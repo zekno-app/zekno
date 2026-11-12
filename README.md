@@ -156,7 +156,7 @@ A Turborepo monorepo on Bun workspaces. The security-critical packages are not w
 
 | Path | Purpose | Status |
 | --- | --- | --- |
-| `apps/web` | The website: landing pages, docs and the signed-in dashboard | Scaffolded |
+| `apps/web` | The website: landing pages, docs and the signed-in dashboard | Landing page built; docs and dashboard planned |
 | `packages/ui` | Shared React components | Scaffolded |
 | `packages/eslint-config` | Shared ESLint configuration | Available |
 | `packages/typescript-config` | Shared TypeScript configuration | Available |
@@ -205,8 +205,21 @@ Run these from the repository root. Turborepo runs each one across every workspa
 | `bun run lint` | Lint with ESLint |
 | `bun run typecheck` | Type-check with `tsc` |
 | `bun run format` | Format with Prettier |
+| `bun run test` | Run unit tests with Bun's test runner |
 
-There is no test runner yet.
+Addresses that are still to be decided (the early-access form, contact, privacy and terms pages) are empty strings at the top of `apps/web/config/site.ts`. The sources for claims about other companies are in the same file.
+
+### How the website is organised
+
+`apps/web` is split into feature modules, with shared code at its root.
+
+| Folder | Holds |
+| --- | --- |
+| `app/` | Routes only. A page composes modules and shared layout. |
+| `modules/<name>/` | One feature: its `components`, `content`, `hooks`, `utils`, `types` (and `actions` when it needs them). The rest of the app imports it through `index.ts` only. |
+| `components/`, `config/`, `lib/`, `providers/`, `hooks/`, `types/` | Code the app shell or more than one module needs. |
+
+Dependencies point one way: `app` uses modules, modules use shared code, shared code never imports a module. Inside a module, files use relative imports. `modules/module-seams.test.ts` fails when a change breaks these rules.
 
 ### Adding UI components
 
