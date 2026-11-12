@@ -1,5 +1,6 @@
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
+import NextLink from "next/link"
 
 import { a11y } from "@/config/site"
 import type { Link } from "@/types/link"
@@ -23,6 +24,15 @@ export function ContentLink({
         {children ?? link.label}
         <span className="sr-only"> ({a11y.unresolved})</span>
       </span>
+    )
+  }
+
+  // A page of this site: navigate without a full reload.
+  if (link.href.startsWith("/")) {
+    return (
+      <NextLink href={link.href} className={className} {...props}>
+        {children ?? link.label}
+      </NextLink>
     )
   }
 

@@ -1,0 +1,97 @@
+---
+title: Introduction
+description: What Zekno is, how it keeps your keys on your side, and where the project stands today.
+---
+
+<Callout type="warn" title="Pre-alpha">
+  Nothing here is ready for production use, and the security design has not
+  been independently audited. The desktop app, the server agent and the core
+  library are not written yet. These docs describe the design they will follow.
+</Callout>
+
+## What Zekno is
+
+Zekno gives a team the convenience of a managed platform (a desktop app,
+teammates with roles, deploy history) on servers they own, starting with
+Hetzner and Docker Compose.
+
+It is built so that a full compromise of the Zekno service yields no customer
+secrets and no ability to run code on customer servers.
+
+| Property | What it means |
+| --- | --- |
+| **Client-side encryption** | Secrets are encrypted on your machine. The hosted service only ever stores ciphertext. |
+| **Signed deploys** | Every deploy is signed on your machine. Your servers refuse anything your team didn't sign. |
+| **Auditable client code** | Everything that runs on your side is in the public repository. |
+| **No runtime dependency** | Your servers don't need Zekno to keep your apps running. |
+
+## The three parts
+
+| Part | Runs on | Keys it holds | Sees plaintext secrets | Can authorize a deploy |
+| --- | --- | --- | --- | --- |
+| Desktop app | A team member's machine | Team signing key | Yes | Yes |
+| Control plane | Zekno's infrastructure | None | No | No |
+| Agent | Your server | Server decryption key | Yes | No, it only verifies |
+
+## How a deploy works
+
+1. **Encrypt.** The desktop app encrypts each secret for your server's public key before anything leaves your machine.
+2. **Sign.** The app signs the deploy with your team's key.
+3. **Relay.** The control plane stores the sealed, signed packet. It has no key to open it. Your server's agent pulls it over an outbound connection.
+4. **Verify.** The agent checks the signature before doing anything, and refuses a deploy your team did not sign.
+5. **Run.** The server decrypts with its own key and starts your containers.
+
+## What it protects against
+
+| Scenario | Outcome | Why |
+| --- | --- | --- |
+| An attacker copies the Zekno database | No secrets exposed | It holds only ciphertext |
+| An attacker controls Zekno and pushes a deploy | Deploy rejected | Servers reject anything not signed by a team key |
+| Zekno goes down | Apps keep running | Servers don't depend on it at runtime |
+
+## What it does not protect against
+
+| Scenario | Why |
+| --- | --- |
+| A team member's machine is compromised | That machine holds a signing key |
+| One of your servers is compromised | Secrets are plaintext in memory where the app runs |
+| A Zekno app or agent release is tampered with | The client is the trust anchor. Mitigated by public code and signed releases |
+
+<Callout title="Metadata">
+  The control plane still sees metadata: server addresses, app names, deploy
+  times and team membership.
+</Callout>
+
+## What exists today
+
+| Part | Status |
+| --- | --- |
+| Website (`apps/web`) | Landing page and these docs; the signed-in dashboard is planned |
+| Core library (`packages/core`): encryption, signing, manifest format | Planned |
+| Server agent (`apps/agent`) | Planned |
+| Desktop app (`apps/desktop`) | Planned |
+| Control plane | Hosted by Zekno, closed source |
+
+Everything that runs on your device or in your browser is open source under
+the MIT license. The control plane is closed because it is the hosted service
+Zekno sells; the design means you don't have to trust it.
+
+## Where to go next
+
+<Cards>
+  <Card title="Source code" href="https://github.com/zekno-app/zekno-monorepo">
+    Read the repository and the full security model.
+  </Card>
+  <Card
+    title="Roadmap"
+    href="https://github.com/zekno-app/zekno-monorepo#roadmap"
+  >
+    What is planned for the first version and after.
+  </Card>
+  <Card
+    title="Report a vulnerability"
+    href="https://github.com/zekno-app/zekno-monorepo#reporting-a-vulnerability"
+  >
+    Security problems are reported privately, never in public issues.
+  </Card>
+</Cards>

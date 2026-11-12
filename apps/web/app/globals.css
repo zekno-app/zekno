@@ -1,0 +1,4 @@
+/* The design system, then Fumadocs' docs styles reading the same theme tokens. */
+@import "@workspace/ui/globals.css";
+@import "fumadocs-ui/css/shadcn.css";
+@import "fumadocs-ui/css/preset.css";

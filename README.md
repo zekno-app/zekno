@@ -156,7 +156,7 @@ A Turborepo monorepo on Bun workspaces. The security-critical packages are not w
 
 | Path | Purpose | Status |
 | --- | --- | --- |
-| `apps/web` | The website: landing pages, docs and the signed-in dashboard | Landing page built; docs and dashboard planned |
+| `apps/web` | The website: landing pages, docs and the signed-in dashboard | Landing page built; docs started at `/docs`; dashboard planned |
 | `packages/ui` | Shared React components | Scaffolded |
 | `packages/eslint-config` | Shared ESLint configuration | Available |
 | `packages/typescript-config` | Shared TypeScript configuration | Available |
@@ -216,6 +216,7 @@ Addresses that are still to be decided (the early-access form, contact, privacy 
 | Folder | Holds |
 | --- | --- |
 | `app/` | Routes only. A page composes modules and shared layout. |
+| `content/docs/` | The docs pages, as MDX files. Rendered at `/docs` by [Fumadocs](https://www.fumadocs.dev). |
 | `modules/<name>/` | One feature: its `components`, `content`, `hooks`, `utils`, `types` (and `actions` when it needs them). The rest of the app imports it through `index.ts` only. |
 | `components/`, `config/`, `lib/`, `providers/`, `hooks/`, `types/` | Code the app shell or more than one module needs. |
 

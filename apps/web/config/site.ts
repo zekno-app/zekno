@@ -74,7 +74,7 @@ export const links = {
   },
   github: { label: "View on GitHub", href: repoUrl, external: true },
   githubShort: { label: "GitHub", href: repoUrl, external: true },
-  docs: { label: "Docs", href: `${repoUrl}#readme`, external: true },
+  docs: { label: "Docs", href: "/docs" },
   roadmap: { label: "Roadmap", href: `${repoUrl}#roadmap`, external: true },
   license: {
     label: "License",
