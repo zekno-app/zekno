@@ -1,12 +1,12 @@
-import { Analytics } from "@vercel/analytics/next"
-import type { Metadata, Viewport } from "next"
-import { Geist_Mono, Inter } from "next/font/google"
-
 import { site } from "@/config/site"
 import { MotionProvider } from "@/providers/motion.provider"
 import { ThemeProvider } from "@/providers/theme.provider"
+import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import "@workspace/ui/globals.css"
 import { cn } from "@workspace/ui/lib/utils"
+import type { Metadata, Viewport } from "next"
+import { Geist_Mono, Inter } from "next/font/google"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
 
@@ -82,6 +82,7 @@ export default function RootLayout({
           <MotionProvider>{children}</MotionProvider>
         </ThemeProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )
