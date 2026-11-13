@@ -363,9 +363,19 @@ describe("SSH questions inside the app (research R10)", () => {
     expect(ask(255, ["ssh: connect to host host port 22: Connection refused"])).toBe(false)
     expect(ask(255, ["ssh: Could not resolve hostname nowhere: nodename nor servname provided"])).toBe(false)
     expect(ask(255, [])).toBe(false)
-    expect(ask(1, ["Permission denied"])).toBe(false)
+    expect(ask(1, ["deploy@host: Permission denied (publickey)."])).toBe(false)
     expect(ask(2, ["Host key verification failed."])).toBe(false)
-    expect(ask(255, ["Permission denied"], true)).toBe(false)
+    expect(ask(255, ["deploy@host: Permission denied (publickey)."], true)).toBe(false)
+    // A banner before SSH's closing line changes nothing: the last line is what counts.
+    expect(ask(255, ["Welcome to prod.", "", "deploy@host: Permission denied (publickey,password).", ""])).toBe(true)
+    // The words in what a remote command wrote are not SSH's line, so its request is never sent a second time.
+    expect(ask(255, ["sh: ./build.sh: Permission denied"])).toBe(false)
+    expect(ask(255, ["permission denied while trying to connect to the Docker daemon socket"])).toBe(false)
+    expect(ask(255, ["Permission denied"])).toBe(false)
+    expect(ask(255, ["deploy@host: Permission denied (publickey).", "Error response from daemon: no such container"])).toBe(false)
+    expect(ask(255, ["Host key verification failed. Or so this line says."])).toBe(false)
+    // A long banner first: the last line still decides.
+    expect(ask(255, [...Array.from({ length: 200 }, () => "banner"), "deploy@host: Permission denied (publickey)."])).toBe(true)
     expect(handOverNote("deploy@203.0.113.7")).toBe("SSH needs an answer to reach deploy@203.0.113.7. zekno carries on once it is connected.")
   })
 
