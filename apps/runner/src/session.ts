@@ -32,12 +32,23 @@ const LINE_COST = 1024
 /** Lines received but not yet handled. A client further ahead than this ends the session. */
 const QUEUE_LINES = 1024
 
+/**
+ * Bytes of frames written but not yet taken by the reader, past which a
+ * frame that does not wait for the reader (Docker's progress during a deploy)
+ * is dropped. Bun holds what standard output cannot take yet, with no limit
+ * of its own. Results are never dropped: after each one the session waits
+ * until it has left.
+ */
+const UNSENT_BYTES = 8 * 1024 * 1024
+
 /** Where the frames of a session go. */
 export type FrameSink = {
   /** Writes one frame. Never throws: work in progress carries on when nobody reads any more. */
   write: (frame: SessionFrame) => void
   /** Resolves once everything written so far has left, or once nobody reads any more. */
   drained: () => Promise<void>
+  /** Signalled once nobody reads any more: a write failed, or the reader closed its end. */
+  gone: AbortSignal
 }
 
 /**
@@ -46,29 +57,37 @@ export type FrameSink = {
  */
 export function stdoutSink(): FrameSink {
   const waiting: (() => void)[] = []
+  const gone = new AbortController()
   let backedUp = false
-  let gone = false
+  /** Bytes handed to standard output since it last took everything. */
+  let unsent = 0
   const release = () => {
     backedUp = false
+    unsent = 0
     for (const resolve of waiting.splice(0)) resolve()
+  }
+  const lost = () => {
+    gone.abort()
+    release()
   }
   process.stdout.on("drain", release)
   // Without this, a write to a closed connection would end the process in the middle of a deploy.
-  process.stdout.on("error", () => {
-    gone = true
-    release()
-  })
+  // Bun reports a reader that went away (EPIPE) here, and from then on takes every write without a word.
+  process.stdout.on("error", lost)
   return {
     write(frame) {
-      if (gone) return
+      if (gone.signal.aborted) return
+      const line = `${JSON.stringify(frame)}\n`
+      if (backedUp && !("result" in frame) && unsent + Buffer.byteLength(line) > UNSENT_BYTES) return
       try {
-        if (!process.stdout.write(`${JSON.stringify(frame)}\n`)) backedUp = true
+        if (!process.stdout.write(line)) backedUp = true
+        if (backedUp) unsent += Buffer.byteLength(line)
       } catch {
-        gone = true
-        release()
+        lost()
       }
     },
-    drained: () => (backedUp && !gone ? new Promise<void>((resolve) => waiting.push(resolve)) : Promise.resolve()),
+    drained: () => (backedUp && !gone.signal.aborted ? new Promise<void>((resolve) => waiting.push(resolve)) : Promise.resolve()),
+    gone: gone.signal,
   }
 }
 
@@ -165,11 +184,16 @@ async function handle(dir: string, request: SessionRequest, sink: FrameSink, clo
  * A client that gets more than `QUEUE_LINES` lines or `QUEUE_BYTES` bytes
  * ahead is not waiting for its answers. Its session ends as if the input had
  * closed, except that the requests still waiting are dropped, not run.
+ *
+ * A reader that has gone (`sink.gone`) is a client that has gone: the session
+ * ends at once, as if the input had closed, and the requests still waiting
+ * are dropped too, since nobody could read their answers.
  */
 export async function runSession(dir: string, input: ReadableStream<Uint8Array>, sink: FrameSink): Promise<number> {
   const queue: (Uint8Array | null)[] = []
   let queued = 0
   let overrun = false
+  let readerGone = false
   let wake: (() => void) | undefined
   const closed = new AbortController()
   const inputClosed = whenAborted(closed.signal)
@@ -178,6 +202,15 @@ export async function runSession(dir: string, input: ReadableStream<Uint8Array>,
     wake = undefined
     resolve?.()
   }
+  const leave = () => {
+    readerGone = true
+    queue.length = 0
+    queued = 0
+    closed.abort()
+    nudge()
+  }
+  if (sink.gone.aborted) leave()
+  else sink.gone.addEventListener("abort", leave, { once: true })
 
   // Reading goes on while a request is handled, so that a closed input is
   // noticed during a long request such as `logs`.
@@ -192,6 +225,7 @@ export async function runSession(dir: string, input: ReadableStream<Uint8Array>,
           queued = 0
           break
         }
+        if (readerGone) break
         queue.push(line)
         queued += cost(line)
         nudge()
@@ -206,7 +240,7 @@ export async function runSession(dir: string, input: ReadableStream<Uint8Array>,
   /** The next line, or undefined once the input has closed and every line was taken, or the session was ended. */
   const next = async (): Promise<Uint8Array | null | undefined> => {
     for (;;) {
-      if (overrun) return undefined
+      if (overrun || readerGone) return undefined
       if (queue.length > 0) {
         const line = queue.shift()!
         queued -= cost(line)

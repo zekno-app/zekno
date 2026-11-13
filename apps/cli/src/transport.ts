@@ -72,6 +72,8 @@ export type Transport = {
 
 /** The longest piece of a runner's standard error passed on as one line. */
 const ERROR_LINE = 4096
+/** How long passing standard error on may go on before everything else gets a turn. */
+const TURN_MS = 10
 /** How long to wait, once a runner has exited, for the last of its standard error. */
 const ERROR_GRACE_MS = 1000
 
@@ -121,6 +123,7 @@ async function passOn(stream: ReadableStream<Uint8Array>, out: ErrorLines): Prom
     }
   }
   let rest = ""
+  let turn = performance.now()
   try {
     for await (const chunk of stream) {
       const lines = (rest + decoder.decode(chunk, { stream: true })).split("\n")
@@ -133,6 +136,12 @@ async function passOn(stream: ReadableStream<Uint8Array>, out: ErrorLines): Prom
         start += ERROR_LINE
       }
       rest = rest.slice(start)
+      // A server that writes without pause keeps this stream full, so reading it never waits:
+      // everything else in this process (keys, the screen, timers, a signal) still gets its turn.
+      if (performance.now() - turn >= TURN_MS) {
+        await new Promise<void>((resolve) => setImmediate(resolve))
+        turn = performance.now()
+      }
     }
   } catch {
     // The process went away.

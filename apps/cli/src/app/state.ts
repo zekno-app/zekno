@@ -59,6 +59,12 @@ export type AppRow = {
   secrets?: number
   /** The deploy `r` returns to on Home: the accepted one before the latest. */
   previous?: number
+  /**
+   * The last deploy its runner accepted, as the runner last said. Undefined
+   * until the server answers, and once it cannot be reached: then `deploy`,
+   * from this machine's history, is shown instead.
+   */
+  accepted?: number
 }
 
 export type ServerRow = {
@@ -321,7 +327,8 @@ export type AppEvent =
       secretNames?: string[]
     }
   | { type: "deploy-stage"; stage: DeployStage; sequence: number; secrets: number }
-  | { type: "deploy-progress"; line: string }
+  /** Docker's lines during the deploy, cleaned, in the order it printed them. */
+  | { type: "deploy-progress"; lines: readonly string[] }
   | { type: "deploy-ended"; outcome: "started" | "start_failed" | "error"; notice: Notice; at?: number }
   /** Before a deploy: names the Compose file `file` expects that have no secret. */
   | { type: "missing-values"; server: string; app: string; names: string[]; file?: string }
@@ -332,8 +339,11 @@ export type AppEvent =
   /** The hidden prompt stored a value, or refused one; it is closed either way. */
   | { type: "secret-saved"; notice: Notice }
   | { type: "secret-refused"; notice: Notice }
-  /** What is running on one server's apps, as its runner said. An app it does not name is unknown. */
-  | { type: "app-states"; server: string; states: Record<string, RunState> }
+  /**
+   * What is running on one server's apps, and the last deploy of each that
+   * it accepted, as its runner said. An app it does not name is unknown.
+   */
+  | { type: "app-states"; server: string; states: Record<string, RunState>; accepted?: Record<string, number> }
   /** Every `REFRESH_MS` while the app is open: Home and the app screen read again what is running. */
   | { type: "tick" }
   /** Lines of the logs being followed, cleaned. `fresh`: the first of a new connection, which replace what was there. */
@@ -527,8 +537,11 @@ function withApps(state: State, name: string, apps: AppRow[]): State {
   const index = team?.servers.findIndex((server) => server.name === name) ?? -1
   if (!team || index === -1) return state
   const before = team.servers[index]!.apps
-  // The history does not say what is running; what the runner last said stays until it is read again.
-  const known = apps.map((app) => ({ ...app, state: before.find((row) => row.name === app.name)?.state ?? app.state }))
+  // The history does not say what is running, nor what the runner holds; what the runner last said stays until it is read again.
+  const known = apps.map((app) => {
+    const was = before.find((row) => row.name === app.name)
+    return { ...app, state: was?.state ?? app.state, accepted: was?.accepted }
+  })
   const servers = team.servers.map((server, at) => (at === index ? { ...server, apps: known } : server))
   const next = updateScreens({ ...state, team: { ...team, servers } }, "home", (screen) => {
     if (screen.server !== index) return screen
@@ -538,15 +551,17 @@ function withApps(state: State, name: string, apps: AppRow[]): State {
   return clampHome(next)
 }
 
-/** Sets the state of each of one server's apps. Nothing else changes, the selection included. */
-function withStates(state: State, name: string, stateOf: (app: string) => RunState): State {
+/** Changes each of one server's apps. Nothing else changes, the selection included. */
+function withAppRows(state: State, name: string, change: (app: AppRow) => AppRow): State {
   const team = state.team
   if (!team?.servers.some((server) => server.name === name)) return state
-  const servers = team.servers.map((server) =>
-    server.name === name ? { ...server, apps: server.apps.map((app) => ({ ...app, state: stateOf(app.name) })) } : server
-  )
+  const servers = team.servers.map((server) => (server.name === name ? { ...server, apps: server.apps.map(change) } : server))
   return { ...state, team: { ...team, servers } }
 }
+
+/** Only the record's own entries count, never something an object has by default, such as `constructor`. */
+const own = <T>(record: Record<string, T> | undefined, key: string): T | undefined =>
+  record !== undefined && Object.hasOwn(record, key) ? record[key] : undefined
 
 // ---------------------------------------------------------------------------
 // Keys
@@ -997,8 +1012,9 @@ export function update(state: State, event: AppEvent): Step {
       const reached = (server: ServerRow): ServerRow => {
         if (server.name !== event.server) return server
         const next: ServerRow = { ...server, reachable: event.reachable, problem: event.reachable ? undefined : event.problem }
-        // A server that cannot be reached has a runner nobody can tell the version of now, and apps whose state is not known.
-        if (!event.reachable) return { ...next, runner: undefined, apps: server.apps.map((app) => ({ ...app, state: "unknown" })) }
+        // A server that cannot be reached has a runner nobody can tell the version of now, and apps whose state is not known:
+        // their deploy numbers are this machine's again.
+        if (!event.reachable) return { ...next, runner: undefined, apps: server.apps.map((app) => ({ ...app, state: "unknown", accepted: undefined })) }
         return event.runner ? { ...next, runner: event.runner } : next
       }
       return stay({ ...state, team: { ...state.team, servers: state.team.servers.map(reached) } })
@@ -1023,11 +1039,17 @@ export function update(state: State, event: AppEvent): Step {
       return stay({ ...state, deploy: { ...state.deploy, stage: event.stage, sequence: event.sequence, secrets: event.secrets } })
     case "deploy-progress":
       if (!state.deploy) return stay(state)
-      return stay({ ...state, deploy: { ...state.deploy, lines: keep(state.deploy.lines, [event.line], DEPLOY_LINES) } })
+      return stay({ ...state, deploy: { ...state.deploy, lines: keep(state.deploy.lines, event.lines, DEPLOY_LINES) } })
     case "deploy-ended": {
       if (!state.deploy) return stay(state)
+      const { server, app, sequence } = state.deploy
       const deploy = { ...state.deploy, running: false, outcome: event.outcome, endedAt: event.at, result: event.notice }
-      const ended = { ...state, deploy, notice: event.notice }
+      // The runner just said it accepted this deploy, whether or not the app started.
+      const accepted =
+        sequence !== undefined && (event.outcome === "started" || event.outcome === "start_failed")
+          ? withAppRows(state, server, (row) => (row.name === app ? { ...row, accepted: sequence } : row))
+          : state
+      const ended = { ...accepted, deploy, notice: event.notice }
       return ended.quitting ? go({ ...ended, exiting: true }, { kind: "exit" }) : stay(ended)
     }
     case "missing-values":
@@ -1062,7 +1084,7 @@ export function update(state: State, event: AppEvent): Step {
     case "logs-dropped":
       return stay(updateScreens(state, "logs", (screen) => ({ ...screen, dropped: true, problem: event.problem })))
     case "app-states":
-      return stay(withStates(state, event.server, (app) => (Object.hasOwn(event.states, app) ? event.states[app]! : "unknown")))
+      return stay(withAppRows(state, event.server, (app) => ({ ...app, state: own(event.states, app.name) ?? "unknown", accepted: own(event.accepted, app.name) })))
     case "tick": {
       if (!refreshAllowed(state)) return stay(state)
       const screen = top(state)

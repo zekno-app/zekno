@@ -25,7 +25,7 @@ type Service = RunnerAppStates["apps"][string]["services"][number]
 /** The longest log line an event may carry. */
 const LOG_LINE = 16384
 /** The most services one app may report. */
-const MAX_SERVICES = 256
+const MAX_SERVICES = LIMITS.servicesPerApp
 /** How long a Docker command has to stop before it is killed outright. */
 const STOP_GRACE_MS = 2000
 /** How long Docker has to say what is running for one app before it is stopped and the app left out. */
@@ -133,14 +133,24 @@ async function dockerOutput(dir: string, args: string[], stop: AbortSignal, time
  * Docker could not be asked about is left out of the answer: its state is not
  * known, which is not the same as stopped. Docker gets `timeoutMs` per app,
  * and is not asked any more once `stop` is signalled (the input closed).
+ *
+ * The answer holds at most `LIMITS.appsPerServer` apps and
+ * `LIMITS.servicesPerServer` services, as the message allows. An app past
+ * either is left out too: not known, never reported with half its services.
  */
 export async function appStates(dir: string, stop: AbortSignal, timeoutMs = PS_TIMEOUT_MS): Promise<RunnerAppStates | RunnerReport> {
   const loaded = load(dir)
   if (isReport(loaded)) return loaded
   const apps: RunnerAppStates["apps"] = {}
-  for (const app of deployedApps(loaded.state)) {
+  let services = 0
+  for (const app of deployedApps(loaded.state).slice(0, LIMITS.appsPerServer)) {
+    if (services >= LIMITS.servicesPerServer) break
     const output = await dockerOutput(dir, ["compose", "-p", `zekno-${app}`, "ps", "--all", "--format", "json"], stop, timeoutMs)
-    if (output !== undefined) apps[app] = { services: parsePs(output) }
+    if (output === undefined) continue
+    const found = parsePs(output)
+    if (services + found.length > LIMITS.servicesPerServer) continue
+    services += found.length
+    apps[app] = { services: found }
   }
   return { apps }
 }

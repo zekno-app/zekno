@@ -177,6 +177,29 @@ follow from them or from what the installed tools provide.
 - **Rationale**: the maintainer asked for the token and chose detection over one colour
   everywhere. A wrong guess costs a few slightly faint letters, nothing more.
 
+## R16. One kept session per server for the app's reads (2026-11-14)
+
+- **Decision**: the session the app opens to each server when it starts (R10: batch mode
+  first, SSH may then ask) is kept open while the app runs, and every read of what is running
+  sends `status` and `state` over it. A read with no answer within 20 seconds closes it; a
+  lost session is opened again in the background in batch mode only, at most once every 30
+  seconds per server, and never where SSH would have to ask. Deploys, rollbacks, secrets and
+  logs keep their own connections.
+- **Rationale**: until then each read opened a new SSH connection, every 5 seconds per
+  server: about 720 logins an hour in the server's auth log; firewall rate limits such as
+  `ufw limit` (6 new connections per 30 seconds) can shut the developer out; an SSH agent that
+  confirms each use, or a hardware key that needs a touch, asks every 5 seconds although batch
+  mode stops SSH's own prompts; and a server that needs a password had no state at all, since
+  the background never asks. With one session, a server that needed a password at start is
+  read like any other. The runner's session mode already serves any number of requests on one
+  connection, with no idle limit; its limits concern lines that are not requests (three in a
+  row) and requests sent ahead of their answers (1,024 lines or 32 MiB), neither of which a
+  request pair every 5 seconds comes near.
+- **Alternatives considered**: OpenSSH connection sharing (`ControlMaster`), rejected in R4;
+  reading less often (fewer logins, the same problems, and staler state); taking over the
+  session a deploy or logs opens (a long deploy would hold up the reads, and those operations
+  are tested to use exactly one connection).
+
 ## Design approvals
 
 All seven boards of the canvas's fourth row were approved by the maintainer on 2026-11-14: the

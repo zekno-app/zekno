@@ -4,12 +4,12 @@
  * runner as it was before its fix. S5 is tested in runner.test.ts.
  */
 import { describe, expect, test } from "bun:test"
-import { parseMessage, RunnerStatusSchema } from "@workspace/core"
-import { closeSync, constants, openSync, readFileSync, realpathSync } from "node:fs"
+import { LIMITS, parseMessage, RunnerAppStatesSchema, RunnerStatusSchema } from "@workspace/core"
+import { chmodSync, closeSync, constants, existsSync, openSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { appStates } from "../src/inspect"
-import { buildDeploy, deployed, fakeDocker, isAlive, residentMiB, RUNNER_MAIN, session, tempDir, waitFor, world } from "./helpers"
+import { buildDeploy, deployed, fakeDocker, isAlive, residentMiB, runner, RUNNER_MAIN, session, tempDir, waitFor, world } from "./helpers"
 
 /**
  * The most resident memory, in MiB, a runner may reach in these tests. The
@@ -222,5 +222,123 @@ describe("Docker runs in the runner's own folder (S8)", () => {
     expect(calls.map((call) => call.args.split(" ")[3])).toEqual(["ps", "logs"])
     expect(realpathSync(process.cwd())).not.toBe(realpathSync(w.home))
     for (const call of calls) expect(call.cwd).toBe(realpathSync(w.home))
+  })
+})
+
+/**
+ * A Docker whose log command prints without pause, as a container that logs
+ * in a loop does. Everything else goes to the stand-in Docker. Its log
+ * command notes its process id in the returned folder.
+ */
+function floodingDocker(docker: string): { path: string; logsPid: () => number | undefined } {
+  const dir = tempDir("flooding")
+  const path = join(dir, "docker")
+  writeFileSync(path, `#!/bin/sh\nif [ "$4" = logs ]; then echo $$ > "${dir}/logs.pid"; exec yes "web-1  | 2026-11-14T00:00:00Z ${"x".repeat(200)}"; fi\nexec "${docker}" "$@"\n`)
+  chmodSync(path, 0o755)
+  const pidFile = join(dir, "logs.pid")
+  return { path, logsPid: () => (existsSync(pidFile) && readFileSync(pidFile, "utf8").trim() !== "" ? Number(readFileSync(pidFile, "utf8")) : undefined) }
+}
+
+describe("a container that prints without pause, and a client that goes away (L6)", () => {
+  /** A session following the logs of `web`, its frames read and thrown away as fast as they come. */
+  async function following(home: string, docker: { path: string; logsPid: () => number | undefined }) {
+    const child = Bun.spawn([process.execPath, RUNNER_MAIN, "session"], {
+      env: { ...process.env, ZEKNO_RUNNER_HOME: home, ZEKNO_DOCKER: docker.path },
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "ignore",
+    })
+    child.stdin.write(`${JSON.stringify({ command: "logs", input: { app: "web", tail: 10 } })}\n`)
+    await child.stdin.flush()
+    const reader = child.stdout.getReader()
+    let bytes = 0
+    void (async () => {
+      for (;;) {
+        const chunk = await reader.read().catch(() => ({ done: true as const, value: undefined }))
+        if (chunk.done) return
+        bytes += chunk.value.length
+      }
+    })()
+    await waitFor(() => docker.logsPid() !== undefined && bytes > 1_000_000, "the logs to pour in")
+    let peak = 0
+    for (let n = 0; n < 5; n++) {
+      await Bun.sleep(100)
+      peak = Math.max(peak, residentMiB(child.pid) ?? 0)
+    }
+    return { child, reader, peak, logsPid: docker.logsPid()! }
+  }
+
+  test("the client closes its input and stops reading: the runner stops Docker's log command and exits, its memory bounded", async () => {
+    const w = await deployed(["web"])
+    const run = await following(w.home, floodingDocker(w.docker.path))
+    try {
+      expect(run.peak).toBeLessThan(MEMORY_BOUND_MIB)
+      run.child.stdin.end()
+      await run.reader.cancel()
+      const gone = Date.now()
+      expect(await within(run.child.exited, 3000)).toBe(0)
+      await waitFor(() => !isAlive(run.logsPid), "Docker's log command to stop", 2000)
+      expect(Date.now() - gone).toBeLessThan(3000)
+    } finally {
+      await cleanUp(run.child, [run.logsPid])
+    }
+  }, 10_000)
+
+  test("the client stops reading but leaves its input open: a write that fails is the client gone, and the runner ends at once", async () => {
+    const w = await deployed(["web"])
+    const run = await following(w.home, floodingDocker(w.docker.path))
+    try {
+      await run.reader.cancel()
+      const gone = Date.now()
+      expect(await within(run.child.exited, 3000)).toBe(0)
+      await waitFor(() => !isAlive(run.logsPid), "Docker's log command to stop", 2000)
+      expect(Date.now() - gone).toBeLessThan(3000)
+    } finally {
+      await cleanUp(run.child, [run.logsPid])
+    }
+  }, 10_000)
+})
+
+describe("what a runner holds always fits the answers that report it (L3)", () => {
+  const state = (home: string) => JSON.parse(readFileSync(join(home, "state.json"), "utf8"))
+  const keep = (home: string, value: unknown) => writeFileSync(join(home, "state.json"), JSON.stringify(value))
+
+  test("a deploy of one app or one secret past the limits is refused as too large; a deploy within them still goes", async () => {
+    const w = await deployed(["web"])
+    const held = state(w.home)
+    // As many apps as a runner holds, `web` among them.
+    for (let n = 1; n < LIMITS.appsPerServer; n++) held.lastSequence[`app-${n}`] = 1
+    // As many secrets as it remembers, `web/GREETING` among them.
+    for (let n = Object.keys(held.secrets).length; n < LIMITS.secretsPerServer; n++) held.secrets[`app-1/S${n}`] = { version: 1, hash: "0".repeat(64) }
+    keep(w.home, held)
+    const apply = async (deploy: Awaited<ReturnType<typeof buildDeploy>>) => (await runner(w.home, w.docker.path, "apply", { rosters: w.rosters, deploy })).json
+    const next = (app: string, values?: Record<string, string>) => buildDeploy({ trust: w.trust, serverId: w.serverId, signer: w.signer, sequence: 2, app, values })
+    expect(await apply(await next("one-more"))).toEqual({ outcome: "refused", reason: "too_large" })
+    expect(await apply(await next("web", { GREETING: "hello", ONE_MORE: "x" }))).toEqual({ outcome: "refused", reason: "too_large" })
+    expect(state(w.home).lastSequence.web).toBe(1)
+    expect(await apply(await next("web"))).toEqual({ outcome: "started", app: "web", sequence: 2 })
+    expect(Object.keys(state(w.home).lastSequence)).toHaveLength(LIMITS.appsPerServer)
+  })
+
+  test("an answer about what is running holds at most 4096 services: an app past them is left out, never cut short", async () => {
+    const w = await deployed(["web"])
+    const held = state(w.home)
+    const apps = ["web", ...Array.from({ length: LIMITS.servicesPerServer / LIMITS.servicesPerApp }, (_, n) => `app-${n}`)]
+    for (const app of apps) {
+      held.lastSequence[app] = 1
+      w.docker.ps(app, Array.from({ length: LIMITS.servicesPerApp }, (_, n) => JSON.stringify({ Service: `s${n}`, State: "running", ExitCode: 0, Health: "" })).join("\n"))
+    }
+    keep(w.home, held)
+    const saved = process.env.ZEKNO_DOCKER
+    process.env.ZEKNO_DOCKER = w.docker.path
+    try {
+      const answer = (await appStates(w.home, new AbortController().signal)) as { apps: Record<string, { services: unknown[] }> }
+      expect(Object.keys(answer.apps)).toEqual(apps.slice(0, -1))
+      for (const app of apps.slice(0, -1)) expect(answer.apps[app]!.services).toHaveLength(LIMITS.servicesPerApp)
+      expect(parseMessage(RunnerAppStatesSchema, answer).ok).toBe(true)
+    } finally {
+      if (saved === undefined) delete process.env.ZEKNO_DOCKER
+      else process.env.ZEKNO_DOCKER = saved
+    }
   })
 })

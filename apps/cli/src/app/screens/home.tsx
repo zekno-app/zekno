@@ -105,7 +105,7 @@ function AppTable({ apps, selected, now }: { apps: readonly AppRow[]; selected: 
           <Cell>
             <Text bold={index === selected}>{app.name}</Text>
           </Cell>
-          <Cell width={DEPLOY_WIDTH}>{app.deploy ?? ""}</Cell>
+          <Cell width={DEPLOY_WIDTH}>{app.accepted ?? app.deploy ?? ""}</Cell>
           <Cell width={STATE_WIDTH}>
             <StateCell state={app.state} />
           </Cell>

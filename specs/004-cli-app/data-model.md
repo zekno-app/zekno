@@ -81,8 +81,9 @@ whose input does not match is answered with `{ result: { outcome: "refused", rea
 | Thing | Content | Kept |
 |-------|---------|------|
 | Screen stack | Which screen is showing and what is selected on each | While the app is open |
-| Server view | Reachable or not, runner version, team list version, last deploy numbers | Refreshed on open and on request |
-| App state | Per app: running, stopped or partly running, from `RunnerAppStates` | Refreshed every few seconds while visible |
+| Server view | Reachable or not, runner version, team list version, last deploy numbers (the runner's last accepted deploy of each app once it answered) | Read when a screen opens and every 5 seconds while Home or App shows, over one session per server kept while the app runs (contracts/app.md, "Refresh") |
+| App state | Per app: running, stopped or partly running, from `RunnerAppStates`; only apps this machine has a history for | As the server view |
+| Kept session | One runner session per server: its process, and when a lost one may be connected to again in the background | Until the app closes |
 | Deploy in progress | Stage, the last progress line, up to 500 lines of Docker output | Until the app closes |
 | Log view | Up to 2000 lines, the filter text, the chosen service, following or paused | Until the logs screen is left |
 

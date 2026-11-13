@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { renderToString, type Key } from "ink"
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -123,8 +123,8 @@ const boardDeploy = (size = { columns: 100, rows: 30 }) =>
     { type: "deploy-stage", stage: "signed", sequence: 5, secrets: 2 },
     { type: "deploy-stage", stage: "sent", sequence: 5, secrets: 2 },
     { type: "deploy-stage", stage: "starting", sequence: 5, secrets: 2 },
-    { type: "deploy-progress", line: "pulled caddy:2" },
-    { type: "deploy-progress", line: "pulling caddy:2, 7.3 MB of 14 MB" }
+    { type: "deploy-progress", lines: ["pulled caddy:2"] },
+    { type: "deploy-progress", lines: ["pulling caddy:2, 7.3 MB of 14 MB"] }
   )
 
 // ---------------------------------------------------------------------------
@@ -341,7 +341,7 @@ describe("the deploy screen (board 'A deploy in progress')", () => {
   test("a deploy that did not start: the failed stage, what Docker reported, and that the number is used", () => {
     const failed = play(
       boardDeploy(),
-      { type: "deploy-progress", line: "pull access denied for example/web, repository does not exist or may require 'docker login'" },
+      { type: "deploy-progress", lines: ["pull access denied for example/web, repository does not exist or may require 'docker login'"] },
       { type: "deploy-stage", stage: "failed", sequence: 5, secrets: 2 },
       { type: "deploy-ended", outcome: "start_failed", notice: { tone: "error", text: "prod accepted deploy 5, but the app did not start." }, at: Date.now() }
     )
@@ -399,7 +399,7 @@ describe("the deploy screen (board 'A deploy in progress')", () => {
 function* failedEvents(): Generator<AppEvent> {
   yield { type: "deploy-started", server: "prod", app: "demo", at: Date.now(), from: "~/code/demo/compose.yaml", replaces: 4, secretNames: ["A"] }
   yield { type: "deploy-stage", stage: "failed", sequence: 5, secrets: 1 }
-  for (let n = 0; n < 40; n++) yield { type: "deploy-progress", line: `Docker line ${n} ${"x".repeat(n * 3)}` }
+  for (let n = 0; n < 40; n++) yield { type: "deploy-progress", lines: [`Docker line ${n} ${"x".repeat(n * 3)}`] }
   yield { type: "deploy-ended", outcome: "start_failed", notice: { tone: "error", text: "prod accepted deploy 5, but the app did not start." } }
 }
 
@@ -541,6 +541,12 @@ describe("what Home and the app screen read from this machine's history", () => 
 // ---------------------------------------------------------------------------
 // Against a real runner process with the stand-in Docker
 
+/** The effects of every app a test opened: closed after each test, so no runner a test reached is left running. */
+const opened: Effects[] = []
+afterEach(async () => {
+  await Promise.all(opened.splice(0).map((effects) => effects.close()))
+})
+
 /** The app on a test machine, without a terminal: the reducer, the effects, and the window drawn on request. */
 function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>, deps: OpDeps = m.deps) {
   const failures: unknown[] = []
@@ -549,6 +555,7 @@ function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>, deps:
     if (effect.kind !== "exit") effects!.run(effect)
   })
   effects = createEffects(deps, store.dispatch, (error) => failures.push(error))
+  opened.push(effects)
   const held = emptyHiddenValue()
   return {
     store,

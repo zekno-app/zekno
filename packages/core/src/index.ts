@@ -78,6 +78,7 @@ export {
   SERVICE_NAME,
   SERVICE_STATES,
   SESSION_COMMANDS,
+  SESSION_FRAME_BYTES,
   SessionEventSchema,
   SessionFrameSchema,
   SessionRequestSchema,

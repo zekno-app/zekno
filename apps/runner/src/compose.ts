@@ -19,6 +19,17 @@ export function dockerEnv(): Record<string, string> {
 export const dockerCommand = (): string => process.env.ZEKNO_DOCKER || "docker"
 
 /**
+ * How long reading may go on before everything else gets a turn. A process
+ * that prints without pause keeps its output full, so reading it never has
+ * to wait, and without a turn the runner would never notice that its input
+ * closed or that nobody reads its frames any more.
+ */
+const TURN_MS = 10
+
+/** Lets everything else that is waiting run first: input, timers, signals. */
+export const nextTurn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
+/**
  * Calls `onLine` for each line of a stream, cut to `limit` characters, and
  * waits for it when it returns a promise, so a slow reader slows the writer
  * instead of filling memory. Only a line feed ends a line: a carriage return
@@ -35,12 +46,17 @@ export async function readLines(
     const text = line.endsWith("\r") ? line.slice(0, -1) : line
     if (text.trim() !== "") await onLine(text.slice(0, limit))
   }
+  let turn = performance.now()
   for await (const chunk of stream) {
     const parts = (rest + decoder.decode(chunk, { stream: true })).split("\n")
     rest = parts.pop() ?? ""
     // A line with no end in sight is cut, not kept growing.
     if (rest.length > limit * 4) rest = rest.slice(0, limit)
     for (const line of parts) await emit(line)
+    if (performance.now() - turn >= TURN_MS) {
+      await nextTurn()
+      turn = performance.now()
+    }
   }
   await emit(rest + decoder.decode())
 }

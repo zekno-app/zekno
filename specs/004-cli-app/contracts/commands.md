@@ -17,7 +17,7 @@ Everything in feature 003's command contract still holds unless this page change
 | `zekno deploy [-f <file>]` | As before. `--app`, `--server` and the file may come from `zekno.json`. |
 | `zekno rollback [--to <number>]` | As before, with the same defaults from `zekno.json`. |
 | `zekno status [--server <name>]` | As before, plus running or stopped for each app when the runner is new enough. |
-| `zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]` | Prints an app's logs, following until interrupted. |
+| `zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]` | Prints an app's logs, following until interrupted. Ctrl-C, or a reader that closes the pipe (`zekno logs \| head -1`), stops the reading on the server and ends the command quietly with status 0. |
 | `zekno link [--app <app>] [--server <name>] [-f <file>] [--force]` | Writes `zekno.json` in the current folder. Refuses to overwrite one without `--force`. An app or server not given is taken from a `zekno.json` that already applies to the folder; `-f` defaults to `compose.yaml` and must be a file inside the folder. |
 
 Flags win over `zekno.json`. A command that still lacks a detail fails with a message naming the
@@ -59,8 +59,9 @@ reported are written to standard error after the failure sentence.
 `state` and `logs` exist only inside a session. The runner still opens no network port, reads
 only its standard input, and starts nothing that the team did not sign.
 
-Exit status of `session`: `0` when its input closed normally, `1` when it stopped because a line
-was not a request it could read or the client sent requests far faster than they could be answered.
+Exit status of `session`: `0` when its input closed normally or its reader went away, `1` when it
+stopped because a line was not a request it could read or the client sent requests far faster than
+they could be answered.
 
 The runner's folder: `ZEKNO_RUNNER_HOME` if set. Otherwise root always uses `/var/lib/zekno`. Any other user uses `~/.local/state/zekno` if a runner is already set up there, else `/var/lib/zekno` only if that folder exists and belongs to them, else `~/.local/state/zekno`.
 

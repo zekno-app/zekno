@@ -164,6 +164,51 @@ describe("User Story 5: one description of every message", () => {
     expect(code(parseMessage(core.RunnerLogsRequestSchema, { app: "web; cat /etc/passwd", tail: 1 }))).toBe("malformed")
   })
 
+  test("a runner's answers have bounds: apps, secrets and services, and the longest frame of each request", async () => {
+    const core = await import("../../src/index")
+    const { server, trust } = await setup()
+    const name = (prefix: string, n: number) => `${prefix}${String(n).padStart(4, "0")}`.padEnd(63, "x")
+    const apps = (count: number) => Object.fromEntries(Array.from({ length: count }, (_, n) => [name("a", n), Number.MAX_SAFE_INTEGER]))
+    const secrets = (count: number) =>
+      Object.fromEntries(Array.from({ length: count }, (_, n) => [`${name("a", n % 1024)}/${name("S", n).padEnd(128, "_")}`, { version: Number.MAX_SAFE_INTEGER, removed: false }]))
+    const status = (lastSequence: object, held: object) => ({
+      serverId: server.serverId,
+      serverPublicKey: server.publicKey,
+      team: { teamId: trust.teamId, version: Number.MAX_SAFE_INTEGER, hash: trust.hash },
+      lastSequence,
+      secrets: held,
+    })
+    // The most a runner holds is accepted; one more app or secret is not a runner's answer.
+    const largest = status(apps(LIMITS.appsPerServer), secrets(LIMITS.secretsPerServer))
+    expect(parseMessage(core.RunnerStatusSchema, largest).ok).toBe(true)
+    expect(code(parseMessage(core.RunnerStatusSchema, status(apps(LIMITS.appsPerServer + 1), {})))).toBe("malformed")
+    expect(code(parseMessage(core.RunnerStatusSchema, status({}, secrets(LIMITS.secretsPerServer + 1))))).toBe("malformed")
+    expect(code(parseMessage(core.RunnerStatusSchema, status({}, { [`web/${"A".repeat(129)}`]: { version: 1, removed: false } })))).toBe("malformed")
+
+    const service = (n: number) => ({ service: name("s", n), state: "restarting", exitCode: 255, health: "unhealthy" })
+    const states = (count: number, each: number) =>
+      ({ apps: Object.fromEntries(Array.from({ length: count }, (_, n) => [name("a", n), { services: Array.from({ length: each }, (_, s) => service(s)) }])) })
+    const fullest = states(LIMITS.appsPerServer, LIMITS.servicesPerServer / LIMITS.appsPerServer)
+    expect(parseMessage(core.RunnerAppStatesSchema, fullest).ok).toBe(true)
+    expect(code(parseMessage(core.RunnerAppStatesSchema, states(LIMITS.appsPerServer + 1, 0)))).toBe("malformed")
+    expect(code(parseMessage(core.RunnerAppStatesSchema, states(LIMITS.servicesPerServer / LIMITS.servicesPerApp + 1, LIMITS.servicesPerApp)))).toBe("malformed")
+
+    // The longest frame each request can bring, written out, is at most two thirds of its limit, and every limit is far below a message's.
+    const written = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length
+    const wide = "\u0001".repeat(16384)
+    const longest = {
+      version: written({ result: { version: "1000.1000.1000", protocol: 1_000_000 } }),
+      status: written({ result: largest }),
+      state: written({ result: fullest }),
+      apply: written({ event: "progress", line: wide.slice(0, 4096) }),
+      logs: written({ event: "log", service: "s".repeat(63), time: "2026-11-14T21:52:03.123456789+00:00", line: wide }),
+    } as const
+    for (const [command, bytes] of Object.entries(longest)) {
+      expect(bytes * 1.5).toBeLessThan(core.SESSION_FRAME_BYTES[command as keyof typeof longest])
+    }
+    for (const limit of Object.values(core.SESSION_FRAME_BYTES)) expect(limit).toBeLessThanOrEqual(LIMITS.messageBytes / 8)
+  })
+
   test("a signed payload with an unknown format version is refused with that reason", async () => {
     const { founder, server, trust } = await setup()
     const { PAYLOAD_TYPES } = await import("../../src/index")

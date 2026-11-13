@@ -22,7 +22,7 @@ const VERSION_WIDTH = 11
 /**
  * A deploy's result as the history shows it: a symbol and words, never
  * colour alone. The deploy the runner runs now, while every service of the
- * app is running, is `● running now`, as on the board.
+ * app is running, is `● running now`, as on the board (`runningNow`).
  */
 function Result({ deploy, runningNow }: { deploy: DeployRow; runningNow: boolean }) {
   const theme = useTheme()
@@ -189,6 +189,18 @@ function SecretsPane({
   )
 }
 
+/**
+ * The deploy that runs now, from what the runner said: its last accepted
+ * deploy, while every service of the app is running, and only if this
+ * machine's history says that deploy started. A deploy that did not start
+ * runs nothing, so then none is marked, and neither is any deploy before
+ * the one the runner holds now. Undefined before the runner has answered.
+ */
+export function runningNow(deploys: readonly DeployRow[] | undefined, state: RunState, accepted: number | undefined): number | undefined {
+  if (state !== "running" || accepted === undefined) return undefined
+  return deploys?.some((deploy) => deploy.sequence === accepted && deploy.outcome === "started") ? accepted : undefined
+}
+
 /** The answers to "remove this secret?", the reducer's own (state.ts `CHOICES`). */
 const REMOVE_HINTS: readonly KeyHint[] = CHOICES["remove-secret"].map((choice) => [choice.key, choice.does] as const)
 
@@ -212,11 +224,14 @@ export function AppScreen({
   const view = appViewOf(state, screen)
   const row = state.team?.servers.find((server) => server.name === screen.server)?.apps.find((app) => app.name === screen.app)
   const runState: RunState = row?.state ?? "unknown"
+  // The latest deploy the runner accepted, from this machine's history: what a secret changed after is measured against.
   const latest = view?.deploys.find((deploy) => deploy.outcome !== "sent")?.sequence
+  // The header names the deploy the runner holds, once it has said; until then, or when it cannot be reached, this machine's.
+  const shown = row?.accepted ?? latest
   const right = (
     <Box columnGap={1}>
       <StateCell state={runState} />
-      {latest !== undefined ? <Text dimColor>deploy {latest}</Text> : null}
+      {shown !== undefined ? <Text dimColor>deploy {shown}</Text> : null}
     </Box>
   )
   const header = <Header place={<Trail parts={[screen.server, screen.app]} />} right={right} />
@@ -242,7 +257,7 @@ export function AppScreen({
           selected={screen.deploy}
           focused={screen.pane === "deploys"}
           now={new Date()}
-          running={runState === "running" ? latest : undefined}
+          running={runningNow(view?.deploys, runState, row?.accepted)}
         />
         <SecretsPane
           secrets={view?.secrets}

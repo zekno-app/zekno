@@ -34,6 +34,7 @@ const REASONS: Record<string, string> = {
   bad_signature: "The runner could not verify the signature.",
   role_not_allowed: "Your role in the team does not allow deploys.",
   stale_secret: "The deploy carries an older version of a secret than the runner already accepted.",
+  too_large: "The deploy is larger than the runner accepts, or the server already holds as many apps or secrets as a runner can.",
 }
 
 export function explain(reason: string): string {

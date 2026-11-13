@@ -3,15 +3,16 @@
  * app screen and in `zekno status`; and an app's logs, on the logs screen
  * and in `zekno logs` (tasks T038 to T042).
  */
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
+import { SESSION_FRAME_BYTES } from "@workspace/core"
 import { renderToString } from "ink"
 import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
 
-import { filesUnder, isAlive, runner, tempDir, waitFor } from "../../runner/test/helpers"
+import { filesUnder, isAlive, residentMiB, runner, RUNNER_MAIN, tempDir, waitFor } from "../../runner/test/helpers"
 import { AppView, createStore } from "../src/app/app"
-import { createEffects, loadStart, needsAnswer, statesFor, type Effects } from "../src/app/effects"
+import { acceptedFor, createEffects, LOG_BATCH_MS, loadStart, needsAnswer, noAnswer, statesFor, type Effects, type Timing } from "../src/app/effects"
 import type { Terminal } from "../src/app/hand-over"
 import type { AppKey } from "../src/app/keys"
 import { logRows, logsHints, STRAIGHT, STRAIGHT_HERE } from "../src/app/screens/logs"
@@ -24,6 +25,7 @@ import {
   update,
   visibleLines,
   type AppEvent,
+  type DeployRow,
   type LogLine,
   type State,
   type TeamView,
@@ -34,6 +36,7 @@ import { stateCell } from "../src/commands/status"
 import { openTeam, type OpDeps } from "../src/context"
 import { followLogs, logsDropped, logsTooOld, prepareLogs } from "../src/ops/logs"
 import { readStatus, runStateOf, stateOf, type ServiceState } from "../src/ops/status"
+import { TOO_LARGE } from "../src/session"
 import { connect } from "../src/transport"
 import { inkUi, LogItem } from "../src/ui/ink"
 import { COMPOSE_V1, machine, ready } from "./helpers"
@@ -83,7 +86,13 @@ const TEAM: TeamView = {
 }
 const SIZE = { columns: 100, rows: 30 }
 const home = (size = SIZE) => play(initialState({ kind: "team", team: TEAM }, size), K.right)
-const states = { type: "app-states", server: "prod", states: { demo: "running", api: "partly running", worker: "stopped" } } as const
+/** A read of prod: what runs, and the last deploy of each app the runner accepted, as the runner said in the same read. */
+const states = {
+  type: "app-states",
+  server: "prod",
+  states: { demo: "running", api: "partly running", worker: "stopped" },
+  accepted: { demo: 4, api: 12, worker: 3 },
+} as const
 
 const at = (second: number) => `2026-11-14T21:52:${String(second).padStart(2, "0")}Z`
 const LINES: LogLine[] = [
@@ -101,18 +110,35 @@ const logsOf = (state: State) => {
 }
 const shown = (state: State) => visibleLines(logsOf(state)).map((line) => line.line)
 
-/** The app on a test machine, without a terminal unless one is given: the reducer, the effects, and the window drawn on request. */
-function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>, terminal?: Terminal, deps: OpDeps = m.deps) {
+/** The effects of every app a test opened: closed after each test, so no runner a test reached is left running. */
+const opened: Effects[] = []
+afterEach(async () => {
+  await Promise.all(opened.splice(0).map((effects) => effects.close()))
+})
+
+/**
+ * The app on a test machine, without a terminal unless one is given: the
+ * reducer, the effects, and the window drawn on request. `events` holds
+ * every event the effects sent, in order.
+ */
+function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>, terminal?: Terminal, deps: OpDeps = m.deps, timing?: Timing) {
   const failures: unknown[] = []
+  const events: AppEvent[] = []
   let effects: Effects | undefined
   const store = createStore(initialState(start, SIZE), (effect) => {
     if (effect.kind !== "exit") effects!.run(effect)
   })
-  effects = createEffects(deps, store.dispatch, (error) => failures.push(error), terminal)
+  const dispatch = (event: AppEvent) => {
+    events.push(event)
+    store.dispatch(event)
+  }
+  effects = createEffects(deps, dispatch, (error) => failures.push(error), terminal, timing)
+  opened.push(effects)
   return {
     store,
     effects,
     failures,
+    events,
     get state() {
       return store.get()
     },
@@ -165,6 +191,72 @@ done
 const VERSION = `${JSON.stringify({ result: { version: "0.2.0", protocol: 2 } })}\n`
 const frame = (value: unknown) => `${JSON.stringify(value)}\n`
 const logEvent = (service: string, time: string, line: string) => frame({ event: "log", service, time, line })
+
+/**
+ * Makes Docker's log command print without pause, as a container that logs
+ * in a loop does, and notes the process id of each runner started and of
+ * Docker's log command in the folder it returns.
+ */
+function floodingLogs(m: Machine): string {
+  const dir = tempDir("flood")
+  const docker = join(dir, "docker")
+  writeFileSync(
+    docker,
+    `#!/bin/sh\nif [ "$4" = logs ]; then echo $$ > "${dir}/logs.pid"; exec yes "web-1  | 2026-11-14T00:00:00Z ${"x".repeat(200)}"; fi\nexec "${m.docker.path}" "$@"\n`
+  )
+  chmodSync(docker, 0o755)
+  m.deps.localRunner = ["sh", "-c", 'echo $$ >> "$0"; exec "$@"', join(dir, "runner.pids"), "env", `ZEKNO_DOCKER=${docker}`, process.execPath, RUNNER_MAIN]
+  return dir
+}
+
+const LATE = "still running"
+
+/** What `promise` gives, or `LATE` after `ms` milliseconds. */
+const within = <T,>(promise: Promise<T>, ms: number): Promise<T | typeof LATE> => Promise.race([promise, Bun.sleep(ms).then(() => LATE as typeof LATE)])
+
+/**
+ * `zekno logs` as a process of its own, run as `main.ts` runs it when its
+ * output is piped (logs-driver.ts), against a runner whose Docker prints
+ * without pause. Its standard output is a pipe this test reads.
+ */
+function logsProcess() {
+  const dir = tempDir("logs-process")
+  const child = Bun.spawn([process.execPath, join(import.meta.dir, "logs-driver.ts"), dir], { stdin: "ignore", stdout: "pipe", stderr: "pipe" })
+  const errors = new Response(child.stderr).text()
+  const reader = child.stdout.getReader()
+  const decoder = new TextDecoder()
+  let text = ""
+  let bytes = 0
+  const read = async () => {
+    const chunk = await reader.read().catch(() => ({ done: true as const, value: undefined }))
+    if (!chunk.done) bytes += chunk.value.length
+    return chunk
+  }
+  const pidsIn = (file: string) => (existsSync(join(dir, file)) ? readFileSync(join(dir, file), "utf8").trim().split("\n").map(Number) : [])
+  return {
+    child,
+    /** The first line it printed. */
+    async firstLine(): Promise<string> {
+      while (!text.includes("\n")) {
+        const chunk = await read()
+        if (chunk.done) throw new Error(`zekno logs ended before its first line: ${await errors}`)
+        text += decoder.decode(chunk.value, { stream: true })
+      }
+      return text.split("\n")[0]!
+    },
+    /** Reads everything it prints, until it ends. */
+    async drain(): Promise<void> {
+      while (!(await read()).done) {
+        // Counted in `received`.
+      }
+    },
+    received: () => bytes,
+    /** Closes this end of its standard output, as `head -1` does once it has its line. */
+    closeOutput: () => reader.cancel(),
+    /** The runners and the Docker log command it started that are still running. */
+    left: () => [...pidsIn("runner.pids"), ...pidsIn("logs.pid")].filter(isAlive),
+  }
+}
 
 /** What the real runner of a machine says it holds, as a frame: so a lying runner passes for the right server. */
 async function realStatus(m: Machine): Promise<string> {
@@ -350,11 +442,65 @@ describe("state on Home and the app screen (boards 'Home' and 'One app')", () =>
     expect(screen).toMatch(/4 +● running now/)
     expect(screen).toMatch(/5 +! no answer recorded/)
     expect(screen).toMatch(/3 +✔ started, a rollback to 1/)
-    const stopped = draw(play(opened, { type: "app-states", server: "prod", states: { demo: "stopped" } }))
+    const stopped = draw(play(opened, { type: "app-states", server: "prod", states: { demo: "stopped" }, accepted: { demo: 4 } }))
     expect(stopped.split("\n")[2]!.trimEnd()).toMatch(/● stopped deploy 4$/)
     expect(stopped).not.toContain("running now")
     expect(stopped).toMatch(/4 +✔ started/)
     fits(draw(update(opened, { type: "resize", columns: 80, rows: 24 }).state, 80, 24), 80, 24)
+  })
+
+  test("`● running now` and the deploy numbers come from what the runner said: a latest deploy that did not start runs nothing (L5)", () => {
+    const appScreen = (deploys: DeployRow[], accepted: Record<string, number> | undefined) =>
+      draw(
+        play(home(), K.enter, { type: "app-view", server: "prod", app: "demo", deploys, secrets: [] }, {
+          type: "app-states",
+          server: "prod",
+          states: { demo: "running" },
+          accepted,
+        })
+      )
+    // `up` for deploy 4 failed; the runner accepted it, so it holds 4, and the containers that run are not deploy 4's.
+    const failed = appScreen(
+      [
+        { sequence: 4, outcome: "start_failed", at: at(40) },
+        { sequence: 3, outcome: "started", at: at(30) },
+      ],
+      { demo: 4 }
+    )
+    expect(failed).not.toContain("running now")
+    expect(failed).toMatch(/4 +✖ did not start/)
+    expect(failed).toMatch(/3 +✔ started/)
+    expect(failed.split("\n")[2]!.trimEnd()).toMatch(/● running deploy 4$/)
+    // Deploy 5 never reached the runner, which still holds 4: 4 is the one running now.
+    const unsent = appScreen(
+      [
+        { sequence: 5, outcome: "sent", at: at(50) },
+        { sequence: 4, outcome: "started", at: at(40) },
+      ],
+      { demo: 4 }
+    )
+    expect(unsent).toMatch(/4 +● running now/)
+    expect(unsent).toMatch(/5 +! no answer recorded/)
+    // The runner holds a deploy this machine did not send: none of these is running now, and the header says which it holds.
+    const elsewhere = appScreen([{ sequence: 4, outcome: "started", at: at(40) }], { demo: 6 })
+    expect(elsewhere).not.toContain("running now")
+    expect(elsewhere.split("\n")[2]!.trimEnd()).toMatch(/● running deploy 6$/)
+    // Before the runner has said which deploy it holds, nothing is marked.
+    expect(appScreen([{ sequence: 4, outcome: "started", at: at(40) }], undefined)).not.toContain("running now")
+
+    // Home: the deploy column is the runner's number once it has said, and this machine's again once the server cannot be reached.
+    const read = play(home(), { ...states, accepted: { demo: 6, api: 12, worker: 3 } })
+    expect(draw(read)).toMatch(/❯ demo +6 +● running/)
+    const lost = play(read, { type: "server-reached", server: "prod", reachable: false, problem: "no route" })
+    expect(draw(lost)).toMatch(/❯ demo +4 +● unknown/)
+    // A deploy from the app that the runner accepted is its number at once, whether or not the app started.
+    const deployedNow = play(
+      read,
+      { type: "deploy-started", server: "prod", app: "demo", at: 0 },
+      { type: "deploy-stage", stage: "checked", sequence: 7, secrets: 0 },
+      { type: "deploy-ended", outcome: "start_failed", notice: { tone: "error", text: "x" }, at: 1 }
+    )
+    expect(deployedNow.team?.servers[0]?.apps[0]?.accepted).toBe(7)
   })
 
   test("every 5 seconds Home reads every server and the app screen its own; never with a question open, nor on another screen", () => {
@@ -548,14 +694,86 @@ describe("logs from the app, against a real runner", () => {
     const pid = m.docker.logsPid()!
     expect(isAlive(pid)).toBe(true)
 
+    const pressed = app.events.length
     app.press({ kind: "escape" })
     expect(top(app.state).name).toBe("home")
     await app.until(() => !isAlive(pid), "Docker's log command to stop")
     expect(app.failures).toEqual([])
-    // Lines of a session that was let go never reach the screen.
+    // Lines of a session that was let go never reach the screen: no batch of them is handed on after esc.
+    await Bun.sleep(LOG_BATCH_MS * 3)
+    expect(app.events.slice(pressed).filter((event) => event.type === "log-lines")).toEqual([])
     expect(disk(m)).toEqual(before)
     const tail = m.docker.inspections().find((call) => call.args.includes("logs"))!
     expect(tail.args).toContain("logs --follow --timestamps --no-color --tail 200")
+  })
+
+  test("a runner that sends lines without pause: a key is taken at once, esc lets the logs go and q quits (L1)", async () => {
+    const m = await deployed("demo")
+    const flood = floodingLogs(m)
+    const app = openApp(m, await loadStart(m.deps))
+    app.press({ kind: "right" })
+    app.type("l")
+    await app.until(() => logsOf(app.state).lines.length > 0, "the first lines")
+    // A key reaches the app as an event on the loop, as a timer does: a timer every 10 ms may not fire late while the lines pour in.
+    let last = performance.now()
+    let late = 0
+    const timer = setInterval(() => {
+      const now = performance.now()
+      late = Math.max(late, now - last)
+      last = now
+    }, 10)
+    await Bun.sleep(600)
+    clearInterval(timer)
+    expect(late).toBeLessThan(100)
+    const shown = () => app.events.flatMap((event) => (event.type === "log-lines" ? event.lines : [])).length
+    expect(shown()).toBeGreaterThan(LOG_LINES)
+    expect(logsOf(app.state).lines.length).toBeLessThanOrEqual(LOG_LINES)
+
+    // esc, pressed in the middle of it, is taken at once, and the runner stops Docker's log command and exits.
+    const asked = performance.now()
+    const taken = await new Promise<number>((resolve) =>
+      setTimeout(() => {
+        app.press({ kind: "escape" })
+        resolve(performance.now())
+      }, 20)
+    )
+    expect(taken - asked).toBeLessThan(120)
+    expect(top(app.state).name).toBe("home")
+    const pressed = app.events.length
+    const docker = Number(readFileSync(join(flood, "logs.pid"), "utf8"))
+    const runners = readFileSync(join(flood, "runner.pids"), "utf8").trim().split("\n").map(Number)
+    await app.until(() => !isAlive(docker) && runners.every((pid) => !isAlive(pid)), "Docker's log command and the runner to stop", 2000)
+    await Bun.sleep(LOG_BATCH_MS * 3)
+    expect(app.events.slice(pressed).filter((event) => event.type === "log-lines")).toEqual([])
+    app.type("q")
+    expect(app.state.exiting).toBe(true)
+    expect(app.failures).toEqual([])
+  })
+
+  test("leaving the logs before the runner has answered stops the connection at once, whatever it was waiting for (L4)", async () => {
+    const m = await deployed("demo")
+    const plan = await prepareLogs(m.deps, { app: "demo", server: "dev" })
+    const dir = tempDir("silent")
+    const version = JSON.stringify({ result: { version: "0.2.0", protocol: 2 } })
+    // One that never answers at all, as SSH still connecting or asking; one that answers its version and never `status`.
+    for (const [label, script] of [
+      ["nothing", 'echo $$ > "$0"; exec sleep 30'],
+      ["no status", `echo $$ > "$0"; read -r line; printf '%s\\n' '${version}'; exec sleep 30`],
+    ] as const) {
+      const pidFile = join(dir, label.replace(" ", "-"))
+      m.deps.localRunner = ["sh", "-c", script, pidFile]
+      const stop = new AbortController()
+      const reading = followLogs(m.deps, plan, { tail: 10, follow: true, stop: stop.signal }, () => {})
+      await waitFor(() => existsSync(pidFile) && readFileSync(pidFile, "utf8").trim() !== "", "the runner to start")
+      const pid = Number(readFileSync(pidFile, "utf8"))
+      // Long enough for the version to have been answered, and before a runner on this machine counts as slow.
+      await Bun.sleep(150)
+      const left = Date.now()
+      stop.abort()
+      expect(await reading).toBe("stopped")
+      await waitFor(() => !isAlive(pid), `the runner that answered ${label} to be stopped`, 1000)
+      expect(Date.now() - left).toBeLessThan(1000)
+    }
   })
 
   test("when Docker stops sending, the screen says so; enter reads them again, and the new lines replace the old", async () => {
@@ -625,13 +843,14 @@ describe("what is running, read again while the app is open", () => {
     ])
     expect(app.draw()).toMatch(/demo +1 +● running/)
 
-    // A slow server: while one read is waiting, ticks start no other.
+    // A slow server: while one read is waiting, ticks start no other. Reads go over the session
+    // kept since the app started, so no tick starts a runner at all (L7; each tick used to start one).
     m.docker.psHangs()
     app.store.dispatch({ type: "tick" })
     await waitFor(() => m.docker.psPid() !== undefined, "Docker to be asked")
     for (let tick = 0; tick < 5; tick++) app.store.dispatch({ type: "tick" })
     await Bun.sleep(300)
-    expect(starts()).toBe(2)
+    expect(starts()).toBe(1)
     // Docker answers again: the read ends, and the next tick reads once more.
     const stateOfApp = (name: string) => app.state.team?.servers[0]?.apps.find((row) => row.name === name)?.state
     rmSync(join(dirname(m.docker.path), "ps-hang"))
@@ -641,10 +860,137 @@ describe("what is running, read again while the app is open", () => {
     await app.until(() => stateOfApp("demo") === "unknown" && stateOfApp("api") === "running", "the slow read to end")
     app.store.dispatch({ type: "tick" })
     await app.until(() => stateOfApp("demo") === "running", "the next read")
-    expect(starts()).toBe(3)
-    app.effects.close()
+    expect(starts()).toBe(1)
+    await app.effects.close()
     expect(app.failures).toEqual([])
   }, 20_000)
+
+  test("one session per server: ticks start no runner, the app screen reads its own server, and closing the app leaves no process (L7)", async () => {
+    const m = await deployed("demo")
+    expect(await m.zekno("server", "add", "other", "--local")).toBe(0)
+    m.docker.ps("demo", `${psRow("web", "running")}\n`)
+    const log = join(m.project, "runner.pids")
+    m.deps.localRunner = ["sh", "-c", 'echo $$ >> "$0"; exec "$@"', log, ...m.deps.localRunner]
+    const pids = () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").map(Number) : [])
+    const app = openApp(m, await loadStart(m.deps))
+    await app.effects.checkServers()
+    expect(pids()).toHaveLength(2)
+    const reads = (server?: string) => app.events.filter((event) => event.type === "app-states" && (server === undefined || event.server === server)).length
+    for (let tick = 0; tick < 10; tick++) {
+      const before = reads()
+      app.store.dispatch({ type: "tick" })
+      await app.until(() => reads() === before + 2, "both servers to be read")
+    }
+    expect(pids()).toHaveLength(2)
+    expect(app.state.team?.servers.map((server) => server.reachable)).toEqual([true, true])
+    expect(app.state.team?.servers[0]?.apps[0]).toMatchObject({ name: "demo", state: "running", accepted: 1 })
+    // The app screen reads its own server only, also when it opens.
+    app.press({ kind: "right" }, { kind: "enter" })
+    await app.until(() => reads("dev") === 12, "the app screen's read")
+    app.store.dispatch({ type: "tick" })
+    await app.until(() => reads("dev") === 13, "a tick on the app screen")
+    expect(reads("other")).toBe(11)
+    expect(pids()).toHaveLength(2)
+    for (const pid of pids()) expect(isAlive(pid)).toBe(true)
+    await app.effects.close()
+    for (const pid of pids()) expect(isAlive(pid)).toBe(false)
+    expect(app.failures).toEqual([])
+  })
+
+  test("closed at once, as on a signal, every kept session's process is stopped at once, even one that would not end by itself", async () => {
+    const m = await deployed("web")
+    const status = await realStatus(m)
+    const dir = tempDir("stubborn")
+    for (const [command, lines] of Object.entries({ version: VERSION, status, state: frame({ result: { apps: {} } }) })) writeFileSync(join(dir, command), lines)
+    // It answers, and once its input closes it stays, as a runner behind a connection that hangs would.
+    const script = join(dir, "runner")
+    writeFileSync(
+      script,
+      `#!/bin/sh\necho $$ > "${dir}/pid"\nwhile IFS= read -r line; do\n  case "$line" in\n    *'"command":"version"'*) cat "${dir}/version" ;;\n    *'"command":"status"'*) cat "${dir}/status" ;;\n    *'"command":"state"'*) cat "${dir}/state" ;;\n  esac\ndone\nexec sleep 30\n`
+    )
+    chmodSync(script, 0o755)
+    m.deps.localRunner = ["sh", script]
+    const app = openApp(m, await loadStart(m.deps))
+    await app.effects.checkServers()
+    expect(app.state.team?.servers[0]?.reachable).toBe(true)
+    const pid = Number(readFileSync(join(dir, "pid"), "utf8"))
+    const closing = Date.now()
+    const closed = app.effects.close({ now: true })
+    await waitFor(() => !isAlive(pid), "the runner to be stopped", 500)
+    await closed
+    expect(Date.now() - closing).toBeLessThan(500)
+    expect(app.failures).toEqual([])
+  })
+
+  test("a lost session is connected to again once 30 seconds have passed, not before; meanwhile the server is shown as not reached (L7)", async () => {
+    const m = await deployed("demo")
+    m.docker.ps("demo", `${psRow("web", "running")}\n`)
+    const log = join(m.project, "runner.pids")
+    m.deps.localRunner = ["sh", "-c", 'echo $$ >> "$0"; exec "$@"', log, ...m.deps.localRunner]
+    const pids = () => readFileSync(log, "utf8").trim().split("\n").map(Number)
+    const clock = { now: 1_000_000 }
+    const app = openApp(m, await loadStart(m.deps), undefined, m.deps, { now: () => clock.now })
+    await app.effects.checkServers()
+    const dev = () => app.state.team!.servers[0]!
+    expect(dev().apps[0]?.state).toBe("running")
+    process.kill(pids()[0]!)
+    app.store.dispatch({ type: "tick" })
+    await app.until(() => dev().reachable === false, "the read to fail")
+    expect(dev().apps[0]).toMatchObject({ state: "unknown", accepted: undefined })
+    expect(app.draw()).toMatch(/❯ demo +1 +● unknown/)
+    for (const wait of [1_000, 15_000, 29_999]) {
+      clock.now = 1_000_000 + wait
+      app.store.dispatch({ type: "tick" })
+    }
+    await Bun.sleep(300)
+    expect(pids()).toHaveLength(1)
+    clock.now = 1_000_000 + 30_000
+    app.store.dispatch({ type: "tick" })
+    await app.until(() => dev().reachable === true && dev().apps[0]?.state === "running", "the server to be read again")
+    for (let tick = 0; tick < 3; tick++) app.store.dispatch({ type: "tick" })
+    await Bun.sleep(300)
+    expect(pids()).toHaveLength(2)
+    expect(app.failures).toEqual([])
+  })
+
+  test("a read that gets no answer in time is given up: its session is closed, and the server is shown as not reached (L8)", async () => {
+    const m = await deployed("demo")
+    m.docker.ps("demo", `${psRow("web", "running")}\n`)
+    const log = join(m.project, "runner.pids")
+    m.deps.localRunner = ["sh", "-c", 'echo $$ >> "$0"; exec "$@"', log, ...m.deps.localRunner]
+    // 300 milliseconds here instead of the 20 seconds the app gives a read.
+    const app = openApp(m, await loadStart(m.deps), undefined, m.deps, { readLimitMs: 300 })
+    await app.effects.checkServers()
+    const dev = () => app.state.team!.servers[0]!
+    expect(dev().apps[0]?.state).toBe("running")
+    m.docker.psHangs()
+    const asked = Date.now()
+    app.store.dispatch({ type: "tick" })
+    await app.until(() => dev().reachable === false, "the read to be given up", 3000)
+    expect(Date.now() - asked).toBeLessThan(2000)
+    expect(dev().problem).toBe(noAnswer("dev", 300))
+    expect(dev().apps[0]?.state).toBe("unknown")
+    const [runner] = readFileSync(log, "utf8").trim().split("\n").map(Number)
+    await app.until(() => !isAlive(runner!) && !isAlive(m.docker.psPid()!), "the runner and Docker to stop", 2000)
+    expect(app.failures).toEqual([])
+  })
+
+  test("a runner that answers with more than an answer can hold: the server is not reached, and only apps this machine knows are kept (L3)", async () => {
+    const m = await deployed("web")
+    const status = await realStatus(m)
+    const huge = frame({ result: { apps: Object.fromEntries(Array.from({ length: 50_000 }, (_, n) => [`app-${n}`, { services: [] }])) } })
+    expect(huge.length).toBeGreaterThan(SESSION_FRAME_BYTES.state)
+    m.deps.localRunner = lyingRunner({ version: VERSION, status, state: huge })
+    const app = openApp(m, await loadStart(m.deps))
+    await app.effects.checkServers()
+    expect(app.state.team?.servers[0]).toMatchObject({ reachable: false, problem: TOO_LARGE })
+    // An answer within the limits: only the apps this machine has a history for are kept.
+    const many = Object.fromEntries(Array.from({ length: 500 }, (_, n) => [`other-${n}`, { services: [service("x", "running")] }]))
+    expect(statesFor({ ...many, web: { services: [service("web", "running")] } }, ["web", "gone"])).toEqual({ web: "running" })
+    const answer = JSON.parse(status).result
+    expect(acceptedFor({ ...answer, lastSequence: { ...answer.lastSequence, other: 3, zero: 0 } }, ["web", "zero", "gone"])).toEqual({ web: 1 })
+    expect(app.failures).toEqual([])
+  })
 
   test("the app opening an app's screen reads its state; nothing is written to disk by the reads", async () => {
     const m = await deployed("demo")
@@ -657,21 +1003,23 @@ describe("what is running, read again while the app is open", () => {
     expect(disk(m)).toEqual(before)
   })
 
-  test("over SSH, reads in the background never ask: batch mode only; where SSH would ask, the server is not reached until something connects on purpose", async () => {
+  test("over SSH, one session per server is kept and read every tick; it is connected to again in batch mode only, after 30 seconds, never where SSH would ask (L7)", async () => {
     const m = machine()
     expect(await m.zekno("init", "--name", "Ada")).toBe(0)
     const dir = tempDir("ssh")
     const log = join(dir, "ssh.log")
+    const pids = join(dir, "ssh.pids")
     const asks = join(dir, "ask")
     const wrapper = join(dir, "zekno-runner")
     writeFileSync(wrapper, `#!/bin/sh\nexec env ZEKNO_RUNNER_HOME="${join(dir, "runner-home")}" ZEKNO_DOCKER="${m.docker.path}" "${process.execPath}" "${join(import.meta.dir, "../../runner/src/main.ts")}" "$@"\n`)
     chmodSync(wrapper, 0o755)
-    // A stand-in for ssh: notes each call; in batch mode it fails as SSH does where it would ask for a password.
+    // A stand-in for ssh: notes each call and its process, which becomes the runner's; in batch mode it fails as SSH does where it would ask for a password.
     const ssh = join(dir, "ssh")
     writeFileSync(
       ssh,
       `#!/bin/sh
 printf '%s\\n' "$*" >> "${log}"
+echo $$ >> "${pids}"
 batch=
 while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
   if [ "$1" = -o ] && [ "$2" = BatchMode=yes ]; then batch=1; fi
@@ -679,11 +1027,12 @@ while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
 done
 [ "$1" = -- ] || exit 255
 if [ -f "${asks}" ] && [ -n "$batch" ]; then echo "$2: Permission denied (publickey,password)." >&2; exit 255; fi
-exec sh -c "$3"
+exec sh -c "exec $3"
 `
     )
     chmodSync(ssh, 0o755)
     const calls = () => readFileSync(log, "utf8").trim().split("\n")
+    const lastProcess = () => Number(readFileSync(pids, "utf8").trim().split("\n").at(-1))
     const session = `deploy@example.test ${wrapper} session`
 
     await withSsh({ path: ssh }, async () => {
@@ -693,37 +1042,77 @@ exec sh -c "$3"
       m.docker.ps("web", `${psRow("web", "running")}\n`)
       const suspended: string[] = []
       const terminal: Terminal = { suspend: async (note) => (suspended.push(note), async () => {}) }
-      const app = openApp(m, await loadStart(m.deps), terminal)
+      const clock = { now: 0 }
+      const app = openApp(m, await loadStart(m.deps), terminal, m.deps, { now: () => clock.now })
+      const prod = () => app.state.team!.servers[0]!
+      const reads = () => app.events.filter((event) => event.type === "app-states").length
+      const tick = async () => {
+        const before = reads()
+        app.store.dispatch({ type: "tick" })
+        await app.until(() => reads() > before, "a read")
+      }
       await app.effects.checkServers()
-      expect(app.state.team?.servers[0]?.apps[0]?.state).toBe("running")
+      expect(prod().apps[0]?.state).toBe("running")
+      expect(calls().at(-1)).toBe(`-o BatchMode=yes -- ${session}`)
 
-      // SSH now needs a password. A read in the background tries batch mode once, never hands the terminal over.
-      writeFileSync(asks, "")
+      // Every tick reads over the session the app kept when it started: no new connection, no new login.
       let made = calls().length
+      m.docker.ps("web", `${psRow("web", "exited", 1)}\n`)
+      for (let n = 0; n < 3; n++) await tick()
+      expect(prod().apps[0]?.state).toBe("stopped")
+      expect(calls().length).toBe(made)
+
+      // SSH now needs a password, and the kept session is lost: the server is shown as not reached at once, its state unknown.
+      writeFileSync(asks, "")
+      process.kill(lastProcess())
       app.store.dispatch({ type: "tick" })
-      await app.until(() => app.state.team?.servers[0]?.reachable === false, "the read to fail")
+      await app.until(() => prod().reachable === false, "the read to fail")
+      expect(prod().apps[0]?.state).toBe("unknown")
+      expect(calls().length).toBe(made)
+      // It is connected to again 30 seconds later, not sooner: in batch mode, once, and the terminal is never handed over.
+      clock.now += 29_000
+      app.store.dispatch({ type: "tick" })
+      await Bun.sleep(300)
+      expect(calls().length).toBe(made)
+      clock.now += 1_000
+      app.store.dispatch({ type: "tick" })
+      await app.until(() => prod().problem === needsAnswer("deploy@example.test"), "the connection in batch mode to fail")
       expect(suspended).toEqual([])
       expect(calls().slice(made)).toEqual([`-o BatchMode=yes -- ${session}`])
-      expect(app.state.team?.servers[0]?.problem).toBe(needsAnswer("deploy@example.test"))
-      expect(app.state.team?.servers[0]?.apps[0]?.state).toBe("unknown")
-      // Later ticks do not try again: no connection at all.
+      // Where SSH would ask, it is not tried again in the background, however long it has been: no connection at all.
       made = calls().length
-      for (let tick = 0; tick < 3; tick++) app.store.dispatch({ type: "tick" })
+      clock.now += 300_000
+      for (let n = 0; n < 3; n++) app.store.dispatch({ type: "tick" })
       app.press({ kind: "right" }, { kind: "enter" })
       await Bun.sleep(300)
       expect(calls().length).toBe(made)
 
-      // Connecting on purpose may ask, and is answered; after it the background tries batch mode again.
+      // Connecting on purpose may ask, and is answered; its session is kept, and ticks read over it.
       app.press({ kind: "escape" })
       await app.effects.checkServers()
       expect(suspended).toHaveLength(1)
-      expect(app.state.team?.servers[0]?.reachable).toBe(true)
+      expect(prod().reachable).toBe(true)
       rmSync(asks)
       made = calls().length
+      m.docker.ps("web", `${psRow("web", "running")}\n`)
+      await tick()
+      expect(prod().apps[0]?.state).toBe("running")
+      expect(calls().length).toBe(made)
+
+      // That session is lost too: after the wait the background connects again, in batch mode, and keeps the new session.
+      process.kill(lastProcess())
       app.store.dispatch({ type: "tick" })
-      await app.until(() => calls().length > made && app.state.team?.servers[0]?.apps[0]?.state === "running", "a read in batch mode")
+      await app.until(() => prod().reachable === false, "the read to fail")
+      clock.now += 30_000
+      await tick()
+      expect(prod()).toMatchObject({ reachable: true, problem: undefined })
+      expect(prod().apps[0]?.state).toBe("running")
       expect(calls().slice(made)).toEqual([`-o BatchMode=yes -- ${session}`])
       expect(suspended).toHaveLength(1)
+      const kept = lastProcess()
+      expect(isAlive(kept)).toBe(true)
+      await app.effects.close()
+      expect(isAlive(kept)).toBe(false)
       expect(app.failures).toEqual([])
     })
   }, 60_000)
@@ -760,6 +1149,34 @@ describe("`zekno logs`", () => {
     expect(m.docker.inspections().at(-1)!.args).toBe("compose -p zekno-web logs --timestamps --no-color --tail 5")
     expect(m.docker.logsPid()).toBeUndefined()
   }, 20_000)
+
+  test("`zekno logs | head -1`: once the reader closes its end, the reading stops and the command ends quietly with 0, leaving nothing running (L2)", async () => {
+    const run = logsProcess()
+    const first = await run.firstLine()
+    expect(first).toMatch(/^2026-11-14T00:00:00Z\tweb\tx{200}$/)
+    // The reader goes, as `head -1` does once it has its line.
+    await run.closeOutput()
+    const closed = Date.now()
+    expect(await within(run.child.exited, 3000)).toBe(0)
+    expect(Date.now() - closed).toBeLessThan(2000)
+    await waitFor(() => run.left().length === 0, "the runner and Docker's log command to stop", 1000)
+  }, 15_000)
+
+  test("`zekno logs` while the runner sends lines without pause: memory stays bounded, and Ctrl-C stops it at once with 0, leaving nothing running (L1)", async () => {
+    const run = logsProcess()
+    await run.firstLine()
+    // Read as fast as it comes, for a moment, as a terminal does.
+    const draining = run.drain()
+    await Bun.sleep(700)
+    expect(residentMiB(run.child.pid)!).toBeLessThan(400)
+    expect(run.received()).toBeGreaterThan(1_000_000)
+    run.child.kill("SIGINT")
+    const interrupted = Date.now()
+    expect(await within(run.child.exited, 3000)).toBe(0)
+    expect(Date.now() - interrupted).toBeLessThan(1500)
+    await draining
+    await waitFor(() => run.left().length === 0, "the runner and Docker's log command to stop", 1000)
+  }, 15_000)
 
   test("--tail is a whole number from 0 to 1000, checked before anything is read or sent", async () => {
     expect(parseTail(undefined)).toBe(200)

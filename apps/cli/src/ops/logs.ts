@@ -10,7 +10,7 @@ import { RunnerReportSchema, RunnerStatusSchema } from "@workspace/core"
 import { openTeam, reach, type OpDeps, type Team } from "../context"
 import { CliError } from "../errors"
 import { findServer, type Server } from "../profile"
-import { ENDED, withSession } from "../session"
+import { ENDED, openSession, type Session } from "../session"
 import { checkApp, type Where } from "./deploy"
 import { checkIdentity } from "./status"
 
@@ -66,6 +66,12 @@ export const logsDropped = (server: string): string => `The connection to ${serv
  * The runner is first asked what it holds, so the logs are read only from
  * the server that was connected, on this team, and only for an app it has
  * accepted a deploy of.
+ *
+ * `stop` may come at any moment. Before the logs are asked for, nothing on
+ * the server needs stopping, so the connection is stopped at once, even
+ * while SSH is still connecting or the runner has not answered. Once they
+ * are being read, the session is closed, so the runner stops Docker's log
+ * command before it exits.
  */
 export async function followLogs(
   deps: OpDeps,
@@ -74,39 +80,47 @@ export async function followLogs(
   onLine: (line: LogLine) => void | Promise<void>
 ): Promise<LogsEnd> {
   const { team, server, app } = plan
-  if (options.stop?.aborted) return "stopped"
-  return withSession(reach(deps, server.target), async (session) => {
+  const stop = options.stop
+  if (stop?.aborted) return "stopped"
+  const now = new AbortController()
+  let session: Session | undefined
+  let reading = false
+  let ended: LogsEnd | undefined
+  let letGo = () => {}
+  // A line still being handed over when the reading stops is not waited for: its reader may never take it.
+  const whenStopped = new Promise<void>((resolve) => (letGo = resolve))
+  const stopped = () => {
+    ended ??= "stopped"
+    letGo()
+    if (reading && session) void session.close()
+    else now.abort()
+  }
+  stop?.addEventListener("abort", stopped, { once: true })
+  try {
+    session = await openSession(reach(deps, server.target), { signal: now.signal })
     if (session.mode !== "session") throw new CliError(logsTooOld(server.name))
     const status = await session.request("status", RunnerStatusSchema)
     checkIdentity(team, server, status)
     if (!Object.hasOwn(status.lastSequence, app) || status.lastSequence[app]! < 1) {
       throw new CliError(`${server.name} has no deploy of ${app}, so there are no logs to read.`)
     }
-
-    let ended: LogsEnd | undefined
-    const stopped = () => {
-      ended ??= "stopped"
-      void session.close()
-    }
-    options.stop?.addEventListener("abort", stopped, { once: true })
-    if (options.stop?.aborted) stopped()
-
-    try {
-      await session.request("logs", RunnerReportSchema, {
-        // Following is the runner's default, so it is said only when it is not wanted.
-        input: options.follow ? { app, tail: options.tail } : { app, tail: options.tail, follow: false },
-        async onEvent(event) {
-          if (event.event !== "log" || ended) return
-          await onLine({ time: event.time, service: event.service, text: event.line })
-        },
-      })
-      return ended ?? "ended"
-    } catch (error) {
-      if (ended) return ended
-      if (error instanceof CliError && error.message === ENDED) throw new CliError(logsDropped(server.name))
-      throw error
-    } finally {
-      options.stop?.removeEventListener("abort", stopped)
-    }
-  })
+    reading = true
+    await session.request("logs", RunnerReportSchema, {
+      // Following is the runner's default, so it is said only when it is not wanted.
+      input: options.follow ? { app, tail: options.tail } : { app, tail: options.tail, follow: false },
+      async onEvent(event) {
+        if (event.event !== "log" || ended) return
+        const busy = onLine({ time: event.time, service: event.service, text: event.line })
+        if (busy instanceof Promise) await Promise.race([busy, whenStopped])
+      },
+    })
+    return ended ?? "ended"
+  } catch (error) {
+    if (ended) return ended
+    if (error instanceof CliError && error.message === ENDED) throw new CliError(logsDropped(server.name))
+    throw error
+  } finally {
+    stop?.removeEventListener("abort", stopped)
+    await session?.close()
+  }
 }

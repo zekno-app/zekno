@@ -44,6 +44,11 @@ export interface Ui {
    * returns settles once the interface can take another line.
    */
   logLine(line: LogOutput): void | Promise<void>
+  /**
+   * Signalled once nothing reads what `logLine` writes any more, such as the
+   * end of a pipe that was closed (`zekno logs | head -1`). Plain output only.
+   */
+  outputClosed?: AbortSignal
   /** Machine-readable output, exactly one JSON object. */
   json(value: unknown): void
   /**

@@ -51,9 +51,30 @@ keys type into it.
   is an error screen with the reason and no actions.
 - **Linked folder**: with a `zekno.json`, Home opens with that server and app selected.
 - **Refresh**: server and app state are read when a screen opens and every 5 seconds while Home
-  or App is showing. Nothing refreshes while a question is open.
+  or App is showing (Home reads every server, App its own). Nothing refreshes while a question
+  is open, below 80 by 24, or while the app is quitting. The reads go over one session per
+  server, kept open while the app runs (research R16): the connection the app makes to each
+  server when it starts, where SSH may ask (R10), checked once to be the right server on the
+  team, then `status` and `state` over it each time. A read adds no SSH login. One read per
+  server at a time.
+- **A read that fails or hangs**: a read with no answer within 20 seconds, or a session that
+  ends, closes that session and shows the server as unreachable at once, with the reason. Its
+  state is never left looking current.
+- **Reconnecting**: a server whose session was lost is connected to again in the background,
+  in SSH's batch mode only (it never asks and never hands the terminal over), at most once
+  every 30 seconds, and only while the screens above refresh. Where SSH would have had to ask,
+  it is not tried in the background again until something connects to it on purpose (start,
+  deploy, rollback, logs, update, add). Deploys, rollbacks, secrets and logs use connections of
+  their own, never the kept session. A runner from before sessions has no session to keep and
+  is not read in the background. After `u` updates a runner, its server's session is opened
+  again on purpose. Every kept session is closed when the app closes, on `q`, an error or a
+  signal.
 - **Unreachable server**: marked as such; its apps show their last deploy numbers from the
   local history and "unknown" for state. Other servers are unaffected.
+- **Deploy numbers**: once a server has answered, Home's deploy column, the app header and
+  "running now" use the runner's last accepted deploy of each app. A deploy is "running now"
+  only when every service runs, its number is the runner's last accepted one, and it started;
+  a latest deploy that did not start is "✖ did not start" and nothing is marked running now.
 - **Deploy from the app**: needs a linked folder or a Compose file in the current folder. With
   neither, the app says so and names `zekno link`.
 - **Missing values**: before a deploy, names the Compose file expects that have no secret are

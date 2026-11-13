@@ -58,12 +58,36 @@ commands answer.
   its number is used. The result is recorded in the runner's state as always; nobody is left to
   read the frame.
 - When the input closes during `logs`, the runner stops Docker's log command and exits.
+- A write that fails because nobody reads any more (the reader closed its end) counts as the
+  client gone, even while the input is still open: the request in progress is finished
+  (`apply`) or stopped (`logs`, and Docker's answer for `state`), requests still waiting are not
+  run, and the runner exits with status 0. While it reads Docker's output it lets other work
+  run every few milliseconds, so a closed input or a failed write is noticed however fast Docker
+  prints.
+- Progress frames do not wait for the reader. Once 8 MiB of frames wait to leave, further
+  progress frames are dropped until the reader catches up. A result is never dropped.
+- A runner holds at most 1,024 apps (`LIMITS.appsPerServer`) and 8,192 secret versions
+  (`LIMITS.secretsPerServer`): a deploy that would make it hold more is refused with
+  `too_large`, before anything is opened. A `state` answer holds at most 1,024 apps and 4,096
+  services in all (`LIMITS.servicesPerServer`); an app past that is left out, which reads as
+  "not known". So every `status` and `state` answer fits the limits the CLI reads them with.
 - Nothing decrypted is ever put in a frame. Progress lines are Docker's own output.
 
 ## Rules the CLI keeps
 
 - A frame that does not match the schema ends the session with "the runner did not answer as
-  expected". Frames are read up to the message size limit and no further.
+  expected". Each frame is read up to the longest the request in progress can bring
+  (`SESSION_FRAME_BYTES`: 64 KiB for `version`, `setup`, `sync` and `apply`'s progress, 192 KiB
+  for a log event, 1 MiB for `state`, 4 MiB for `status`) and no further: past it the session
+  ends with "the runner sent more than an answer can hold". `status` holds at most 1,024 apps
+  and 8,192 secrets, `state` at most 1,024 apps and 4,096 services; an answer with more does
+  not match.
+- While a request's events are read, other work in the CLI runs every few milliseconds (keys,
+  the screen, timers, a signal), however fast the runner sends. While whoever takes the events
+  is busy (a full pipe, a screen that has not drawn the last batch), nothing more is read, so
+  the runner, and Docker behind it, are held back in the connection.
+- Opening a session can be stopped at any moment, before the runner has answered or while SSH
+  connects or asks: its process is stopped at once.
 - A `result` is believed only as far as feature 003 allows: the server and team are checked
   from `status`, and a deploy's result must name the app and number that were sent.
 - Text in `progress` and `log` events is cleaned of terminal control sequences before it is

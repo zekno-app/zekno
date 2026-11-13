@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { createTeam as startTeam, createSigner, generateMemberKeyPair } from "@workspace/core"
 import { renderToString } from "ink"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
@@ -50,6 +50,12 @@ function releaseOf(server: StandInServer, content: string): RunnerRelease {
   return { version: "0.2.0", files: { "linux-x64": { sha256: server.release(content) }, "linux-arm64": { sha256: null } } }
 }
 
+/** The effects of every app a test opened: closed after each test, so no runner a test reached is left running. */
+const opened: ReturnType<typeof createEffects>[] = []
+afterEach(async () => {
+  await Promise.all(opened.splice(0).map((effects) => effects.close()))
+})
+
 /** The app on a test machine, without a terminal: the reducer, the effects, and the window drawn on request. */
 function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>, terminal?: Terminal, deps: OpDeps = m.deps) {
   const failures: unknown[] = []
@@ -58,6 +64,7 @@ function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>, termi
     if (effect.kind !== "exit") effects!.run(effect)
   })
   effects = createEffects(deps, store.dispatch, (error) => failures.push(error), terminal)
+  opened.push(effects)
   return {
     store,
     effects,

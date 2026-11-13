@@ -5,6 +5,7 @@ import {
   RunnerReportSchema,
   RunnerStatusSchema,
   RunnerVersionSchema,
+  SESSION_FRAME_BYTES,
   type SessionEvent,
 } from "@workspace/core"
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs"
@@ -91,7 +92,7 @@ describe("a session carries several requests over one runner process", () => {
     const plan = await prepareDeploy(m.deps, { app: "web", server: "dev" })
     const result = await sendDeploy(m.deps, plan, {
       stage: (stage, deploy) => timeline.push(`${stage} ${deploy.sequence}`),
-      progress: (line) => timeline.push(`line ${line}`),
+      progress: (line) => void timeline.push(`line ${line}`),
     })
     expect(result).toMatchObject({ outcome: "started", app: "web", sequence: 1, server: "dev", secrets: 0, mode: "session" })
     expect(timeline.slice(0, 4)).toEqual(["checked 1", "signed 1", "sent 1", "starting 1"])
@@ -193,6 +194,112 @@ describe("what the runner sends is checked", () => {
       spy.mockRestore()
     }
     expect(written.join("")).toBe("one two\nthree\n")
+  })
+})
+
+describe("a runner that sends too much, too fast, or nothing (security-review.md L1, L3, L4)", () => {
+  /** A log event of `width` characters, as one line. */
+  const logLine = (width: number) => JSON.stringify({ event: "log", service: "web", time: "2026-11-14T00:00:00Z", line: "x".repeat(width) })
+
+  /** A stand-in that notes its process id in `pidFile`, answers its version, and then sends `line` without pause for the next request. */
+  const flooding = (pidFile: string, line: string) => [
+    "sh",
+    "-c",
+    `echo $$ > "$0"; read -r request; printf '%s\\n' '${JSON.stringify({ result: VERSION })}'; read -r request; exec yes "$1"`,
+    pidFile,
+    line,
+  ]
+
+  test("events as fast as a runner can send them: timers still fire every few milliseconds, and closing stops the runner", async () => {
+    const pidFile = join(tempDir("flood"), "pid")
+    const s = await openSession(connect(local(), flooding(pidFile, logLine(1000))))
+    let events = 0
+    const reading = s.request("logs", RunnerReportSchema, { input: { app: "web", tail: 0 }, onEvent: () => void events++ }).catch((error: unknown) => error)
+    let last = performance.now()
+    let late = 0
+    const timer = setInterval(() => {
+      const now = performance.now()
+      late = Math.max(late, now - last)
+      last = now
+    }, 10)
+    await Bun.sleep(700)
+    clearInterval(timer)
+    expect(late).toBeLessThan(100)
+    expect(events).toBeGreaterThan(10_000)
+    const pid = Number(readFileSync(pidFile, "utf8"))
+    await s.close(1000)
+    expect(String(await reading)).toContain(ENDED)
+    await waitFor(() => !isAlive(pid), "the runner to stop", 1000)
+  })
+
+  test("a runner that writes on standard error without pause, over a session kept open: timers still fire every few milliseconds", async () => {
+    let lines = 0
+    const pidFile = join(tempDir("flood"), "pid")
+    const noisy = ["sh", "-c", `echo $$ > "$0"; read -r request; printf '%s\\n' '${JSON.stringify({ result: VERSION })}'; exec yes "$1" >&2`, pidFile, "x".repeat(200)]
+    const s = await openSession(connect(local(), noisy, { errorLines: () => void lines++ }))
+    let last = performance.now()
+    let late = 0
+    const timer = setInterval(() => {
+      const now = performance.now()
+      late = Math.max(late, now - last)
+      last = now
+    }, 10)
+    await Bun.sleep(500)
+    clearInterval(timer)
+    expect(late).toBeLessThan(100)
+    expect(lines).toBeGreaterThan(10_000)
+    await s.close(500)
+    await waitFor(() => !isAlive(Number(readFileSync(pidFile, "utf8"))), "the runner to stop", 1000)
+  })
+
+  test("while what a request's events go to is busy, nothing more is read: the runner is held back in the connection", async () => {
+    const pidFile = join(tempDir("flood"), "pid")
+    const s = await openSession(connect(local(), flooding(pidFile, logLine(1000))))
+    let events = 0
+    const reading = s
+      .request("logs", RunnerReportSchema, { input: { app: "web", tail: 0 }, onEvent: () => (events++, Bun.sleep(50)) })
+      .catch((error: unknown) => error)
+    await Bun.sleep(500)
+    expect(events).toBeGreaterThan(3)
+    expect(events).toBeLessThan(15)
+    await s.close(1000)
+    expect(String(await reading)).toContain(ENDED)
+    await waitFor(() => !isAlive(Number(readFileSync(pidFile, "utf8"))), "the runner to stop", 1000)
+  })
+
+  test("each answer is read up to the longest its request can bring, far below a message's limit; past it the session ends", async () => {
+    const past = (bytes: number) => `head -c ${bytes + 1} /dev/zero | tr '\\0' x; echo`
+    for (const [command, schema] of [
+      ["status", RunnerStatusSchema],
+      ["state", RunnerAppStatesSchema],
+    ] as const) {
+      expect(SESSION_FRAME_BYTES[command]).toBeLessThanOrEqual(LIMITS.messageBytes / 8)
+      const s = await openSession(connect(local(), scripted(say({ result: VERSION }), past(SESSION_FRAME_BYTES[command]))))
+      await expect(s.request(command, schema)).rejects.toThrow(TOO_LARGE)
+      await expect(s.request("version", RunnerVersionSchema)).rejects.toThrow(ENDED)
+      await s.close()
+    }
+    // One log event longer than the longest a log line can make.
+    const pidFile = join(tempDir("flood"), "pid")
+    const s = await openSession(connect(local(), flooding(pidFile, logLine(SESSION_FRAME_BYTES.logs))))
+    await expect(s.request("logs", RunnerReportSchema, { input: { app: "web", tail: 0 } })).rejects.toThrow(TOO_LARGE)
+    await waitFor(() => !isAlive(Number(readFileSync(pidFile, "utf8"))), "the runner to be stopped", 1000)
+    // A version longer than a version can be.
+    await expect(openSession(connect(local(), scripted(past(SESSION_FRAME_BYTES.version))))).rejects.toThrow(TOO_LARGE)
+  })
+
+  test("opening a session can be stopped before the runner has answered: its process is stopped at once", async () => {
+    const pidFile = join(tempDir("silent"), "pid")
+    const stop = new AbortController()
+    const opening = openSession(connect(local(), ["sh", "-c", 'echo $$ > "$0"; exec sleep 30', pidFile]), { signal: stop.signal }).catch((error: unknown) => error)
+    await waitFor(() => existsSync(pidFile) && readFileSync(pidFile, "utf8").trim() !== "", "the runner to start")
+    stop.abort()
+    expect(await opening).toBeInstanceOf(Error)
+    await waitFor(() => !isAlive(Number(readFileSync(pidFile, "utf8"))), "the runner to be stopped", 1000)
+    // Signalled before it starts, nothing is started at all.
+    const started = join(tempDir("silent"), "pid")
+    await expect(openSession(connect(local(), ["sh", "-c", 'echo $$ > "$0"', started]), { signal: AbortSignal.abort() })).rejects.toThrow(ENDED)
+    expect(existsSync(started)).toBe(false)
   })
 })
 

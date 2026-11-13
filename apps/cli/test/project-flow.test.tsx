@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { renderToString, type Key } from "ink"
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -162,6 +162,12 @@ describe("single commands in a linked folder", () => {
 // ---------------------------------------------------------------------------
 // The app
 
+/** The effects of every app a test opened: closed after each test, so no runner a test reached is left running. */
+const opened: Effects[] = []
+afterEach(async () => {
+  await Promise.all(opened.splice(0).map((effects) => effects.close()))
+})
+
 /** The app on a test machine, without a terminal: the reducer, the effects, and the window drawn on request. */
 function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>) {
   const failures: unknown[] = []
@@ -170,6 +176,7 @@ function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>) {
     if (effect.kind !== "exit") effects!.run(effect)
   })
   effects = createEffects(m.deps, store.dispatch, (error) => failures.push(error))
+  opened.push(effects)
   const held = emptyHiddenValue()
   return {
     store,

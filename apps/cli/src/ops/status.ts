@@ -1,7 +1,7 @@
 import { RunnerAppStatesSchema, RunnerStatusSchema, type RunnerAppStates, type RunnerStatus, type RunnerVersion } from "@workspace/core"
 
 import { openTeam, reach, type OpDeps, type Team } from "../context"
-import { CliError } from "../errors"
+import { CliError, RunnerRefused } from "../errors"
 import { findServer, type Server } from "../profile"
 import { withSession, type Session, type SessionMode } from "../session"
 
@@ -81,33 +81,43 @@ export type StatusResult = {
 /**
  * Asks what is running, in a session that already showed it is the right
  * server. A runner from before sessions has no `state`, and is not asked:
- * that would cost a connection to learn nothing. A refusal or an answer that
- * does not match leaves the state unknown; what the runner holds was already
- * read and checked, so it still counts.
+ * that would cost a connection to learn nothing. A refusal leaves the state
+ * unknown; what the runner holds was already read and checked, so it still
+ * counts. So does an answer that does not match, unless `whole`: such an
+ * answer also ends the session (session.ts), and a session that is kept for
+ * more reads then fails here with the reason, rather than on the next read.
  */
-async function readStates(session: Session): Promise<AppStates | undefined> {
+async function readStates(session: Session, whole: boolean): Promise<AppStates | undefined> {
   if (session.mode !== "session") return undefined
   try {
     return (await session.request("state", RunnerAppStatesSchema)).apps
   } catch (error) {
-    if (error instanceof CliError) return undefined
+    if (error instanceof RunnerRefused || (error instanceof CliError && !whole)) return undefined
     throw error
   }
 }
 
-/** Asks a server what it holds and what is running, over one session. */
-export async function readStatus(deps: OpDeps, { team, server }: Checked): Promise<StatusResult> {
-  return withSession(reach(deps, server.target), async (session) => {
-    const status = await session.request("status", RunnerStatusSchema)
-    checkIdentity(team, server, status)
-    const states = await readStates(session)
-    return {
-      server: server.name,
-      status,
-      behind: status.team.version < team.trust.version,
-      mode: session.mode,
-      runner: session.runner,
-      ...(states === undefined ? {} : { states }),
-    }
-  })
+/**
+ * Asks a server what it holds and what is running, over a session that is
+ * open, and checks that it is the server that was connected and on this
+ * team. The app keeps one session per server for this (effects.ts); see
+ * `readStates` for `whole`.
+ */
+export async function readOver(session: Session, { team, server }: Checked, options: { whole?: boolean } = {}): Promise<StatusResult> {
+  const status = await session.request("status", RunnerStatusSchema)
+  checkIdentity(team, server, status)
+  const states = await readStates(session, options.whole === true)
+  return {
+    server: server.name,
+    status,
+    behind: status.team.version < team.trust.version,
+    mode: session.mode,
+    runner: session.runner,
+    ...(states === undefined ? {} : { states }),
+  }
+}
+
+/** Asks a server what it holds and what is running, over one session of its own. */
+export async function readStatus(deps: OpDeps, checked: Checked): Promise<StatusResult> {
+  return withSession(reach(deps, checked.server.target), (session) => readOver(session, checked))
 }

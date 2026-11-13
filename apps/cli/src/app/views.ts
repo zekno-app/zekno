@@ -52,8 +52,12 @@ export function verifiedDeploys(team: Team, server: Server, app: string): Verifi
 
 const accepted = (entries: readonly Verified[]) => entries.filter((entry) => entry.outcome !== "sent")
 
-/** The apps this machine has a history for on one server, by the name of each history file. */
-function appNames(home: string, server: Server): string[] {
+/**
+ * The apps this machine has a history for on one server, by the name of each
+ * history file. Nothing is verified: it only chooses which of a runner's
+ * answers to keep, for the apps Home may show.
+ */
+export function appNames(home: string, server: Server): string[] {
   let files: string[]
   try {
     files = readdirSync(join(home, "history", server.serverId))

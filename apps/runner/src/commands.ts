@@ -3,6 +3,7 @@ import {
   CoreError,
   generateServerKeyPair,
   initialRunnerState,
+  LIMITS,
   openSecrets,
   parseMessage,
   parseRunnerState,
@@ -58,6 +59,10 @@ function follow(state: RunnerState, rosters: readonly Envelope[]): RunnerState |
 }
 
 export const isReport = (value: object): value is RunnerReport => "outcome" in value
+
+/** Whether a state holds no more apps and secrets than a runner may report (LIMITS). */
+const withinLimits = (state: RunnerState): boolean =>
+  Object.keys(state.lastSequence).length <= LIMITS.appsPerServer && Object.keys(state.secrets).length <= LIMITS.secretsPerServer
 
 /**
  * Sets the server up for one team. Runs once: a server that already has a key
@@ -152,6 +157,9 @@ export function apply(dir: string, input: string, onProgress?: (line: string) =>
 
     const verified = verifyDeploy({ ...request.value.deploy, state: followed })
     if (!verified.ok) return refused(verified.error.code)
+    // What a runner holds must always fit the answers that report it (`status`, `state`),
+    // so a deploy of one app or one secret more than that is refused before anything is opened.
+    if (!withinLimits(verified.value.nextState)) return refused("too_large")
 
     // Open before saving: a deploy whose secrets cannot be opened must not use up its number.
     const secrets = openSecrets(verified.value, loaded.secretKey)

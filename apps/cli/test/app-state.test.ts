@@ -275,7 +275,7 @@ describe("a deploy in progress", () => {
   })
 
   test("Docker's output is kept, the last 500 lines", () => {
-    const lines = Array.from({ length: 600 }, (_, n) => ({ type: "deploy-progress", line: `line ${n}` }) as const)
+    const lines = Array.from({ length: 600 }, (_, n) => ({ type: "deploy-progress", lines: [`line ${n}`] }) as const)
     const state = play(deploying(), ...lines).state
     expect(state.deploy?.lines).toHaveLength(500)
     expect(state.deploy?.lines.at(-1)).toBe("line 599")

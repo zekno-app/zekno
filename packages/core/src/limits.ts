@@ -26,6 +26,14 @@ export const LIMITS = {
   pendingDeploys: 64,
   /** Team lists in one chain response. */
   rosterChain: 1024,
+  /** Apps one runner holds deploys of. A runner refuses a deploy of one more. */
+  appsPerServer: 1024,
+  /** Secrets one runner remembers a version of, across its apps ("app/NAME"). A runner refuses a deploy that would make it more. */
+  secretsPerServer: 8192,
+  /** Services of one app in an answer about what is running. */
+  servicesPerApp: 256,
+  /** Services across all apps in an answer about what is running. A runner leaves out the apps past it. */
+  servicesPerServer: 4096,
 } as const
 
 /** Longest base64url text that can encode `bytes` bytes. */

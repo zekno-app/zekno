@@ -228,3 +228,88 @@ rated high or critical. One medium and four low findings.
   commit starts a release.
 - The checksums in `SHA256SUMS` come from the same job that builds the files. Before recording
   them in `runner-release.json`, build the runner again somewhere else and compare.
+
+## State, logs and the logs command (reviewed 2026-11-14)
+
+An independent reviewer (a separate agent that did not write the code) read commit `e51baf1`, with
+a runner or server that lies as the main attacker, and reproduced each finding against a lying
+stand-in runner and the stand-in Docker. Nothing was rated high or critical. One medium and seven
+low findings. The fixes were made afterwards, on the code as it stood at `abcf8f4`, by an
+assistant other than the reviewer, who reproduced each finding there first.
+
+| Id | Rating | Finding | State |
+|----|--------|---------|-------|
+| L1 | Medium | A runner that sends `log` events as fast as it can froze the app and `zekno logs`: the session's read loop only waited on promises that were already settled, so no key, timer or signal handler ran (Esc not taken 25 seconds after it was pressed; a SIGINT handler not run 6 seconds after the signal). Docker's progress lines during a deploy took the same path. | Fixed: while it reads events the session client lets everything else run every 10 ms (`session.ts`). The app's log batches and its batches of Docker's progress push back: once 2,000 log lines or 500 progress lines wait to be drawn, nothing more is read until they are, so the runner is held back in the connection. Measured against a runner whose Docker prints without pause: a timer every 10 ms fired at most 12 to 26 ms apart, Esc taken within 0.12 s in a pseudo-terminal, a SIGINT handler run 70 ms after the signal, the app at 225 to 263 MB. An honest runner is not slowed: 270,000 lines of 100 characters a second (40 MB/s) and 2,800 lines of 16 KB a second (45 MB/s), the same before and after. |
+| L2 | Low | `zekno logs \| head -1` never ended: Bun's `console.log` ignores a closed pipe, so the SSH session and Docker's log command went on. | Fixed: log lines are written with `process.stdout.write` and wait for `drain`; a closed standard output stops the reading on the server and ends the command quietly, with status 0 (contracts/commands.md). |
+| L3 | Low | Nothing bounded the apps in a `state` or `status` answer, and any answer could be 32 MiB: a lying runner made each read take 1.5 seconds and grew the CLI to 2.4 GB. | Fixed: each line is read up to the longest its request can bring (`SESSION_FRAME_BYTES`: 64 KiB for `version` and progress, 192 KiB for a log event, 1 MiB for `state`, 4 MiB for `status`, about twice the largest each message allows), past which the session ends with the existing "more than an answer can hold" sentence. `status` holds at most 1,024 apps and 8,192 secrets, `state` at most 1,024 apps and 4,096 services. So that an honest runner never goes past them, it refuses a deploy that would make it hold more apps or secrets (`too_large`), and leaves out of `state` the apps past the services limit, which reads as "not known". A runner whose state was made outside zekno with more apps than that answers `status` in a way the CLI refuses ("did not answer as expected"). The app keeps only the apps this machine has a history for. |
+| L4 | Low | Leaving the logs screen before the runner had answered `status` left the session, and its SSH process, running: one more for each `esc`, `l`. | Fixed: opening a session takes a signal that stops its process at once, while SSH connects or asks, or before the runner answers. Once the logs are being read, leaving closes the session, so the runner stops Docker's log command. |
+| L5 | Low | "● running now" and the deploy number in the app's header were the latest deploy in this machine's history, also when it had not started. | Fixed: both come from the runner's last accepted deploy, read with the state. A deploy is "running now" only while every service runs, when its number is the runner's last accepted one and it started. A latest deploy that did not start shows "✖ did not start", and then nothing is marked. Home's deploy column shows the runner's number too, and this machine's again once the server cannot be reached. |
+| L6 | Low | With Docker printing without pause and the client gone, the runner never noticed the closed input or the failed writes: it and Docker's log command ran on, the runner growing to 6 GB. | Fixed: the runner lets other work run every 10 ms while it reads Docker's output; a write that fails (EPIPE) counts as the client gone, even while its input is open; at most 8 MiB of progress frames wait for a slow reader, and the rest are dropped. The runner and Docker's log command now end within about 50 ms of the client going (the tests allow 3 seconds). Every existing runner test passes unchanged. |
+| L7 | Low | Each background read opened a new SSH connection, every 5 seconds per server: about 720 logins an hour in the server's auth log, firewall limits such as `ufw limit` could shut the developer out, and SSH agents or keys that confirm each use would ask every 5 seconds. | Fixed: one session per server, opened when the app starts (where SSH may ask), checked once to be the server that was connected on this team, and kept; each read sends `status` and `state` over it. A lost session is opened again in the background in batch mode only, at most once every 30 seconds, never where SSH would ask. Deploys, rollbacks, secrets and logs keep their own connections. All kept sessions are closed, and their processes gone, when the app closes, on an error and on a signal (research R16, contracts/app.md). |
+| L8 | Low | A background read had no time limit: once the network dropped, Home kept the server's last state, looking current, until TCP gave up. | Fixed: a read with no answer within 20 seconds closes the session and shows the server as not reached, its apps' state unknown. |
+
+**Notes**
+
+- N1. The line for a server where SSH would ask said zekno asks "only when you deploy or open
+  logs". It also asks when the app starts and when a server is added or updated. Corrected: "zekno
+  asks only when it starts and when you add or update a server, deploy or open logs, never in the
+  background."
+- N3. `sanitize` keeps combining marks (50 × U+0301 pass), the braille blank, noncharacters and
+  U+3000. They cannot change the text, but can draw over the rows next to it in some terminals.
+  Not fixed.
+
+**Checked and found to hold**
+
+From the review: while the logs poured in, the CLI's memory stayed bounded (290 to 355 MB); what
+went wrong was the event loop, not memory. Checked again while fixing:
+
+- Text in log and progress events is still cleaned before it is drawn, and a log event that does
+  not match its definition still ends the reading with a sentence (the existing tests, unchanged).
+- Reads in the background never hand the terminal over: a lost session is opened again with
+  `BatchMode=yes` only, and not at all where SSH would ask (tested with a stand-in `ssh`).
+- Ticks do not open the keychain: they use the team list verified when the app started or last
+  verified it (read in the code).
+- A kept session is checked against the profile's server and team when it opens, and each later
+  `status` over it is checked the same way (read in the code; tested through the app).
+- `zekno deploy`, `status` and `rollback` still start one runner process each, and the app's
+  deploys and logs still open their own (the existing tests, unchanged).
+- The runner's session limits suit a session held open: three unreadable lines in a row (the
+  count starts again with every request), 1,024 requests or 32 MiB sent ahead of their answers,
+  and no limit on how long a session stays open (read in the code; two requests every 5 seconds
+  for 22 seconds in a pseudo-terminal, not for hours).
+
+**Where each fix is tested**
+
+| Finding | Test |
+|---------|------|
+| L1, L3, L4 (session client) | `apps/cli/test/session.test.ts`, "a runner that sends too much, too fast, or nothing" |
+| L1, L2, L4, L5, L7, L8, L3 (app) | `apps/cli/test/state-logs.test.tsx`; `zekno logs` runs as a process of its own (`apps/cli/test/logs-driver.ts`) |
+| L3 (bounds) | `packages/core/test/scenarios/messages.test.ts`; the runner's side in `apps/runner/test/hardening.test.ts` |
+| L6 | `apps/runner/test/hardening.test.ts`, "a container that prints without pause". Both tests fail against the runner at `abcf8f4`. |
+
+Also walked through in a pseudo-terminal (100 by 30, a driver that reads the terminal the whole
+time, an in-memory key store, two runners on this machine, a Docker whose logs never pause), in
+three runs, 10 of 10 checks each: Home showed the state; over 22 seconds of ticks each runner was
+started once; `esc` and `q` worked on a flooded logs screen; the app exited with status 0 and left
+no runner or Docker process.
+
+**Tests the reviewer found missing**: a flood, a closed standard output, leaving before `status`,
+answer sizes, a latest deploy that did not start and Ctrl-C in `zekno logs` are now tested. "Lines
+of a session that was let go never reach the screen" now checks that no batch of lines is handed
+on after `esc`. The interval in `app.tsx` itself is covered by the pseudo-terminal walk, not by a
+test.
+
+**Noticed while fixing, not part of the review**
+
+- Passing a runner's standard error on (`transport.ts`) used the same kind of loop as L1: a runner
+  writing on standard error without pause froze the CLI (a one-second timer had not fired after 6
+  seconds). A kept session makes that stream last as long as the app, so it now gives way every
+  10 ms as well, and is tested.
+- The installer's output during "add a server" (`install.ts`, `scriptLines`) is read with that kind
+  of loop too. Not changed here.
+- The runner records a deploy's number before it starts it, so after a failed start it holds the
+  failed deploy, and nothing is marked "running now". Which deploy's containers run then (the
+  earlier one's, or some of the new one's) cannot be told from what the runner reports.
+- A runner from before sessions has nothing to keep open: it is read when the app starts and
+  after `u`, never in the background.
+- A one-shot `status` answer from a runner before sessions is still read up to 32 MiB.

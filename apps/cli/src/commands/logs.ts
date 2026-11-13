@@ -20,7 +20,9 @@ export function parseTail(value: string | undefined): number {
  * interrupted, Docker's log command ends or the connection does; with
  * `--no-follow` the runner sends the lines Docker has and the command ends.
  * Ctrl-C stops the reading, which stops Docker's log command on the server,
- * and is not a failure.
+ * and is not a failure. Nor is a reader that stops reading and closes its
+ * end of the pipe (`zekno logs | head -1`): the reading stops the same way
+ * and the command ends quietly, with status 0.
  */
 export async function logs(deps: Deps, options: Options): Promise<void> {
   const tail = parseTail(options.tail)
@@ -29,10 +31,14 @@ export async function logs(deps: Deps, options: Options): Promise<void> {
   const interrupt = () => stop.abort()
   process.once("SIGINT", interrupt)
   process.once("SIGTERM", interrupt)
+  const closed = deps.ui.outputClosed
+  if (closed?.aborted) interrupt()
+  closed?.addEventListener("abort", interrupt, { once: true })
   try {
     await followLogs(remoteThroughUi(deps), plan, { tail, follow: !options["no-follow"], stop: stop.signal }, (line) => deps.ui.logLine(line))
   } finally {
     process.off("SIGINT", interrupt)
     process.off("SIGTERM", interrupt)
+    closed?.removeEventListener("abort", interrupt)
   }
 }

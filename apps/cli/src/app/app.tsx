@@ -227,8 +227,8 @@ export function openApp(deps: AppDeps, options: AppOptions): Promise<number> {
   let failure: { error: unknown } | undefined
 
   const close = () => {
-    // Nothing more is read in the background, and the logs being followed are let go.
-    effects.close()
+    // Nothing more is read in the background, the logs being followed are let go, and each server's kept session is closed.
+    void effects.close()
     instance?.unmount()
   }
   const fail = (error: unknown) => {
@@ -236,9 +236,10 @@ export function openApp(deps: AppDeps, options: AppOptions): Promise<number> {
     close()
     restoreInput(stdin)
   }
-  // A signal ends the app at once. The terminal is restored first.
+  // A signal ends the app at once. The terminal is restored first, and every connection is stopped: nothing can wait for them.
   const onSignal = (signal: (typeof SIGNALS)[number]) => {
-    close()
+    void effects.close({ now: true })
+    instance?.unmount()
     restoreInput(stdin)
     process.exit(128 + constants.signals[signal])
   }
@@ -255,13 +256,15 @@ export function openApp(deps: AppDeps, options: AppOptions): Promise<number> {
   for (const signal of SIGNALS) process.on(signal, onSignal)
   process.on("uncaughtException", onCrash)
   process.on("unhandledRejection", onCrash)
-  const cleanUp = () => {
+  /** Restores the terminal at once, then waits until every kept session's process has exited. */
+  const cleanUp = async () => {
     clearInterval(refresher)
-    effects.close()
+    const closed = effects.close()
+    restoreInput(stdin)
+    await closed
     for (const signal of SIGNALS) process.off(signal, onSignal)
     process.off("uncaughtException", onCrash)
     process.off("unhandledRejection", onCrash)
-    restoreInput(stdin)
   }
 
   try {
@@ -273,20 +276,19 @@ export function openApp(deps: AppDeps, options: AppOptions): Promise<number> {
       { stdin, stdout, alternateScreen: true, exitOnCtrlC: false }
     )
   } catch (error) {
-    cleanUp()
-    return Promise.reject(error)
+    return cleanUp().then(() => Promise.reject(error))
   }
   // Home is drawn first; whether each server answers is filled in as it arrives (T021).
   if (options.start.kind === "team") void effects.checkServers()
 
   return instance.waitUntilExit().then(
-    () => {
-      cleanUp()
+    async () => {
+      await cleanUp()
       if (failure) throw failure.error
       return 0
     },
-    (error: unknown) => {
-      cleanUp()
+    async (error: unknown) => {
+      await cleanUp()
       throw failure ? failure.error : error
     }
   )

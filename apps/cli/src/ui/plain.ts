@@ -2,14 +2,13 @@ import { CliError } from "../errors"
 import { cellText, REMOTE_MARK, type Ui } from "./types"
 
 /**
- * Writes to this process's standard error. When it is backed up, such as a
- * pipe nobody reads, the returned promise settles only once it takes more,
- * or can take nothing any more. Whoever waits for it holds back instead of
- * piling text up in memory: Bun keeps every write it cannot pass on yet, with
- * no limit, and `writableLength` does not show it.
+ * Writes to a stream of this process. When it is backed up, such as a pipe
+ * nobody reads, the returned promise settles only once it takes more, or can
+ * take nothing any more. Whoever waits for it holds back instead of piling
+ * text up in memory: Bun keeps every write it cannot pass on yet, with no
+ * limit, and `writableLength` does not show it.
  */
-export function writeStandardError(text: string): Promise<void> | undefined {
-  const stream = process.stderr
+function writeWaiting(stream: NodeJS.WriteStream, text: string): Promise<void> | undefined {
   if (stream.write(text)) return undefined
   return new Promise((resolve) => {
     const done = () => {
@@ -24,6 +23,28 @@ export function writeStandardError(text: string): Promise<void> | undefined {
   })
 }
 
+/** Writes to this process's standard error, as `writeWaiting` does. */
+export const writeStandardError = (text: string): Promise<void> | undefined => writeWaiting(process.stderr, text)
+
+/**
+ * This process's standard output, for lines that come without end, such as
+ * `zekno logs`. A write waits while the output is backed up. Once nobody
+ * reads it any more (the end of a pipe was closed, as `| head -1` does)
+ * `closed` is signalled and nothing more is written: `console.log` would go
+ * on writing into the closed pipe for as long as lines came.
+ */
+export function standardOutput(stream: NodeJS.WriteStream = process.stdout): { write(text: string): Promise<void> | undefined; closed: AbortSignal } {
+  const closed = new AbortController()
+  const gone = () => closed.abort()
+  // Kept for the life of the process: a write that fails later must not end it with an error.
+  stream.on("error", gone)
+  stream.once("close", gone)
+  return {
+    write: (text) => (closed.signal.aborted ? undefined : writeWaiting(stream, text)),
+    closed: closed.signal,
+  }
+}
+
 /** Reads everything on standard input, without one trailing line break. */
 export async function readStdin(): Promise<string> {
   const text = await new Response(Bun.stdin.stream()).text()
@@ -35,12 +56,14 @@ export async function readStdin(): Promise<string> {
  * error. A line from a server goes to standard error as well, after the mark,
  * through `remote`. That is not `err`, which cannot say when standard error
  * is backed up: a server can send lines without end, and whoever passes them
- * on must be able to wait.
+ * on must be able to wait. For the same reason an app's logs go through
+ * `logs`, when given, rather than `out`.
  */
 export function plainUi(
   out: (line: string) => void,
   err: (line: string) => void,
-  remote: (text: string) => void | Promise<void> = writeStandardError
+  remote: (text: string) => void | Promise<void> = writeStandardError,
+  logs?: ReturnType<typeof standardOutput>
 ): Ui {
   return {
     info: out,
@@ -49,9 +72,12 @@ export function plainUi(
     error: err,
     field: (label, value) => out(`${label}: ${value}`),
     table: (rows) => rows.forEach((row) => out(row.map(cellText).join("\t"))),
-    // `console.log`, which `out` is outside tests, waits while standard output is backed up, so a
-    // reader slower than the logs slows the reading down instead of filling memory.
-    logLine: (line) => out(`${line.time}\t${line.service}\t${line.text}`),
+    // A reader slower than the logs slows the reading down instead of filling memory.
+    logLine: (line) => {
+      const text = `${line.time}\t${line.service}\t${line.text}`
+      return logs ? logs.write(`${text}\n`) : out(text)
+    },
+    outputClosed: logs?.closed,
     json: (value) => out(JSON.stringify(value)),
     remote: (line) => remote(`${REMOTE_MARK} ${line}\n`),
     step: (_label, work) => work(),
@@ -67,3 +93,12 @@ export function plainUi(
     close: async () => {},
   }
 }
+
+/** The plain interface as `zekno` runs it when output is piped: this process's own standard output and error. */
+export const processPlainUi = (): Ui =>
+  plainUi(
+    (line) => console.log(line),
+    (line) => console.error(line),
+    writeStandardError,
+    standardOutput()
+  )

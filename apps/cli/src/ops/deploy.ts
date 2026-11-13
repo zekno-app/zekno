@@ -18,8 +18,13 @@ export type DeployInfo = { app: string; server: string; sequence: number; secret
 export type DeployCallbacks = {
   /** A stage was reached. */
   stage?: (stage: DeployStage, deploy: DeployInfo) => void
-  /** One line of Docker's output, already cleaned. Only a runner that speaks sessions sends them. */
-  progress?: (line: string) => void
+  /**
+   * One line of Docker's output, already cleaned. Only a runner that speaks
+   * sessions sends them. While a promise it returns is pending, nothing more
+   * is read from the runner, so lines that come faster than they can be shown
+   * wait in the connection instead of in this process.
+   */
+  progress?: (line: string) => void | Promise<void>
   /** Something the person should notice. The work carries on. */
   warning?: (text: string) => void
 }
@@ -199,7 +204,7 @@ export async function sendDeploy(deps: OpDeps, plan: DeployPlan, callbacks: Depl
       onEvent: (event) => {
         if (event.event !== "progress") return
         start()
-        callbacks.progress?.(event.line)
+        return callbacks.progress?.(event.line)
       },
     })
     callbacks.stage?.("sent", info)

@@ -15,10 +15,10 @@
  * session says so in `mode`.
  */
 import {
-  LIMITS,
   parseMessage,
   RunnerReportSchema,
   RunnerVersionSchema,
+  SESSION_FRAME_BYTES,
   SessionFrameSchema,
   type RunnerVersion,
   type SessionCommand,
@@ -56,8 +56,12 @@ export type Session = {
    * any other failure ends the session.
    */
   request<Schema extends z.ZodType>(command: SessionCommand, schema: Schema, options?: RequestOptions): Promise<z.infer<Schema>>
-  /** Closes the runner's input and waits for it to exit. Returns its exit status, if there was a process. */
-  close(): Promise<number | undefined>
+  /**
+   * Closes the runner's input and waits for it to exit, for `graceMs` at
+   * most (5 seconds unless given), then stops it. Returns its exit status, if
+   * there was a process. Closing again waits for the same exit.
+   */
+  close(graceMs?: number): Promise<number | undefined>
 }
 
 export const UNEXPECTED = "The runner did not answer as expected. Check that it is installed and reachable."
@@ -71,14 +75,26 @@ const EVENTS: Partial<Record<SessionCommand, SessionEvent["event"]>> = { apply: 
 /** How long a runner has to exit once its session is closed, before it is stopped. */
 const CLOSE_GRACE_MS = 5000
 
+/**
+ * How long reading a runner's events may go on before everything else gets
+ * a turn: keys, the screen, timers, a signal. A runner that sends events as
+ * fast as it can keeps its output full, so reading never has to wait, and
+ * without a turn nothing else in this process would ever run.
+ */
+const TURN_MS = 10
+
+/** Lets everything else that is waiting run first. */
+const nextTurn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
 type Line = { kind: "line"; bytes: Uint8Array } | { kind: "too_long" } | { kind: "end" }
 
 /**
  * Splits a stream into lines and never holds more than `limit` bytes of one:
  * a line that grows past it is reported at once, before its end arrives.
- * A last line without a line feed still counts.
+ * Each line may have a limit of its own, the longest its request can bring
+ * (`SESSION_FRAME_BYTES`). A last line without a line feed still counts.
  */
-function lineReader(stream: ReadableStream<Uint8Array>, limit: number) {
+function lineReader(stream: ReadableStream<Uint8Array>) {
   const reader = stream.getReader()
   let held: Uint8Array[] = []
   let size = 0
@@ -92,7 +108,7 @@ function lineReader(stream: ReadableStream<Uint8Array>, limit: number) {
     return { kind: "line", bytes }
   }
 
-  async function next(): Promise<Line> {
+  async function next(limit: number): Promise<Line> {
     for (;;) {
       if (pending) {
         const end = pending.indexOf(0x0a)
@@ -122,8 +138,17 @@ function lineReader(stream: ReadableStream<Uint8Array>, limit: number) {
 
   return {
     next,
-    /** Stops reading. The runner's further writes fail, which it takes as nobody reading any more. */
-    cancel: () => void reader.cancel().catch(() => {}),
+    /**
+     * Stops reading. Nothing already received is handed out any more, and the
+     * runner's further writes fail, which it takes as nobody reading any more.
+     */
+    cancel() {
+      done = true
+      pending = undefined
+      held = []
+      size = 0
+      void reader.cancel().catch(() => {})
+    },
   }
 }
 type LineReader = ReturnType<typeof lineReader>
@@ -152,45 +177,55 @@ function stop(child: RunnerProcess, lines: LineReader): void {
  * Starts `zekno-runner session` and asks for its version, which tells
  * whether it speaks sessions at all. Only the version is asked before that
  * is known, so a runner that does not speak sessions has been asked nothing
- * that changes anything.
+ * that changes anything. `signal` stops the process at once, whenever it
+ * comes: while SSH connects or asks, or while the runner has not answered.
  */
-async function start(transport: Transport, patience: number | undefined): Promise<Started> {
+async function start(transport: Transport, patience: number | undefined, signal: AbortSignal | undefined): Promise<Started> {
+  if (signal?.aborted) throw new CliError(ENDED)
   const child = transport.open()
-  const lines = lineReader(child.output, LIMITS.messageBytes)
-  child.write(`${JSON.stringify({ command: "version" })}\n`)
-  const first = lines.next()
-  let late = false
-  if (patience !== undefined && (await within(first, patience)) === LATE) {
-    // A runner that waits for its input to close is not reading requests one
-    // by one. Closing its input makes it answer, and the answer shows what it is.
-    late = true
-    child.end()
+  const lines = lineReader(child.output)
+  const abort = () => stop(child, lines)
+  signal?.addEventListener("abort", abort, { once: true })
+  try {
+    child.write(`${JSON.stringify({ command: "version" })}\n`)
+    const first = lines.next(SESSION_FRAME_BYTES.version)
+    let late = false
+    if (patience !== undefined && (await within(first, patience)) === LATE) {
+      // A runner that waits for its input to close is not reading requests one
+      // by one. Closing its input makes it answer, and the answer shows what it is.
+      late = true
+      child.end()
+    }
+    const line = await first
+    if (signal?.aborted) throw new CliError(ENDED)
+    if (line.kind === "too_long") {
+      stop(child, lines)
+      throw new CliError(TOO_LARGE)
+    }
+    if (line.kind === "end") {
+      // Status 2 is a runner from before sessions saying `session` is not one of its commands.
+      if ((await within(child.exited, CLOSE_GRACE_MS)) === 2) return { kind: "one-shot" }
+      stop(child, lines)
+      throw new CliError(UNEXPECTED)
+    }
+    const frame = parseMessage(SessionFrameSchema, line.bytes)
+    if (!frame.ok) {
+      // Not a frame at all: whatever answered does not speak sessions.
+      stop(child, lines)
+      return { kind: "one-shot" }
+    }
+    const version = "result" in frame.value ? parseMessage(RunnerVersionSchema, frame.value.result) : undefined
+    if (!version?.ok) {
+      stop(child, lines)
+      throw new CliError(UNEXPECTED)
+    }
+    // Its input is already closed, so this process can carry nothing more.
+    if (late) stop(child, lines)
+    return { kind: "session", child, lines, runner: version.value, late }
+  } finally {
+    // A session that goes on listens for the signal itself (`live`).
+    signal?.removeEventListener("abort", abort)
   }
-  const line = await first
-  if (line.kind === "too_long") {
-    stop(child, lines)
-    throw new CliError(TOO_LARGE)
-  }
-  if (line.kind === "end") {
-    // Status 2 is a runner from before sessions saying `session` is not one of its commands.
-    if ((await within(child.exited, CLOSE_GRACE_MS)) === 2) return { kind: "one-shot" }
-    stop(child, lines)
-    throw new CliError(UNEXPECTED)
-  }
-  const frame = parseMessage(SessionFrameSchema, line.bytes)
-  if (!frame.ok) {
-    // Not a frame at all: whatever answered does not speak sessions.
-    stop(child, lines)
-    return { kind: "one-shot" }
-  }
-  const version = "result" in frame.value ? parseMessage(RunnerVersionSchema, frame.value.result) : undefined
-  if (!version?.ok) {
-    stop(child, lines)
-    throw new CliError(UNEXPECTED)
-  }
-  // Its input is already closed, so this process can carry nothing more.
-  if (late) stop(child, lines)
-  return { kind: "session", child, lines, runner: version.value, late }
 }
 
 /** Removes terminal control sequences from the text of an event. Service names and times are held to patterns already. */
@@ -199,8 +234,8 @@ function clean(event: SessionEvent): SessionEvent {
   return { event: "log", service: sanitize(event.service), time: event.time, line: sanitize(event.line) }
 }
 
-/** A session over one runner process. */
-function live(started: Extract<Started, { kind: "session" }>): Session {
+/** A session over one runner process. `signal` stops it at once, as `stop` does. */
+function live(started: Extract<Started, { kind: "session" }>, signal: AbortSignal | undefined): Session {
   const { child, lines } = started
   let busy = false
   let ended = false
@@ -211,11 +246,16 @@ function live(started: Extract<Started, { kind: "session" }>): Session {
     ended = true
     stop(child, lines)
   }
+  if (signal?.aborted) end()
+  else signal?.addEventListener("abort", end, { once: true })
 
   async function answer<Schema extends z.ZodType>(command: SessionCommand, schema: Schema, onEvent?: RequestOptions["onEvent"]) {
+    // Each line is read up to the longest frame this request can bring, and no further.
+    const limit = SESSION_FRAME_BYTES[command]
+    let turn = performance.now()
     try {
       for (;;) {
-        const line = await lines.next()
+        const line = await lines.next(limit)
         if (line.kind === "end") throw new CliError(ENDED)
         if (line.kind === "too_long") throw new CliError(TOO_LARGE)
         const frame = parseMessage(SessionFrameSchema, line.bytes)
@@ -225,6 +265,11 @@ function live(started: Extract<Started, { kind: "session" }>): Session {
           if (EVENTS[command] !== value.event) throw new CliError(UNEXPECTED)
           const busy = onEvent?.(clean(value))
           if (busy instanceof Promise) await busy
+          // Events can arrive faster than they are read. Keys, the screen, timers and signals still get their turn.
+          if (performance.now() - turn >= TURN_MS) {
+            await nextTurn()
+            turn = performance.now()
+          }
           continue
         }
         const report = parseMessage(RunnerReportSchema, value.result)
@@ -254,13 +299,13 @@ function live(started: Extract<Started, { kind: "session" }>): Session {
       child.write(`${JSON.stringify(request)}\n`)
       return answer(command, schema, options.onEvent).finally(() => (busy = false))
     },
-    close() {
+    close(graceMs = CLOSE_GRACE_MS) {
       exit ??= (async () => {
         closing = true
         ended = true
         child.end()
         lines.cancel()
-        const code = await within(child.exited, CLOSE_GRACE_MS)
+        const code = await within(child.exited, graceMs)
         if (code !== LATE) return code
         child.kill()
         return child.exited
@@ -285,22 +330,36 @@ function oneShot(transport: Transport): Session {
   }
 }
 
+export type OpenOptions = {
+  /**
+   * Stops the session at once, whenever it is signalled: while SSH connects
+   * or asks, before the runner has answered, or later. The runner process,
+   * or SSH, is stopped outright, and a request in progress rejects. Opening
+   * rejects too; whoever signalled knows why. A runner from before sessions
+   * has nothing kept open to stop.
+   */
+  signal?: AbortSignal
+}
+
 /**
  * Opens a session with the runner `transport` reaches. Resolves once the
  * runner has said which version it is, or once it is known that it does not
  * speak sessions.
  */
-export async function openSession(transport: Transport): Promise<Session> {
-  let started = await start(transport, transport.firstAnswerMs)
+export async function openSession(transport: Transport, options: OpenOptions = {}): Promise<Session> {
+  const { signal } = options
+  let started = await start(transport, transport.firstAnswerMs, signal)
   // It speaks sessions but was slow to start, and its input is already
   // closed. It is started once more, this time given as long as it needs.
-  if (started.kind === "session" && started.late) started = await start(transport, undefined)
-  return started.kind === "session" ? live(started) : oneShot(transport)
+  if (started.kind === "session" && started.late) started = await start(transport, undefined, signal)
+  if (started.kind === "session") return live(started, signal)
+  if (signal?.aborted) throw new CliError(ENDED)
+  return oneShot(transport)
 }
 
 /** Runs `work` with one session and closes it afterwards, however the work ends. */
-export async function withSession<T>(transport: Transport, work: (session: Session) => Promise<T>): Promise<T> {
-  const session = await openSession(transport)
+export async function withSession<T>(transport: Transport, work: (session: Session) => Promise<T>, options: OpenOptions = {}): Promise<T> {
+  const session = await openSession(transport, options)
   try {
     return await work(session)
   } finally {

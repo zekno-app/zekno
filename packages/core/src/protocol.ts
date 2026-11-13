@@ -156,6 +156,9 @@ export const RunnerReportSchema = z
   .refine((report) => (report.outcome === "refused") === (report.reason !== undefined))
 export type RunnerReport = z.infer<typeof RunnerReportSchema>
 
+/** At most `limit` entries: a runner holds no more than that, so an answer with more is not a runner's. */
+const atMost = (limit: number) => (record: Record<string, unknown>) => Object.keys(record).length <= limit
+
 /** Runner to CLI: what the server holds. Versions and numbers only, never a value. */
 export const RunnerStatusSchema = z
   .strictObject({
@@ -167,11 +170,15 @@ export const RunnerStatusSchema = z
     hash: z.string().regex(/^[0-9a-f]{64}$/),
   }),
   // Keys are shown to a person, so they are held to the same patterns as app and secret names.
-  lastSequence: z.record(z.string().regex(APP_NAME), z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)),
-  secrets: z.record(
-    z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}\/[A-Za-z_][A-Za-z0-9_]*$/),
-    z.strictObject({ version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), removed: z.boolean() })
-  ),
+  lastSequence: z
+    .record(z.string().regex(APP_NAME), z.number().int().min(0).max(Number.MAX_SAFE_INTEGER))
+    .refine(atMost(LIMITS.appsPerServer)),
+  secrets: z
+    .record(
+      z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}\/[A-Za-z_][A-Za-z0-9_]{0,127}$/),
+      z.strictObject({ version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), removed: z.boolean() })
+    )
+    .refine(atMost(LIMITS.secretsPerServer)),
   })
   .refine((status) => serverIdOf(status.serverPublicKey) === status.serverId)
 export type RunnerStatus = z.infer<typeof RunnerStatusSchema>
@@ -234,26 +241,57 @@ export const SessionResultSchema = z.strictObject({ result: z.unknown() })
 export const SessionFrameSchema = z.union([SessionEventSchema, SessionResultSchema])
 export type SessionFrame = z.infer<typeof SessionFrameSchema>
 
+const KiB = 1024
+const MiB = 1024 * KiB
+
+/**
+ * The longest line a runner sends while it answers each request, in bytes:
+ * about twice the longest frame the messages above allow, written out as
+ * JSON (an escape turns one character into at most six bytes). A session
+ * client reads no further, so a runner that lies cannot make it hold or
+ * parse more than that. Requests are still bounded by `LIMITS.messageBytes`.
+ */
+export const SESSION_FRAME_BYTES: Readonly<Record<SessionCommand, number>> = {
+  version: 64 * KiB,
+  setup: 64 * KiB,
+  sync: 64 * KiB,
+  // A progress event: at most 4096 characters, at most about 24 KiB written out.
+  apply: 64 * KiB,
+  // A log event: at most 16384 characters, at most about 96 KiB written out.
+  logs: 192 * KiB,
+  // At most 1024 apps and 4096 services: about 0.6 MiB.
+  state: 1 * MiB,
+  // At most 1024 apps and 8192 secrets: about 2.1 MiB.
+  status: 4 * MiB,
+}
+
 export const SERVICE_STATES = ["running", "exited", "created", "restarting", "paused", "dead", "removing", "unknown"] as const
 export const SERVICE_HEALTH = ["healthy", "unhealthy", "starting", ""] as const
 
-/** Runner to CLI: what is running for each app. Names and states only. */
+/**
+ * Runner to CLI: what is running for each app. Names and states only. At
+ * most `LIMITS.appsPerServer` apps, and `LIMITS.servicesPerServer` services
+ * in all: a runner leaves out the apps past that, which reads as "not known".
+ */
 export const RunnerAppStatesSchema = z.strictObject({
-  apps: z.record(
-    z.string().regex(APP_NAME),
-    z.strictObject({
-      services: z
-        .array(
-          z.strictObject({
-            service: z.string().regex(SERVICE_NAME),
-            state: z.enum(SERVICE_STATES),
-            exitCode: z.number().int().min(0).max(255),
-            health: z.enum(SERVICE_HEALTH),
-          })
-        )
-        .max(256),
-    })
-  ),
+  apps: z
+    .record(
+      z.string().regex(APP_NAME),
+      z.strictObject({
+        services: z
+          .array(
+            z.strictObject({
+              service: z.string().regex(SERVICE_NAME),
+              state: z.enum(SERVICE_STATES),
+              exitCode: z.number().int().min(0).max(255),
+              health: z.enum(SERVICE_HEALTH),
+            })
+          )
+          .max(LIMITS.servicesPerApp),
+      })
+    )
+    .refine(atMost(LIMITS.appsPerServer))
+    .refine((apps) => Object.values(apps).reduce((total, app) => total + app.services.length, 0) <= LIMITS.servicesPerServer),
 })
 export type RunnerAppStates = z.infer<typeof RunnerAppStatesSchema>
 
