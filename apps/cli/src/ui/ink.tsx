@@ -1,31 +1,54 @@
-import { Box, render, Static, Text, useInput } from "ink"
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { Box, render, Static, Text, useInput, type RenderOptions } from "ink"
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react"
 
 import { CliError } from "../errors"
 import { readStdin } from "./plain"
 import { applySecretInput } from "./secret-input"
-import type { Ui } from "./types"
+import { REMOTE_MARK, type Ui } from "./types"
 
 type Item =
-  | { id: number; kind: "info" | "success" | "warn" | "error"; text: string }
+  | { id: number; kind: "info" | "success" | "warn" | "error" | "remote"; text: string }
   | { id: number; kind: "field"; label: string; value: string }
   | { id: number; kind: "table"; rows: string[][] }
 
 type Prompt = { question: string; settle(result: { value: string } | { error: Error }): void }
-type State = { items: Item[]; step?: string; prompt?: Prompt }
+/** `generation` changes when lines already drawn are let go; Static then starts afresh with what is left. */
+type State = { items: Item[]; generation: number; step?: string; prompt?: Prompt }
+
+/**
+ * How many drawn lines may pile up before they are let go. Static writes a
+ * line once and never again, so keeping it only costs memory, and a server
+ * can send lines without end.
+ */
+const DRAWN_KEPT = 200
 
 function createStore() {
-  let state: State = { items: [] }
+  let state: State = { items: [], generation: 0 }
+  /** How many items of this generation are already on the terminal. */
+  let drawn = 0
+  let nextId = 0
   const listeners = new Set<() => void>()
+  const set = (next: Partial<State>) => {
+    state = { ...state, ...next }
+    listeners.forEach((listener) => listener())
+  }
   return {
     get: () => state,
-    set(next: Partial<State>) {
-      state = { ...state, ...next }
-      listeners.forEach((listener) => listener())
-    },
+    set,
     subscribe(listener: () => void) {
       listeners.add(listener)
       return () => void listeners.delete(listener)
+    },
+    add(item: Record<string, unknown>) {
+      const added = { ...item, id: nextId++ } as Item
+      if (drawn < DRAWN_KEPT) return set({ items: [...state.items, added] })
+      // Only lines not yet drawn go on to the next Static, so none is lost and none drawn twice.
+      set({ items: [...state.items.slice(drawn), added], generation: state.generation + 1 })
+      drawn = 0
+    },
+    /** Called once a commit has written the first `count` items of `generation` to the terminal. */
+    drawn(generation: number, count: number) {
+      if (generation === state.generation) drawn = count
     },
   }
 }
@@ -66,12 +89,29 @@ function Line({ item }: { item: Item }) {
       </Box>
     )
   }
+  if (item.kind === "remote") return <RemoteLine text={item.text} />
   return (
     <Box>
       <Box flexShrink={0} marginRight={1}>
         <Text color={COLOR[item.kind]}>{MARK[item.kind]}</Text>
       </Box>
       <Text>{item.text}</Text>
+    </Box>
+  )
+}
+
+/**
+ * A line from a server: dim, after the mark. A line wider than the terminal
+ * goes on under its own text, never at the left edge where zekno's marked
+ * lines start, so the part after the wrap cannot pass for one of them.
+ */
+export function RemoteLine({ text }: { text: string }) {
+  return (
+    <Box>
+      <Box flexShrink={0} marginRight={1}>
+        <Text dimColor>{REMOTE_MARK}</Text>
+      </Box>
+      <Text dimColor>{text}</Text>
     </Box>
   )
 }
@@ -112,24 +152,30 @@ function SecretPrompt({ prompt }: { prompt: Prompt }) {
 
 function App({ store }: { store: ReturnType<typeof createStore> }) {
   const state = useSyncExternalStore(store.subscribe, store.get)
+  // Ink writes Static's new items to the terminal as the commit ends, before this runs.
+  useLayoutEffect(() => store.drawn(state.generation, state.items.length))
   return (
     <>
-      <Static items={state.items}>{(item) => <Line key={item.id} item={item} />}</Static>
+      <Static key={state.generation} items={state.items}>
+        {(item) => <Line key={item.id} item={item} />}
+      </Static>
       {state.prompt ? <SecretPrompt prompt={state.prompt} /> : state.step ? <Spinner label={state.step} /> : null}
     </>
   )
 }
 
-/** The interface at a terminal: progress, a hidden prompt, aligned tables and colour. */
-export function inkUi(): Ui {
+/**
+ * The interface at a terminal: progress, a hidden prompt, aligned tables and
+ * colour. Tests pass their own streams.
+ */
+export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"> = {}): Ui {
   const store = createStore()
   // Ink is not left to act on Ctrl-C: it would close the interface and leave the
   // command waiting for an answer that never comes. While the prompt is open
   // the prompt cancels the command; the rest of the time the terminal turns
   // Ctrl-C into the usual interrupt.
-  const app = render(<App store={store} />, { exitOnCtrlC: false })
-  let nextId = 0
-  const add = (item: Record<string, unknown>) => store.set({ items: [...store.get().items, { ...item, id: nextId++ } as Item] })
+  const app = render(<App store={store} />, { ...streams, exitOnCtrlC: false })
+  const add = store.add
 
   return {
     info: (text) => add({ kind: "info", text }),
@@ -139,6 +185,11 @@ export function inkUi(): Ui {
     field: (label, value) => add({ kind: "field", label, value }),
     table: (rows) => add({ kind: "table", rows }),
     json: (value) => add({ kind: "info", text: JSON.stringify(value) }),
+    async remote(line) {
+      add({ kind: "remote", text: line })
+      // The next line waits until this one is on the terminal.
+      await app.waitUntilRenderFlush()
+    },
     async step(label, work, options) {
       if (options?.quiet) {
         add({ kind: "info", text: `${label}…` })

@@ -8,23 +8,42 @@
  * deploys are signed and are verified again every time they are read; see
  * `openTeam` in context.ts.
  */
-import { EnvelopeSchema, SecretRecordSchema } from "@workspace/core"
+import { EnvelopeSchema, LIMITS, SecretRecordSchema } from "@workspace/core"
 import { randomBytes } from "node:crypto"
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { z } from "zod"
 
 import { CliError } from "./errors"
+import { RUNNER_PATH, SSH_DESTINATION } from "./transport"
 
 export const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/
 
 /** Deploys kept for each app on each server. Older ones are dropped. */
 export const HISTORY_LENGTH = 50
 
+/**
+ * The same patterns `server add` checks. They are printed (`server ls`) and
+ * put in an `ssh` command, so a value that was changed on disk to hold an
+ * escape sequence or an option makes the profile damaged, not something drawn.
+ */
 const TargetSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("ssh"), destination: z.string(), runnerPath: z.string() }),
+  z.strictObject({ kind: z.literal("ssh"), destination: z.string().regex(SSH_DESTINATION), runnerPath: z.string().regex(RUNNER_PATH) }),
   z.strictObject({ kind: z.literal("local"), home: z.string().min(1) }),
 ])
+
+/**
+ * The rule the core library holds a member's name to in a team list
+ * (`displayName` in packages/core/src/roster.ts): no control, format,
+ * unassigned or private-use character, which covers escape sequences and
+ * bidirectional overrides, no line or paragraph separator, and no space at
+ * either end. `\p{C}` also matches a lone surrogate.
+ */
+const MemberNameSchema = z
+  .string()
+  .min(1)
+  .max(LIMITS.memberNameLength)
+  .refine((name) => !/[\p{C}\u2028\u2029]/u.test(name) && name === name.trim())
 
 const ServerSchema = z.strictObject({
   name: z.string().regex(NAME),
@@ -34,7 +53,7 @@ const ServerSchema = z.strictObject({
 export type Server = z.infer<typeof ServerSchema>
 
 const ProfileSchema = z.strictObject({
-  memberName: z.string().min(1),
+  memberName: MemberNameSchema,
   /** The name of the keychain entry that holds the signing key and the team code. */
   keyName: z.string().min(1),
   /** Every team list from the founding one, in order. Each is signed, and checked on every run. */

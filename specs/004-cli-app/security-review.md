@@ -80,3 +80,85 @@ informational notes were fixed. One finding is open and needs the maintainer's d
   about 1.5 GB of memory for a moment while it is parsed, measured on macOS. The runner then
   refuses it and carries on. The same parsing serves the one-shot commands, and it lives in
   `packages/core` (`parseMessage`), outside what was fixed here.
+
+## CLI plumbing: sessions, transport, text cleaning, operations (reviewed 2026-11-14)
+
+**Scope**: `apps/cli/src/session.ts`, `transport.ts`, `sanitize.ts`, `ops/*.ts`, `context.ts`,
+`profile.ts` and the commands that call them, at commit `6fa2eaa`, against
+[`contracts/session.md`](./contracts/session.md) and [`contracts/commands.md`](./contracts/commands.md)
+· **Kind**: internal, focused review
+
+This is not an external audit. One independent reviewer read the finished source without access
+to the author's reasoning, and ran its own measurements against the CLI: `sanitize` with 200,000
+fuzzed inputs, and the CLI's memory with its standard error going into a pipe nobody reads. The
+fixes were made afterwards, from the findings, by an assistant other than the reviewer, on the
+source as it stood at `fc9a9ea`. An external audit is still required before production use.
+
+**Who was considered**
+
+| Attacker | Can do |
+|----------|--------|
+| A runner or server that lies | Answer anything, write anything on standard error or as Docker's output, as fast as it likes, and keep a command waiting. Holds no team key. |
+| B | Change files in the developer's profile folder (`~/.zekno`). Cannot read the keychain. |
+| A slow reader | Read the CLI's standard error slowly, or never: a pipe into a program that stopped, a FIFO. Not an attacker, but a condition the CLI must survive. |
+
+**Outcome**: no finding rated medium, high or critical. Three low findings and one
+informational note were fixed.
+
+| # | Severity | Finding | Fix |
+|---|----------|---------|-----|
+| C7 | Low | **Server output could grow the CLI's memory without limit when its standard error is a slow pipe.** Two paths: what a runner or SSH writes on standard error, passed on without waiting (at feature 003 standard error was inherited, so SSH itself had to wait), and Docker's progress lines during a deploy, written from the session's event callback. Bun's `process.stderr.write` returns `false` but keeps the text, and `writableLength` stays 0, so a size check cannot see it. Measured by the reviewer with standard error going into a FIFO nobody reads: 2 GB and rising. | A runner's standard error is passed on one line at a time, and the next is read only once standard error has taken the last one (`drain`). The pipe then fills and the runner, or SSH, has to wait, as at feature 003. Docker's lines during a deploy go through a hold of at most 500 lines (research R5): while standard error is backed up, the oldest held line is dropped and counted, and the count is reported ("Left out N lines of Docker's output ...") before the next line drawn. Once the deploy has its answer, its last lines get at most one second. The interface at a terminal lets go of lines it has drawn, where it used to keep every one. In the tests (up to 400 MB sent, standard error into a FIFO nobody reads) the CLI peaked at about 62 MiB with the runner held back, and at about 67 MiB for a deploy's lines, which finished on its own. With the fixes taken out, each passed the tests' bound of 200 MiB within half a second. |
+| C8 | Low | **Server text reached the terminal unmarked.** A lying server could print lines that look exactly like zekno's own, such as a fake "Server code: ..." line or an instruction to run a command. | In single commands, every line from a runner's, Docker's or SSH's standard error, and every progress line of a deploy, is drawn through the interface's new `remote` method after a fixed mark, `remote:`, as git marks what the other side said. Plain output writes `remote: <line>` on standard error. None of zekno's own messages on standard error start with the mark, and it stays the same for scripts. At a terminal the line is dim after the same mark, and a line wider than the terminal goes on under its own text, never at the left edge where zekno's own lines start. The full-screen app already keeps these lines off the terminal and is unchanged. |
+| C9 | Low | **`profile.json` accepted any string as an SSH destination, runner path and member name** (older than this feature). The first two were checked only on connect, so attacker B could put escape sequences there and `zekno server ls` printed them raw. | The profile's schema holds the destination and the runner path to the patterns `server add` checks (`SSH_DESTINATION`, `RUNNER_PATH`), and the member name to the core library's rule for a name in a team list: no control, format, unassigned or private-use character, no line or paragraph separator, no space at either end, at most 64 characters. A changed value makes the profile damaged when it is read. |
+| C10 | Informational | **Text cleaning kept characters that are drawn as nothing or as blanks**: Hangul fillers, the combining grapheme joiner, Mongolian and other variation selectors, and unassigned default-ignorable code points. | `sanitize` also removes every `Default_Ignorable_Code_Point`, except U+FE0E and U+FE0F, which choose between an emoji's text and emoji form, so emoji keep their form. |
+
+**Where each fix is tested**
+
+| Finding | Test |
+|---------|------|
+| C7, C8, C9, C10 | `apps/cli/test/plumbing.test.tsx`. The C7 measurements run `apps/cli/test/flood.ts` as a process of its own and leave nothing running. Each test was also run with its fix taken out, and fails then. |
+
+**Checked and found sound**
+
+- The output of `sanitize` never contains a control or invisible character: 200,000 fuzzed
+  inputs, and OSC 52, OSC 8, the 8-bit C1 forms, unterminated and split sequences, bracketed
+  paste, bidirectional and tag characters checked one by one. (Since C10 the only characters it
+  keeps that draw as nothing on their own are U+FE0E and U+FE0F.)
+- Every path where server text is drawn is either cleaned or held to a pattern.
+- Session results get the same checks as one-shot answers, including the server's identity and
+  the checks of the deploy number and of the answer.
+- No deploy can be sent twice: the switch to the one-shot commands is decided before anything but
+  `version` is sent, and nothing is retried.
+- The `ssh` argument list is built only from values checked again on every use and a command word
+  from a fixed list. There is no shell on the CLI's side.
+- The operations make the same checks, in the same order, as the commands they replaced (C1 to C6
+  of feature 003).
+- A secret value goes only from the prompt to the core library. It is in no plan, result,
+  callback, argument, error or file.
+- Closing a session cannot leave a process behind.
+
+**Not new, noted**
+
+- A lying server can keep a command waiting for as long as it likes. Over SSH there is no
+  deadline, by design, because SSH may be waiting for a password. Ctrl-C works.
+
+**Noticed while fixing, not part of the review**
+
+- `connect` without its `errorLines` option still writes a runner's lines to standard error
+  without the mark (now waiting for `drain`). No command uses it that way any more. Two existing
+  tests hold that output as it is: "a single command still writes it to standard error, cleaned,
+  as before" (`app-effects.test.ts`) and "what the runner writes on standard error is passed on
+  cleaned" (`session.test.ts`).
+- In plain output a line wider than the terminal is wrapped by the terminal itself, and the part
+  after the wrap has no mark. Plain output is meant for pipes and scripts; at a terminal the Ink
+  interface indents it.
+- SSH's own messages, such as "Permission denied" or a host key warning, come on the same
+  standard error as the runner's and carry the mark too.
+- `zekno status` prints `<server>: team list version <v>` on standard output, so for a server
+  named `remote` that line starts with the mark. The developer chooses that name and it is signed
+  in the team list; a server cannot choose it.
+- zekno's own warnings and errors in plain output go through `console.error`. In Bun it drops
+  what a backed-up standard error cannot take at once instead of waiting. They are few and short,
+  so nothing piles up, but into a pipe nobody reads they can be lost.
+- A local target's folder (`home`) is still any non-empty string. No command prints it; it is
+  passed to the runner as `ZEKNO_RUNNER_HOME`.

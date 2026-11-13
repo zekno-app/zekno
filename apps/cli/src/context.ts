@@ -39,6 +39,21 @@ export const reach = (deps: Pick<Deps, "connect" | "localRunner">, target: Targe
   deps.connect(target, deps.localRunner)
 
 /**
+ * A single command's way of showing what a runner, Docker or SSH write on
+ * standard error: each cleaned line through `ui.remote`, marked as the
+ * server's, never straight to the terminal. Reading waits while the interface
+ * is busy, so a server that writes without end is slowed down instead of
+ * filling memory.
+ */
+export function remoteThroughUi(deps: Deps): Deps {
+  return {
+    ...deps,
+    connect: (target, localRunner, options) =>
+      deps.connect(target, localRunner, { ...options, errorLines: options?.errorLines ?? ((line) => deps.ui.remote(line)) }),
+  }
+}
+
+/**
  * What the keychain entry holds: the signing key, and the code of the team's
  * founding list. The code is what makes the team lists in the profile folder
  * checkable: a list that does not lead back to this code is not this team's.

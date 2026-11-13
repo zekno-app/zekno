@@ -1,10 +1,10 @@
-import type { Deps } from "../context"
+import { remoteThroughUi, type Deps } from "../context"
 import { locateServer, readStatus } from "../ops/status"
 
 export async function status(deps: Deps, options: { server?: string; json?: boolean }): Promise<void> {
   const located = await locateServer(deps, options.server)
   const { server } = located
-  const { status: answer, behind } = await deps.ui.step(`Asking ${server.name}`, () => readStatus(deps, located), {
+  const { status: answer, behind } = await deps.ui.step(`Asking ${server.name}`, () => readStatus(remoteThroughUi(deps), located), {
     quiet: server.target.kind === "ssh",
   })
   if (options.json) return deps.ui.json({ server: server.name, ...answer })

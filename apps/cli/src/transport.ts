@@ -3,6 +3,7 @@ import type { z } from "zod"
 
 import { CliError, RunnerRefused } from "./errors"
 import { sanitize } from "./sanitize"
+import { writeStandardError } from "./ui/plain"
 
 export const SSH_DESTINATION = /^[A-Za-z0-9][A-Za-z0-9._@:-]*$/
 export const RUNNER_PATH = /^[A-Za-z0-9._/~-]+$/
@@ -61,18 +62,23 @@ const ERROR_LINE = 4096
 /** How long to wait, once a runner has exited, for the last of its standard error. */
 const ERROR_GRACE_MS = 1000
 
-/** Where a runner's standard error goes, one cleaned line at a time. */
-export type ErrorLines = (line: string) => void
+/**
+ * Where a runner's standard error goes, one cleaned line at a time. What it
+ * returns is not used, except a promise: nothing more is read until that
+ * promise settles.
+ */
+export type ErrorLines = (line: string) => unknown
 
-/** A single command's way: straight to this process's standard error. */
-const toStandardError: ErrorLines = (line) => void process.stderr.write(`${line}\n`)
+/** Without a callback: straight to this process's standard error, waiting while it is backed up. */
+const toStandardError: ErrorLines = (line) => writeStandardError(`${line}\n`)
 
 export type ConnectOptions = {
   /**
    * Receives what the runner, Docker or SSH write on standard error, one
    * cleaned line at a time, instead of this process's standard error. The
    * full-screen app passes one: a write to the terminal behind Ink's back
-   * would draw over the screen.
+   * would draw over the screen. Single commands pass one that draws the line
+   * as the server's (`Ui.remote`).
    */
   errorLines?: ErrorLines
 }
@@ -80,21 +86,31 @@ export type ConnectOptions = {
 /**
  * Passes what a runner, Docker or SSH writes on standard error on to `out`,
  * one cleaned line at a time. It comes from the server and could hold
- * anything a terminal would act on.
+ * anything a terminal would act on. While `out` is busy with a line, nothing
+ * more is read: the pipe fills and the runner, or SSH, has to wait, so a
+ * server that writes faster than the lines can be shown is slowed down
+ * instead of filling this process's memory.
  */
 async function passOn(stream: ReadableStream<Uint8Array>, out: ErrorLines): Promise<void> {
   const decoder = new TextDecoder()
-  const emit = (line: string) => out(sanitize(line))
+  const emit = async (line: string) => {
+    try {
+      const busy = out(sanitize(line))
+      if (busy instanceof Promise) await busy
+    } catch {
+      // A line that could not be shown is lost. Reading goes on, or the runner would be left waiting.
+    }
+  }
   let rest = ""
   try {
     for await (const chunk of stream) {
       const lines = (rest + decoder.decode(chunk, { stream: true })).split("\n")
       rest = lines.pop() ?? ""
-      for (const line of lines) emit(line)
+      for (const line of lines) await emit(line)
       // A line with no end in sight is passed on in pieces, never held whole.
       let start = 0
       while (rest.length - start > ERROR_LINE) {
-        emit(rest.slice(start, start + ERROR_LINE))
+        await emit(rest.slice(start, start + ERROR_LINE))
         start += ERROR_LINE
       }
       rest = rest.slice(start)
@@ -103,7 +119,7 @@ async function passOn(stream: ReadableStream<Uint8Array>, out: ErrorLines): Prom
     // The process went away.
   }
   rest += decoder.decode()
-  if (rest !== "") emit(rest)
+  if (rest !== "") await emit(rest)
 }
 
 /** Reads a stream to the end, or returns undefined once it is larger than `limit` bytes. */

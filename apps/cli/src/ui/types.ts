@@ -1,4 +1,12 @@
 /**
+ * What every line from a server starts with, as git marks what the other
+ * side said. The server cannot leave it out, and none of zekno's own messages
+ * on standard error start with it, so a line that does not start with it is
+ * zekno's. It stays the same for scripts that read standard error.
+ */
+export const REMOTE_MARK = "remote:"
+
+/**
  * How commands talk to the person. Commands say what happened; a Ui decides
  * how it looks. At a terminal that is Ink; when output is piped, in scripts
  * and in tests it is plain lines.
@@ -16,6 +24,15 @@ export interface Ui {
   table(rows: string[][]): void
   /** Machine-readable output, exactly one JSON object. */
   json(value: unknown): void
+  /**
+   * One line that came from a server: what a runner, Docker or SSH wrote on
+   * standard error, or Docker's output during a deploy. Already cleaned. It
+   * is drawn after `REMOTE_MARK`, which none of zekno's own lines start with,
+   * so a server cannot pass its text off as zekno's. A promise it returns
+   * settles once the interface can take another line; until then the caller
+   * holds back.
+   */
+  remote(line: string): void | Promise<void>
   /**
    * Runs work while showing that it is in progress. Pass `quiet` when the
    * work may write to the terminal itself, such as SSH asking for a

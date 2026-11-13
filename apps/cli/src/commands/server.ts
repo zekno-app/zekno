@@ -1,4 +1,4 @@
-import type { Deps } from "../context"
+import { remoteThroughUi, type Deps } from "../context"
 import { addServer, listServers, prepareServerAdd } from "../ops/server"
 
 /** Connects a server: the runner sets itself up for this team, then an admin adds it to the team list. */
@@ -16,7 +16,7 @@ export async function serverAdd(
   const result = await deps.ui.step(
     `Connecting ${plan.name}`,
     () =>
-      addServer(deps, plan, {
+      addServer(remoteThroughUi(deps), plan, {
         resumed: () => deps.ui.info("The runner was already set up for your team by an earlier attempt. Carrying on from there."),
       }),
     { quiet: plan.target.kind === "ssh" }

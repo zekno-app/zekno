@@ -22,7 +22,19 @@ const TAB_STOP = 8
  */
 const INVISIBLE = /[\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/u
 
+/**
+ * Characters Unicode says to draw as nothing when they are not understood:
+ * Hangul fillers, the combining grapheme joiner, Mongolian and other
+ * variation selectors, and code points kept for more of the same. They can
+ * pad or hide text.
+ */
+const IGNORABLE = /\p{Default_Ignorable_Code_Point}/u
+
+/** The two variation selectors that choose between text and emoji form. Emoji keep their form. */
+const EMOJI_FORM = new Set([0xfe0e, 0xfe0f])
+
 const isControl = (code: number) => code < 0x20 || (code >= 0x7f && code <= 0x9f)
+const isHidden = (code: number, char: string) => INVISIBLE.test(char) || (IGNORABLE.test(char) && !EMOJI_FORM.has(code))
 const inRange = (code: number | undefined, low: number, high: number) => code !== undefined && code >= low && code <= high
 
 /** Skips a control sequence's parameters, intermediates and final character. Returns where the text resumes. */
@@ -64,7 +76,8 @@ function skipEscape(codes: number[], start: number): number {
 /**
  * Makes one line of text from a server safe to draw: every control character
  * and escape sequence is removed (7-bit and 8-bit forms, complete or cut off),
- * invisible formatting characters are removed, and a tab becomes spaces up to
+ * invisible formatting characters and characters drawn as nothing are removed
+ * (but for the two that pick an emoji's form), and a tab becomes spaces up to
  * the next tab stop. Ordinary text in any script, and emoji, are kept. Never
  * throws, whatever the input.
  */
@@ -88,7 +101,7 @@ export function sanitize(text: string): string {
       at++
     } else {
       const char = String.fromCodePoint(code)
-      if (!isControl(code) && !INVISIBLE.test(char)) {
+      if (!isControl(code) && !isHidden(code, char)) {
         out += char
         column++
       }
