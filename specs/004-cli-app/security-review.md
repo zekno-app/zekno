@@ -162,3 +162,69 @@ informational note were fixed.
   so nothing piles up, but into a pipe nobody reads they can be lost.
 - A local target's folder (`home`) is still any non-empty string. No command prints it; it is
   passed to the runner as `ZEKNO_RUNNER_HOME`.
+
+## Installing and updating the runner, the SSH hand-over, the release workflow (reviewed 2026-11-14)
+
+An independent reviewer (a separate agent that did not write the code) read commits `6f2686c`
+and `949e2f4` and ran the install script under `sh` and `dash` against stand-ins. Nothing was
+rated high or critical. One medium and four low findings.
+
+| Id | Rating | Finding | State |
+|----|--------|---------|-------|
+| U1 | Medium | `server update` replaced whatever file the profile's runner path named. That path is in the profile file, which is not signed, so someone who can edit the profile could point an update at `sshd` or `docker` on the server and have it overwritten once the developer ran the update. Reproduced. | Fixed in `420f934`: only a file named `zekno-runner` is replaced. Checked before anything is asked or sent, and again by the script. |
+| U2 | Low | `server update` from an older CLI replaced a newer runner. Reproduced. | Fixed in `420f934`: the script stops with "newer" and changes nothing. |
+| U3 | Low | The new runner was moved into place before it was checked. One that could not run on the server (an older C library, a processor without AVX2) left no working runner. Reproduced. | Fixed in `420f934`: it has to answer `version` from the temporary folder first. |
+| U4 | Low | The hand-over decided on text. Exit 255 with "Permission denied" anywhere in the first lines of standard error counted as "SSH could not log in", and a server's own output can contain those words. For a runner from before 0.2.0 the same request, a deploy included, was then sent a second time; the runner refuses the repeated deploy number, so the deploy ran once but was reported as refused. A lying server could also force a hand-over on every connection. Reproduced. | See "The hand-over" below. |
+| U5 | Low | The workflow used `actions/checkout@v4` and `oven-sh/setup-bun@v2`, tags that can be moved, in a job that may write releases. | Pinned to full commits in `0d9d1f3`. Two parts stay with the maintainer: see "Left for the maintainer". |
+
+**Notes, not fixed**
+
+- N1. The `wget` route has no size limit on the download, and `curl --max-filesize` does not
+  stop a download of unknown length before curl 8.4. The packed file can fill the disk before
+  the checksum is taken. Only whoever serves the release address over TLS could do that.
+- N2. "Installed the runner … It matched the checksum" repeats what the server printed. A lying
+  server can print it without doing it. What a server is trusted for is decided by the session
+  that follows, where every answer is checked. `zekno server update` from the command line does
+  not read the status afterwards; the app does.
+- N3. A terminal that answers the background colour question more than a second late, in pieces
+  split across reads, could have the tail of its answer (hex digits and `/`) taken as typing.
+  It needs a very slow link between the terminal and zekno. Not reproduced.
+- N4. On Linux, a line typed but not finished while SSH had the terminal may arrive as key
+  presses when the app takes the terminal back. Checked on macOS only, where it did not.
+- N5. Before the first `server add`, someone who can write to a folder on root's `PATH` could
+  put a `zekno-runner` there, and the installer would use it. Those folders belong to root on a
+  normal system.
+- N6. `--runner-file` checks the file, then reads it. A file swapped in between is read without
+  the size limit. Development option only.
+- N7. In the app, what a server writes on standard error is shown without slowing the server
+  down. Memory is bounded at 200 lines; a server can keep the screen busy.
+
+**Checked and found to hold**
+
+- The script's text is fixed. Its words are checked three times (the CLI's patterns, the
+  transport, the script). A hostile `IFS`, `ENV`, `BASH_ENV`, `CDPATH` or a home folder with
+  spaces and `*` changes nothing.
+- Bytes sent after the script (the runner file, the session's requests) are never run as
+  commands, on a failing path either: every path ends in `exit` or `exec`.
+- A missing checksum never counts as a match. The comparison is exact, and an empty or odd
+  answer from the checksum tool fails.
+- The file is checked in a private folder (mode 700) in the folder it will live in, and put in
+  place by a rename. A symbolic link at the destination is replaced, not followed.
+- Downloads are HTTPS only, redirects included, with `curl` and with `wget`.
+- The CLI never stores a path a server chose, and a server cannot make it run anything locally.
+- An update never happens unasked.
+
+**Tests the reviewer found missing, still missing**
+
+- Installing as root (`/usr/local/bin`, `/var/lib/zekno`): the stand-in server is always a
+  normal user. The real-server run covers it.
+- The hand-over in a real terminal has no automated test; it is walked through in a
+  pseudo-terminal (quickstart, "Results").
+- Real `curl`, GNU `wget` and BusyBox `wget` are stand-ins in the tests.
+
+**Left for the maintainer**
+
+- Restrict who can push `runner-v*` tags (a tag ruleset on the repository). Any such tag on any
+  commit starts a release.
+- The checksums in `SHA256SUMS` come from the same job that builds the files. Before recording
+  them in `runner-release.json`, build the runner again somewhere else and compare.
