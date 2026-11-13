@@ -152,7 +152,7 @@ Please do not open public issues for security problems. Report them privately to
 
 ## Repository
 
-A Turborepo monorepo on Bun workspaces. The security-critical packages are not written yet; the table shows what exists today.
+A Turborepo monorepo on Bun workspaces. The table shows what exists today.
 
 | Path | Purpose | Status |
 | --- | --- | --- |
@@ -160,11 +160,11 @@ A Turborepo monorepo on Bun workspaces. The security-critical packages are not w
 | `packages/ui` | Shared React components | Scaffolded |
 | `packages/eslint-config` | Shared ESLint configuration | Available |
 | `packages/typescript-config` | Shared TypeScript configuration | Available |
-| `packages/core` | Encryption, signing, manifest format, control-plane client and protocol types | Planned |
+| `packages/core` | Key generation, secret encryption, signed deploys, team membership and protocol types | First version built; unaudited. The control-plane client is not written yet |
 | `apps/agent` | Program that runs on your servers | Planned |
 | `apps/desktop` | Desktop app (Electrobun: React UI + Bun main process) | Planned |
 
-- `packages/core` will contain no framework code. The desktop app and the agent both depend on it, so they encrypt and verify in exactly the same way.
+- `packages/core` contains no framework code. The desktop app and the agent both depend on it, so they encrypt and verify in exactly the same way.
 - `apps/web` is the only website. Its dashboard shows status, deploy history, team and billing. It never handles keys or secret values; those stay in the desktop app.
 
 ### Tech stack
@@ -243,7 +243,7 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 **Foundations**
 
 - [ ] One-day spike: window, keychain access, signed build, verified auto-update (macOS and Windows)
-- [ ] `packages/core`: key generation, secret encryption, manifest signing and verification, protocol types
+- [x] `packages/core`: key generation, secret encryption, manifest signing and verification, protocol types (first version, awaiting external audit)
 
 **Version 1**
 
