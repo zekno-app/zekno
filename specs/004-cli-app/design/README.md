@@ -24,12 +24,11 @@ canvas remains the reference; if it changes, this copy is refreshed.
 | Questions.dc.html | Two questions the app asks |
 | ProfileError.dc.html | Profile could not be verified |
 
-Two decisions made after the boards were drawn override what they show:
+One decision made after the boards were drawn overrides what they show: the action letters in
+Home's details pane use `brand` on a dark terminal and `brand-darker` on a light one.
 
-- A selected row is marked by the arrow and bold text only. The faint shaded bar behind selected
-  rows on the dark boards is not built.
-- The action letters in Home's details pane use `brand` on a dark terminal and `brand-darker`
-  on a light one.
+A selected row is marked by the arrow and bold text only, with no shaded bar; the boards were
+updated to show this on 2026-11-14.
 
 The logo on the boards is an SVG of a 5-row bitmap, 41 columns wide. In the terminal it is drawn
 with half-block characters, 3 lines tall.
