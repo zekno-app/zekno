@@ -46,6 +46,14 @@ commands answer.
   against the app-name pattern before it is used.
 - A line that is not a valid `SessionRequest` is answered with a refusal (`invalid_request`).
   After three in a row the runner ends the session with exit status 1.
+- A client that gets more than 1,024 requests or 32 MiB ahead of the answers has its session
+  ended with exit status 1. The request in progress finishes or stops as described below;
+  requests still waiting are not run.
+- After each result the runner waits until the frame has been read, the reader has gone or the
+  input has closed, so a client that does not read cannot make the runner hold frames in memory.
+- `state` gives up on Docker after 30 seconds, and at once when the input closes. A `state`
+  handled after the input has closed answers with no apps. The CLI keeps the input open until
+  it has the result.
 - When the input closes during `apply`, the deploy carries on to its end: it was accepted and
   its number is used. The result is recorded in the runner's state as always; nobody is left to
   read the frame.

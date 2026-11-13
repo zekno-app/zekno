@@ -44,8 +44,7 @@ Nothing else is added to the profile. App state and logs are never stored.
 | another user | `~/.local/bin/zekno-runner` | `~/.local/state/zekno` |
 
 The folder's content and permissions are unchanged from feature 003. The runner's default folder:
-`ZEKNO_RUNNER_HOME` if set; else `/var/lib/zekno` if it exists or the user is root; else
-`~/.local/state/zekno`.
+`ZEKNO_RUNNER_HOME` if set. Otherwise root always uses `/var/lib/zekno`. Any other user uses `~/.local/state/zekno` if a runner is already set up there, else `/var/lib/zekno` only if that folder exists and belongs to them, else `~/.local/state/zekno`.
 
 ## Messages added to `packages/core/src/protocol.ts`
 

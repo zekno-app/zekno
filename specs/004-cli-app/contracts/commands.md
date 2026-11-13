@@ -60,10 +60,9 @@ reported are written to standard error after the failure sentence.
 only its standard input, and starts nothing that the team did not sign.
 
 Exit status of `session`: `0` when its input closed normally, `1` when it stopped because a line
-was not a request it could read.
+was not a request it could read or the client sent requests far faster than they could be answered.
 
-The runner's folder: `ZEKNO_RUNNER_HOME` if set; else `/var/lib/zekno` if it exists or the user
-is root; else `~/.local/state/zekno`.
+The runner's folder: `ZEKNO_RUNNER_HOME` if set. Otherwise root always uses `/var/lib/zekno`. Any other user uses `~/.local/state/zekno` if a runner is already set up there, else `/var/lib/zekno` only if that folder exists and belongs to them, else `~/.local/state/zekno`.
 
 ## Installing the runner over SSH
 

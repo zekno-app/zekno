@@ -99,8 +99,9 @@ follow from them or from what the installed tools provide.
 - **Where it installs**: as root, `/usr/local/bin/zekno-runner` with its folder at
   `/var/lib/zekno`. As another user, `~/.local/bin/zekno-runner` with its folder at
   `~/.local/state/zekno`, because that user cannot write the system paths. The runner's default
-  folder becomes: `ZEKNO_RUNNER_HOME` if set, else `/var/lib/zekno` if it exists or the user is
-  root, else `~/.local/state/zekno`. Servers set up in feature 003 keep working.
+  folder is: `ZEKNO_RUNNER_HOME` if set. Otherwise root always uses `/var/lib/zekno`. Any other user uses `~/.local/state/zekno` if a runner is already set up there, else `/var/lib/zekno` only if that folder exists and belongs to them, else `~/.local/state/zekno`.
+  Servers set up in feature 003 keep working. (The ownership condition was added after the
+  security review, finding S5.)
 - **What the script needs on the server**: `uname`, `curl` or `wget`, `gzip`, `sha256sum` or
   `shasum`. Files are published gzip-compressed (35 MB against 78 MB) because `gzip` is always
   there.
