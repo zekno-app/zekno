@@ -23,23 +23,48 @@ import { dirname, join } from "node:path"
 
 const SYSTEM_HOME = "/var/lib/zekno"
 
+/** The folder a user who is not root keeps the runner's key and state in. */
+const userFolder = (userHome: string) => join(userHome, ".local", "state", "zekno")
+
 /**
- * Where the runner keeps its key and state when nothing says otherwise: the
- * system folder for root, or when it is already there (a server set up by an
- * earlier version); a folder in the user's own home for anyone else, who
- * could not create the system one.
+ * Where the runner keeps its key and state when nothing says otherwise.
+ * Root uses the system folder. Anyone else keeps using their own folder once
+ * it is set up, so a system folder created later never takes its place; before
+ * that, they use the system folder only when it is theirs (a server set up by
+ * an earlier version), never one that belongs to root or another user.
  */
-export function defaultHome(input: { isRoot: boolean; systemExists: boolean; userHome: string }): string {
-  if (input.isRoot || input.systemExists) return SYSTEM_HOME
-  return join(input.userHome, ".local", "state", "zekno")
+export function defaultHome(input: {
+  isRoot: boolean
+  userHome: string
+  /** The user's own folder already holds a key or state. */
+  userFolderSetUp: boolean
+  /** `/var/lib/zekno` exists, is a folder and belongs to this user. */
+  ownsSystemFolder: boolean
+}): string {
+  if (input.isRoot) return SYSTEM_HOME
+  if (input.userFolderSetUp) return userFolder(input.userHome)
+  return input.ownsSystemFolder ? SYSTEM_HOME : userFolder(input.userHome)
+}
+
+/** True when `path` is a folder that belongs to the user running this process. */
+function ownedFolder(path: string): boolean {
+  if (typeof process.getuid !== "function") return false
+  try {
+    const info = statSync(path)
+    return info.isDirectory() && info.uid === process.getuid()
+  } catch {
+    return false
+  }
 }
 
 export function homeDir(): string {
   if (process.env.ZEKNO_RUNNER_HOME) return process.env.ZEKNO_RUNNER_HOME
+  const userHome = homedir()
   return defaultHome({
     isRoot: typeof process.getuid === "function" && process.getuid() === 0,
-    systemExists: existsSync(SYSTEM_HOME),
-    userHome: homedir(),
+    userHome,
+    userFolderSetUp: isSetUp(userFolder(userHome)),
+    ownsSystemFolder: ownedFolder(SYSTEM_HOME),
   })
 }
 

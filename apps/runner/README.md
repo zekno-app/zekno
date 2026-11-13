@@ -23,7 +23,10 @@ Exit status: `0` done, `1` refused or the app did not start, `2` wrong usage.
 
 ## Its folder
 
-`/var/lib/zekno`, or `ZEKNO_RUNNER_HOME`. Mode `0700`.
+`ZEKNO_RUNNER_HOME` when it is set. Otherwise root uses `/var/lib/zekno`. Any other user uses
+`~/.local/state/zekno` once that folder is set up; before that, `/var/lib/zekno` only if it exists
+and belongs to that user (a server set up by an earlier version), else `~/.local/state/zekno`.
+Mode `0700`.
 
 | File | What |
 |------|------|

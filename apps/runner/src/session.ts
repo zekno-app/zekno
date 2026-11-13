@@ -22,8 +22,15 @@ export const version = (): RunnerVersion => ({ version: runnerVersion, protocol:
 /** Lines that are not requests, in a row, before the runner gives up on the session. */
 const MAX_BAD_LINES = 3
 
-/** Bytes of requests received but not yet handled. A client further ahead than this waits. */
-const QUEUE_LIMIT = LIMITS.messageBytes
+/** Bytes of requests received but not yet handled. A client further ahead than this ends the session. */
+const QUEUE_BYTES = LIMITS.messageBytes
+/**
+ * What each waiting line counts for on top of its own bytes. Without it an
+ * empty line would cost nothing, although holding it costs memory.
+ */
+const LINE_COST = 1024
+/** Lines received but not yet handled. A client further ahead than this ends the session. */
+const QUEUE_LINES = 1024
 
 /** Where the frames of a session go. */
 export type FrameSink = {
@@ -100,11 +107,20 @@ const whenAborted = (signal: AbortSignal) =>
     else signal.addEventListener("abort", () => resolve(), { once: true })
   })
 
+/** What a waiting line counts for against `QUEUE_BYTES`. */
+const cost = (line: Uint8Array | null) => (line?.length ?? 0) + LINE_COST
+
 /** Runs one request through the code of its one-shot command and returns its answer. */
 async function handle(dir: string, request: SessionRequest, sink: FrameSink, closed: AbortSignal): Promise<unknown> {
   const { command, input } = request
-  // The one-shot commands read their request as text and check it themselves.
-  const text = input === undefined ? "" : JSON.stringify(input)
+  let text: string
+  try {
+    // The one-shot commands read their request as text and check it themselves.
+    text = input === undefined ? "" : JSON.stringify(input)
+  } catch {
+    // Input nested too deeply to be written out again is not a request either.
+    return refused("invalid_request")
+  }
   try {
     switch (command) {
       case "version":
@@ -119,7 +135,7 @@ async function handle(dir: string, request: SessionRequest, sink: FrameSink, clo
         // Docker's own output, line by line. The deploy does not wait for anyone to read it.
         return await apply(dir, text, (line) => sink.write({ event: "progress", line }))
       case "state":
-        return await appStates(dir)
+        return await appStates(dir, closed)
       case "logs": {
         const gone = whenAborted(closed)
         // A slow reader slows Docker's log command down, until the reader goes away.
@@ -139,18 +155,24 @@ async function handle(dir: string, request: SessionRequest, sink: FrameSink, clo
  * Reads requests from `input`, one per line, and writes frames to `sink`.
  * Requests are handled one at a time, in order, each answered by its events
  * and then one result. Returns the exit status: 0 when the input closed, 1
- * when the session was ended because lines were not requests.
+ * when the session was ended because lines were not requests, or because the
+ * client sent far more than it waited answers for.
  *
  * When the input closes, the request in progress is finished (`apply`) or
- * stopped (`logs`), the requests received before the close are answered, and
- * the session ends.
+ * stopped (`logs`, and Docker's answer for `state`), the requests received
+ * before the close are answered, and the session ends.
+ *
+ * A client that gets more than `QUEUE_LINES` lines or `QUEUE_BYTES` bytes
+ * ahead is not waiting for its answers. Its session ends as if the input had
+ * closed, except that the requests still waiting are dropped, not run.
  */
 export async function runSession(dir: string, input: ReadableStream<Uint8Array>, sink: FrameSink): Promise<number> {
   const queue: (Uint8Array | null)[] = []
   let queued = 0
+  let overrun = false
   let wake: (() => void) | undefined
-  let room: (() => void) | undefined
   const closed = new AbortController()
+  const inputClosed = whenAborted(closed.signal)
   const nudge = () => {
     const resolve = wake
     wake = undefined
@@ -162,9 +184,16 @@ export async function runSession(dir: string, input: ReadableStream<Uint8Array>,
   void (async () => {
     try {
       for await (const line of requestLines(input, LIMITS.messageBytes)) {
-        while (queued > QUEUE_LIMIT) await new Promise<void>((resolve) => (room = resolve))
+        // Holding lines back would also stop the reading, and with it the
+        // noticing of a closed input. A client this far ahead ends its session.
+        if (queue.length >= QUEUE_LINES || (queue.length > 0 && queued + cost(line) > QUEUE_BYTES)) {
+          overrun = true
+          queue.length = 0
+          queued = 0
+          break
+        }
         queue.push(line)
-        queued += line?.length ?? 0
+        queued += cost(line)
         nudge()
       }
     } catch {
@@ -174,15 +203,13 @@ export async function runSession(dir: string, input: ReadableStream<Uint8Array>,
     nudge()
   })()
 
-  /** The next line, or undefined once the input has closed and every line was taken. */
+  /** The next line, or undefined once the input has closed and every line was taken, or the session was ended. */
   const next = async (): Promise<Uint8Array | null | undefined> => {
     for (;;) {
+      if (overrun) return undefined
       if (queue.length > 0) {
         const line = queue.shift()!
-        queued -= line?.length ?? 0
-        const resolve = room
-        room = undefined
-        resolve?.()
+        queued -= cost(line)
         return line
       }
       if (closed.signal.aborted) return undefined
@@ -190,17 +217,26 @@ export async function runSession(dir: string, input: ReadableStream<Uint8Array>,
     }
   }
 
+  /**
+   * Waits until the reader has taken the frames written so far, has gone, or
+   * the input has closed, so that a client that does not read cannot make the
+   * runner hold its answers. No lock is held here.
+   */
+  const delivered = () => Promise.race([sink.drained(), inputClosed])
+
   let bad = 0
   for (;;) {
     const line = await next()
-    if (line === undefined) return 0
+    if (line === undefined) return overrun ? 1 : 0
     const request = line === null ? undefined : parseMessage(SessionRequestSchema, line)
     if (!request?.ok) {
       sink.write({ result: refused("invalid_request") })
       if (++bad >= MAX_BAD_LINES) return 1
+      await delivered()
       continue
     }
     bad = 0
     sink.write({ result: await handle(dir, request.value, sink, closed.signal) })
+    await delivered()
   }
 }

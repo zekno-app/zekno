@@ -135,15 +135,28 @@ describe("the runner", () => {
 })
 
 describe("the runner's folder", () => {
-  test("root, or a server that already has the system folder, uses /var/lib/zekno", () => {
-    expect(defaultHome({ isRoot: true, systemExists: false, userHome: "/root" })).toBe("/var/lib/zekno")
-    expect(defaultHome({ isRoot: true, systemExists: true, userHome: "/root" })).toBe("/var/lib/zekno")
-    // A server set up by an earlier version keeps its folder, whoever runs the runner.
-    expect(defaultHome({ isRoot: false, systemExists: true, userHome: "/home/deploy" })).toBe("/var/lib/zekno")
+  const USER = "/home/deploy/.local/state/zekno"
+
+  test("root always uses /var/lib/zekno", () => {
+    for (const userFolderSetUp of [false, true]) {
+      for (const ownsSystemFolder of [false, true]) {
+        expect(defaultHome({ isRoot: true, userHome: "/root", userFolderSetUp, ownsSystemFolder })).toBe("/var/lib/zekno")
+      }
+    }
   })
 
-  test("anyone else uses a folder in their own home", () => {
-    expect(defaultHome({ isRoot: false, systemExists: false, userHome: "/home/deploy" })).toBe("/home/deploy/.local/state/zekno")
+  test("a user whose own folder is set up keeps it, even when a system folder appears later, theirs or not", () => {
+    expect(defaultHome({ isRoot: false, userHome: "/home/deploy", userFolderSetUp: true, ownsSystemFolder: false })).toBe(USER)
+    expect(defaultHome({ isRoot: false, userHome: "/home/deploy", userFolderSetUp: true, ownsSystemFolder: true })).toBe(USER)
+  })
+
+  test("a server set up by an earlier version keeps /var/lib/zekno when it belongs to the user running the runner", () => {
+    expect(defaultHome({ isRoot: false, userHome: "/home/deploy", userFolderSetUp: false, ownsSystemFolder: true })).toBe("/var/lib/zekno")
+  })
+
+  test("anyone else uses a folder in their own home, also when /var/lib/zekno exists but belongs to someone else", () => {
+    // `ownsSystemFolder` is false both when the folder is missing and when root or another user owns it.
+    expect(defaultHome({ isRoot: false, userHome: "/home/deploy", userFolderSetUp: false, ownsSystemFolder: false })).toBe(USER)
   })
 
   test("ZEKNO_RUNNER_HOME wins when it is set", () => {
@@ -160,8 +173,8 @@ describe("the runner's folder", () => {
     }
   })
 
-  // Only where running it cannot touch a real runner's folder.
-  const systemFolderInPlay = existsSync("/var/lib/zekno") || process.getuid?.() === 0
+  // Only where running it cannot touch a real runner's folder: not as root, and not when /var/lib/zekno is this user's.
+  const systemFolderInPlay = process.getuid?.() === 0 || (existsSync("/var/lib/zekno") && statSync("/var/lib/zekno").uid === process.getuid?.())
   test.skipIf(systemFolderInPlay)("without ZEKNO_RUNNER_HOME, a user who is not root sets up in ~/.local/state/zekno", async () => {
     const { team } = await world()
     const home = tempDir("user-home")

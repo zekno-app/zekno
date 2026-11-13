@@ -21,7 +21,8 @@ export function tempDir(label: string): string {
   return mkdtempSync(join(tmpdir(), `zekno-${label}-`))
 }
 
-type DockerCall = { args: string; env: Record<string, string> }
+/** One call of the stand-in Docker: its arguments, its environment and the folder it was started in. */
+type DockerCall = { args: string; env: Record<string, string>; cwd: string }
 
 function readCalls(log: string): DockerCall[] {
   if (!existsSync(log)) return []
@@ -35,8 +36,16 @@ function readCalls(log: string): DockerCall[] {
         const [name, ...rest] = line.slice(4).split("=")
         env[name!] = rest.join("=")
       }
-      return { args: lines.find((entry) => entry.startsWith("ARGS "))!.slice(5), env }
+      const cwd = lines.find((entry) => entry.startsWith("CWD "))?.slice(4) ?? ""
+      return { args: lines.find((entry) => entry.startsWith("ARGS "))!.slice(5), env, cwd }
     })
+}
+
+/** The resident memory of a running process, in MiB, or undefined once it has gone. */
+export function residentMiB(pid: number): number | undefined {
+  const result = Bun.spawnSync(["ps", "-o", "rss=", "-p", String(pid)])
+  const kib = Number(result.stdout.toString().trim())
+  return result.exitCode === 0 && Number.isFinite(kib) && kib > 0 ? kib / 1024 : undefined
 }
 
 /** Waits until `ready` is true, checking every few milliseconds. */
@@ -69,9 +78,9 @@ export function isAlive(pid: number): boolean {
  * what environment, and exits with the status written in its `exit` file.
  *
  * `compose ... up` prints prepared lines and can be held in the middle until
- * the test lets it go. `compose -p <project> ps` prints a prepared file.
- * `compose -p <project> logs` prints a prepared file and, when asked, stays
- * alive afterwards the way `--follow` does.
+ * the test lets it go. `compose -p <project> ps` prints a prepared file, or
+ * hangs when asked to. `compose -p <project> logs` prints a prepared file
+ * and, when asked, stays alive afterwards the way `--follow` does.
  */
 export function fakeDocker() {
   const dir = tempDir("docker")
@@ -84,11 +93,12 @@ export function fakeDocker() {
     `#!/bin/sh
 d="${dir}"
 if [ "$4" = "ps" ] || [ "$4" = "logs" ]; then
-  { echo "ARGS $*"; env | sed 's/^/ENV /'; echo END; } >> "${inspectLog}"
+  { echo "ARGS $*"; echo "CWD $(pwd -P)"; env | sed 's/^/ENV /'; echo END; } >> "${inspectLog}"
 else
-  { echo "ARGS $*"; env | sed 's/^/ENV /'; echo END; } >> "${log}"
+  { echo "ARGS $*"; echo "CWD $(pwd -P)"; env | sed 's/^/ENV /'; echo END; } >> "${log}"
 fi
 if [ "$4" = "ps" ]; then
+  if [ -f "$d/ps-hang" ]; then echo $$ > "$d/ps.pid"; exec sleep 60; fi
   if [ -f "$d/ps-$3" ]; then cat "$d/ps-$3"; fi
   if [ -f "$d/ps-$3.exit" ]; then exit "$(cat "$d/ps-$3.exit")"; fi
   exit 0
@@ -144,6 +154,10 @@ exit 0
       writeFileSync(at(`ps-zekno-${app}`), output)
       writeFileSync(at(`ps-zekno-${app}.exit`), String(status))
     },
+    /** Makes every `ps` hang, printing nothing, until it is stopped. */
+    psHangs: () => writeFileSync(at("ps-hang"), ""),
+    /** The process id of the last `ps` that hung, once it has started. */
+    psPid: (): number | undefined => pidIn(at("ps.pid")),
     /**
      * What `logs` prints for an app. With `follow`, it then stays alive until
      * stopped. With `leaveChild`, it starts a process that keeps the output
@@ -305,6 +319,17 @@ export async function world() {
   if (synced.json?.outcome !== "ok") throw new Error(`sync failed: ${JSON.stringify(synced.json)}`)
 
   return { signer, team, trust: added.trust, rosters, home, docker, serverId, setup }
+}
+
+/** A world with a deploy accepted for each of `apps`. */
+export async function deployed(apps: string[]): Promise<Awaited<ReturnType<typeof world>>> {
+  const w = await world()
+  for (const app of apps) {
+    const deploy = await buildDeploy({ trust: w.trust, serverId: w.serverId, signer: w.signer, sequence: 1, app })
+    const result = await runner(w.home, w.docker.path, "apply", { rosters: w.rosters, deploy })
+    if (result.json?.outcome !== "started") throw new Error(`deploy of ${app} failed: ${JSON.stringify(result.json)}`)
+  }
+  return w
 }
 
 export async function buildDeploy(input: {

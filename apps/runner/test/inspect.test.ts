@@ -4,9 +4,7 @@ import { chmodSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { parseLogLine, parsePs } from "../src/inspect"
-import { buildDeploy, fakeDocker, isAlive, runner, session, tempDir, waitFor, world } from "./helpers"
-
-type World = Awaited<ReturnType<typeof world>>
+import { deployed, fakeDocker, isAlive, session, tempDir, waitFor, world } from "./helpers"
 
 /** One row of `docker compose ps --format json` as Docker 29 prints it, with everything it carries. */
 function psRow(service: string, state: string, extra: Record<string, unknown> = {}) {
@@ -39,17 +37,6 @@ function psRow(service: string, state: string, extra: Record<string, unknown> = 
 
 /** What must never leave the server in an answer about state. */
 const PRIVATE = ["/home/deploy", "/srv/private", "docker-entrypoint", "com.docker.compose", "0.0.0.0", "4f1c0de5", "zekno-web-web-1", "Up 2 minutes"]
-
-/** A world with a deploy accepted for each of `apps`. */
-async function deployed(apps: string[]): Promise<World> {
-  const w = await world()
-  for (const app of apps) {
-    const deploy = await buildDeploy({ trust: w.trust, serverId: w.serverId, signer: w.signer, sequence: 1, app })
-    const result = await runner(w.home, w.docker.path, "apply", { rosters: w.rosters, deploy })
-    if (result.json?.outcome !== "started") throw new Error(`deploy of ${app} failed: ${JSON.stringify(result.json)}`)
-  }
-  return w
-}
 
 describe("parsePs", () => {
   test("keeps the service, state, exit code and health of each container, and nothing else", () => {

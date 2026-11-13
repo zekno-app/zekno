@@ -26,8 +26,10 @@ type Service = RunnerAppStates["apps"][string]["services"][number]
 const LOG_LINE = 16384
 /** The most services one app may report. */
 const MAX_SERVICES = 256
-/** How long Docker's log command has to stop before it is killed outright. */
+/** How long a Docker command has to stop before it is killed outright. */
 const STOP_GRACE_MS = 2000
+/** How long Docker has to say what is running for one app before it is stopped and the app left out. */
+const PS_TIMEOUT_MS = 30_000
 
 /** The apps this runner has accepted a deploy for. Names come from its own state, never from a request. */
 const deployedApps = (state: RunnerState): string[] =>
@@ -75,37 +77,69 @@ export function parsePs(output: string): Service[] {
   return services
 }
 
-/** Runs one Docker command and returns what it printed, or undefined when it failed or printed too much. */
-async function dockerOutput(args: string[]): Promise<string | undefined> {
+/** Stops a Docker command: asked first, then killed when it does not stop in time. */
+async function stopChild(child: Bun.Subprocess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return
+  child.kill()
+  const stopped = await Promise.race([child.exited.then(() => true), Bun.sleep(STOP_GRACE_MS).then(() => false)])
+  if (!stopped) child.kill("SIGKILL")
+}
+
+/**
+ * Runs one Docker command in the runner's own folder and returns what it
+ * printed. Undefined when it failed, printed too much, took longer than
+ * `timeoutMs`, or `stop` was signalled; the command is then stopped.
+ */
+async function dockerOutput(dir: string, args: string[], stop: AbortSignal, timeoutMs: number): Promise<string | undefined> {
+  if (stop.aborted) return undefined
+  let child
   try {
-    const child = Bun.spawn([dockerCommand(), ...args], { env: dockerEnv(), stdin: "ignore", stdout: "pipe", stderr: "ignore" })
-    const chunks: Uint8Array[] = []
-    let size = 0
-    for await (const chunk of child.stdout) {
-      size += chunk.length
-      if (size > LIMITS.messageBytes) {
-        child.kill()
-        return undefined
-      }
-      chunks.push(chunk)
-    }
-    return (await child.exited) === 0 ? Buffer.concat(chunks).toString("utf8") : undefined
+    // Started in the runner's private folder: Docker Compose reads files from
+    // where it runs, and wherever the runner was started is not the runner's to trust.
+    child = Bun.spawn([dockerCommand(), ...args], { cwd: dir, env: dockerEnv(), stdin: "ignore", stdout: "pipe", stderr: "ignore" })
   } catch {
     return undefined
+  }
+  const { stdout, exited } = child
+  const reading = (async () => {
+    const chunks: Uint8Array[] = []
+    let size = 0
+    for await (const chunk of stdout) {
+      size += chunk.length
+      if (size > LIMITS.messageBytes) return undefined
+      chunks.push(chunk)
+    }
+    return (await exited) === 0 ? Buffer.concat(chunks).toString("utf8") : undefined
+  })().catch(() => undefined)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let giveUp = () => {}
+  const givenUp = new Promise<undefined>((resolve) => {
+    giveUp = () => resolve(undefined)
+    timer = setTimeout(giveUp, timeoutMs)
+    stop.addEventListener("abort", giveUp, { once: true })
+  })
+  try {
+    return await Promise.race([reading, givenUp])
+  } finally {
+    clearTimeout(timer)
+    stop.removeEventListener("abort", giveUp)
+    // Not waiting for the output to close: a process Docker left behind could keep it open.
+    await stopChild(child)
   }
 }
 
 /**
  * What is running for each app this runner has accepted a deploy for. An app
  * Docker could not be asked about is left out of the answer: its state is not
- * known, which is not the same as stopped.
+ * known, which is not the same as stopped. Docker gets `timeoutMs` per app,
+ * and is not asked any more once `stop` is signalled (the input closed).
  */
-export async function appStates(dir: string): Promise<RunnerAppStates | RunnerReport> {
+export async function appStates(dir: string, stop: AbortSignal, timeoutMs = PS_TIMEOUT_MS): Promise<RunnerAppStates | RunnerReport> {
   const loaded = load(dir)
   if (isReport(loaded)) return loaded
   const apps: RunnerAppStates["apps"] = {}
   for (const app of deployedApps(loaded.state)) {
-    const output = await dockerOutput(["compose", "-p", `zekno-${app}`, "ps", "--all", "--format", "json"])
+    const output = await dockerOutput(dir, ["compose", "-p", `zekno-${app}`, "ps", "--all", "--format", "json"], stop, timeoutMs)
     if (output !== undefined) apps[app] = { services: parsePs(output) }
   }
   return { apps }
@@ -128,14 +162,6 @@ export function parseLogLine(line: string, now: () => Date = () => new Date()): 
     time: timed ? timed[1]! : now().toISOString(),
     line: (timed ? timed[2]! : prefixed[2]!).slice(0, LOG_LINE),
   }
-}
-
-/** Stops a Docker command: asked first, then killed when it does not stop in time. */
-async function stopChild(child: Bun.Subprocess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  child.kill()
-  const stopped = await Promise.race([child.exited.then(() => true), Bun.sleep(STOP_GRACE_MS).then(() => false)])
-  if (!stopped) child.kill("SIGKILL")
 }
 
 /**
@@ -163,7 +189,8 @@ export async function followLogs(
   try {
     child = Bun.spawn(
       [dockerCommand(), "compose", "-p", `zekno-${app}`, "logs", "--follow", "--timestamps", "--no-color", "--tail", String(tail)],
-      { env: dockerEnv(), stdin: "ignore", stdout: "pipe", stderr: "ignore" }
+      // In the runner's private folder, for the same reason as `ps`.
+      { cwd: dir, env: dockerEnv(), stdin: "ignore", stdout: "pipe", stderr: "ignore" }
     )
   } catch {
     return { outcome: "ok" }

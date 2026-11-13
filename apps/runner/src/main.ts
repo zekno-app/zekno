@@ -7,7 +7,8 @@
  *
  * Exit status: 0 when the work was done, 1 when it was refused or the app
  * did not start, 2 for wrong usage. For `session`: 0 when its input closed,
- * 1 when it stopped because lines were not requests it could read.
+ * 1 when it stopped because lines were not requests it could read, or
+ * because requests arrived far faster than they were answered.
  */
 import { LIMITS } from "@workspace/core"
 
