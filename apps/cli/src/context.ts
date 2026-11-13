@@ -12,6 +12,7 @@ import { z } from "zod"
 import { CliError } from "./errors"
 import type { KeyStore } from "./keystore"
 import { profileStore, type Profile, type ProfileStore } from "./profile"
+import type { RunnerRelease } from "./runner-release"
 import type { ConnectOptions, Target, Transport } from "./transport"
 import type { Ui } from "./ui/types"
 
@@ -27,6 +28,11 @@ export type Deps = {
   ui: Ui
   /** The command that starts a runner on this machine, for `--local`. */
   localRunner: string[]
+  /**
+   * The runner this CLI installs and checks servers against. Undefined is
+   * runner-release.json; tests pass their own, with checksums of their files.
+   */
+  release?: RunnerRelease
 }
 
 /**

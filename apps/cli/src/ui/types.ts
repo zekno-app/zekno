@@ -41,6 +41,12 @@ export interface Ui {
   step<T>(label: string, work: () => Promise<T>, options?: { quiet?: boolean }): Promise<T>
   /** Reads a secret value: hidden at a terminal, or everything on standard input. */
   askSecret(question: string, fromStdin: boolean): Promise<string>
+  /**
+   * Asks a yes-or-no question at a terminal and resolves with the answer; no
+   * is the default. Without a terminal it throws `refusal`: a command never
+   * asks where nobody can answer, and never takes yes for granted.
+   */
+  confirm(question: string, refusal: string): Promise<boolean>
   /** Finishes drawing. Call once, before the process exits. */
   close(): Promise<void>
 }

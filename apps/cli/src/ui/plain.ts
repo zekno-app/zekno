@@ -58,6 +58,9 @@ export function plainUi(
       }
       return readStdin()
     },
+    async confirm(_question, refusal) {
+      throw new CliError(refusal)
+    },
     close: async () => {},
   }
 }

@@ -4,7 +4,7 @@ import { parseArgs } from "node:util"
 import { deploy, rollback } from "./commands/deploy"
 import { init } from "./commands/init"
 import { secretList, secretRemove, secretSet } from "./commands/secret"
-import { serverAdd, serverList } from "./commands/server"
+import { serverAdd, serverList, serverUpdate } from "./commands/server"
 import { status } from "./commands/status"
 import type { Deps } from "./context"
 import { CliError, UsageError } from "./errors"
@@ -13,7 +13,9 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
 
   zekno init --name <you>
   zekno server add <name> --ssh <user@host> [--runner-path <path>]
+  zekno server add <name> --ssh <user@host> --runner-file <path>  (development only)
   zekno server add <name> --local [--home <dir>]
+  zekno server update <name> [--yes]
   zekno server ls
   zekno secret set <NAME> --app <app> --server <name> [--stdin]
   zekno secret rm <NAME> --app <app> --server <name>
@@ -26,6 +28,7 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
 const WORDS: Record<string, number> = {
   init: 1,
   "server add": 3,
+  "server update": 3,
   "server ls": 2,
   "secret set": 3,
   "secret rm": 3,
@@ -51,6 +54,8 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
         local: { type: "boolean" },
         home: { type: "string" },
         "runner-path": { type: "string" },
+        "runner-file": { type: "string" },
+        yes: { type: "boolean" },
         app: { type: "string" },
         server: { type: "string" },
         stdin: { type: "boolean" },
@@ -84,6 +89,9 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
         return 0
       case "server add":
         await serverAdd(deps, third, values)
+        return 0
+      case "server update":
+        await serverUpdate(deps, third, values)
         return 0
       case "server ls":
         await serverList(deps)

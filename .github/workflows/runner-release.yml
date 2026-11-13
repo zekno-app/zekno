@@ -1,0 +1,102 @@
+# Publishes a runner release (specs/004-cli-app/contracts/commands.md, "The release workflow").
+#
+# Runs only when a tag `runner-v<version>` is pushed. Builds zekno-runner for Linux on x86-64 and
+# ARM64, compresses each with gzip, writes SHA256SUMS for the unpacked binaries, and attaches
+# them to a GitHub Release. It uses no secret beyond the token GitHub gives every workflow.
+# Recording the checksums in apps/cli/src/runner-release.json is a separate commit, made by a
+# person who has checked them.
+name: runner release
+
+on:
+  push:
+    tags:
+      - "runner-v*"
+
+# Nothing by default; the one job below asks for what it needs.
+permissions: {}
+
+concurrency:
+  group: runner-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      # The tag name reaches the shell only through an environment variable, and is checked
+      # against its pattern before anything uses it.
+      - name: Check the tag
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^runner-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The tag is not of the form runner-v<major>.<minor>.<patch>." >&2
+            exit 1
+          fi
+          echo "version=${TAG#runner-v}" >> "$GITHUB_OUTPUT"
+
+      # Third-party actions should be pinned to a full commit SHA. These are major version tags
+      # because the SHAs could not be checked where this file was written: pin them before use.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check the version and read the Bun version
+        id: versions
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          runner=$(jq -r .version apps/runner/package.json)
+          if [ "$runner" != "$VERSION" ]; then
+            echo "The tag says $VERSION, but apps/runner/package.json says $runner." >&2
+            exit 1
+          fi
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.versions.outputs.bun }}
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build for Linux on x86-64 and ARM64
+        working-directory: apps/runner
+        run: |
+          set -euo pipefail
+          bun run compile:linux-x64
+          bun run compile:linux-arm64
+
+      - name: Compress, and write SHA256SUMS of the unpacked binaries
+        working-directory: apps/runner/dist
+        run: |
+          set -euo pipefail
+          sha256sum zekno-runner-linux-x64 zekno-runner-linux-arm64 > SHA256SUMS
+          gzip -9 -n -k zekno-runner-linux-x64 zekno-runner-linux-arm64
+          cat SHA256SUMS
+
+      - name: Publish the release
+        working-directory: apps/runner/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "zekno-runner $VERSION" \
+            --notes "zekno-runner $VERSION for Linux on x86-64 and ARM64. SHA256SUMS holds the SHA-256 of each unpacked binary. Unaudited." \
+            zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz SHA256SUMS

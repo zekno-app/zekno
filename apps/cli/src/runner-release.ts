@@ -19,7 +19,10 @@ const ReleaseSchema = z.strictObject({
 
 export type RunnerArch = "x64" | "arm64"
 
-export const RUNNER_RELEASE = ReleaseSchema.parse(release)
+/** A runner release: its version, and the SHA-256 of each file, or `null` before it is published. */
+export type RunnerRelease = z.infer<typeof ReleaseSchema>
+
+export const RUNNER_RELEASE: RunnerRelease = ReleaseSchema.parse(release)
 
 export function expectedSha256(arch: RunnerArch): string | null {
   return RUNNER_RELEASE.files[`linux-${arch}`].sha256

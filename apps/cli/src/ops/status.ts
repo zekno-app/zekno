@@ -1,4 +1,4 @@
-import { RunnerStatusSchema, type RunnerStatus } from "@workspace/core"
+import { RunnerStatusSchema, type RunnerStatus, type RunnerVersion } from "@workspace/core"
 
 import { openTeam, reach, type OpDeps, type Team } from "../context"
 import { CliError } from "../errors"
@@ -28,6 +28,8 @@ export type StatusResult = {
   /** The server has an older team list than this machine. The next deploy brings it up to date. */
   behind: boolean
   mode: SessionMode
+  /** The runner's version, when it says. A runner from before sessions does not. */
+  runner?: RunnerVersion
 }
 
 /** Asks a server what it holds, over one session. */
@@ -35,6 +37,6 @@ export async function readStatus(deps: OpDeps, { team, server }: Located): Promi
   return withSession(reach(deps, server.target), async (session) => {
     const status = await session.request("status", RunnerStatusSchema)
     checkIdentity(team, server, status)
-    return { server: server.name, status, behind: status.team.version < team.trust.version, mode: session.mode }
+    return { server: server.name, status, behind: status.team.version < team.trust.version, mode: session.mode, runner: session.runner }
   })
 }

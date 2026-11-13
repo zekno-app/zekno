@@ -147,16 +147,18 @@ describe("screens a later part builds", () => {
     expect(text).toContain("pre-alpha, unaudited")
     expect(lastLine(lines)).toBe("f pause following  / filter  1-9 one service  ↑↓ scroll  esc back")
 
-    const adding = draw(after(home(), key("a")), 100, 30)
+    // "Add a server" is built now (first-run.test.tsx has its board); its place and keys are as before.
+    const adding = draw(after(home(), key("a"), key("h"), { type: "key", key: { kind: "enter" } }, key("n"), { type: "key", key: { kind: "enter" } }), 100, 30)
     expect(adding.join("\n")).toContain("› add a server")
-    expect(adding.join("\n")).toContain("Adding a server is not built yet.")
+    expect(adding.join("\n")).not.toContain("not built yet")
     expect(lastLine(adding)).toBe("o show details  esc cancel")
   })
 
-  test("first run has no wordmark in its header, as on its board", () => {
+  test("first run has no wordmark in its header, as on its board: the wordmark is in its body", () => {
     const lines = draw(initialState({ kind: "no-team" }, { columns: 80, rows: 24 }), 80, 24)
-    expect(lines.join("\n")).not.toContain("▀")
+    expect(lines[0]).not.toContain("▀")
     expect(lines[0]).toMatch(/^ welcome +pre-alpha, unaudited$/)
+    expect(lines.slice(1).join("\n")).toContain(logoLines()[0]!)
     expect(lastLine(lines)).toBe("enter create the key  esc quit")
   })
 

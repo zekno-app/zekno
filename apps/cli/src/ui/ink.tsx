@@ -12,8 +12,9 @@ type Item =
   | { id: number; kind: "table"; rows: string[][] }
 
 type Prompt = { question: string; settle(result: { value: string } | { error: Error }): void }
+type Question = { question: string; settle(yes: boolean): void }
 /** `generation` changes when lines already drawn are let go; Static then starts afresh with what is left. */
-type State = { items: Item[]; generation: number; step?: string; prompt?: Prompt }
+type State = { items: Item[]; generation: number; step?: string; prompt?: Prompt; question?: Question }
 
 /**
  * How many drawn lines may pile up before they are let go. Static writes a
@@ -150,6 +151,28 @@ function SecretPrompt({ prompt }: { prompt: Prompt }) {
   )
 }
 
+/** What a key answers to a yes-or-no question: `y` is yes; `n`, Enter, Esc and Ctrl-C are no; anything else, nothing yet. */
+export function yesOrNo(input: string, key: { return?: boolean; escape?: boolean; ctrl?: boolean }): boolean | undefined {
+  if (key.ctrl) return input === "c" ? false : undefined
+  if (key.return || key.escape) return false
+  if (input === "y" || input === "Y") return true
+  if (input === "n" || input === "N") return false
+  return undefined
+}
+
+/** A yes-or-no question, answered with one key. */
+function QuestionPrompt({ question }: { question: Question }) {
+  useInput((input, key) => {
+    const answer = yesOrNo(input, key)
+    if (answer !== undefined) question.settle(answer)
+  })
+  return (
+    <Text>
+      <Text color="cyan">?</Text> {question.question} <Text dimColor>(y/N)</Text>
+    </Text>
+  )
+}
+
 function App({ store }: { store: ReturnType<typeof createStore> }) {
   const state = useSyncExternalStore(store.subscribe, store.get)
   // Ink writes Static's new items to the terminal as the commit ends, before this runs.
@@ -159,7 +182,13 @@ function App({ store }: { store: ReturnType<typeof createStore> }) {
       <Static key={state.generation} items={state.items}>
         {(item) => <Line key={item.id} item={item} />}
       </Static>
-      {state.prompt ? <SecretPrompt prompt={state.prompt} /> : state.step ? <Spinner label={state.step} /> : null}
+      {state.prompt ? (
+        <SecretPrompt prompt={state.prompt} />
+      ) : state.question ? (
+        <QuestionPrompt question={state.question} />
+      ) : state.step ? (
+        <Spinner label={state.step} />
+      ) : null}
     </>
   )
 }
@@ -218,6 +247,22 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
               store.set({ prompt: undefined })
               if ("value" in result) resolve(result.value)
               else reject(result.error)
+            },
+          },
+        })
+      }).finally(() => process.stdin.setRawMode(false))
+    },
+    confirm(question, refusal) {
+      if (!process.stdin.isTTY) throw new CliError(refusal)
+      process.stdin.setRawMode(true)
+      return new Promise<boolean>((resolve) => {
+        store.set({
+          question: {
+            question,
+            settle(yes) {
+              store.set({ question: undefined })
+              add({ kind: "info", text: `${question} ${yes ? "yes" : "no"}` })
+              resolve(yes)
             },
           },
         })

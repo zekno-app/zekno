@@ -60,13 +60,17 @@ export type ServerRow = {
   reachable?: boolean
   /** Why it could not be reached, as a sentence. */
   problem?: string
-  /** The runner's version, and whether it is older than this CLI needs. */
-  runner?: { version: string; outdated: boolean }
+  /**
+   * The runner's version, and whether it is older than the one this CLI
+   * carries. `version` is undefined for a runner from before 0.2.0, which
+   * does not say.
+   */
+  runner?: { version?: string; outdated: boolean }
   apps: AppRow[]
 }
 
-/** The verified team, as the screens show it. */
-export type TeamView = { member: string; version: number; servers: ServerRow[] }
+/** The verified team, as the screens show it. `code` is the team code, which servers check. */
+export type TeamView = { member: string; version: number; code?: string; servers: ServerRow[] }
 
 /** One deploy in an app's history. Everything but `outcome` is read from under the deploy's signature. */
 export type DeployRow = {
@@ -122,6 +126,31 @@ export type DeployProgress = {
   result?: Notice
 }
 
+/** The steps of adding a server, in order (board "Add a server"). */
+export const ADD_STEPS = ["connect", "docker", "runner", "set_up", "added"] as const
+export type AddStepName = (typeof ADD_STEPS)[number]
+
+/** The steps shown for a runner on this machine: there is no SSH, no Docker check and nothing to install. */
+export const LOCAL_ADD_STEPS: readonly AddStepName[] = ["connect", "set_up", "added"]
+
+/** One step of adding a server that has ended. `found`: the runner was already there and was used as it is. */
+export type AddStep = { state: "done" | "failed"; detail?: string; found?: boolean }
+
+/** Adding a server, started from the app. Kept until another one starts. */
+export type AddProgress = {
+  /** As typed, once it was found valid; "this machine" for a runner here. */
+  destination: string
+  name: string
+  /** A runner on this machine: no SSH, no Docker check, nothing to install. */
+  local: boolean
+  steps: Partial<Record<AddStepName, AddStep>>
+  /** Derived on this machine from the key the server sent, once setup finished. */
+  serverCode?: string
+  /** What the installer, SSH and the runner printed on standard error, cleaned, the last `RUNNER_LINES`. */
+  lines: string[]
+  running: boolean
+}
+
 /** How the app starts: the profile has been read and verified, or not (effects.ts `loadStart`). */
 export type Start =
   | { kind: "team"; team: TeamView; linked?: { server: string; app: string } }
@@ -159,6 +188,8 @@ export type Screen =
       destination: string
       serverName: string
       output: boolean
+      /** Step 2 of first run: the header shows the three steps. */
+      firstRun?: boolean
     }
   | {
       name: "set-secret"
@@ -233,12 +264,24 @@ export type AppEvent =
   | { type: "server-added"; team: TeamView; notice: Notice }
   | { type: "app-view"; server: string; app: string; deploys: DeployRow[]; secrets: SecretRow[] }
   | { type: "notice"; notice: Notice }
-  /** An effect failed with a reason a person can act on. What was waiting for it can be tried again. */
-  | { type: "failed"; notice: Notice }
+  /**
+   * An effect failed with a reason a person can act on. What was waiting for
+   * it can be tried again. `from` names the effect when it was adding a
+   * server, whose progress then marks where it stopped.
+   */
+  | { type: "failed"; notice: Notice; from?: "add-server" }
   /** A line a runner or SSH wrote on standard error, already cleaned. */
   | { type: "runner-line"; line: string }
-  /** A server answered, or could not be reached and why. */
-  | { type: "server-reached"; server: string; reachable: boolean; problem?: string }
+  /** A server answered, or could not be reached and why; and, when it answered, its runner's version. */
+  | { type: "server-reached"; server: string; reachable: boolean; problem?: string; runner?: { version?: string; outdated: boolean } }
+  /** Adding a server began: its details were found valid. */
+  | { type: "add-started"; destination: string; name: string; local: boolean }
+  /** A step of adding a server ended. */
+  | { type: "add-step"; step: AddStepName; detail?: string; found?: boolean }
+  /** The server code, once setup finished. */
+  | { type: "add-code"; code: string }
+  /** A line the installer, SSH or the runner printed while a server was being added, already cleaned. */
+  | { type: "add-line"; line: string }
   /** One server's apps, read again from this machine's history. */
   | { type: "server-apps"; server: string; apps: AppRow[] }
   | {
@@ -273,6 +316,8 @@ export type State = {
   appView?: { server: string; app: string; deploys: DeployRow[]; secrets: SecretRow[] }
   size: { columns: number; rows: number }
   deploy?: DeployProgress
+  /** Adding a server started from the app. */
+  adding?: AddProgress
   question?: Question
   notice?: Notice
   runnerLines: string[]
@@ -554,7 +599,7 @@ function onHome(state: State, screen: Extract<Screen, { name: "home" }>, key: Ap
       const moved = applySelectKey(screen.server, servers.length + 1, listKey(key))
       if (moved.kind === "moved") return stay(replaceTop(state, { ...screen, server: moved.index, app: 0 }))
       if (moved.kind === "chosen") {
-        if (moved.index === servers.length) return push(state, addServerScreen())
+        if (moved.index === servers.length) return openAddServer(state)
         return stay(replaceTop(state, { ...screen, pane: "apps" }))
       }
       return stay(state)
@@ -568,7 +613,7 @@ function onHome(state: State, screen: Extract<Screen, { name: "home" }>, key: Ap
   if (key.kind !== "text") return undefined
   switch (key.text) {
     case "a":
-      return push(state, addServerScreen())
+      return openAddServer(state)
     case "d":
       return server && !state.deploy?.running ? go(state, { kind: "deploy", server: server.name, app: app?.name }) : stay(state)
     case "r":
@@ -708,6 +753,12 @@ function onKey(state: State, key: AppKey): Step {
   return step ?? onAnyScreen(state, screen, key)
 }
 
+/** The step adding a server stopped at: the first that had not ended. */
+function failAdding(adding: AddProgress): AddProgress {
+  const at = (adding.local ? LOCAL_ADD_STEPS : ADD_STEPS).find((step) => !adding.steps[step])
+  return { ...adding, running: false, steps: at ? { ...adding.steps, [at]: { state: "failed" } } : adding.steps }
+}
+
 /** The core library's rule for a secret name (`secretName` in packages/core/src/secrets.ts). */
 const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/
 
@@ -718,7 +769,27 @@ export function secretNameProblem(name: string): string | undefined {
   return undefined
 }
 
-const addServerScreen = (): Screen => ({ name: "add-server", step: "destination", destination: "", serverName: "", output: false })
+const addServerScreen = (firstRun = false): Extract<Screen, { name: "add-server" }> => ({
+  name: "add-server",
+  step: "destination",
+  destination: "",
+  serverName: "",
+  output: false,
+  ...(firstRun ? { firstRun } : {}),
+})
+
+/**
+ * Opens "add a server". While one is still being added (its screen was left
+ * with esc), it opens on that one's progress; otherwise on the questions,
+ * with nothing left over from an earlier attempt.
+ */
+function openAddServer(state: State): Step {
+  const adding = state.adding
+  if (adding?.running) {
+    return push(state, { ...addServerScreen(), step: "working", destination: adding.destination, serverName: adding.name })
+  }
+  return push({ ...state, adding: undefined }, addServerScreen())
+}
 
 const setSecretScreen = (server: string, app: string): Extract<Screen, { name: "set-secret" }> => ({
   name: "set-secret",
@@ -757,14 +828,38 @@ export function update(state: State, event: AppEvent): Step {
       return stay({
         ...state,
         team: event.team,
-        stack: [{ name: "home", pane: "servers", server: 0, app: 0 }, addServerScreen()],
+        stack: [{ name: "home", pane: "servers", server: 0, app: 0 }, addServerScreen(true)],
         notice: undefined,
       })
     case "server-added": {
-      const next = clampHome({ ...state, team: event.team })
+      const adding = state.adding ? { ...state.adding, running: false } : undefined
+      const next = clampHome({ ...state, team: event.team, adding })
       const back = top(next).name === "add-server" ? pop(next).state : next
-      return stay({ ...back, notice: event.notice })
+      // The new server is selected on Home.
+      const index = event.team.servers.length - 1
+      const selected = updateScreens(back, "home", (screen) => (index >= 0 ? { ...screen, pane: "servers", server: index, app: 0 } : screen))
+      return stay({ ...selected, notice: event.notice })
     }
+    case "add-started":
+      // A line about an earlier attempt would now be about the wrong one.
+      return stay({
+        ...state,
+        notice: undefined,
+        adding: { destination: event.destination, name: event.name, local: event.local, steps: {}, lines: [], running: true },
+      })
+    case "add-step":
+      if (!state.adding) return stay(state)
+      return stay({
+        ...state,
+        adding: {
+          ...state.adding,
+          steps: { ...state.adding.steps, [event.step]: { state: "done", detail: event.detail, found: event.found } },
+        },
+      })
+    case "add-code":
+      return state.adding ? stay({ ...state, adding: { ...state.adding, serverCode: event.code } }) : stay(state)
+    case "add-line":
+      return state.adding ? stay({ ...state, adding: { ...state.adding, lines: keep(state.adding.lines, [event.line], RUNNER_LINES) } }) : stay(state)
     case "app-view":
       return stay({ ...state, appView: { server: event.server, app: event.app, deploys: event.deploys, secrets: event.secrets } })
     case "notice":
@@ -775,17 +870,24 @@ export function update(state: State, event: AppEvent): Step {
       if (screen.name === "welcome" && screen.creating) {
         return stay({ ...replaceTop(state, { ...screen, creating: false }), notice: event.notice })
       }
+      // The step it stopped at is marked, and stays in view under the questions.
+      const adding = event.from === "add-server" && state.adding?.running ? failAdding(state.adding) : state.adding
       if (screen.name === "add-server" && screen.step === "working") {
-        return stay({ ...replaceTop(state, { ...screen, step: "destination" }), notice: event.notice })
+        return stay({ ...replaceTop({ ...state, adding }, { ...screen, step: "destination" }), notice: event.notice })
       }
-      return stay({ ...state, notice: event.notice })
+      return stay({ ...state, adding, notice: event.notice })
     }
     case "runner-line":
       return stay({ ...state, runnerLines: keep(state.runnerLines, [event.line], RUNNER_LINES) })
     case "server-reached": {
       if (!state.team) return stay(state)
-      const reached = (server: ServerRow): ServerRow =>
-        server.name === event.server ? { ...server, reachable: event.reachable, problem: event.reachable ? undefined : event.problem } : server
+      const reached = (server: ServerRow): ServerRow => {
+        if (server.name !== event.server) return server
+        const next: ServerRow = { ...server, reachable: event.reachable, problem: event.reachable ? undefined : event.problem }
+        // A server that cannot be reached has a runner nobody can tell the version of now.
+        if (!event.reachable) return { ...next, runner: undefined }
+        return event.runner ? { ...next, runner: event.runner } : next
+      }
       return stay({ ...state, team: { ...state.team, servers: state.team.servers.map(reached) } })
     }
     case "server-apps":

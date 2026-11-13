@@ -7,7 +7,7 @@ import { join } from "node:path"
 import { tempDir } from "../../runner/test/helpers"
 import { createEffects, loadStart, NOT_BUILT, routeErrorLines, tilde } from "../src/app/effects"
 import type { AppEvent } from "../src/app/state"
-import { TAMPERED } from "../src/context"
+import { openTeam, TAMPERED } from "../src/context"
 import { memoryKeyStore } from "../src/keystore"
 import { openSession } from "../src/session"
 import { connect, type ConnectOptions, type Target } from "../src/transport"
@@ -28,7 +28,7 @@ describe("starting the app", () => {
     const m = await ready()
     expect(await loadStart(m.deps)).toEqual({
       kind: "team",
-      team: { member: "Ada", version: 2, servers: [{ name: "dev", destination: undefined, apps: [] }] },
+      team: { member: "Ada", version: 2, code: (await openTeam(m.deps)).teamCode, servers: [{ name: "dev", destination: undefined, apps: [] }] },
     })
   })
 
@@ -77,7 +77,7 @@ describe("starting the app", () => {
     const start = await loadStart(m.deps)
     expect(start).toEqual({
       kind: "team",
-      team: { member: "Ada", version: 2, servers: [{ name: "dev", destination: "deploy@203.0.113.7", apps: [] }] },
+      team: { member: "Ada", version: 2, code: (await openTeam(m.deps)).teamCode, servers: [{ name: "dev", destination: "deploy@203.0.113.7", apps: [] }] },
     })
     expect(member).not.toBe("Ada")
   })

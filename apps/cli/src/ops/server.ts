@@ -5,28 +5,56 @@ import {
   RunnerSetupResponseSchema,
   RunnerStatusSchema,
   serverConfirmationCode,
+  type RunnerVersion,
   type ServerPublicKey,
 } from "@workspace/core"
 import { join, resolve } from "node:path"
 
 import { openTeam, reach, type OpDeps, type Team } from "../context"
 import { CliError, RunnerRefused, UsageError } from "../errors"
+import {
+  readRunnerFile,
+  releaseFiles,
+  RUNNER_PATHS,
+  runInstaller,
+  type InstallEvent,
+  type InstallRequest,
+  type InstallSource,
+} from "../install"
 import { NAME, type Server } from "../profile"
+import { RUNNER_RELEASE, type RunnerRelease } from "../runner-release"
 import { withSession, type Session, type SessionMode } from "../session"
-import { RUNNER_PATH, SSH_DESTINATION, type Target } from "../transport"
+import { RUNNER_PATH, SSH_DESTINATION, type RunnerProcess, type Target, type Transport } from "../transport"
+import { locateServer } from "./status"
 
-export type ServerAddOptions = { ssh?: string; local?: boolean; home?: string; runnerPath?: string }
+export type ServerAddOptions = { ssh?: string; local?: boolean; home?: string; runnerPath?: string; runnerFile?: string }
 
 /** A server to connect, checked on this machine. Nothing has been asked of it yet. */
-export type ServerAddPlan = { team: Team; name: string; target: Target }
+export type ServerAddPlan = {
+  team: Team
+  name: string
+  target: Target
+  /**
+   * Over SSH with no `--runner-path`: the runner is looked for on the server
+   * first, and installed when it is not there. `target.runnerPath` is then
+   * decided by where the installer found or put it.
+   */
+  install?: InstallRequest
+}
 
 /** What has been done on the server so far. */
 export type ServerAddStage = "connected" | "set_up" | "added"
 
 export type ServerAddCallbacks = {
   stage?: (stage: ServerAddStage) => void
+  /** Each step of the installer as it completes, when it runs. */
+  install?: (event: InstallEvent) => void
+  /** A line the installer printed that is not one of its own, cleaned. */
+  detail?: (line: string) => void
   /** The runner was already set up for this team by an earlier attempt that stopped half way. */
   resumed?: () => void
+  /** The server code, as soon as setup has finished: derived on this machine from the key the server sent. */
+  code?: (code: string) => void
 }
 
 export type ServerAddResult = {
@@ -35,9 +63,37 @@ export type ServerAddResult = {
   /** The server code, derived on this machine from the key the server sent. */
   code: string
   mode: SessionMode
+  /** The runner's version, when it says. A runner from before sessions does not. */
+  runner?: RunnerVersion
+  /** Older than the runner this CLI carries. Deploys work; state and logs need it updated. */
+  outdated: boolean
+  /** The installer put the runner there just now. */
+  installed: boolean
 }
 
-/** Checks the name and how to reach the server. */
+const release = (deps: Pick<OpDeps, "release">): RunnerRelease => deps.release ?? RUNNER_RELEASE
+
+/** Compares two versions of the form 1.2.3: negative when `a` is older. */
+export function compareVersions(a: string, b: string): number {
+  const parts = (version: string) => version.split(".").map(Number)
+  const [x, y] = [parts(a), parts(b)]
+  for (let at = 0; at < 3; at++) {
+    const difference = (x[at] ?? 0) - (y[at] ?? 0)
+    if (difference !== 0) return difference
+  }
+  return 0
+}
+
+/**
+ * Whether a runner is older than the one this CLI carries. One that does not
+ * speak sessions is from before them, so it is.
+ */
+export function isOutdated(mode: SessionMode, runner: RunnerVersion | undefined, version: string): boolean {
+  if (mode === "one-shot" || runner === undefined) return true
+  return compareVersions(runner.version, version) < 0
+}
+
+/** Checks the name and how to reach the server; reads `--runner-file` once, here. */
 export async function prepareServerAdd(deps: OpDeps, name: string | undefined, options: ServerAddOptions): Promise<ServerAddPlan> {
   const team = await openTeam(deps)
   if (!name || !NAME.test(name)) {
@@ -49,17 +105,30 @@ export async function prepareServerAdd(deps: OpDeps, name: string | undefined, o
   if (Boolean(options.ssh) === Boolean(options.local)) {
     throw new UsageError("Say how to reach the server: `--ssh <destination>` or `--local`.")
   }
-
-  let target: Target
-  if (options.ssh) {
-    const runnerPath = options.runnerPath ?? "zekno-runner"
-    if (!SSH_DESTINATION.test(options.ssh)) throw new CliError("That SSH destination is not valid. Use the form user@host.")
-    if (!RUNNER_PATH.test(runnerPath)) throw new CliError("That runner path is not valid.")
-    target = { kind: "ssh", destination: options.ssh, runnerPath }
-  } else {
-    target = { kind: "local", home: options.home ? resolve(deps.cwd, options.home) : join(deps.home, "runner", name) }
+  if (options.runnerFile !== undefined && (!options.ssh || options.runnerPath !== undefined)) {
+    throw new UsageError("`--runner-file` sends a runner over SSH: use it with `--ssh` and without `--runner-path`.")
   }
-  return { team, name, target }
+
+  if (!options.ssh) {
+    return { team, name, target: { kind: "local", home: options.home ? resolve(deps.cwd, options.home) : join(deps.home, "runner", name) } }
+  }
+  if (!SSH_DESTINATION.test(options.ssh)) throw new CliError("That SSH destination is not valid. Use the form user@host.")
+  if (options.runnerPath !== undefined) {
+    if (!RUNNER_PATH.test(options.runnerPath)) throw new CliError("That runner path is not valid.")
+    // A runner already installed there: nothing is installed.
+    return { team, name, target: { kind: "ssh", destination: options.ssh, runnerPath: options.runnerPath } }
+  }
+  const carried = release(deps)
+  const source: InstallSource =
+    options.runnerFile !== undefined
+      ? { kind: "file", file: await readRunnerFile(resolve(deps.cwd, options.runnerFile)) }
+      : { kind: "release", files: releaseFiles(carried) }
+  return {
+    team,
+    name,
+    target: { kind: "ssh", destination: options.ssh, runnerPath: RUNNER_PATHS.path },
+    install: { mode: "add", version: carried.version, source },
+  }
 }
 
 /**
@@ -88,20 +157,59 @@ async function setUp(
   }
 }
 
+/** The runner reached as usual, except that its first session is the one the installer handed over. */
+function continuing(transport: Transport, session: RunnerProcess): Transport {
+  let handed = false
+  return {
+    ...transport,
+    open() {
+      if (handed) return transport.open()
+      handed = true
+      return session
+    },
+  }
+}
+
 /**
  * Connects a server, over one session: the runner sets itself up for this
  * team, then an admin adds it to the team list and the runner is given the
- * new list.
+ * new list. Over SSH with no runner path given, the installer runs first: it
+ * checks Docker, finds the runner or installs it, and hands its connection
+ * over to the session, so a server reached with a published release is
+ * reached once. A runner that is already there is used as it is, never
+ * replaced without being asked (FR-012); one that is older is reported.
  */
 export async function addServer(deps: OpDeps, plan: ServerAddPlan, callbacks: ServerAddCallbacks = {}): Promise<ServerAddResult> {
-  const { team, name, target } = plan
+  const { team, name } = plan
   const { profile, trust } = team
-  return withSession(reach(deps, target), async (session) => {
-    callbacks.stage?.("connected")
+  let target = plan.target
+  let transport = reach(deps, target)
+  let installed = false
+  if (plan.install && target.kind === "ssh") {
+    const done = await runInstaller(
+      transport,
+      plan.install,
+      { destination: target.destination },
+      (event) => {
+        if (event.kind === "connected") callbacks.stage?.("connected")
+        callbacks.install?.(event)
+      },
+      callbacks.detail
+    )
+    // The path is this CLI's own for the place the installer named, never one the server sent.
+    if (done.place !== "target") target = { ...target, runnerPath: RUNNER_PATHS[done.place] }
+    installed = done.events.some((event) => event.kind === "install")
+    transport = done.session ? continuing(reach(deps, target), done.session) : reach(deps, target)
+  }
+  const reached = target
+  return withSession(transport, async (session) => {
+    if (!plan.install) callbacks.stage?.("connected")
     const answer = await setUp(team, session, callbacks.resumed)
     if (trust.servers.some((server) => server.serverId === answer.serverId)) {
       throw new CliError("That server is already connected under another name.")
     }
+    const code = serverConfirmationCode(answer.serverPublicKey)
+    callbacks.code?.(code)
     callbacks.stage?.("set_up")
 
     const next = await team
@@ -112,12 +220,81 @@ export async function addServer(deps: OpDeps, plan: ServerAddPlan, callbacks: Se
       })
 
     const rosters = [...profile.rosters, next.envelope]
-    team.store.save({ ...profile, rosters, servers: [...profile.servers, { name, serverId: answer.serverId, target }] })
+    team.store.save({ ...profile, rosters, servers: [...profile.servers, { name, serverId: answer.serverId, target: reached }] })
     await session.request("sync", RunnerReportSchema, { input: { rosters } })
     callbacks.stage?.("added")
-    // The code is derived here from the key that came back, never taken on the runner's word.
-    return { name, target, code: serverConfirmationCode(answer.serverPublicKey), mode: session.mode }
+    return {
+      name,
+      target: reached,
+      // The code is derived here from the key that came back, never taken on the runner's word.
+      code,
+      mode: session.mode,
+      runner: session.runner,
+      outdated: reached.kind === "ssh" && isOutdated(session.mode, session.runner, release(deps).version),
+      installed,
+    }
   })
+}
+
+/** A runner to replace, checked on this machine. Nothing has been asked of the server yet. */
+export type ServerUpdatePlan = { server: Server; request: Extract<InstallRequest, { mode: "update" }> }
+
+export type ServerUpdateResult = {
+  server: string
+  /** The version the runner has now. */
+  version: string
+  /** False when it already had this version. */
+  updated: boolean
+  /** The version it had before, when it said. */
+  from?: string
+}
+
+/** Finds the server and what its runner would be replaced with. Only a runner reached over SSH is replaced this way. */
+export async function prepareServerUpdate(deps: OpDeps, name: string | undefined): Promise<ServerUpdatePlan> {
+  const { server } = await locateServer(deps, name)
+  if (server.target.kind !== "ssh") {
+    throw new CliError(`${server.name} is a runner on this machine. It comes with zekno itself, so there is nothing to update.`)
+  }
+  const carried = release(deps)
+  return {
+    server,
+    request: {
+      mode: "update",
+      version: carried.version,
+      runnerPath: server.target.runnerPath,
+      source: { kind: "release", files: releaseFiles(carried) },
+    },
+  }
+}
+
+/**
+ * Replaces the runner on a server with the version this CLI carries, by the
+ * same verified route as `server add`: the server downloads it and installs
+ * it only when its SHA-256 matches the one this CLI holds. A runner that
+ * already has this version is left as it is. Its folder, key and state are
+ * not touched, so its apps keep running.
+ */
+export async function updateRunner(
+  deps: OpDeps,
+  plan: ServerUpdatePlan,
+  callbacks: Pick<ServerAddCallbacks, "install" | "detail"> = {}
+): Promise<ServerUpdateResult> {
+  const { server, request } = plan
+  if (server.target.kind !== "ssh") throw new CliError("Only a runner reached over SSH is updated this way.")
+  const done = await runInstaller(
+    reach(deps, server.target),
+    request,
+    { destination: server.target.destination, server: server.name },
+    callbacks.install,
+    callbacks.detail
+  )
+  const found = done.events.find((event) => event.kind === "runner")
+  return {
+    server: server.name,
+    version: request.version,
+    updated: done.events.some((event) => event.kind === "install"),
+    from: found?.kind === "runner" ? found.version : undefined,
+  }
 }
 
 /** The servers of the verified team. */

@@ -1,9 +1,12 @@
 import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
+import { RUNNER_RELEASE } from "../../runner-release"
+import { Confirm } from "../../ui/confirm"
+import type { KeyHint } from "../../ui/key-hints"
 import { useTheme } from "../../ui/theme"
 import { Frame, Header, PRE_ALPHA } from "../frame"
-import { selectedApp, selectedServer, type AppRow, type Screen, type ServerRow, type State } from "../state"
+import { CHOICES, selectedApp, selectedServer, type AppRow, type Screen, type ServerRow, type State } from "../state"
 import { relativeTime } from "../time"
 import { Cell, Fields, Marker, Pane, Rule, StateCell } from "./parts"
 import { HINTS } from "./placeholder"
@@ -21,9 +24,19 @@ const WHEN_WIDTH = 12
 /** What a deploy's result is called in the details pane. */
 export const OUTCOME_WORDS = { started: "started", start_failed: "did not start", sent: "no answer recorded" } as const
 
-/** One server: the marker, its name, ● once it answered or ✖ when it could not be reached, and its address below. */
+/** How Home names a runner's version beside its server: `runner 0.1.0`, or `old runner` when it does not say. */
+export const runnerWords = (version: string | undefined): string => (version === undefined ? "old runner" : `runner ${version}`)
+
+/**
+ * One server: the marker, its name, ● once it answered or ✖ when it could not
+ * be reached, and its address below. A server whose runner is older than this
+ * zekno shows `! runner 0.1.0` until it is updated, as on the board "Two
+ * questions the app asks": on a line of its own under the name, because the
+ * servers pane is narrower than the board's.
+ */
 function ServerItem({ server, selected }: { server: ServerRow; selected: boolean }) {
   const theme = useTheme()
+  const outdated = server.reachable !== false && server.runner?.outdated === true
   return (
     <Box flexDirection="column">
       <Box>
@@ -31,9 +44,16 @@ function ServerItem({ server, selected }: { server: ServerRow; selected: boolean
         <Cell>
           <Text bold={selected}>{server.name}</Text>
         </Cell>
-        {server.reachable === true ? <Text color={theme.success}> ●</Text> : null}
+        {server.reachable === true && !outdated ? <Text color={theme.success}> ●</Text> : null}
         {server.reachable === false ? <Text color={theme.danger}> ✖</Text> : null}
       </Box>
+      {outdated ? (
+        <Box paddingLeft={2}>
+          <Text color={theme.warning} wrap="truncate-end">
+            ! {runnerWords(server.runner?.version)}
+          </Text>
+        </Box>
+      ) : null}
       <Box paddingLeft={2}>
         <Text dimColor wrap="truncate-end">
           {server.destination ?? "this machine"}
@@ -190,6 +210,48 @@ function DetailsPane({ app }: { app?: AppRow }) {
   )
 }
 
+/** Home's key hints: the board's, and `u` while the selected server's runner is out of date (contracts/app.md). */
+export function homeHints(server: ServerRow | undefined): readonly KeyHint[] {
+  if (!server?.runner?.outdated) return HINTS.home
+  const at = HINTS.home.findIndex(([key]) => key === "?")
+  return [...HINTS.home.slice(0, at), ["u", "update runner"], ...HINTS.home.slice(at)]
+}
+
+/** The answers to "update the runner?", the reducer's own (state.ts `CHOICES`). */
+const UPDATE_HINTS: readonly KeyHint[] = CHOICES["update-runner"].map((choice) => [choice.key, choice.does] as const)
+
+/**
+ * Board "Two questions the app asks", right half: the runner on a server is
+ * older than this zekno. Deploys still work; updating is offered and done
+ * only on `u`.
+ */
+function UpdateQuestion({ server, columns }: { server: ServerRow; columns: number }) {
+  return (
+    <Box width={Math.min(columns - 2, 64)}>
+      <Confirm title={`The runner on ${server.name} is out of date`} tone="warning" choices={CHOICES["update-runner"]}>
+        <Box flexDirection="column">
+          <Box>
+            <Box width={14} flexShrink={0}>
+              <Text dimColor>on {server.name}</Text>
+            </Box>
+            <Text>{server.runner?.version ?? "from before 0.2.0"}</Text>
+          </Box>
+          <Box>
+            <Box width={14} flexShrink={0}>
+              <Text dimColor>this zekno</Text>
+            </Box>
+            <Text>{RUNNER_RELEASE.version}</Text>
+          </Box>
+        </Box>
+        <Text>Deploys still work. Running state and logs need the newer runner.</Text>
+        <Text dimColor>
+          Updating downloads the runner on {server.name} and checks it before it replaces the old one. Your apps keep running.
+        </Text>
+      </Confirm>
+    </Box>
+  )
+}
+
 /**
  * Board "Home": the servers, the selected server's apps with deploy number,
  * state and when, and the selected app's details and actions. An
@@ -213,8 +275,17 @@ export function HomeScreen({ state, screen, columns, status }: { state: State; s
       {team.member}'s team
     </Text>
   ) : null
+  const question = state.question?.kind === "update-runner" ? state.question : undefined
+  const asked = question ? servers.find((entry) => entry.name === question.server) : undefined
+  if (asked) {
+    return (
+      <Frame header={<Header place={place} right={right} />} hints={UPDATE_HINTS} status={status}>
+        <UpdateQuestion server={asked} columns={columns} />
+      </Frame>
+    )
+  }
   return (
-    <Frame header={<Header place={place} right={right} />} hints={HINTS.home} status={status}>
+    <Frame header={<Header place={place} right={right} />} hints={homeHints(server)} status={status}>
       <Box flexGrow={1} columnGap={1}>
         <ServersPane servers={servers} selected={screen.server} focused={screen.pane === "servers"} />
         <AppsPane state={state} server={server} selected={screen.app} focused={screen.pane === "apps"} now={new Date()} />

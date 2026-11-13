@@ -1,12 +1,18 @@
 import { remoteThroughUi, type Deps } from "../context"
+import { isOutdated } from "../ops/server"
 import { locateServer, readStatus } from "../ops/status"
+import { RUNNER_RELEASE } from "../runner-release"
+import { outdatedWarning } from "./server"
 
 export async function status(deps: Deps, options: { server?: string; json?: boolean }): Promise<void> {
   const located = await locateServer(deps, options.server)
   const { server } = located
-  const { status: answer, behind } = await deps.ui.step(`Asking ${server.name}`, () => readStatus(remoteThroughUi(deps), located), {
+  const { status: answer, behind, mode, runner } = await deps.ui.step(`Asking ${server.name}`, () => readStatus(remoteThroughUi(deps), located), {
     quiet: server.target.kind === "ssh",
   })
+  // An older runner is said once, on standard error, and changes nothing else.
+  const carried = (deps.release ?? RUNNER_RELEASE).version
+  if (server.target.kind === "ssh" && isOutdated(mode, runner, carried)) deps.ui.warn(outdatedWarning(server.name, runner?.version, carried))
   if (options.json) return deps.ui.json({ server: server.name, ...answer })
 
   const note = behind ? " (behind this machine; the next deploy brings it up to date)" : ""

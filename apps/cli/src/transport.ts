@@ -35,12 +35,19 @@ export type RunnerProcess = {
   output: ReadableStream<Uint8Array>
   /** Writes to the runner's input. Never throws: a runner that has gone shows as the end of its output. */
   write(text: string): void
+  /**
+   * Writes bytes to the runner's input and resolves once they have left, so
+   * a large file is never held in memory twice. Never rejects.
+   */
+  send(bytes: Uint8Array): Promise<void>
   /** Closes the runner's input. A runner in a session then finishes and exits. */
   end(): void
   /** Stops the runner process, or the SSH connection, at once. */
   kill(): void
   /** The exit status, once the process has exited. */
   exited: Promise<number>
+  /** Settles once all the process wrote on standard error has been passed on. */
+  errorsRead: Promise<void>
 }
 
 /** The ways of reaching one runner. */
@@ -49,6 +56,12 @@ export type Transport = {
   run(command: RunnerCommand, input?: string): Promise<{ exitCode: number; stdout: string }>
   /** Starts `zekno-runner session` and keeps it running. */
   open(): RunnerProcess
+  /**
+   * Starts `sh -s -- <words>` on the server, for the runner's installer
+   * (install.ts), which sends the script's text on standard input. Only over
+   * SSH; undefined for a runner on this machine.
+   */
+  script?(words: readonly string[]): RunnerProcess
   /**
    * How long a runner reached this way may stay silent before its first
    * answer, after which a session closes its input to see what it is. No
@@ -81,6 +94,12 @@ export type ConnectOptions = {
    * as the server's (`Ui.remote`).
    */
   errorLines?: ErrorLines
+  /**
+   * SSH in batch mode: it never asks a question, and fails where it would
+   * have asked for a password, a passphrase or a host key. The full-screen
+   * app connects this way first (app/hand-over.ts).
+   */
+  batch?: boolean
 }
 
 /**
@@ -173,7 +192,7 @@ async function run(argv: string[], input: string | undefined, env: Record<string
 
 function open(argv: string[], env: Record<string, string | undefined> | undefined, out: ErrorLines): RunnerProcess {
   const child = spawn(argv, env)
-  void passOn(child.stderr, out)
+  const errorsRead = passOn(child.stderr, out)
   let writable = true
   return {
     output: child.stdout,
@@ -183,6 +202,15 @@ function open(argv: string[], env: Record<string, string | undefined> | undefine
         child.stdin.write(text)
         return child.stdin.flush()
       })
+    },
+    async send(bytes) {
+      if (!writable) return
+      try {
+        child.stdin.write(bytes)
+        await child.stdin.flush()
+      } catch {
+        // The other side closed early. What it printed, or did not, says why.
+      }
     },
     end() {
       if (!writable) return
@@ -194,6 +222,7 @@ function open(argv: string[], env: Record<string, string | undefined> | undefine
       quietly(() => child.kill())
     },
     exited: child.exited,
+    errorsRead,
   }
 }
 
@@ -214,6 +243,23 @@ function transport(
     open: () => open(command("session"), env(), out),
     firstAnswerMs,
   }
+}
+
+/**
+ * A word after `sh -s --`: install.ts checks each value against its own
+ * pattern first. This holds even for a caller that got around that: plain
+ * characters only, nothing a shell would expand but a leading `~`, and never
+ * a leading `-`.
+ */
+const SCRIPT_WORD = /^[A-Za-z0-9._~/][A-Za-z0-9._/~-]*$/
+const SCRIPT_WORDS = 16
+
+/** SSH's options. Each is a fixed string, placed before `--`, never built from input. */
+const BATCH = ["-o", "BatchMode=yes"] as const
+
+/** `ssh [-o BatchMode=yes] -- <destination> <remote command>`. */
+function ssh(destination: string, remote: string, batch: boolean): string[] {
+  return ["ssh", ...(batch ? BATCH : []), "--", destination, remote]
 }
 
 /**
@@ -240,11 +286,17 @@ export function connect(target: Target, localRunner: string[], options: ConnectO
   // neither can be read as an option or carry a shell command. The word after
   // the path is one of a fixed few, so the remote command is built from
   // nothing else.
-  return transport(
-    (word) => ["ssh", "--", target.destination, `${target.runnerPath} ${word}`],
-    () => undefined,
-    out
-  )
+  const batch = options.batch === true
+  const runner = transport((word) => ssh(target.destination, `${target.runnerPath} ${word}`, batch), () => undefined, out)
+  return {
+    ...runner,
+    script(words) {
+      if (words.length === 0 || words.length > SCRIPT_WORDS || !words.every((word) => SCRIPT_WORD.test(word))) {
+        throw new CliError("The installer's arguments are not valid, so nothing was sent to the server.")
+      }
+      return open(ssh(target.destination, ["sh", "-s", "--", ...words].join(" "), batch), undefined, out)
+    },
+  }
 }
 
 /**
