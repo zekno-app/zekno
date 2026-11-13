@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createTeam as startTeam, createSigner, generateMemberKeyPair } from "@workspace/core"
 import { renderToString } from "ink"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { runner, waitFor } from "../../runner/test/helpers"
@@ -551,6 +551,24 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
     expect(await m.zekno("server", "add", "dev", "--local")).toBe(0)
     expect(await m.zekno("server", "update", "dev", "--yes")).toBe(1)
     expect(m.lastErr()).toBe("dev is a runner on this machine. It comes with zekno itself, so there is nothing to update.")
+
+    // The runner's path in the profile file is not signed. An update replaces only a file named
+    // zekno-runner, so an edited profile cannot point it at another program on the server: it is
+    // refused before anything is asked or sent.
+    const profilePath = join(m.deps.home, "profile.json")
+    const profile = JSON.parse(readFileSync(profilePath, "utf8")) as { servers: { name: string; target: { runnerPath?: string } }[] }
+    profile.servers.find((server) => server.name === "prod")!.target.runnerPath = "/usr/sbin/sshd"
+    writeFileSync(profilePath, JSON.stringify(profile))
+    const calls = ssh.calls().length
+    const asked: string[] = []
+    m.deps.ui = { ...m.deps.ui, confirm: async (question) => (asked.push(question), true) }
+    await withSsh(ssh, async () => {
+      expect(await m.zekno("server", "update", "prod", "--yes")).toBe(1)
+      expect(await m.zekno("server", "update", "prod")).toBe(1)
+    })
+    expect(m.lastErr()).toBe("zekno only replaces a runner whose file is named zekno-runner. The runner for prod is at /usr/sbin/sshd. Replace that one by hand.")
+    expect(asked).toEqual([])
+    expect(ssh.calls()).toHaveLength(calls)
   }, 90_000)
 
   test("a yes-or-no question at a terminal is no unless y", () => {

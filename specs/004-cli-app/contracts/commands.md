@@ -73,15 +73,20 @@ first that fails. Nothing is installed unless every check before it passed.
 |------|------------|
 | 1. Connect | "could not be reached over SSH" |
 | 2. `docker compose version` | "Docker with Compose was not found" |
-| 3. Is a runner already there (at `--runner-path`, on `PATH`, or where the installer puts it)? If its version is the one this CLI carries, skip to step 7. | |
+| 3. Is a runner already there (at `--runner-path`, on `PATH`, or where the installer puts it)? If its version is the one this CLI carries, skip to step 7. `server add` uses a runner it finds as it is, whatever its version, and says when it is out of date. `server update` goes on to replace it, unless it is newer than the one this CLI carries. | "is newer than the … this zekno carries, so it was left as it is" |
 | 4. `uname -sm` is Linux on x86-64 or ARM64 | "this kind of server is not supported yet" |
 | 5. Download the release file with `curl` or `wget` to a new private temporary folder and unpack it | "the server could not download the runner" |
-| 6. SHA-256 of the unpacked file equals the value in the CLI; then move it into place with mode 755 | "the downloaded runner did not match", and the file is deleted |
+| 6. SHA-256 of the unpacked file equals the value in the CLI. The file then has to answer `version` with the expected version from the temporary folder. Only then is it moved into place with mode 755, so a runner that cannot run on this server never replaces one that can | "the downloaded runner did not match", and the file is deleted; "the runner did not start" |
 | 7. `zekno-runner version` answers with the expected version | "the runner did not start" |
 | 8. Create the runner's folder with mode 700 if it is missing | |
 
 The release address is
 `https://github.com/zekno-app/zekno-monorepo/releases/download/runner-v<version>/zekno-runner-linux-<arch>.gz`.
+
+`server update` replaces only a file named `zekno-runner`. The runner's path is kept in the
+profile file, which is not signed, so any other path is refused before anything is asked or
+sent ("zekno only replaces a runner whose file is named zekno-runner"), and the script on the
+server refuses it again.
 
 Setup and adding to the team list then proceed as in feature 003, in the same session.
 

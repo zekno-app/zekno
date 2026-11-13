@@ -13,6 +13,8 @@ import { join, resolve } from "node:path"
 import { openTeam, reach, type OpDeps, type Team } from "../context"
 import { CliError, RunnerRefused, UsageError } from "../errors"
 import {
+  isRunnerFileName,
+  notNamedRunner,
   readRunnerFile,
   releaseFiles,
   RUNNER_PATHS,
@@ -255,6 +257,8 @@ export async function prepareServerUpdate(deps: OpDeps, name: string | undefined
   if (server.target.kind !== "ssh") {
     throw new CliError(`${server.name} is a runner on this machine. It comes with zekno itself, so there is nothing to update.`)
   }
+  // Checked before anyone is asked anything: the path is from the profile file, which is not signed.
+  if (!isRunnerFileName(server.target.runnerPath)) throw new CliError(notNamedRunner(server.target.runnerPath, server.name))
   const carried = release(deps)
   return {
     server,

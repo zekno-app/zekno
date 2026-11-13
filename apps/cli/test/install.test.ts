@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, readFileSync, truncateSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, readFileSync, truncateSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { tempDir } from "../../runner/test/helpers"
@@ -227,10 +227,52 @@ describe("the script, run with sh against stand-ins", () => {
         expect(server.leftovers()).toEqual([])
       })
 
-      test("a runner that installs but does not answer with this version is reported", async () => {
+      test("a runner that matches the checksum but does not answer with this version is never put in place", async () => {
         const server = standInServer()
         const run = await server.run(["add", VERSION, "release", "x64", server.release(fakeRunner("9.9.9"))], { shell })
-        expect(run.lines.slice(-2)).toEqual(["install ok", "fail version"])
+        expect(run.lines.slice(-2)).toEqual(["checksum ok", "fail version"])
+        expect(existsSync(server.runnerPath)).toBe(false)
+        expect(server.leftovers()).toEqual([])
+      })
+
+      test("update: a new runner that cannot run here leaves the working one in place", async () => {
+        const server = standInServer()
+        const working = fakeRunner("0.1.0")
+        server.installed(working)
+        const broken = "#!/bin/sh\nexit 1\n"
+        const run = await server.run(["update", VERSION, server.runnerPath, "release", "x64", server.release(broken)], { shell })
+        expect(run.lines.slice(-2)).toEqual(["checksum ok", "fail version"])
+        expect(readFileSync(server.runnerPath, "utf8")).toBe(working)
+        expect(server.leftovers()).toEqual([])
+      })
+
+      test("update: a runner newer than the one carried is never replaced", async () => {
+        for (const newer of ["0.9.0", "1.0.0", `${VERSION.split(".").slice(0, 2).join(".")}.${Number(VERSION.split(".")[2]) + 1}`, "0.10.0"]) {
+          const server = standInServer()
+          const there = fakeRunner(newer)
+          server.installed(there)
+          const run = await server.run(["update", VERSION, server.runnerPath, "release", "x64", server.release(fakeRunner(VERSION))], { shell })
+          expect({ newer, lines: run.lines }).toEqual({ newer, lines: ["connected", "docker ok 2.40.3", `runner found target ${newer}`, "fail newer"] })
+          expect(readFileSync(server.runnerPath, "utf8")).toBe(there)
+          expect(server.calls("curl")).toEqual([])
+        }
+      })
+
+      test("update: only a file named zekno-runner is ever replaced, whatever the profile says the path is", async () => {
+        const server = standInServer()
+        // A program that is not a runner, where an edited profile could point: it must come to no harm.
+        const victim = join(server.home, "sshd")
+        const program = "#!/bin/sh\necho 'I am not a runner'\n"
+        writeFileSync(victim, program)
+        chmodSync(victim, 0o755)
+        const sha = server.release(fakeRunner(VERSION))
+        for (const path of [victim, "sshd", "~/sshd", join(server.home, "zekno-runner.sh"), join(server.home, "zekno-runner", "x")]) {
+          const run = await server.run(["update", VERSION, path, "release", "x64", sha], { shell })
+          expect({ path, lines: run.lines }).toEqual({ path, lines: ["connected", "fail name"] })
+        }
+        expect(readFileSync(victim, "utf8")).toBe(program)
+        expect(server.calls("docker")).toEqual([])
+        expect(server.calls("curl")).toEqual([])
       })
 
       test("update: an older runner is replaced in place; one at this version is left; a missing one is said", async () => {
@@ -326,6 +368,16 @@ describe("what is placed into the script", () => {
     expect(
       installWords({ mode: "update", version: VERSION, runnerPath: "~/.local/bin/zekno-runner", source: { kind: "release", files: [{ arch: "arm64", sha256: SHA }] } })
     ).toEqual(["update", VERSION, "~/.local/bin/zekno-runner", "release", "arm64", SHA])
+  })
+
+  test("an update names only a file called zekno-runner: any other path throws before anything is placed", () => {
+    const update = (runnerPath: string): InstallRequest => ({ mode: "update", version: VERSION, runnerPath, source: { kind: "release", files: [] } })
+    for (const path of ["zekno-runner", "/usr/local/bin/zekno-runner", "~/.local/bin/zekno-runner", "/opt/zekno/zekno-runner"]) {
+      expect(installWords(update(path))[2]).toBe(path)
+    }
+    for (const path of ["/usr/sbin/sshd", "/bin/sh", "docker", "/usr/bin/sudo", "~/zekno-runner.sh", "/opt/my-zekno-runner", "/opt/zekno-runner/run"]) {
+      expect(() => installWords(update(path))).toThrow("not valid")
+    }
   })
 
   test("each of the four values that does not fit its pattern throws before anything is placed", () => {

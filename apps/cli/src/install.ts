@@ -49,6 +49,10 @@ export const RUNNER_FILE_LIMIT = 256 * 1024 * 1024
  *
  * It never uses `sudo`, never runs a downloaded file before its checksum
  * matched, and works in a private temporary folder that is removed on exit.
+ * A runner is put in place only after it answered with its version from that
+ * folder, so one that cannot run on this server never replaces one that can.
+ * An update replaces only a file named `zekno-runner`, and never a runner
+ * newer than the one it carries.
  * Written with no `${` and no backquote, so the template below cannot
  * interpolate anything.
  */
@@ -76,6 +80,15 @@ is_sha() {
 is_path() {
   case $1 in ''|-*) return 1 ;; esac
   return 0
+}
+is_newer() {
+  for part in 1 2 3; do
+    ours=$(printf '%s' "$2" | cut -d . -f "$part")
+    theirs=$(printf '%s' "$1" | cut -d . -f "$part")
+    if [ "$theirs" -gt "$ours" ] 2>/dev/null; then return 0; fi
+    if [ "$theirs" -lt "$ours" ] 2>/dev/null; then return 1; fi
+  done
+  return 1
 }
 pick() {
   want=$1
@@ -112,7 +125,11 @@ is_version "$version" || fail usage
 target=
 case $mode in
   add) ;;
-  update) target=$1; shift; is_path "$target" || fail usage ;;
+  update)
+    target=$1
+    shift
+    is_path "$target" || fail usage
+    case $target in zekno-runner|*/zekno-runner) ;; *) fail name ;; esac ;;
   *) fail usage ;;
 esac
 [ "$#" -ge 1 ] || fail usage
@@ -185,6 +202,7 @@ if [ -n "$runner" ]; then
 else
   say "runner none"
 fi
+if [ "$mode" = update ] && [ "$found" != unknown ] && is_newer "$found" "$version"; then fail newer; fi
 
 install=yes
 if [ -n "$runner" ]; then
@@ -238,6 +256,8 @@ if [ "$install" = yes ]; then
   fi
   say checksum ok
   chmod 755 "$tmp/zekno-runner" || fail install
+  answer=$("$tmp/zekno-runner" version </dev/null 2>/dev/null | head -n 1 | cut -c 1-200) || answer=
+  case $answer in "{\"version\":\"$version\","*) ;; *) rm -f "$tmp/zekno-runner"; fail version ;; esac
   mv -f "$tmp/zekno-runner" "$dest" || fail install
   cleanup
   final=$dest
@@ -316,6 +336,7 @@ export function installWords(request: InstallRequest): string[] {
   words.push(request.version)
   if (request.mode === "update") {
     if (typeof request.runnerPath !== "string" || !isInstallPath(request.runnerPath)) throw placed("runner path")
+    if (!isRunnerFileName(request.runnerPath)) throw placed("runner path")
     words.push(request.runnerPath)
   }
   const source = request.source
@@ -358,6 +379,8 @@ export async function readRunnerFile(path: string): Promise<RunnerFile> {
 
 export type InstallFailure =
   | "usage"
+  | "name"
+  | "newer"
   | "docker"
   | "home"
   | "missing"
@@ -392,6 +415,8 @@ export type InstallEvent =
 
 const FAILURES: readonly string[] = [
   "usage",
+  "name",
+  "newer",
   "docker",
   "home",
   "missing",
@@ -540,10 +565,26 @@ export function installFailure(reason: InstallFailure, request: InstallRequest, 
       return `The runner did not start on the server: it did not answer with version ${request.version}.`
     case "folder":
       return "The runner's folder could not be created on the server."
+    case "name":
+      return notNamedRunner(request.mode === "update" ? request.runnerPath : "that path", where.server ?? where.destination)
+    case "newer":
+      return `The runner on ${where.server ?? where.destination} is newer than the ${request.version} this zekno carries, so it was left as it is. Update zekno instead.`
     case "usage":
       return INSTALL_UNEXPECTED
   }
 }
+
+/**
+ * Whether an update may replace the file at `path`: only one named
+ * `zekno-runner`. The path comes from the profile file, which is not signed,
+ * so without this an edited profile could point an update at any program on
+ * the server and have it replaced.
+ */
+export const isRunnerFileName = (path: string): boolean => path === "zekno-runner" || path.endsWith("/zekno-runner")
+
+/** Said when the runner an update was asked to replace is not a file named `zekno-runner`. */
+export const notNamedRunner = (path: string, server: string): string =>
+  `zekno only replaces a runner whose file is named zekno-runner. The runner for ${server} is at ${path}. Replace that one by hand.`
 
 /** Said when SSH itself could not connect: nothing of the script ran. */
 export const unreachable = (destination: string): string =>
