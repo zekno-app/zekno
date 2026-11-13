@@ -14,8 +14,8 @@ const TONES: Record<RunState, MarkedCell["tone"]> = { running: "success", stoppe
  */
 export const stateCell = (state: RunState): MarkedCell => ({ text: state, mark: "●", tone: TONES[state] })
 
-export async function status(deps: Deps, options: { server?: string; json?: boolean }): Promise<void> {
-  const located = await locateServer(deps, options.server)
+export async function status(deps: Deps, options: { server?: string; serverFrom?: string; json?: boolean }): Promise<void> {
+  const located = await locateServer(deps, options.server, options.serverFrom)
   const { server } = located
   const { status: answer, behind, mode, runner, states } = await deps.ui.step(`Asking ${server.name}`, () => readStatus(remoteThroughUi(deps), located), {
     quiet: server.target.kind === "ssh",

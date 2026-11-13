@@ -75,12 +75,12 @@
 
 **Independent Test**: `bun test apps/cli/test/project.test.ts apps/cli/test/compose-file.test.ts`
 
-- [ ] T043 [P] [US4] Implement apps/cli/src/project.ts: find `zekno.json` in the current folder then each parent, stopping at the home folder or the filesystem root; strict schema `{ app, server, compose }` with `app` and `server` matching `^[a-z0-9][a-z0-9-]{0,62}$` and `compose` a relative path inside the file's folder with no `..`; write it only when asked; tests in apps/cli/test/project.test.ts including malformed files, unknown fields, a path that escapes the folder, and an unknown server or app name
-- [ ] T044 [P] [US4] Implement apps/cli/src/compose-file.ts with `Bun.YAML.parse`: a name is expected when a service's `environment` lists it with no value, or the file uses `${NAME}` or `$NAME` without a default; names with a default and reserved names are left out; a file it cannot read yields no names, not an error; tests in apps/cli/test/compose-file.test.ts
-- [ ] T045 [US4] Read defaults from `zekno.json` in apps/cli/src/cli.ts for `deploy`, `rollback`, `status`, `logs` and `secret`; flags win; a missing detail fails naming the flag and the project file; add `zekno link [--app] [--server] [-f] [--force]`
-- [ ] T046 [US4] Open the app focused on the linked server and app, and list missing values before a deploy with the choice to set each or go ahead, in apps/cli/src/app/effects.ts and apps/cli/src/app/screens/set-secret.tsx as on canvas board "Set a secret"
-- [ ] T047 [US4] (canvas: "Two questions the app asks", approved 2026-11-14) ask before writing `zekno.json` on the first deploy of a folder, in apps/cli/src/app/screens/deploy.tsx
-- [ ] T048 [US4] Tests in apps/cli/test/project-flow.test.tsx: `zekno deploy` with no flags in a linked folder; flags override the file; the app opens focused; missing values are listed and can be set or skipped
+- [X] T043 [P] [US4] Implement apps/cli/src/project.ts: find `zekno.json` in the current folder then each parent, stopping at the home folder or the filesystem root; strict schema `{ app, server, compose }` with `app` and `server` matching `^[a-z0-9][a-z0-9-]{0,62}$` and `compose` a relative path inside the file's folder with no `..`; write it only when asked; tests in apps/cli/test/project.test.ts including malformed files, unknown fields, a path that escapes the folder, and an unknown server or app name
+- [X] T044 [P] [US4] Implement apps/cli/src/compose-file.ts with `Bun.YAML.parse`: a name is expected when a service's `environment` lists it with no value, or the file uses `${NAME}` or `$NAME` without a default; names with a default and reserved names are left out; a file it cannot read yields no names, not an error; tests in apps/cli/test/compose-file.test.ts
+- [X] T045 [US4] Read defaults from `zekno.json` in apps/cli/src/cli.ts for `deploy`, `rollback`, `status`, `logs` and `secret`; flags win; a missing detail fails naming the flag and the project file; add `zekno link [--app] [--server] [-f] [--force]`
+- [X] T046 [US4] Open the app focused on the linked server and app, and list missing values before a deploy with the choice to set each or go ahead, in apps/cli/src/app/effects.ts and apps/cli/src/app/screens/set-secret.tsx as on canvas board "Set a secret"
+- [X] T047 [US4] (canvas: "Two questions the app asks", approved 2026-11-14) ask before writing `zekno.json` on the first deploy of a folder, in apps/cli/src/app/screens/deploy.tsx
+- [X] T048 [US4] Tests in apps/cli/test/project-flow.test.tsx: `zekno deploy` with no flags in a linked folder; flags override the file; the app opens focused; missing values are listed and can be set or skipped
 
 ## Phase 7: User Story 5 - Single commands that match, and still work in scripts (P5)
 

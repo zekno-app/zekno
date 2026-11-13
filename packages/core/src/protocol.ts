@@ -257,10 +257,15 @@ export const RunnerAppStatesSchema = z.strictObject({
 })
 export type RunnerAppStates = z.infer<typeof RunnerAppStatesSchema>
 
-/** CLI to runner: follow the logs of one app, starting with its last `tail` lines. */
+/**
+ * CLI to runner: the logs of one app, starting with its last `tail` lines.
+ * They are followed unless `follow` is false: then the runner sends the lines
+ * Docker has and ends the request. Absent means true.
+ */
 export const RunnerLogsRequestSchema = z.strictObject({
   app: z.string().regex(APP_NAME),
   tail: z.number().int().min(0).max(1000),
+  follow: z.boolean().optional(),
 })
 export type RunnerLogsRequest = z.infer<typeof RunnerLogsRequestSchema>
 

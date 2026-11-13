@@ -3,12 +3,14 @@ import { parseArgs } from "node:util"
 
 import { deploy, rollback } from "./commands/deploy"
 import { init } from "./commands/init"
+import { link } from "./commands/link"
 import { logs } from "./commands/logs"
 import { secretList, secretRemove, secretSet } from "./commands/secret"
 import { serverAdd, serverList, serverUpdate } from "./commands/server"
 import { status } from "./commands/status"
 import type { Deps } from "./context"
 import { CliError, UsageError } from "./errors"
+import { withProject } from "./project"
 
 export const HELP = `zekno: deploy to your own servers. Secrets are encrypted and deploys are signed on this machine.
 
@@ -18,13 +20,16 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno server add <name> --local [--home <dir>]
   zekno server update <name> [--yes]
   zekno server ls
-  zekno secret set <NAME> --app <app> --server <name> [--stdin]
-  zekno secret rm <NAME> --app <app> --server <name>
-  zekno secret ls --app <app> --server <name>
-  zekno deploy --app <app> --server <name> [-f <compose file>] [--json]
-  zekno rollback --app <app> --server <name> [--to <number>] [--json]
-  zekno status --server <name> [--json]
-  zekno logs --app <app> --server <name> [--tail <n>] [--no-follow]`
+  zekno secret set <NAME> [--app <app>] [--server <name>] [--stdin]
+  zekno secret rm <NAME> [--app <app>] [--server <name>]
+  zekno secret ls [--app <app>] [--server <name>]
+  zekno deploy [--app <app>] [--server <name>] [-f <compose file>] [--json]
+  zekno rollback [--app <app>] [--server <name>] [--to <number>] [--json]
+  zekno status [--server <name>] [--json]
+  zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
+  zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force]
+
+In a folder linked with \`zekno link\`, --app, --server and -f come from its zekno.json. Flags win over it.`
 
 /** How many words each command takes, counting its own name. */
 const WORDS: Record<string, number> = {
@@ -39,6 +44,7 @@ const WORDS: Record<string, number> = {
   rollback: 1,
   status: 1,
   logs: 1,
+  link: 1,
 }
 
 /**
@@ -66,6 +72,7 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
         to: { type: "string" },
         tail: { type: "string" },
         "no-follow": { type: "boolean" },
+        force: { type: "boolean" },
         json: { type: "boolean" },
         help: { type: "boolean", short: "h" },
       },
@@ -88,6 +95,8 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
       )
     }
 
+    // Details not given as flags come from the project file (contracts/commands.md). Flags win.
+    const project = (wanted: Parameters<typeof withProject>[2]) => withProject(deps.cwd, values, wanted)
     switch (name) {
       case "init":
         await init(deps, values)
@@ -102,23 +111,26 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
         await serverList(deps)
         return 0
       case "secret set":
-        await secretSet(deps, third, values)
+        await secretSet(deps, third, project(["app", "server"]))
         return 0
       case "secret rm":
-        await secretRemove(deps, third, values)
+        await secretRemove(deps, third, project(["app", "server"]))
         return 0
       case "secret ls":
-        await secretList(deps, values)
+        await secretList(deps, project(["app", "server"]))
         return 0
       case "deploy":
-        return await deploy(deps, values)
+        return await deploy(deps, project(["app", "server", "file"]))
       case "rollback":
-        return await rollback(deps, values)
+        return await rollback(deps, project(["app", "server"]))
       case "status":
-        await status(deps, values)
+        await status(deps, project(["server"]))
         return 0
       case "logs":
-        await logs(deps, values)
+        await logs(deps, project(["app", "server"]))
+        return 0
+      case "link":
+        await link(deps, values)
         return 0
       default:
         throw new UsageError(`Unknown command "${positionals.join(" ")}".`)

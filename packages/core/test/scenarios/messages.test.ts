@@ -155,6 +155,11 @@ describe("User Story 5: one description of every message", () => {
     expect(code(parseMessage(core.RunnerAppStatesSchema, { apps: { web: { services: [{ service: "web", state: "on fire", exitCode: 0, health: "" }] } } }))).toBe("malformed")
 
     expect(parseMessage(core.RunnerLogsRequestSchema, { app: "web", tail: 200 }).ok).toBe(true)
+    expect(parseMessage(core.RunnerLogsRequestSchema, { app: "web", tail: 200, follow: false }).ok).toBe(true)
+    expect(parseMessage(core.RunnerLogsRequestSchema, { app: "web", tail: 200, follow: true }).ok).toBe(true)
+    expect(code(parseMessage(core.RunnerLogsRequestSchema, { app: "web", tail: 200, follow: "false" }))).toBe("malformed")
+    expect(code(parseMessage(core.RunnerLogsRequestSchema, { app: "web", tail: 200, follow: 0 }))).toBe("malformed")
+    expect(code(parseMessage(core.RunnerLogsRequestSchema, { app: "web", tail: 200, since: "1h" }))).toBe("malformed")
     expect(code(parseMessage(core.RunnerLogsRequestSchema, { app: "web", tail: 100000 }))).toBe("malformed")
     expect(code(parseMessage(core.RunnerLogsRequestSchema, { app: "web; cat /etc/passwd", tail: 1 }))).toBe("malformed")
   })

@@ -3,8 +3,9 @@ import { existsSync, readFileSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 
 import { openTeam, reach, type OpDeps, type Team } from "../context"
-import { CliError, UsageError } from "../errors"
+import { CliError, MISSING_APP, UsageError } from "../errors"
 import { findServer, NAME, type History, type Server } from "../profile"
+import { sanitize } from "../sanitize"
 import { withSession, type SessionMode } from "../session"
 import { checkIdentity } from "./status"
 
@@ -41,15 +42,23 @@ export type DeployResult = DeployInfo & {
  */
 const MAX_AHEAD = 1000
 
-type Where = { app?: string; server?: string }
+/**
+ * Where a command acts: an app on a server. `serverFrom` is set when the
+ * server's name was read from the project file, as a sentence shows the file.
+ */
+export type Where = { app?: string; server?: string; serverFrom?: string }
+
+/** The app's name, checked against the app-name pattern before anything is read or sent. */
+export function checkApp(app: string | undefined): string {
+  if (!app) throw new UsageError(MISSING_APP)
+  if (!NAME.test(app)) throw new UsageError("Say which app with `--app <name>`: lowercase letters, digits and hyphens.")
+  return app
+}
 
 async function locate(deps: OpDeps, where: Where) {
   const team = await openTeam(deps)
-  const server = findServer(team.profile, where.server)
-  if (!where.app || !NAME.test(where.app)) {
-    throw new UsageError("Say which app with `--app <name>`: lowercase letters, digits and hyphens.")
-  }
-  return { team, server, app: where.app }
+  const server = findServer(team.profile, where.server, where.serverFrom)
+  return { team, server, app: checkApp(where.app) }
 }
 
 type Sent = { sequence: number; compose: string; outcome: History[number]["outcome"] }
@@ -82,10 +91,11 @@ function sentDeploys(team: Team, server: Server, app: string, history: History, 
 export async function prepareDeploy(deps: OpDeps, input: Where & { file?: string }): Promise<DeployPlan> {
   const where = await locate(deps, input)
   const path = resolve(deps.cwd, input.file ?? "compose.yaml")
-  if (!existsSync(path)) throw new CliError(`No Compose file at ${path}. Point to one with \`-f <file>\`.`)
+  // A folder's name can hold anything, escape sequences included, so a path is cleaned before it is shown.
+  if (!existsSync(path)) throw new CliError(`No Compose file at ${sanitize(path)}. Point to one with \`-f <file>\`.`)
   if (statSync(path).size > LIMITS.composeBytes) throw new CliError("The Compose file is larger than the 256 KiB limit.")
   const compose = readFileSync(path, "utf8")
-  if (compose.trim() === "") throw new CliError(`The Compose file at ${path} is empty.`)
+  if (compose.trim() === "") throw new CliError(`The Compose file at ${sanitize(path)} is empty.`)
   return { ...where, compose }
 }
 

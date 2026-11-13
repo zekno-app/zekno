@@ -15,10 +15,10 @@ export type Located = { team: Team; server: Server }
  */
 export type Checked = { team: Pick<Team, "trust">; server: Server }
 
-/** Verifies the team and finds one of its servers. */
-export async function locateServer(deps: OpDeps, name: string | undefined): Promise<Located> {
+/** Verifies the team and finds one of its servers. `from`: the project file, when the name was read from it. */
+export async function locateServer(deps: OpDeps, name: string | undefined, from?: string): Promise<Located> {
   const team = await openTeam(deps)
-  return { team, server: findServer(team.profile, name) }
+  return { team, server: findServer(team.profile, name, from) }
 }
 
 /** The runner must be the server that was connected, and on this team. */

@@ -33,7 +33,7 @@ export {
   type ServerEntry,
   type TeamTrust,
 } from "./roster"
-export { isReservedSecretName, SealedSecretSchema, type SealedSecret } from "./secrets"
+export { isReservedSecretName, SealedSecretSchema, SECRET_NAME, type SealedSecret } from "./secrets"
 export {
   createSecret,
   createSecretRemoval,

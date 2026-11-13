@@ -14,7 +14,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { dirname, join } from "node:path"
 import { z } from "zod"
 
-import { CliError } from "./errors"
+import { CliError, MISSING_SERVER, UsageError } from "./errors"
 import { RUNNER_PATH, SSH_DESTINATION } from "./transport"
 
 export const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/
@@ -135,11 +135,18 @@ export function profileStore(home: string) {
 }
 export type ProfileStore = ReturnType<typeof profileStore>
 
-export function findServer(profile: Profile, name: string | undefined): Server {
-  if (!name) throw new CliError("Say which server with `--server <name>`.")
+/**
+ * A server of the profile, by name. `from` is where the name was read when it
+ * was not typed, the project file as a sentence shows it, so the sentence
+ * for an unknown name says where it came from.
+ */
+export function findServer(profile: Profile, name: string | undefined, from?: string): Server {
+  if (!name) throw new UsageError(MISSING_SERVER)
   const server = profile.servers.find((entry) => entry.name === name)
   if (!server) {
     const known = profile.servers.map((entry) => entry.name).join(", ") || "none yet"
+    // A name read from a file is held to the server-name pattern before it gets here.
+    if (from !== undefined) throw new CliError(`${from} names a server "${name}" that is not connected to this machine. Connected servers: ${known}.`)
     throw new CliError(`No server named "${name}". Connected servers: ${known}.`)
   }
   return server

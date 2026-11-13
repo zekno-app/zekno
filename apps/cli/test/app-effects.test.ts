@@ -1,11 +1,11 @@
 import { describe, expect, spyOn, test } from "bun:test"
 import { RunnerStatusSchema } from "@workspace/core"
-import { writeFileSync } from "node:fs"
+import { existsSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
 import { tempDir } from "../../runner/test/helpers"
-import { createEffects, loadStart, NOT_BUILT, routeErrorLines, tilde } from "../src/app/effects"
+import { createEffects, loadStart, routeErrorLines, tilde } from "../src/app/effects"
 import type { AppEvent } from "../src/app/state"
 import { openTeam, TAMPERED } from "../src/context"
 import { memoryKeyStore } from "../src/keystore"
@@ -195,15 +195,19 @@ describe("what runners write on standard error, while the app is on screen", () 
 })
 
 describe("effects", () => {
-  test("one that a later part builds says so as a line; exit is left to the shell", async () => {
+  test("exit is left to the shell; an answer to a question nothing waits for does nothing", async () => {
     const events: AppEvent[] = []
-    const effects = createEffects(machine().deps, (event) => events.push(event), (error) => {
+    const m = machine()
+    const effects = createEffects(m.deps, (event) => events.push(event), (error) => {
       throw error
     })
     effects.run({ kind: "exit" })
-    // Going ahead with a deploy that waited on a question is built with the project file (T046).
-    effects.run({ kind: "deploy-continue", server: "prod", app: "demo", answer: "skip-values" })
+    // No deploy asked these questions, so nothing is written, signed or sent.
+    for (const answer of ["write-link", "skip-link", "values-set", "skip-values"] as const) {
+      effects.run({ kind: "deploy-continue", server: "prod", app: "demo", answer })
+    }
     await Bun.sleep(10)
-    expect(events).toEqual([{ type: "notice", notice: { tone: "info", text: NOT_BUILT } }])
+    expect(events).toEqual([])
+    expect(existsSync(join(m.project, "zekno.json"))).toBe(false)
   })
 })

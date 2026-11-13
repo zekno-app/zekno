@@ -160,9 +160,16 @@ export type AddProgress = {
   running: boolean
 }
 
-/** How the app starts: the profile has been read and verified, or not (effects.ts `loadStart`). */
+/** What this folder's zekno.json names: a server of the team, an app, and the Compose file as the file names it. */
+export type Linked = { server: string; app: string; compose?: string }
+
+/**
+ * How the app starts: the profile has been read and verified, or not
+ * (effects.ts `loadStart`). `problem` is why this folder's zekno.json could
+ * not be used, shown as a line on Home.
+ */
 export type Start =
-  | { kind: "team"; team: TeamView; linked?: { server: string; app: string } }
+  | { kind: "team"; team: TeamView; linked?: Linked; problem?: string }
   | { kind: "no-team" }
   | { kind: "profile-error"; reason: string; folder: string }
 
@@ -208,6 +215,10 @@ export type Screen =
       app: string
       /** Names the Compose file expects that have no secret, before a deploy. Empty when opened with `s`. */
       missing: readonly string[]
+      /** Those of `missing` set since the list opened. */
+      done: readonly string[]
+      /** The Compose file that expects them, as the list names it. */
+      file?: string
       at: number
       /** The question that is open: the name, the hidden value, or none. */
       question?: "name" | "value"
@@ -312,10 +323,12 @@ export type AppEvent =
   | { type: "deploy-stage"; stage: DeployStage; sequence: number; secrets: number }
   | { type: "deploy-progress"; line: string }
   | { type: "deploy-ended"; outcome: "started" | "start_failed" | "error"; notice: Notice; at?: number }
-  /** Before a deploy: names the Compose file expects that have no secret. */
-  | { type: "missing-values"; server: string; app: string; names: string[] }
+  /** Before a deploy: names the Compose file `file` expects that have no secret. */
+  | { type: "missing-values"; server: string; app: string; names: string[]; file?: string }
   /** Before the first deploy of a folder that is not linked. */
   | { type: "ask-remember-folder"; server: string; app: string; compose: string }
+  /** zekno.json was written: this folder is now linked to that app on that server. */
+  | { type: "linked"; linked: Linked }
   /** The hidden prompt stored a value, or refused one; it is closed either way. */
   | { type: "secret-saved"; notice: Notice }
   | { type: "secret-refused"; notice: Notice }
@@ -333,7 +346,7 @@ export type State = {
   stack: Screen[]
   team?: TeamView
   /** The server and app this folder's zekno.json names. */
-  linked?: { server: string; app: string }
+  linked?: Linked
   /** Deploys and secrets of the app the app screen shows, once read. */
   appView?: { server: string; app: string; deploys: DeployRow[]; secrets: SecretRow[] }
   size: { columns: number; rows: number }
@@ -366,7 +379,8 @@ export function initialState(start: Start, size: { columns: number; rows: number
   const server = Math.max(found, 0)
   const app = found === -1 ? -1 : team.servers[found]!.apps.findIndex((entry) => entry.name === linked?.app)
   const home: Screen = { name: "home", pane: app === -1 ? "servers" : "apps", server, app: Math.max(app, 0) }
-  return { ...base, stack: [home], team, linked }
+  const notice: Notice | undefined = start.problem === undefined ? undefined : { tone: "error", text: start.problem }
+  return { ...base, stack: [home], team, linked, notice }
 }
 
 // ---------------------------------------------------------------------------
@@ -880,11 +894,21 @@ function openAddServer(state: State): Step {
   return push({ ...state, adding: undefined }, addServerScreen())
 }
 
+/** The first of `missing` after `at`, going round to the start, that is not done; undefined when all are. */
+function nextUnset(missing: readonly string[], done: readonly string[], at: number): number | undefined {
+  for (let step = 1; step <= missing.length; step++) {
+    const index = (at + step) % missing.length
+    if (!done.includes(missing[index]!)) return index
+  }
+  return undefined
+}
+
 const setSecretScreen = (server: string, app: string): Extract<Screen, { name: "set-secret" }> => ({
   name: "set-secret",
   server,
   app,
   missing: [],
+  done: [],
   at: 0,
   question: "name",
   secretName: "",
@@ -1007,15 +1031,19 @@ export function update(state: State, event: AppEvent): Step {
       return ended.quitting ? go({ ...ended, exiting: true }, { kind: "exit" }) : stay(ended)
     }
     case "missing-values":
-      return push(state, { ...setSecretScreen(event.server, event.app), missing: event.names, question: "value" })
+      return push(state, { ...setSecretScreen(event.server, event.app), missing: event.names, file: event.file, question: "value" })
     case "ask-remember-folder":
       return stay({ ...state, question: { kind: "remember-folder", server: event.server, app: event.app, compose: event.compose } })
+    case "linked":
+      return stay({ ...state, linked: event.linked })
     case "secret-saved": {
       const screen = top(state)
       if (screen.name !== "set-secret") return stay({ ...state, notice: event.notice })
-      // Before a deploy: on to the next missing name, and on to the deploy after the last.
-      if (screen.missing.length > 0 && screen.at < screen.missing.length - 1) {
-        return stay({ ...replaceTop(state, { ...screen, at: screen.at + 1, question: "value" }), notice: event.notice })
+      // Before a deploy: on to the next name not set yet, and on to the deploy once none is left.
+      if (screen.missing.length > 0) {
+        const done = [...screen.done, screen.missing[screen.at]!]
+        const next = nextUnset(screen.missing, done, screen.at)
+        if (next !== undefined) return stay({ ...replaceTop(state, { ...screen, done, at: next, question: "value" }), notice: event.notice })
       }
       const step =
         screen.missing.length > 0

@@ -17,7 +17,7 @@ import { emptyHiddenValue, hiddenPromptKey } from "./hidden-prompt"
 import { toAppKey } from "./keys"
 import { AddServerScreen } from "./screens/add-server"
 import { AppScreen } from "./screens/app"
-import { DeployScreen } from "./screens/deploy"
+import { DeployScreen, RememberFolderScreen } from "./screens/deploy"
 import { HelpScreen } from "./screens/help"
 import { HomeScreen } from "./screens/home"
 import { LogsScreen } from "./screens/logs"
@@ -78,6 +78,10 @@ export function Screen({ state, columns, rows }: { state: State; columns: number
   if (columns < MIN_COLUMNS || rows < MIN_ROWS) return <TooSmall columns={columns} rows={rows} />
   const screen = top(state)
   const status = <Status state={state} />
+  // Asked when a deploy's plan reaches it, which is a moment after `d`: shown over whatever screen is open by then.
+  if (state.question?.kind === "remember-folder" && !hiddenPromptOpen(state)) {
+    return <RememberFolderScreen question={state.question} columns={columns} status={status} />
+  }
   switch (screen.name) {
     case "home":
       return <HomeScreen state={state} screen={screen} columns={columns} status={status} />

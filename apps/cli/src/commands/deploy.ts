@@ -1,8 +1,8 @@
 import { remoteThroughUi, type Deps } from "../context"
-import { prepareDeploy, prepareRollback, sendDeploy, type DeployCallbacks, type DeployPlan } from "../ops/deploy"
+import { prepareDeploy, prepareRollback, sendDeploy, type DeployCallbacks, type DeployPlan, type Where } from "../ops/deploy"
 import type { Ui } from "../ui/types"
 
-type Options = { app?: string; server?: string; json?: boolean }
+type Options = Where & { json?: boolean }
 
 /** The most lines of Docker's output held while an earlier one is still being drawn (research R5). */
 export const HELD_LINES = 500

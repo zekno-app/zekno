@@ -80,7 +80,8 @@ export function isAlive(pid: number): boolean {
  * `compose ... up` prints prepared lines and can be held in the middle until
  * the test lets it go. `compose -p <project> ps` prints a prepared file, or
  * hangs when asked to. `compose -p <project> logs` prints a prepared file
- * and, when asked, stays alive afterwards the way `--follow` does.
+ * and, when the test asks and the call has `--follow`, stays alive afterwards
+ * the way Docker does.
  */
 export function fakeDocker() {
   const dir = tempDir("docker")
@@ -105,6 +106,8 @@ if [ "$4" = "ps" ]; then
 fi
 if [ "$4" = "logs" ]; then
   if [ -f "$d/logs-$3" ]; then cat "$d/logs-$3"; fi
+  # Like Docker, it stays alive afterwards only when asked to follow.
+  case " $* " in *" --follow "*) ;; *) exit 0 ;; esac
   if [ -f "$d/logs-leave-child" ]; then
     # A process left behind that keeps the output open after this one is stopped.
     sleep 60 &
@@ -159,9 +162,10 @@ exit 0
     /** The process id of the last `ps` that hung, once it has started. */
     psPid: (): number | undefined => pidIn(at("ps.pid")),
     /**
-     * What `logs` prints for an app. With `follow`, it then stays alive until
-     * stopped. With `leaveChild`, it starts a process that keeps the output
-     * open even after `logs` itself is stopped.
+     * What `logs` prints for an app. With `follow`, a call with `--follow`
+     * then stays alive until stopped; one without ends, as Docker's does.
+     * With `leaveChild`, a following call starts a process that keeps the
+     * output open even after `logs` itself is stopped.
      */
     logs: (app: string, output: string, options: { follow?: boolean; leaveChild?: boolean } = {}) => {
       writeFileSync(at(`logs-zekno-${app}`), output)

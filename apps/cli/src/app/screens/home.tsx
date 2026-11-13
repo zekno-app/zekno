@@ -184,7 +184,7 @@ function Action({ letter, children }: { letter: string; children: ReactNode }) {
   )
 }
 
-function DetailsPane({ app }: { app?: AppRow }) {
+function DetailsPane({ app, file }: { app?: AppRow; file?: string }) {
   if (!app) {
     return (
       <Pane title=" " width={DETAILS_WIDTH}>
@@ -196,6 +196,7 @@ function DetailsPane({ app }: { app?: AppRow }) {
   const rows: [string, ReactNode][] = [["deploy", deploy]]
   if (app.signer !== undefined) rows.push(["signed by", app.signer])
   if (app.secrets !== undefined) rows.push(["secrets", String(app.secrets)])
+  if (file !== undefined) rows.push(["file", file])
   return (
     <Pane title={app.name} width={DETAILS_WIDTH}>
       <Fields rows={rows} labelWidth={11} />
@@ -208,6 +209,12 @@ function DetailsPane({ app }: { app?: AppRow }) {
       </Box>
     </Pane>
   )
+}
+
+/** The Compose file `d` deploys for an app: known when this folder is linked to that app on that server. */
+function linkedFile(state: State, server: ServerRow | undefined, app: AppRow | undefined): string | undefined {
+  const linked = state.linked
+  return linked && linked.server === server?.name && linked.app === app?.name ? linked.compose : undefined
 }
 
 /** Home's key hints: the board's, and `u` while the selected server's runner is out of date (contracts/app.md). */
@@ -289,7 +296,7 @@ export function HomeScreen({ state, screen, columns, status }: { state: State; s
       <Box flexGrow={1} columnGap={1}>
         <ServersPane servers={servers} selected={screen.server} focused={screen.pane === "servers"} />
         <AppsPane state={state} server={server} selected={screen.app} focused={screen.pane === "apps"} now={new Date()} />
-        {wide ? <DetailsPane app={app} /> : null}
+        {wide ? <DetailsPane app={app} file={linkedFile(state, server, app)} /> : null}
       </Box>
     </Frame>
   )

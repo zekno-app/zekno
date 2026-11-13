@@ -8,9 +8,10 @@
 import { RunnerReportSchema, RunnerStatusSchema } from "@workspace/core"
 
 import { openTeam, reach, type OpDeps, type Team } from "../context"
-import { CliError, UsageError } from "../errors"
-import { findServer, NAME, type Server } from "../profile"
+import { CliError } from "../errors"
+import { findServer, type Server } from "../profile"
 import { ENDED, withSession } from "../session"
+import { checkApp, type Where } from "./deploy"
 import { checkIdentity } from "./status"
 
 /** How many lines Docker sends from before the request, by default (research R7). */
@@ -29,42 +30,27 @@ export type LogLine = { time: string; service: string; text: string }
 export type LogsPlan = { team: Pick<Team, "trust">; server: Server; app: string }
 
 /** Verifies the team and finds the server; the app's name is checked before anything is sent. */
-export async function prepareLogs(deps: OpDeps, where: { app?: string; server?: string }): Promise<LogsPlan> {
+export async function prepareLogs(deps: OpDeps, where: Where): Promise<LogsPlan> {
   const team = await openTeam(deps)
-  const server = findServer(team.profile, where.server)
-  if (!where.app || !NAME.test(where.app)) {
-    throw new UsageError("Say which app with `--app <name>`: lowercase letters, digits and hyphens.")
-  }
-  return { team: { trust: team.trust }, server, app: where.app }
+  const server = findServer(team.profile, where.server, where.serverFrom)
+  return { team: { trust: team.trust }, server, app: checkApp(where.app) }
 }
-
-/**
- * For `--no-follow`. The runner always follows, as Docker's `--follow` does:
- * it sends the lines Docker has at once, then each new one. So reading stops
- * once no line has come for `quietMs` (or for `firstMs` before the first
- * one, while Docker starts), and in any case `mostMs` after the first line,
- * for an app that writes without a pause.
- */
-export type QuietRule = { firstMs: number; quietMs: number; mostMs: number }
-export const NO_FOLLOW: QuietRule = { firstMs: 5000, quietMs: 1000, mostMs: 10_000 }
 
 export type LogsOptions = {
   /** Lines from before the request, 0 to `MAX_TAIL`. */
   tail: number
-  /** False for `--no-follow`: the lines Docker has, then the end (`quiet`). */
+  /** False for `--no-follow`: the runner sends the lines Docker has, then ends the request. */
   follow: boolean
   /** Signalled to stop reading. The session is closed, and the runner stops Docker's log command. */
   stop?: AbortSignal
-  /** When to stop without `follow`. Tests pass shorter times. */
-  quiet?: QuietRule
 }
 
 /**
- * How reading ended: Docker's log command ended by itself, the caller
- * stopped it, or Docker was quiet (`--no-follow`). A dropped connection,
- * a refusal or an answer that does not match is an error instead.
+ * How reading ended: Docker's log command ended by itself (always so without
+ * `follow`), or the caller stopped it. A dropped connection, a refusal or an
+ * answer that does not match is an error instead.
  */
-export type LogsEnd = "ended" | "stopped" | "quiet"
+export type LogsEnd = "ended" | "stopped"
 
 /** Said when the runner does not speak sessions: it has no logs to give. */
 export const logsTooOld = (server: string): string =>
@@ -98,34 +84,20 @@ export async function followLogs(
     }
 
     let ended: LogsEnd | undefined
-    const finish = (how: LogsEnd) => {
-      ended ??= how
+    const stopped = () => {
+      ended ??= "stopped"
       void session.close()
     }
-    const stopped = () => finish("stopped")
     options.stop?.addEventListener("abort", stopped, { once: true })
-    if (options.stop?.aborted) finish("stopped")
-
-    // Without following, the lines Docker has come at once; a pause after them is the end.
-    const rule = options.follow ? undefined : (options.quiet ?? NO_FOLLOW)
-    let quiet: ReturnType<typeof setTimeout> | undefined
-    let most: ReturnType<typeof setTimeout> | undefined
-    const wait = (ms: number) => {
-      clearTimeout(quiet)
-      quiet = setTimeout(() => finish("quiet"), ms)
-    }
-    if (rule) wait(rule.firstMs)
+    if (options.stop?.aborted) stopped()
 
     try {
       await session.request("logs", RunnerReportSchema, {
-        input: { app, tail: options.tail },
+        // Following is the runner's default, so it is said only when it is not wanted.
+        input: options.follow ? { app, tail: options.tail } : { app, tail: options.tail, follow: false },
         async onEvent(event) {
           if (event.event !== "log" || ended) return
-          // The quiet time counts only while waiting for Docker, never while a line is being shown.
-          clearTimeout(quiet)
-          if (rule && most === undefined) most = setTimeout(() => finish("quiet"), rule.mostMs)
           await onLine({ time: event.time, service: event.service, text: event.line })
-          if (rule && !ended) wait(rule.quietMs)
         },
       })
       return ended ?? "ended"
@@ -134,8 +106,6 @@ export async function followLogs(
       if (error instanceof CliError && error.message === ENDED) throw new CliError(logsDropped(server.name))
       throw error
     } finally {
-      clearTimeout(quiet)
-      clearTimeout(most)
       options.stop?.removeEventListener("abort", stopped)
     }
   })

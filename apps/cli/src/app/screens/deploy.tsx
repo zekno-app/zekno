@@ -2,11 +2,12 @@ import { Box, Text, useAnimation } from "ink"
 import type { ReactNode } from "react"
 
 import type { DeployStage } from "../../ops/deploy"
+import { Confirm } from "../../ui/confirm"
 import type { KeyHint } from "../../ui/key-hints"
 import { Panel } from "../../ui/panel"
 import { Stages, type Stage, type StageState } from "../../ui/stages"
 import { Frame, Header, NoticeLine, Trail } from "../frame"
-import type { DeployProgress, Screen, State } from "../state"
+import { CHOICES, type DeployProgress, type Question, type Screen, type State } from "../state"
 import { seconds } from "../time"
 import { Fields } from "./parts"
 import { HINTS } from "./placeholder"
@@ -210,6 +211,46 @@ export function DeployScreen({
             <Text dimColor>Leaving this screen does not cancel the deploy. Quitting zekno waits for it to finish.</Text>
           </>
         ) : null}
+      </Box>
+    </Frame>
+  )
+}
+
+/** The answers to "remember this folder?", the reducer's own (state.ts `CHOICES`). */
+const REMEMBER_HINTS: readonly KeyHint[] = CHOICES["remember-folder"].map((choice) => [choice.key, choice.does] as const)
+
+/**
+ * Board "Two questions the app asks", left half: before the first deploy of
+ * a folder that is not linked, whether to write zekno.json here. It shows
+ * exactly what would be written: three names, no secret.
+ */
+export function RememberFolderScreen({
+  question,
+  columns,
+  status,
+}: {
+  question: Extract<Question, { kind: "remember-folder" }>
+  columns: number
+  status?: ReactNode
+}) {
+  // The same three names, in the same order, as project.ts writes them.
+  const json = JSON.stringify({ app: question.app, server: question.server, compose: question.compose }, null, 2).split("\n")
+  return (
+    <Frame header={<Header place={<Trail parts={[question.server, question.app, "deploy"]} />} />} hints={REMEMBER_HINTS} status={status}>
+      <Box width={Math.min(columns - 2, 76)}>
+        <Confirm title="Remember this folder?" tone="focus" choices={CHOICES["remember-folder"]}>
+          <Text>
+            Write zekno.json here, so this folder always deploys {question.app} to {question.server}.
+          </Text>
+          <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
+            {json.map((line, index) => (
+              <Text key={index} dimColor>
+                {line}
+              </Text>
+            ))}
+          </Box>
+          <Text dimColor>It holds no secret and is safe to commit.</Text>
+        </Confirm>
       </Box>
     </Frame>
   )

@@ -567,14 +567,30 @@ function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>, deps:
 }
 type App = ReturnType<typeof openApp>
 
-/** A machine with demo deployed once, and the app open on Home with demo selected. */
-async function onHome(prepare?: (m: Machine) => Promise<void>) {
+/**
+ * A machine with demo deployed once, the folder linked to demo on dev (so `d`
+ * deploys it without asking to remember it), and the app open on Home with
+ * demo selected.
+ */
+async function onHome(prepare?: (m: Machine) => Promise<void>, options: { linked?: boolean } = {}) {
   const m = await ready()
   expect(await m.zekno("deploy", "--app", "demo", "--server", "dev")).toBe(0)
+  if (options.linked !== false) expect(await m.zekno("link", "--app", "demo", "--server", "dev")).toBe(0)
   await prepare?.(m)
   const app = openApp(m, await loadStart(m.deps))
   app.press({ kind: "right" })
   return { m, app }
+}
+
+/**
+ * Presses d, and goes ahead without the value compose.yaml expects and no
+ * secret gives (GREETING), as esc does on that list (board "Set a secret").
+ */
+async function deployKey(app: App) {
+  app.type("d")
+  await app.until(() => top(app.state).name === "set-secret", "the values compose.yaml expects")
+  expect(top(app.state)).toMatchObject({ name: "set-secret", missing: ["GREETING"], file: "compose.yaml" })
+  app.press({ kind: "escape" })
 }
 
 /** Opens demo's screen and waits for its history. */
@@ -594,7 +610,7 @@ describe("operating against a real runner", () => {
       const stage = app.state.deploy?.stage
       if (stage && stages.at(-1) !== stage) stages.push(stage)
     })
-    app.type("d")
+    await deployKey(app)
     await ended(app)
     expect(top(app.state)).toEqual({ name: "deploy", output: false })
     expect(stages).toEqual(["checked", "signed", "sent", "starting", "started"])
@@ -615,7 +631,7 @@ describe("operating against a real runner", () => {
     const { m, app } = await onHome()
     m.docker.failWith(1)
     m.docker.upPrints({ stderr: "pull access denied for example/web, repository does not exist\n" })
-    app.type("d")
+    await deployKey(app)
     await ended(app)
     expect(app.state.deploy).toMatchObject({ sequence: 2, outcome: "start_failed" })
     const screen = app.draw()
@@ -628,7 +644,7 @@ describe("operating against a real runner", () => {
     m.docker.failWith(0)
     app.press({ kind: "escape" })
     await app.until(() => app.state.team?.servers[0]?.apps[0]?.outcome === "start_failed", "Home to show the failed deploy")
-    app.type("d")
+    await deployKey(app)
     await app.until(() => app.state.deploy?.sequence === 3 && !app.state.deploy.running, "deploy 3")
     expect(app.state.deploy?.outcome).toBe("started")
   })
@@ -636,7 +652,7 @@ describe("operating against a real runner", () => {
   test("esc leaves a deploy that carries on, and its result arrives as a line on the screen below", async () => {
     const { m, app } = await onHome()
     m.docker.holdUp()
-    app.type("d")
+    await deployKey(app)
     await app.until(m.docker.upStarted, "Docker to start")
     app.press({ kind: "escape" })
     expect(top(app.state).name).toBe("home")
@@ -655,7 +671,7 @@ describe("operating against a real runner", () => {
   test("q during a deploy says what it waits for, and closes when the deploy ends", async () => {
     const { m, app } = await onHome()
     m.docker.holdUp()
-    app.type("d")
+    await deployKey(app)
     await app.until(m.docker.upStarted, "Docker to start")
     app.type("q")
     expect(app.state.quitting).toBe(true)
@@ -690,15 +706,15 @@ describe("operating against a real runner", () => {
     expect(readFileSync(join(m.runnerHome, "apps/demo/compose.yaml"), "utf8")).toBe(COMPOSE_V2)
   })
 
-  test("with no compose.yaml in the folder, d says so and names zekno deploy -f; nothing is signed", async () => {
-    const { m, app } = await onHome()
+  test("with no compose.yaml in a folder that is not linked, d says so and names zekno link; nothing is signed", async () => {
+    const { m, app } = await onHome(undefined, { linked: false })
     writeFileSync(join(m.project, "other.yaml"), COMPOSE_V1)
     rmSync(join(m.project, "compose.yaml"))
     app.type("d")
     await app.until(() => app.state.notice !== undefined, "a line")
     expect(app.state.notice?.tone).toBe("error")
     expect(app.state.notice?.text).toContain("There is no compose.yaml in ")
-    expect(app.state.notice?.text).toContain("To deploy another file, run zekno deploy -f <file>.")
+    expect(app.state.notice?.text).toContain("and no zekno.json names another. Run zekno link -f <file> here to name one.")
     expect(app.state.deploy).toBeUndefined()
     expect(m.docker.calls()).toHaveLength(1)
   })
@@ -743,7 +759,7 @@ describe("operating against a real runner", () => {
     expect(m.out).toEqual(["API_KEY\tversion 1"])
 
     // The next deploy carries it to the runner, and only the runner opens it.
-    app.type("d")
+    await deployKey(app)
     await ended(app)
     expect(m.docker.calls().at(-1)!.env.API_KEY).toBe(VALUE)
     app.press({ kind: "escape" })
@@ -790,7 +806,7 @@ describe("operating against a real runner", () => {
     expect(await m.zekno("secret", "ls", "--app", "demo", "--server", "dev")).toBe(0)
     expect(m.out).toEqual(["TOKEN\tversion 1"])
     // What was stored is "whole": the runner gets it with the next deploy.
-    app.type("d")
+    await deployKey(app)
     await ended(app)
     expect(m.docker.calls().at(-1)!.env.TOKEN).toBe("whole")
   })

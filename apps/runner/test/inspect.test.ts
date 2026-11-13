@@ -286,9 +286,42 @@ describe("logs, through a session", () => {
     const s = session(w.home, w.docker.path)
     for (const app of ["api", "zekno-web", "constructor", "__proto__"]) {
       expect(await s.request({ command: "logs", input: { app, tail: 10 } })).toEqual({ events: [], result: { outcome: "refused", reason: "invalid_request" } })
+      expect(await s.request({ command: "logs", input: { app, tail: 10, follow: false } })).toEqual({
+        events: [],
+        result: { outcome: "refused", reason: "invalid_request" },
+      })
     }
     expect((await s.close()).code).toBe(0)
     expect(w.docker.inspections()).toEqual([])
+  })
+
+  test("without following, the lines Docker has are sent and the request ends by itself, though Docker would follow", async () => {
+    const w = await deployed(["web"])
+    // Asked to follow, the stand-in would stay alive; without `--follow` it ends, as Docker's does.
+    w.docker.logs("web", LINES, { follow: true })
+    const s = session(w.home, w.docker.path)
+    const { events, result } = await s.request({ command: "logs", input: { app: "web", tail: 5, follow: false } })
+    expect(events.map((event) => event.line)).toEqual(["started", "waiting for jobs", "GET / 200"])
+    expect(result).toEqual({ outcome: "ok" })
+    // The session goes on, with the input still open.
+    expect((await s.request({ command: "state" })).result).toEqual({ apps: { web: { services: [] } } })
+    expect((await s.close()).code).toBe(0)
+    const [call] = w.docker.inspections()
+    expect(call!.args).toBe("compose -p zekno-web logs --timestamps --no-color --tail 5")
+    expect(w.docker.logsPid()).toBeUndefined()
+  })
+
+  test("follow: true is the same as leaving it out: Docker is asked to follow until the reader goes", async () => {
+    const w = await deployed(["web"])
+    w.docker.logs("web", LINES, { follow: true })
+    const s = session(w.home, w.docker.path)
+    s.send({ command: "logs", input: { app: "web", tail: 3, follow: true } })
+    expect((await s.next())?.line).toBe("started")
+    await waitFor(() => w.docker.logsPid() !== undefined, "docker compose logs to start")
+    expect(w.docker.inspections()[0]!.args).toBe("compose -p zekno-web logs --follow --timestamps --no-color --tail 3")
+    expect((await s.close()).code).toBe(0)
+    expect(isAlive(w.docker.logsPid()!)).toBe(false)
+    expect(s.frames.at(-1)).toEqual({ result: { outcome: "ok" } })
   })
 
   test("an app name outside the pattern, or a tail out of range, never reaches Docker", async () => {
@@ -301,7 +334,10 @@ describe("logs, through a session", () => {
       { app: "web", tail: 1.5 },
       { app: "web", tail: "10" },
       { app: "web" },
-      { app: "web", tail: 10, follow: false },
+      { app: "web", tail: 10, follow: "false" },
+      { app: "web", tail: 10, follow: 0 },
+      { app: "web", tail: 10, follow: null },
+      { app: "web", tail: 10, since: "1h" },
       { app: ["web"], tail: 10 },
     ]
     for (const input of inputs) {

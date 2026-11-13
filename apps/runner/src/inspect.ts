@@ -168,7 +168,9 @@ export function parseLogLine(line: string, now: () => Date = () => new Date()): 
  * Follows the logs of one app until Docker's log command ends or `stop` is
  * signalled, then stops that command. Only an app this runner has accepted
  * a deploy for can be followed, and its name is checked before Docker sees it.
- * `onEvent` may return a promise to slow the reading down.
+ * With `follow: false` Docker is not asked to follow: it prints the lines it
+ * has and ends, and so does the request. `onEvent` may return a promise to
+ * slow the reading down.
  */
 export async function followLogs(
   dir: string,
@@ -180,7 +182,7 @@ export async function followLogs(
   if (!request.ok) return refused("invalid_request")
   const loaded = load(dir)
   if (isReport(loaded)) return loaded
-  const { app, tail } = request.value
+  const { app, tail, follow = true } = request.value
   if (!deployedApps(loaded.state).includes(app)) return refused("invalid_request")
   // Nobody is left to read: Docker is not even asked.
   if (stop.aborted) return { outcome: "ok" }
@@ -188,7 +190,7 @@ export async function followLogs(
   let child
   try {
     child = Bun.spawn(
-      [dockerCommand(), "compose", "-p", `zekno-${app}`, "logs", "--follow", "--timestamps", "--no-color", "--tail", String(tail)],
+      [dockerCommand(), "compose", "-p", `zekno-${app}`, "logs", ...(follow ? ["--follow"] : []), "--timestamps", "--no-color", "--tail", String(tail)],
       // In the runner's private folder, for the same reason as `ps`.
       { cwd: dir, env: dockerEnv(), stdin: "ignore", stdout: "pipe", stderr: "ignore" }
     )

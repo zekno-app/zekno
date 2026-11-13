@@ -11,6 +11,10 @@ export class RunnerRefused extends CliError {
 /** The command was typed wrongly: shown with a hint, exit status 2. */
 export class UsageError extends Error {}
 
+/** Said when a command lacks a detail it needs (contracts/commands.md): the flag, and the project file. */
+export const MISSING_APP = "Say which app with `--app <name>`, or link this folder to it with `zekno link`, which keeps it in zekno.json."
+export const MISSING_SERVER = "Say which server with `--server <name>`, or link this folder to it with `zekno link`, which keeps it in zekno.json."
+
 /** One plain sentence for each reason a runner can give. */
 const REASONS: Record<string, string> = {
   not_set_up: "The runner on that server has not been set up. Run `zekno server add` first.",

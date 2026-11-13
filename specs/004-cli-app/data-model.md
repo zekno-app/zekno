@@ -18,6 +18,13 @@ Strict: an unknown field is an error. No secret and no key ever goes in this fil
 not signed and not trusted: the server it names is looked up in the verified profile, and the
 Compose file it names is read and signed like any other.
 
+It is looked for in the current folder, then each folder above it, stopping at the home folder
+or the filesystem root; a folder above home is never read. Only a regular file of at most 4096 bytes that belongs to the
+user is used: a symbolic link, a pipe or another user's file is an error that names it. The
+Compose file must stay inside the file's folder also once symbolic links are followed. It is
+written only by `zekno link` or a "yes" in the app, never over an existing one without
+`--force`, as a whole file with mode 644.
+
 ## In the CLI: the runner it installs (`apps/cli/src/runner-release.json`)
 
 ```json
@@ -57,7 +64,7 @@ The folder's content and permissions are unchanged from feature 003. The runner'
 | `LogEvent` | runner → CLI | `{ event: "log", service, time, line }`. Sent during `logs`. |
 | `RunnerStateRequest` | CLI → runner | none (all apps) |
 | `RunnerAppStates` | runner → CLI | `{ apps: { "<app>": { services: [{ service, state, exitCode, health }] } } }` |
-| `RunnerLogsRequest` | CLI → runner | `{ app, tail }`. `tail` is 0 to 1000. |
+| `RunnerLogsRequest` | CLI → runner | `{ app, tail, follow? }`. `tail` is 0 to 1000. `follow` is a boolean, true when absent; with `false` the runner sends the lines Docker has and ends the request (`zekno logs --no-follow`). |
 
 Rules: all schemas are strict. `service` matches `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$`. `state` is
 one of `running`, `exited`, `created`, `restarting`, `paused`, `dead`, `removing`, with anything

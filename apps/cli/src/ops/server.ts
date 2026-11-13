@@ -253,6 +253,7 @@ export type ServerUpdateResult = {
 
 /** Finds the server and what its runner would be replaced with. Only a runner reached over SSH is replaced this way. */
 export async function prepareServerUpdate(deps: OpDeps, name: string | undefined): Promise<ServerUpdatePlan> {
+  if (!name) throw new UsageError("Say which server: `zekno server update <name>`.")
   const { server } = await locateServer(deps, name)
   if (server.target.kind !== "ssh") {
     throw new CliError(`${server.name} is a runner on this machine. It comes with zekno itself, so there is nothing to update.`)

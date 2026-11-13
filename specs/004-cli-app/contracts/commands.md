@@ -18,7 +18,7 @@ Everything in feature 003's command contract still holds unless this page change
 | `zekno rollback [--to <number>]` | As before, with the same defaults from `zekno.json`. |
 | `zekno status [--server <name>]` | As before, plus running or stopped for each app when the runner is new enough. |
 | `zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]` | Prints an app's logs, following until interrupted. |
-| `zekno link [--app <app>] [--server <name>] [-f <file>]` | Writes `zekno.json` in the current folder. Refuses to overwrite one without `--force`. |
+| `zekno link [--app <app>] [--server <name>] [-f <file>] [--force]` | Writes `zekno.json` in the current folder. Refuses to overwrite one without `--force`. An app or server not given is taken from a `zekno.json` that already applies to the folder; `-f` defaults to `compose.yaml` and must be a file inside the folder. |
 
 Flags win over `zekno.json`. A command that still lacks a detail fails with a message naming the
 flag and the project file. A command never asks a question when there is no terminal (FR-033).

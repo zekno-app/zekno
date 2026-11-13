@@ -748,16 +748,17 @@ describe("`zekno logs`", () => {
     expect(m.docker.inspections().at(-1)!.args).toContain("--tail 200")
   })
 
-  test("--no-follow prints what Docker has and ends, though Docker would go on following; --tail is passed on", async () => {
+  test("--no-follow asks the runner not to follow: Docker prints what it has and the command ends; --tail is passed on", async () => {
     const m = await deployed("web")
+    // Asked to follow, the stand-in Docker would stay alive.
     m.docker.logs("web", "web-1  | 2026-11-14T21:52:03Z one\nweb-1  | 2026-11-14T21:52:04Z two\n", { follow: true })
     const started = Date.now()
     expect(await m.zekno("logs", "--app", "web", "--server", "dev", "--no-follow", "--tail", "5")).toBe(0)
-    expect(Date.now() - started).toBeLessThan(8000)
+    // No quiet time is waited for: it ends when Docker's log command does.
+    expect(Date.now() - started).toBeLessThan(5000)
     expect(m.out).toEqual(["2026-11-14T21:52:03Z\tweb\tone", "2026-11-14T21:52:04Z\tweb\ttwo"])
-    expect(m.docker.inspections().at(-1)!.args).toContain("logs --follow --timestamps --no-color --tail 5")
-    // Docker's log command was stopped on the way out.
-    await waitFor(() => !isAlive(m.docker.logsPid()!), "Docker's log command to stop")
+    expect(m.docker.inspections().at(-1)!.args).toBe("compose -p zekno-web logs --timestamps --no-color --tail 5")
+    expect(m.docker.logsPid()).toBeUndefined()
   }, 20_000)
 
   test("--tail is a whole number from 0 to 1000, checked before anything is read or sent", async () => {
@@ -777,12 +778,12 @@ describe("`zekno logs`", () => {
     expect(m.docker.inspections()).toEqual([])
   })
 
-  test("a missing app is wrong usage; an app the server never ran, or a runner from before sessions, is said and is exit 1", async () => {
+  test("a missing app or server is wrong usage; an app the server never ran, or a runner from before sessions, is said and is exit 1", async () => {
     const m = await deployed("web")
     expect(await m.zekno("logs", "--server", "dev")).toBe(2)
-    expect(m.lastErr()).toStartWith("Say which app with `--app <name>`")
-    expect(await m.zekno("logs", "--app", "web")).toBe(1)
-    expect(m.lastErr()).toBe("Say which server with `--server <name>`.")
+    expect(m.lastErr()).toStartWith("Say which app with `--app <name>`, or link this folder to it with `zekno link`, which keeps it in zekno.json.")
+    expect(await m.zekno("logs", "--app", "web")).toBe(2)
+    expect(m.lastErr()).toStartWith("Say which server with `--server <name>`, or link this folder to it with `zekno link`, which keeps it in zekno.json.")
     expect(await m.zekno("logs", "--app", "other", "--server", "dev")).toBe(1)
     expect(m.lastErr()).toBe("dev has no deploy of other, so there are no logs to read.")
     const real = m.deps.localRunner
@@ -803,6 +804,6 @@ describe("`zekno logs`", () => {
   test("`zekno logs` is in the help", async () => {
     const m = machine()
     expect(await m.zekno("--help")).toBe(0)
-    expect(m.out.join("\n")).toContain("zekno logs --app <app> --server <name> [--tail <n>] [--no-follow]")
+    expect(m.out.join("\n")).toContain("zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]")
   })
 })

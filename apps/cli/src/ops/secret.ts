@@ -11,17 +11,16 @@ import {
 
 import { openTeam, type OpDeps, type Team } from "../context"
 import { CliError, UsageError } from "../errors"
-import { findServer, NAME, type SecretStore, type Server } from "../profile"
+import { findServer, type SecretStore, type Server } from "../profile"
+import { checkApp, type Where } from "./deploy"
 
-export type Where = { app?: string; server?: string }
+export type { Where }
 
 async function locate(deps: OpDeps, where: Where) {
   const team = await openTeam(deps)
-  const server = findServer(team.profile, where.server)
-  if (!where.app || !NAME.test(where.app)) {
-    throw new UsageError("Say which app with `--app <name>`: lowercase letters, digits and hyphens.")
-  }
-  return { team, trust: team.trust, server, app: where.app, secrets: team.store.secrets(server.serverId, where.app) }
+  const server = findServer(team.profile, where.server, where.serverFrom)
+  const app = checkApp(where.app)
+  return { team, trust: team.trust, server, app, secrets: team.store.secrets(server.serverId, app) }
 }
 
 /** The highest version this machine has seen for a name, set or removed. */

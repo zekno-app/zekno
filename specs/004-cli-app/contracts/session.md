@@ -31,7 +31,7 @@ CLI    closes its side
 | `sync` | `RunnerSyncRequest` | none | `RunnerReport` |
 | `apply` | `RunnerApplyRequest` | `progress` | `RunnerReport` |
 | `state` | none | none | `RunnerAppStates`, or a refusal |
-| `logs` | `RunnerLogsRequest` | `log` | Only when Docker's log command ends: `{"outcome":"ok"}` |
+| `logs` | `RunnerLogsRequest` | `log` | Only when Docker's log command ends: `{"outcome":"ok"}`. With `follow: false` Docker is not asked to follow, so it ends once it has sent the lines it has |
 
 A refusal is a `RunnerReport` with `outcome: "refused"` and a `reason`, exactly as the one-shot
 commands answer.
