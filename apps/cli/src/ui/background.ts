@@ -80,9 +80,11 @@ export function isLateAnswer(input: string): boolean {
   return /^(?:\d+;)?rgba?:[0-9a-fA-F/]*\x07?$/.test(input) || /^\[\?[0-9;]*c$/.test(input)
 }
 
-type Input = Pick<NodeJS.ReadStream, "isTTY" | "on" | "removeListener" | "resume" | "pause"> & {
+type Input = Pick<NodeJS.ReadStream, "isTTY" | "on" | "removeListener" | "read"> & {
   isRaw?: boolean
   setRawMode?: (mode: boolean) => unknown
+  ref?: () => unknown
+  unref?: () => unknown
 }
 type Output = Pick<NodeJS.WriteStream, "isTTY" | "write">
 
@@ -90,6 +92,12 @@ type Output = Pick<NodeJS.WriteStream, "isTTY" | "write">
  * Asks the terminal for its background colour and says whether it is dark or
  * light. Does nothing at all, and says dark, when input or output is not a
  * terminal. The terminal's mode is put back as it was, whatever happens.
+ *
+ * Input is read the way Ink reads it: a `readable` listener that takes what
+ * has arrived. It is never switched to a flowing `data` stream and never
+ * paused. In Bun, a terminal's input that has flowed and been paused takes no
+ * key afterwards and keeps a processor busy, so the app that opens next would
+ * be deaf.
  */
 export async function detectBackground(
   input: Input = process.stdin,
@@ -99,18 +107,22 @@ export async function detectBackground(
   if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== "function") return "dark"
   const wasRaw = input.isRaw === true
   let text = ""
-  let onData: ((chunk: Buffer | string) => void) | undefined
+  let onReadable: (() => void) | undefined
   const timers: ReturnType<typeof setTimeout>[] = []
   try {
     // Without raw mode the terminal would echo the answer and hold it until Enter.
     input.setRawMode(true)
+    input.ref?.()
     await new Promise<void>((resolve) => {
-      onData = (chunk) => {
-        text += typeof chunk === "string" ? chunk : chunk.toString("latin1")
+      onReadable = () => {
+        let chunk: Buffer | string | null
+        while ((chunk = input.read() as Buffer | string | null) !== null) {
+          text += typeof chunk === "string" ? chunk : chunk.toString("latin1")
+          if (text.length > ANSWER_LIMIT) break
+        }
         if (answered(text) || text.length > ANSWER_LIMIT) resolve()
       }
-      input.on("data", onData)
-      input.resume()
+      input.on("readable", onReadable)
       timers.push(setTimeout(() => text === "" && resolve(), patience.quietMs))
       timers.push(setTimeout(resolve, patience.answeringMs))
       output.write(QUERY)
@@ -119,13 +131,14 @@ export async function detectBackground(
     return "dark"
   } finally {
     for (const timer of timers) clearTimeout(timer)
-    if (onData) input.removeListener("data", onData)
-    input.pause()
+    if (onReadable) input.removeListener("readable", onReadable)
     try {
       input.setRawMode(wasRaw)
     } catch {
       // The terminal went away. There is nothing left to put back.
     }
+    // Nothing here keeps the program running any more. Ink takes the input again when the app opens.
+    input.unref?.()
   }
   return backgroundFrom(text)
 }

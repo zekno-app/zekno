@@ -91,6 +91,7 @@ function terminal(options: { tty?: boolean; outTty?: boolean; raw?: boolean; ans
     isTTY: boolean
     isRaw: boolean
     setRawMode: (mode: boolean) => void
+    read: () => Buffer | null
     resume: () => void
     pause: () => void
   }
@@ -105,6 +106,13 @@ function terminal(options: { tty?: boolean; outTty?: boolean; raw?: boolean; ans
   }
   input.resume = () => void calls.push("resume")
   input.pause = () => void calls.push("pause")
+  // What has arrived and not been read yet. Input is read as Ink reads it: `readable`, then `read()` until null.
+  const arrived: Buffer[] = []
+  input.read = () => arrived.shift() ?? null
+  const arrive = (piece: string) => {
+    arrived.push(Buffer.from(piece, "latin1"))
+    input.emit("readable")
+  }
   const written: string[] = []
   const output = {
     isTTY: options.outTty ?? true,
@@ -112,11 +120,11 @@ function terminal(options: { tty?: boolean; outTty?: boolean; raw?: boolean; ans
       written.push(text)
       // The terminal answers a moment later, in pieces.
       const every = options.every ?? 5
-      ;(options.answer ?? []).forEach((piece, index) => setTimeout(() => input.emit("data", Buffer.from(piece, "latin1")), 5 + index * every))
+      ;(options.answer ?? []).forEach((piece, index) => setTimeout(() => arrive(piece), 5 + index * every))
       return true
     },
   }
-  return { input: input as never, output: output as never, modes, calls, written, listeners: () => input.listenerCount("data") }
+  return { input: input as never, output: output as never, modes, calls, written, listeners: () => input.listenerCount("readable") + input.listenerCount("data") }
 }
 
 const quick = { quietMs: 30, answeringMs: 150 }
@@ -138,7 +146,15 @@ describe("asking the terminal", () => {
     expect(t.written).toEqual([QUERY])
     expect(t.modes).toEqual([true, false])
     expect(t.listeners()).toBe(0)
-    expect(t.calls.at(-1)).toBe("pause")
+  })
+
+  test("input is never made to flow and never paused, so the app that opens next still hears keys", async () => {
+    // In Bun, a terminal's input that has flowed and been paused takes no key afterwards.
+    for (const answer of [[osc("rgb:ffff/ffff/ffff", ST), DA1], [], ["x".repeat(2000)]]) {
+      const t = terminal({ answer })
+      await detectBackground(t.input, t.output, quick)
+      expect(t.calls).toEqual([])
+    }
   })
 
   test("an answer that arrives in pieces is read whole", async () => {
