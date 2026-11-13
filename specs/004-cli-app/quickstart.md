@@ -88,4 +88,46 @@ bun test apps/cli/test/journey.test.ts        # no key and no value in any file
 
 ## Results
 
-To be filled in when the feature is implemented.
+### User Story 1: operate servers and apps from one screen (2026-11-14)
+
+**Automated**: `bun test apps/cli/test/app-operate.test.tsx`: Home, the app screen, the deploy
+screen and "set a secret" rendered at 100 columns with their boards' wording, symbols and keys
+(and within 80 by 24); deploy, a failed start, leaving and quitting during a deploy, rollback
+from the app screen and from Home, setting and removing a secret, and an unreachable server
+beside a slow one, each driven through the reducer and the effects against a real runner process
+with the stand-in Docker. The typed secret value was looked for in the state and in every frame
+drawn while it was typed, and in every file of the profile folder; it was in none.
+
+**Walked through in a pseudo-terminal** (100 by 30, a Python driver reading the terminal the
+whole time, an in-memory key store, a runner on the same machine with the stand-in Docker,
+nothing over SSH), 35 checks, all passed:
+
+- Home opened on an existing team with one server and one deployed app, after the switch to the
+  alternate screen; the server was marked as answering. Arrows and tab moved between panes and
+  rows.
+- Enter opened the app screen with its history. `d` opened the deploy screen with the summary
+  panel and the stage row, and said that leaving does not cancel. With Docker held mid-deploy,
+  `esc` returned to the app screen; once Docker was let go, "✔ demo is live on dev in …" arrived
+  there as a line and the history showed deploy 2.
+- Selecting deploy 1 and pressing `r` ran deploy 3 from "what deploy 1 ran", to Started; the
+  history then read "a rollback to 1".
+- `s`, a name, then the hidden prompt: the terminal's echo flag was already off when "hidden as
+  you type" first appeared. The value, typed one key at a time, never appeared in anything the
+  terminal received; it was stored as version 1 and marked as set after the latest deploy. A
+  pasted value of two lines was refused with the pointer to `--stdin`, and nothing of the paste
+  was drawn. Ctrl-C at the prompt went back to the name question and the app stayed open.
+- `q` closed the app: it left the alternate screen, showed the cursor again, echo and line
+  editing were back on, raw mode was off, and the exit status was 0.
+
+**Not checked**:
+
+- Anything over SSH. No real server was used. Until the SSH hand-over (T032) exists, a server
+  that needs a password or a host-key answer makes SSH ask on the terminal while the app is
+  drawn, and the status check that runs when Home opens can cause that without a key press.
+- Home and the app screen at 80 columns as their boards draw them (T053): at 80 columns Home
+  leaves out the details pane, and nothing else was arranged.
+- Colours: tests draw without colour, and the walkthrough did not inspect colour codes, the
+  struck-out name of a removed secret, or a light terminal.
+- Resizing the window during the walkthrough, and real Docker.
+- Running state (shown as "unknown"), logs, missing values and the linked folder belong to later
+  stories.

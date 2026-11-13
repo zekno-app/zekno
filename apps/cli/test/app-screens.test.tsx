@@ -138,12 +138,14 @@ describe("profile could not be verified (board 'Profile could not be verified')"
 
 describe("screens a later part builds", () => {
   test("say plainly that they are not built yet, with their place and their board's key hints", () => {
-    const lines = draw(home(), 100, 30)
+    const withApp: TeamView = { ...TEAM, servers: [{ ...TEAM.servers[0]!, apps: [{ name: "demo", deploy: 4, state: "unknown" }] }] }
+    const onLogs = after(initialState({ kind: "team", team: withApp }, { columns: 100, rows: 30 }), { type: "key", key: { kind: "right" } }, key("l"))
+    const lines = draw(onLogs, 100, 30)
     const text = lines.join("\n")
-    expect(text).toContain("Home is not built yet.")
-    expect(text).toContain("Ada's team")
+    expect(text).toContain("The logs screen is not built yet.")
+    expect(text).toContain("› prod › demo › logs")
     expect(text).toContain("pre-alpha, unaudited")
-    expect(lastLine(lines)).toBe("↑↓ move  ←→ pane  enter open  a add  ? help  q quit")
+    expect(lastLine(lines)).toBe("f pause following  / filter  1-9 one service  ↑↓ scroll  esc back")
 
     const adding = draw(after(home(), key("a")), 100, 30)
     expect(adding.join("\n")).toContain("› add a server")

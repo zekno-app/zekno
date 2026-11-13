@@ -6,18 +6,34 @@
  */
 import { Box, render, Text, useInput, useWindowSize, type Instance } from "ink"
 import { constants } from "node:os"
-import { useEffect, useSyncExternalStore } from "react"
+import { useEffect, useRef, useSyncExternalStore } from "react"
 
 import { Spinner } from "../ui/stages"
 import { ThemeProvider, themeFor, type Background } from "../ui/theme"
-import { createEffects, type AppDeps } from "./effects"
+import { createEffects, type AppDeps, type Effects } from "./effects"
 import { NoticeLine } from "./frame"
+import { emptyHiddenValue, hiddenPromptKey } from "./hidden-prompt"
 import { toAppKey } from "./keys"
+import { AppScreen } from "./screens/app"
+import { DeployScreen } from "./screens/deploy"
 import { HelpScreen } from "./screens/help"
+import { HomeScreen } from "./screens/home"
 import { Placeholder } from "./screens/placeholder"
 import { ProfileErrorScreen } from "./screens/profile-error"
+import { SetSecretScreen } from "./screens/set-secret"
 import { TooSmall } from "./screens/too-small"
-import { initialState, MIN_COLUMNS, MIN_ROWS, top, update, type AppEvent, type Effect, type State } from "./state"
+import {
+  hiddenPromptOpen,
+  initialState,
+  MIN_COLUMNS,
+  MIN_ROWS,
+  tooSmall,
+  top,
+  update,
+  type AppEvent,
+  type Effect,
+  type State,
+} from "./state"
 
 /** Holds the state, runs the reducer for each event and hands its effects on. */
 export function createStore(initial: State, run: (effect: Effect) => void) {
@@ -58,6 +74,14 @@ export function Screen({ state, columns, rows }: { state: State; columns: number
   const screen = top(state)
   const status = <Status state={state} />
   switch (screen.name) {
+    case "home":
+      return <HomeScreen state={state} screen={screen} columns={columns} status={status} />
+    case "app":
+      return <AppScreen state={state} screen={screen} columns={columns} status={status} />
+    case "deploy":
+      return <DeployScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
+    case "set-secret":
+      return <SetSecretScreen state={state} screen={screen} columns={columns} status={status} />
     case "help":
       return <HelpScreen columns={columns} status={status} />
     case "profile-error":
@@ -76,11 +100,25 @@ export function AppView({ state, columns, rows }: { state: State; columns: numbe
   )
 }
 
-function App({ store }: { store: Store }) {
+function App({ store, effects }: { store: Store; effects: Effects }) {
   const state = useSyncExternalStore(store.subscribe, store.get)
   const { columns, rows } = useWindowSize()
   useEffect(() => store.dispatch({ type: "resize", columns, rows }), [store, columns, rows])
+  // The value being typed at the hidden prompt: in this ref only, never in the state (hidden-prompt.ts).
+  const hidden = useRef(emptyHiddenValue())
+  const prompting = hiddenPromptOpen(state)
+  useEffect(() => {
+    if (!prompting) hidden.current.value = ""
+  }, [prompting])
   useInput((input, key) => {
+    const current = store.get()
+    // The app is in raw mode the whole time it is on screen, so echo is already
+    // off when the prompt is drawn. Below 80 by 24 the prompt cannot be seen and
+    // takes nothing; only quitting works then.
+    if (hiddenPromptOpen(current) && !tooSmall(current)) {
+      hiddenPromptKey(hidden.current, input, key, current, store.dispatch, effects.saveSecret)
+      return
+    }
     const appKey = toAppKey(input, key)
     if (appKey) store.dispatch({ type: "key", key: appKey })
   })
@@ -148,7 +186,7 @@ export function openApp(deps: AppDeps, options: AppOptions): Promise<number> {
   try {
     instance = render(
       <ThemeProvider value={themeFor(options.background)}>
-        <App store={store} />
+        <App store={store} effects={effects} />
       </ThemeProvider>,
       // Ctrl-C is a key like any other here: it quits, but waits for a deploy in progress.
       { stdin, stdout, alternateScreen: true, exitOnCtrlC: false }
@@ -157,6 +195,8 @@ export function openApp(deps: AppDeps, options: AppOptions): Promise<number> {
     cleanUp()
     return Promise.reject(error)
   }
+  // Home is drawn first; whether each server answers is filled in as it arrives (T021).
+  if (options.start.kind === "team") void effects.checkServers()
 
   return instance.waitUntilExit().then(
     () => {

@@ -1,0 +1,191 @@
+/**
+ * What Home and the app screen show about apps, deploys and secrets, read
+ * from this machine's profile folder. Nothing there reaches a server.
+ *
+ * The folder is ordinary files that something other than zekno could have
+ * changed (attacker B in specs/003-cli-runner/security-review.md), so
+ * nothing is taken as it stands. A deploy counts only when it is signed by a
+ * current team member for this team, server and app, exactly as
+ * ops/deploy.ts reads the history for a rollback, and its number, time,
+ * signer, service definition and secrets are read from under that
+ * signature. Only whether the runner accepted it is the file's word. A
+ * secret counts only when its record verifies. A file name counts only when
+ * it is an app name. Text that is drawn is cleaned.
+ */
+import { currentSecrets, readSignedDeploy, verifySecret, verifySecretRemoval, type Deploy } from "@workspace/core"
+import { readdirSync } from "node:fs"
+import { join } from "node:path"
+
+import type { Team } from "../context"
+import type { History, Server } from "../profile"
+import { sanitize } from "../sanitize"
+import type { AppRow, DeployRow, SecretRow } from "./state"
+
+/** A history file's name: an app name and `.json`. Anything else in the folder is not an app. */
+const HISTORY_FILE = /^([a-z0-9][a-z0-9-]{0,62})\.json$/
+
+type Verified = { deploy: Deploy; signer: string; outcome: History[number]["outcome"] }
+
+/**
+ * The deploys this machine sent for one app on one server that verify,
+ * oldest first, one per number. A history file that cannot be read shows no
+ * deploys here; the deploy and rollback operations say what is wrong with it.
+ */
+export function verifiedDeploys(team: Team, server: Server, app: string): Verified[] {
+  let history: History
+  try {
+    history = team.store.history(server.serverId, app)
+  } catch {
+    return []
+  }
+  const byNumber = new Map<number, Verified>()
+  for (const entry of history) {
+    const read = readSignedDeploy({ envelope: entry.envelope, trust: team.trust })
+    if (!read.ok) continue
+    const { deploy, signer } = read.value
+    if (deploy.teamId !== team.trust.teamId || deploy.serverId !== server.serverId || deploy.app !== app) continue
+    // The same number twice is not something zekno writes. The later entry is the one it would have written last.
+    byNumber.set(deploy.sequence, { deploy, signer: sanitize(signer.name), outcome: entry.outcome })
+  }
+  return [...byNumber.values()].sort((a, b) => a.deploy.sequence - b.deploy.sequence)
+}
+
+const accepted = (entries: readonly Verified[]) => entries.filter((entry) => entry.outcome !== "sent")
+
+/** The apps this machine has a history for on one server, by the name of each history file. */
+function appNames(home: string, server: Server): string[] {
+  let files: string[]
+  try {
+    files = readdirSync(join(home, "history", server.serverId))
+  } catch {
+    return []
+  }
+  return files.flatMap((file) => HISTORY_FILE.exec(file)?.slice(1, 2) ?? [])
+}
+
+/**
+ * One server's apps for Home, the most recently deployed first. An app with
+ * no deploy that verifies is not listed. The state is "unknown": what is
+ * running is read from the server, which this does not do.
+ */
+export function appsOf(team: Team, server: Server, home: string): AppRow[] {
+  const rows: AppRow[] = []
+  for (const app of appNames(home, server)) {
+    const entries = verifiedDeploys(team, server, app)
+    const latest = entries.at(-1)
+    if (!latest) continue
+    rows.push({
+      name: app,
+      deploy: latest.deploy.sequence,
+      at: latest.deploy.createdAt,
+      state: "unknown",
+      outcome: latest.outcome,
+      signer: latest.signer,
+      secrets: latest.deploy.secrets.length,
+      previous: accepted(entries).at(-2)?.deploy.sequence,
+    })
+  }
+  return rows.sort((a, b) => (b.at ?? "").localeCompare(a.at ?? "") || a.name.localeCompare(b.name))
+}
+
+/**
+ * Each service of a Compose file as `web (caddy:2)`, or as `web` when it is
+ * built rather than pulled. Empty when the file is not a Compose file this
+ * can read: it is only shown, never acted on. Bun's YAML parser refuses
+ * excessive aliasing, so a file that would expand without end is refused.
+ */
+export function composeServices(compose: string): string[] {
+  let parsed: unknown
+  try {
+    parsed = Bun.YAML.parse(compose)
+  } catch {
+    return []
+  }
+  const services = (parsed as { services?: unknown } | null)?.services
+  if (typeof services !== "object" || services === null || Array.isArray(services)) return []
+  return Object.entries(services).map(([name, service]) => {
+    const image = (service as { image?: unknown } | null)?.image
+    return sanitize(typeof image === "string" ? `${name} (${image})` : name)
+  })
+}
+
+/** The version of the team list a deploy was signed with, when this machine holds that list. */
+function teamVersionOf(team: Team, hash: string): number | undefined {
+  const index = team.chain.findIndex((trust) => trust.hash === hash)
+  return index === -1 ? undefined : index + 1
+}
+
+/** One deploy for the app screen. */
+function deployRow(team: Team, entries: readonly Verified[], index: number): DeployRow {
+  const { deploy, signer, outcome } = entries[index]!
+  // A rollback deploys an earlier deploy's service definition again. A
+  // definition equal to the one just before is a deploy of the same thing.
+  const before = entries[index - 1]
+  const earlier =
+    before && before.deploy.compose !== deploy.compose
+      ? accepted(entries.slice(0, index - 1))
+          .filter((entry) => entry.deploy.compose === deploy.compose)
+          .at(-1)
+      : undefined
+  return {
+    sequence: deploy.sequence,
+    outcome,
+    at: deploy.createdAt,
+    signer,
+    teamVersion: teamVersionOf(team, deploy.teamHash),
+    services: composeServices(deploy.compose),
+    secrets: deploy.secrets.map(({ name, version }) => ({ name, version })),
+    rollbackTo: earlier?.deploy.sequence,
+  }
+}
+
+/**
+ * The secrets an app has now, by name, and those removed, after them. A
+ * value is never read: records are verified, not opened. Each is marked when
+ * it changed after the latest deploy the runner accepted.
+ */
+function secretRows(team: Team, server: Server, app: string, latest: Deploy | undefined): SecretRow[] {
+  const { trust } = team
+  const serverId = server.serverId
+  let current
+  try {
+    current = currentSecrets({ trust, serverId, app, ...team.store.secrets(serverId, app) })
+  } catch {
+    return []
+  }
+  const deployed = (name: string) => latest?.secrets.find((secret) => secret.name === name)
+  const rows: SecretRow[] = []
+  for (const record of current.secrets) {
+    const checked = verifySecret({ record, trust, serverId, app })
+    if (!checked.ok) continue
+    const { name, version } = checked.value
+    const before = deployed(name)
+    rows.push({ name, version, removed: false, afterDeploy: latest !== undefined && (before === undefined || before.version < version) })
+  }
+  for (const removal of current.removals) {
+    const checked = verifySecretRemoval({ removal, trust, serverId, app })
+    if (!checked.ok) continue
+    const { name, version } = checked.value
+    rows.push({ name, version, removed: true, afterDeploy: latest !== undefined && deployed(name) !== undefined })
+  }
+  return rows
+}
+
+/** An app's deploy history, newest first, and its secrets. */
+export function appDetails(team: Team, server: Server, app: string): { deploys: DeployRow[]; secrets: SecretRow[] } {
+  const entries = verifiedDeploys(team, server, app)
+  const deploys = entries.map((_, index) => deployRow(team, entries, index)).reverse()
+  return { deploys, secrets: secretRows(team, server, app, accepted(entries).at(-1)?.deploy) }
+}
+
+/** The names of the secrets the next deploy of an app carries. */
+export function secretNamesOf(team: Team, server: Server, app: string): string[] {
+  return secretRows(team, server, app, undefined)
+    .filter((secret) => !secret.removed)
+    .map((secret) => secret.name)
+}
+
+/** The latest deploy of an app the runner accepted, from this machine's history. */
+export function latestAccepted(team: Team, server: Server, app: string): number | undefined {
+  return accepted(verifiedDeploys(team, server, app)).at(-1)?.deploy.sequence
+}

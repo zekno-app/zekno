@@ -9,6 +9,8 @@
  * hidden prompt is open the reducer only knows that it is open: the keys go
  * to the prompt, and only Esc and Ctrl-C close it.
  */
+import { isReservedSecretName } from "@workspace/core"
+
 import type { DeployStage } from "../ops/deploy"
 import { applyConfirmKey, type Choice } from "../ui/confirm"
 import { applySelectKey, clampIndex, type ListKey } from "../ui/select"
@@ -31,7 +33,24 @@ export const RUNNER_LINES = 200
 /** Whether an app's services are running, as the runner last said. */
 export type RunState = "running" | "stopped" | "partly running" | "unknown"
 
-export type AppRow = { name: string; deploy?: number; at?: string; state: RunState }
+/**
+ * One app on Home. The deploy number, time, result, signer and secret count
+ * are those of the latest deploy in this machine's history that verifies
+ * (views.ts), so they are known even when the server cannot be reached.
+ */
+export type AppRow = {
+  name: string
+  deploy?: number
+  at?: string
+  state: RunState
+  outcome?: DeployRow["outcome"]
+  /** Who signed the latest deploy. */
+  signer?: string
+  /** How many secrets the latest deploy carried. */
+  secrets?: number
+  /** The deploy `r` returns to on Home: the accepted one before the latest. */
+  previous?: number
+}
 
 export type ServerRow = {
   name: string
@@ -39,6 +58,8 @@ export type ServerRow = {
   destination?: string
   /** Undefined until it has been asked. */
   reachable?: boolean
+  /** Why it could not be reached, as a sentence. */
+  problem?: string
   /** The runner's version, and whether it is older than this CLI needs. */
   runner?: { version: string; outdated: boolean }
   apps: AppRow[]
@@ -47,8 +68,27 @@ export type ServerRow = {
 /** The verified team, as the screens show it. */
 export type TeamView = { member: string; version: number; servers: ServerRow[] }
 
-export type DeployRow = { sequence: number; outcome: "sent" | "started" | "start_failed"; at: string }
-export type SecretRow = { name: string; version: number; removed: boolean }
+/** One deploy in an app's history. Everything but `outcome` is read from under the deploy's signature. */
+export type DeployRow = {
+  sequence: number
+  outcome: "sent" | "started" | "start_failed"
+  at: string
+  signer?: string
+  /** The version of the team list it was signed with. */
+  teamVersion?: number
+  /** Each service of its Compose file, as `web (caddy:2)`. */
+  services?: string[]
+  secrets?: { name: string; version: number }[]
+  /** It ran the same service definition as this earlier deploy, and not the one just before it. */
+  rollbackTo?: number
+}
+export type SecretRow = {
+  name: string
+  version: number
+  removed: boolean
+  /** Set or removed after the latest deploy the runner accepted: it takes effect on the next deploy. */
+  afterDeploy?: boolean
+}
 /** One line of an app's logs. Its text was cleaned when it arrived (session.ts). */
 export type LogLine = { time: string; service: string; line: string }
 
@@ -70,6 +110,16 @@ export type DeployProgress = {
   outcome?: "started" | "start_failed" | "error"
   /** When it began, in milliseconds, for the time shown beside it. */
   since: number
+  /** When it ended, in milliseconds. */
+  endedAt?: number
+  /** Where the service definition comes from: a file, or an earlier deploy. */
+  from?: string
+  /** The deploy it takes over from, when there was one. */
+  replaces?: number
+  /** The names of the secrets it carries. */
+  secretNames?: string[]
+  /** The line that says how it ended. */
+  result?: Notice
 }
 
 /** How the app starts: the profile has been read and verified, or not (effects.ts `loadStart`). */
@@ -187,10 +237,22 @@ export type AppEvent =
   | { type: "failed"; notice: Notice }
   /** A line a runner or SSH wrote on standard error, already cleaned. */
   | { type: "runner-line"; line: string }
-  | { type: "deploy-started"; server: string; app: string; at: number }
+  /** A server answered, or could not be reached and why. */
+  | { type: "server-reached"; server: string; reachable: boolean; problem?: string }
+  /** One server's apps, read again from this machine's history. */
+  | { type: "server-apps"; server: string; apps: AppRow[] }
+  | {
+      type: "deploy-started"
+      server: string
+      app: string
+      at: number
+      from?: string
+      replaces?: number
+      secretNames?: string[]
+    }
   | { type: "deploy-stage"; stage: DeployStage; sequence: number; secrets: number }
   | { type: "deploy-progress"; line: string }
-  | { type: "deploy-ended"; outcome: "started" | "start_failed" | "error"; notice: Notice }
+  | { type: "deploy-ended"; outcome: "started" | "start_failed" | "error"; notice: Notice; at?: number }
   /** Before a deploy: names the Compose file expects that have no secret. */
   | { type: "missing-values"; server: string; app: string; names: string[] }
   /** Before the first deploy of a folder that is not linked. */
@@ -344,6 +406,24 @@ function clampHome(state: State): State {
   })
 }
 
+/**
+ * One server's apps, read again. The app that was selected on Home stays
+ * selected, wherever its row moved: a deploy moves its app to the top.
+ */
+function withApps(state: State, name: string, apps: AppRow[]): State {
+  const team = state.team
+  const index = team?.servers.findIndex((server) => server.name === name) ?? -1
+  if (!team || index === -1) return state
+  const before = team.servers[index]!.apps
+  const servers = team.servers.map((server, at) => (at === index ? { ...server, apps } : server))
+  const next = updateScreens({ ...state, team: { ...team, servers } }, "home", (screen) => {
+    if (screen.server !== index) return screen
+    const moved = apps.findIndex((app) => app.name === before[screen.app]?.name)
+    return moved === -1 ? screen : { ...screen, app: moved }
+  })
+  return clampHome(next)
+}
+
 // ---------------------------------------------------------------------------
 // Keys
 
@@ -423,7 +503,12 @@ function onTextQuestion(state: State, key: AppKey): Step {
       const result = applyTextInput(screen.secretName, input, flags)
       if (result.kind === "cancelled") return pop(state)
       const name = result.value.trim()
-      if (result.kind === "done" && name !== "") return stay(replaceTop(state, { ...screen, secretName: name, question: "value" }))
+      if (result.kind === "done" && name !== "") {
+        // A name that cannot be stored is said now, before anyone types a value for it.
+        const problem = secretNameProblem(name)
+        if (problem) return stay({ ...replaceTop(state, { ...screen, secretName: name }), notice: { tone: "error", text: problem } })
+        return stay(replaceTop(state, { ...screen, secretName: name, question: "value" }))
+      }
       return stay(replaceTop(state, { ...screen, secretName: result.value }))
     }
     case "logs": {
@@ -623,6 +708,16 @@ function onKey(state: State, key: AppKey): Step {
   return step ?? onAnyScreen(state, screen, key)
 }
 
+/** The core library's rule for a secret name (`secretName` in packages/core/src/secrets.ts). */
+const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/
+
+/** Why a name cannot be a secret's, in the words `zekno secret set` uses, or undefined when it can. */
+export function secretNameProblem(name: string): string | undefined {
+  if (!SECRET_NAME.test(name)) return "A secret name uses letters, digits and underscore, and does not start with a digit."
+  if (isReservedSecretName(name)) return `"${name}" is reserved: the runner uses it to start Docker. Choose another name.`
+  return undefined
+}
+
 const addServerScreen = (): Screen => ({ name: "add-server", step: "destination", destination: "", serverName: "", output: false })
 
 const setSecretScreen = (server: string, app: string): Extract<Screen, { name: "set-secret" }> => ({
@@ -687,8 +782,25 @@ export function update(state: State, event: AppEvent): Step {
     }
     case "runner-line":
       return stay({ ...state, runnerLines: keep(state.runnerLines, [event.line], RUNNER_LINES) })
+    case "server-reached": {
+      if (!state.team) return stay(state)
+      const reached = (server: ServerRow): ServerRow =>
+        server.name === event.server ? { ...server, reachable: event.reachable, problem: event.reachable ? undefined : event.problem } : server
+      return stay({ ...state, team: { ...state.team, servers: state.team.servers.map(reached) } })
+    }
+    case "server-apps":
+      return stay(withApps(state, event.server, event.apps))
     case "deploy-started": {
-      const deploy: DeployProgress = { server: event.server, app: event.app, lines: [], running: true, since: event.at }
+      const deploy: DeployProgress = {
+        server: event.server,
+        app: event.app,
+        lines: [],
+        running: true,
+        since: event.at,
+        from: event.from,
+        replaces: event.replaces,
+        secretNames: event.secretNames,
+      }
       return push({ ...state, deploy }, { name: "deploy", output: false })
     }
     case "deploy-stage":
@@ -699,7 +811,8 @@ export function update(state: State, event: AppEvent): Step {
       return stay({ ...state, deploy: { ...state.deploy, lines: keep(state.deploy.lines, [event.line], DEPLOY_LINES) } })
     case "deploy-ended": {
       if (!state.deploy) return stay(state)
-      const ended = { ...state, deploy: { ...state.deploy, running: false, outcome: event.outcome }, notice: event.notice }
+      const deploy = { ...state.deploy, running: false, outcome: event.outcome, endedAt: event.at, result: event.notice }
+      const ended = { ...state, deploy, notice: event.notice }
       return ended.quitting ? go({ ...ended, exiting: true }, { kind: "exit" }) : stay(ended)
     }
     case "missing-values":

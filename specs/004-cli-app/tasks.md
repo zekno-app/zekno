@@ -33,15 +33,15 @@
 
 **Independent Test**: `bun test apps/cli/test/app-operate.test.tsx`, then the pseudo-terminal walkthrough in T024
 
-- [ ] T016 [P] [US1] Implement Home in apps/cli/src/app/screens/home.tsx as on canvas board "Home": servers pane, apps pane (deploy number and when; the state column shows "unknown" until US3), details and actions pane, the linked-folder line
-- [ ] T017 [P] [US1] Implement the app screen in apps/cli/src/app/screens/app.tsx as on canvas board "One app: deploys and secrets": deploy history from the verified local history, secrets by name and version, the selected deploy's details, the note for a secret newer than the running deploy
-- [ ] T018 [US1] Implement the deploy screen in apps/cli/src/app/screens/deploy.tsx as on canvas board "A deploy in progress": summary panel, stage row, live line, `o` for Docker's output, the failure form with what Docker reported; `esc` leaves without cancelling and the result arrives as a line on the previous screen
-- [ ] T019 [US1] Wire deploy (`d`) and rollback (`r`) from Home and the app screen to apps/cli/src/ops/deploy.ts in apps/cli/src/app/effects.ts, including "waiting for deploy <n> to finish" on quit
-- [ ] T020 [US1] Implement setting and removing a secret in apps/cli/src/app/screens/set-secret.tsx with the hidden prompt rules of apps/cli/src/ui/secret-input.ts (echo off before the question is drawn, multi-line refused, empty not stored, Ctrl-C cancels the prompt only) and a confirm before removing
-- [ ] T021 [US1] Show an unreachable server on Home without blocking the others, in apps/cli/src/app/effects.ts and apps/cli/src/app/screens/home.tsx
-- [ ] T022 [US1] Tests in apps/cli/test/app-operate.test.tsx: each of the three screens rendered at 100 columns contains the wording, symbols and keys of its canvas board; deploy, failed start, rollback, set and remove a secret driven through the reducer and effects against a real runner process with a stand-in Docker
+- [X] T016 [P] [US1] Implement Home in apps/cli/src/app/screens/home.tsx as on canvas board "Home": servers pane, apps pane (deploy number and when; the state column shows "unknown" until US3), details and actions pane, the linked-folder line
+- [X] T017 [P] [US1] Implement the app screen in apps/cli/src/app/screens/app.tsx as on canvas board "One app: deploys and secrets": deploy history from the verified local history, secrets by name and version, the selected deploy's details, the note for a secret newer than the running deploy
+- [X] T018 [US1] Implement the deploy screen in apps/cli/src/app/screens/deploy.tsx as on canvas board "A deploy in progress": summary panel, stage row, live line, `o` for Docker's output, the failure form with what Docker reported; `esc` leaves without cancelling and the result arrives as a line on the previous screen
+- [X] T019 [US1] Wire deploy (`d`) and rollback (`r`) from Home and the app screen to apps/cli/src/ops/deploy.ts in apps/cli/src/app/effects.ts, including "waiting for deploy <n> to finish" on quit
+- [X] T020 [US1] Implement setting and removing a secret in apps/cli/src/app/screens/set-secret.tsx with the hidden prompt rules of apps/cli/src/ui/secret-input.ts (echo off before the question is drawn, multi-line refused, empty not stored, Ctrl-C cancels the prompt only) and a confirm before removing
+- [X] T021 [US1] Show an unreachable server on Home without blocking the others, in apps/cli/src/app/effects.ts and apps/cli/src/app/screens/home.tsx
+- [X] T022 [US1] Tests in apps/cli/test/app-operate.test.tsx: each of the three screens rendered at 100 columns contains the wording, symbols and keys of its canvas board; deploy, failed start, rollback, set and remove a secret driven through the reducer and effects against a real runner process with a stand-in Docker
 - [X] T023 [US1] (canvas: "Help", approved 2026-11-14) implement the help screen in apps/cli/src/app/screens/help.tsx and its test
-- [ ] T024 [US1] Walk through User Story 1 in a pseudo-terminal that reads continuously (open, move, open an app, deploy, leave during a deploy, roll back, set a secret, quit) and record what was and was not checked in specs/004-cli-app/quickstart.md
+- [X] T024 [US1] Walk through User Story 1 in a pseudo-terminal that reads continuously (open, move, open an app, deploy, leave during a deploy, roll back, set a secret, quit) and record what was and was not checked in specs/004-cli-app/quickstart.md
 
 ## Phase 4: User Story 2 - From nothing to a running app without leaving the app (P2)
 

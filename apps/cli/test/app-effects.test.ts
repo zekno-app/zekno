@@ -166,7 +166,7 @@ describe("effects", () => {
       throw error
     })
     effects.run({ kind: "exit" })
-    effects.run({ kind: "deploy", server: "prod", app: "demo" })
+    effects.run({ kind: "logs", server: "prod", app: "demo" })
     await Bun.sleep(10)
     expect(events).toEqual([{ type: "notice", notice: { tone: "info", text: NOT_BUILT } }])
   })
