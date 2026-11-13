@@ -1,15 +1,18 @@
 import { Box, render, Static, Text, useInput, type RenderOptions } from "ink"
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react"
 
+import { logClock } from "../app/time"
 import { CliError } from "../errors"
 import { readStdin } from "./plain"
 import { applySecretInput } from "./secret-input"
-import { REMOTE_MARK, type Ui } from "./types"
+import { BRAND } from "./theme"
+import { REMOTE_MARK, type Cell, type LogOutput, type Ui } from "./types"
 
 type Item =
   | { id: number; kind: "info" | "success" | "warn" | "error" | "remote"; text: string }
   | { id: number; kind: "field"; label: string; value: string }
-  | { id: number; kind: "table"; rows: string[][] }
+  | { id: number; kind: "table"; rows: Cell[][] }
+  | { id: number; kind: "log"; line: LogOutput; serviceWidth: number }
 
 type Prompt = { question: string; settle(result: { value: string } | { error: Error }): void }
 type Question = { question: string; settle(yes: boolean): void }
@@ -56,6 +59,35 @@ function createStore() {
 
 const MARK = { success: "✔", warn: "!", error: "✖" } as const
 const COLOR = { success: "green", warn: "yellow", error: "red" } as const
+const TONE = { success: "green", danger: "red", warning: "yellow" } as const
+
+/** A cell as a terminal draws it: a marked cell's symbol before its word. */
+const drawnCell = (cell: Cell | undefined): string => (cell === undefined ? "" : typeof cell === "string" ? cell : `${cell.mark} ${cell.text}`)
+
+/** The widest service column `zekno logs` lines up to; a longer name is cut. */
+const SERVICE_COLUMN = 16
+
+/**
+ * One line of `zekno logs` at a terminal, as on the board "Live logs": the
+ * time, faint; the service; the text. A line wider than the terminal goes on
+ * under its own text, never at the left edge, so the part after the wrap
+ * cannot pass for a line with a time and a service of its own.
+ */
+export function LogItem({ line, serviceWidth }: { line: LogOutput; serviceWidth: number }) {
+  return (
+    <Box>
+      <Box flexShrink={0} width={10}>
+        <Text dimColor>{logClock(line.time)}</Text>
+      </Box>
+      <Box flexShrink={0} width={serviceWidth + 2}>
+        <Text color={BRAND} wrap="truncate-end">
+          {line.service}
+        </Text>
+      </Box>
+      <Text>{line.text}</Text>
+    </Box>
+  )
+}
 
 function Line({ item }: { item: Item }) {
   if (item.kind === "field") {
@@ -67,21 +99,33 @@ function Line({ item }: { item: Item }) {
     )
   }
   if (item.kind === "table") {
-    const widths = item.rows[0]?.map((_, column) => Math.max(...item.rows.map((row) => (row[column] ?? "").length))) ?? []
+    const widths = item.rows[0]?.map((_, column) => Math.max(...item.rows.map((row) => drawnCell(row[column]).length))) ?? []
     return (
       <Box flexDirection="column" marginLeft={2}>
         {item.rows.map((row, index) => (
           <Text key={index}>
-            {row.map((cell, column) => (
-              <Text key={column} dimColor={column > 0}>
-                {cell.padEnd((widths[column] ?? 0) + 2)}
-              </Text>
-            ))}
+            {row.map((cell, column) => {
+              const text = drawnCell(cell).padEnd((widths[column] ?? 0) + 2)
+              if (typeof cell === "string") {
+                return (
+                  <Text key={column} dimColor={column > 0}>
+                    {text}
+                  </Text>
+                )
+              }
+              return (
+                <Text key={column} color={cell.tone === "quiet" ? undefined : TONE[cell.tone]} dimColor={cell.tone === "quiet"}>
+                  {text}
+                </Text>
+              )
+            })}
           </Text>
         ))}
       </Box>
     )
   }
+  if (item.kind === "log") return <LogItem line={item.line} serviceWidth={item.serviceWidth} />
+
   if (item.kind === "info") {
     // Indented as a block, so text of several lines stays aligned with the marked lines.
     return (
@@ -205,6 +249,8 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
   // Ctrl-C into the usual interrupt.
   const app = render(<App store={store} />, { ...streams, exitOnCtrlC: false })
   const add = store.add
+  // The service column grows to the longest name seen so far, up to a bound, so lines stay aligned.
+  let serviceWidth = 0
 
   return {
     info: (text) => add({ kind: "info", text }),
@@ -217,6 +263,12 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
     async remote(line) {
       add({ kind: "remote", text: line })
       // The next line waits until this one is on the terminal.
+      await app.waitUntilRenderFlush()
+    },
+    async logLine(line) {
+      serviceWidth = Math.min(Math.max(serviceWidth, line.service.length), SERVICE_COLUMN)
+      add({ kind: "log", line, serviceWidth })
+      // As for a server's line: the next one waits until this one is on the terminal.
       await app.waitUntilRenderFlush()
     },
     async step(label, work, options) {

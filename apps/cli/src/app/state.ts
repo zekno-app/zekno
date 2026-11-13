@@ -12,6 +12,7 @@
 import { isReservedSecretName } from "@workspace/core"
 
 import type { DeployStage } from "../ops/deploy"
+import type { RunState } from "../ops/status"
 import { applyConfirmKey, type Choice } from "../ui/confirm"
 import { applySelectKey, clampIndex, type ListKey } from "../ui/select"
 import { applyTextInput } from "../ui/text-input"
@@ -24,14 +25,22 @@ export const MIN_ROWS = 24
 /** data-model.md, "In the app's memory only". */
 export const DEPLOY_LINES = 500
 export const LOG_LINES = 2000
+/**
+ * The most of one log line the app keeps: far wider than any terminal, so
+ * nothing that could be drawn is lost, while 2000 lines of the runner's
+ * longest (16384 characters) cannot take hundreds of megabytes.
+ */
+export const LOG_TEXT_KEPT = 4096
+/** How often Home and the app screen read what is running (contracts/app.md, "Refresh"). */
+export const REFRESH_MS = 5000
 /** What runners and SSH wrote on standard error, kept for showing on request. */
 export const RUNNER_LINES = 200
 
 // ---------------------------------------------------------------------------
 // What the app knows
 
-/** Whether an app's services are running, as the runner last said. */
-export type RunState = "running" | "stopped" | "partly running" | "unknown"
+/** Whether an app's services are running, as the runner last said (ops/status.ts). */
+export type { RunState }
 
 /**
  * One app on Home. The deploy number, time, result, signer and secret count
@@ -178,8 +187,10 @@ export type Screen =
       service?: string
       /** Lines scrolled back from the newest. */
       scroll: number
-      /** The connection dropped; Enter reconnects. */
+      /** The connection dropped, or the logs ended; Enter reconnects. */
       dropped: boolean
+      /** Why, as a sentence, once it dropped. */
+      problem?: string
     }
   | { name: "welcome"; value: string; creating: boolean }
   | {
@@ -249,6 +260,11 @@ export type Effect =
   | { kind: "rollback"; server: string; app: string; to?: number }
   | { kind: "logs"; server: string; app: string }
   | { kind: "stop-logs" }
+  /**
+   * Read again what is running and whether the servers answer, in the
+   * background: on every server for Home, on one for the app screen.
+   */
+  | { kind: "refresh"; server?: string }
   | { kind: "remove-secret"; server: string; app: string; name: string }
   | { kind: "update-runner"; server: string }
 
@@ -303,8 +319,14 @@ export type AppEvent =
   /** The hidden prompt stored a value, or refused one; it is closed either way. */
   | { type: "secret-saved"; notice: Notice }
   | { type: "secret-refused"; notice: Notice }
-  | { type: "log-lines"; lines: LogLine[] }
-  | { type: "logs-dropped" }
+  /** What is running on one server's apps, as its runner said. An app it does not name is unknown. */
+  | { type: "app-states"; server: string; states: Record<string, RunState> }
+  /** Every `REFRESH_MS` while the app is open: Home and the app screen read again what is running. */
+  | { type: "tick" }
+  /** Lines of the logs being followed, cleaned. `fresh`: the first of a new connection, which replace what was there. */
+  | { type: "log-lines"; lines: LogLine[]; fresh?: boolean }
+  /** The logs stopped coming: the connection dropped, or Docker's log command ended. */
+  | { type: "logs-dropped"; problem?: string }
 
 export type State = {
   /** The screens, the one showing last. Never empty. */
@@ -406,6 +428,37 @@ export function servicesOf(lines: readonly LogLine[]): string[] {
   return [...new Set(lines.map((line) => line.service))]
 }
 
+type LogsScreen = Extract<Screen, { name: "logs" }>
+
+/**
+ * Whether a log line is shown under the screen's choices: its service, when
+ * one is chosen, and the filter. The filter is the text the person typed,
+ * found anywhere in the line, whatever the case of its letters. It is plain
+ * text, never a pattern: no character in it has a meaning of its own.
+ */
+export function shows(screen: Pick<LogsScreen, "service" | "filter">): (line: LogLine) => boolean {
+  const filter = screen.filter.toLowerCase()
+  return (line) => (screen.service === undefined || line.service === screen.service) && (filter === "" || line.line.toLowerCase().includes(filter))
+}
+
+/** The log lines the screen shows, oldest first. */
+export const visibleLines = (screen: LogsScreen): LogLine[] => screen.lines.filter(shows(screen))
+
+/** Lines back from the newest shown, kept inside the lines there are. */
+const clampScroll = (scroll: number, count: number): number => Math.max(0, Math.min(scroll, count - 1))
+
+/**
+ * Whether what is running may be read again now (contracts/app.md,
+ * "Refresh"): only while Home or the app screen is showing and no question
+ * of any kind is open, and not below 80 by 24, where nothing is shown.
+ */
+export function refreshAllowed(state: State): boolean {
+  const screen = top(state)
+  if (screen.name !== "home" && screen.name !== "app") return false
+  if (state.exiting || state.quitting || tooSmall(state)) return false
+  return state.question === undefined && !textQuestionOpen(state) && !hiddenPromptOpen(state)
+}
+
 // ---------------------------------------------------------------------------
 // Changing the state
 
@@ -460,13 +513,25 @@ function withApps(state: State, name: string, apps: AppRow[]): State {
   const index = team?.servers.findIndex((server) => server.name === name) ?? -1
   if (!team || index === -1) return state
   const before = team.servers[index]!.apps
-  const servers = team.servers.map((server, at) => (at === index ? { ...server, apps } : server))
+  // The history does not say what is running; what the runner last said stays until it is read again.
+  const known = apps.map((app) => ({ ...app, state: before.find((row) => row.name === app.name)?.state ?? app.state }))
+  const servers = team.servers.map((server, at) => (at === index ? { ...server, apps: known } : server))
   const next = updateScreens({ ...state, team: { ...team, servers } }, "home", (screen) => {
     if (screen.server !== index) return screen
-    const moved = apps.findIndex((app) => app.name === before[screen.app]?.name)
+    const moved = known.findIndex((app) => app.name === before[screen.app]?.name)
     return moved === -1 ? screen : { ...screen, app: moved }
   })
   return clampHome(next)
+}
+
+/** Sets the state of each of one server's apps. Nothing else changes, the selection included. */
+function withStates(state: State, name: string, stateOf: (app: string) => RunState): State {
+  const team = state.team
+  if (!team?.servers.some((server) => server.name === name)) return state
+  const servers = team.servers.map((server) =>
+    server.name === name ? { ...server, apps: server.apps.map((app) => ({ ...app, state: stateOf(app.name) })) } : server
+  )
+  return { ...state, team: { ...team, servers } }
 }
 
 // ---------------------------------------------------------------------------
@@ -558,8 +623,9 @@ function onTextQuestion(state: State, key: AppKey): Step {
     }
     case "logs": {
       const result = applyTextInput(screen.filter, input, flags)
-      if (result.kind === "cancelled") return stay(replaceTop(state, { ...screen, filter: "", filtering: false }))
-      return stay(replaceTop(state, { ...screen, filter: result.value, filtering: result.kind !== "done" }))
+      if (result.kind === "cancelled") return stay(replaceTop(state, { ...screen, filter: "", filtering: false, scroll: 0 }))
+      const scroll = result.value === screen.filter ? screen.scroll : 0
+      return stay(replaceTop(state, { ...screen, filter: result.value, filtering: result.kind !== "done", scroll }))
     }
     default:
       return stay(state)
@@ -676,25 +742,48 @@ function onApp(state: State, screen: Extract<Screen, { name: "app" }>, key: AppK
   return undefined
 }
 
-function onLogs(state: State, screen: Extract<Screen, { name: "logs" }>, key: AppKey): Step | undefined {
+/**
+ * The logs screen. `↑` and `↓` scroll through the lines shown, never past
+ * the ends. `f` pauses where the view is, and resuming goes back to the
+ * newest line. Choosing a service, or changing the filter, shows the newest
+ * of the lines that then match.
+ */
+function onLogs(state: State, screen: LogsScreen, key: AppKey): Step | undefined {
   if (key.kind === "up") {
-    return stay(replaceTop(state, { ...screen, scroll: Math.min(screen.scroll + 1, Math.max(screen.lines.length - 1, 0)) }))
+    return stay(replaceTop(state, { ...screen, scroll: clampScroll(screen.scroll + 1, visibleLines(screen).length) }))
   }
   if (key.kind === "down") return stay(replaceTop(state, { ...screen, scroll: Math.max(screen.scroll - 1, 0) }))
   if (key.kind === "escape") return pop(state, { kind: "stop-logs" })
   if (key.kind === "enter") {
     if (!screen.dropped) return stay(state)
-    return go(replaceTop(state, { ...screen, dropped: false }), { kind: "logs", server: screen.server, app: screen.app })
+    return go(replaceTop(state, { ...screen, dropped: false, problem: undefined }), { kind: "logs", server: screen.server, app: screen.app })
   }
   if (key.kind !== "text") return undefined
-  if (key.text === "f") return stay(replaceTop(state, { ...screen, following: !screen.following, scroll: 0 }))
+  if (key.text === "f") return stay(replaceTop(state, { ...screen, following: !screen.following, scroll: screen.following ? screen.scroll : 0 }))
   if (key.text === "/") return stay(replaceTop(state, { ...screen, filtering: true }))
-  if (key.text === "0") return stay(replaceTop(state, { ...screen, service: undefined }))
+  if (key.text === "0") return stay(replaceTop(state, { ...screen, service: undefined, scroll: 0 }))
   if (/^[1-9]$/.test(key.text)) {
     const service = servicesOf(screen.lines)[Number(key.text) - 1]
-    return service ? stay(replaceTop(state, { ...screen, service })) : stay(state)
+    return service ? stay(replaceTop(state, { ...screen, service, scroll: 0 })) : stay(state)
   }
   return undefined
+}
+
+/**
+ * New lines on a logs screen, the oldest let go past `LOG_LINES`. While it
+ * follows at the newest line, the view moves on with them. While it is
+ * paused, or scrolled back, the view stays on the lines it shows: the scroll
+ * grows by the new lines it would show. Lines keep arriving while paused, so
+ * past `LOG_LINES` the oldest go even then; once the lines in view have gone
+ * the view shows the oldest kept. `fresh` lines, the first of a new
+ * connection, replace what was there.
+ */
+function withLogLines(screen: LogsScreen, added: readonly LogLine[], fresh: boolean): LogsScreen {
+  const lines = keep(fresh ? [] : screen.lines, added, LOG_LINES)
+  const next = { ...screen, lines }
+  const held = !fresh && (!screen.following || screen.scroll > 0)
+  const scroll = held ? screen.scroll + added.filter(shows(screen)).length : 0
+  return { ...next, scroll: clampScroll(scroll, visibleLines(next).length) }
 }
 
 function onSetSecret(state: State, screen: Extract<Screen, { name: "set-secret" }>, key: AppKey): Step | undefined {
@@ -884,8 +973,8 @@ export function update(state: State, event: AppEvent): Step {
       const reached = (server: ServerRow): ServerRow => {
         if (server.name !== event.server) return server
         const next: ServerRow = { ...server, reachable: event.reachable, problem: event.reachable ? undefined : event.problem }
-        // A server that cannot be reached has a runner nobody can tell the version of now.
-        if (!event.reachable) return { ...next, runner: undefined }
+        // A server that cannot be reached has a runner nobody can tell the version of now, and apps whose state is not known.
+        if (!event.reachable) return { ...next, runner: undefined, apps: server.apps.map((app) => ({ ...app, state: "unknown" })) }
         return event.runner ? { ...next, runner: event.runner } : next
       }
       return stay({ ...state, team: { ...state.team, servers: state.team.servers.map(reached) } })
@@ -941,8 +1030,16 @@ export function update(state: State, event: AppEvent): Step {
       return stay({ ...replaceTop(state, { ...screen, question: "value" }), notice: event.notice })
     }
     case "log-lines":
-      return stay(updateScreens(state, "logs", (screen) => ({ ...screen, lines: keep(screen.lines, event.lines, LOG_LINES) })))
+      return stay(updateScreens(state, "logs", (screen) => withLogLines(screen, event.lines, event.fresh === true)))
     case "logs-dropped":
-      return stay(updateScreens(state, "logs", (screen) => ({ ...screen, dropped: true })))
+      return stay(updateScreens(state, "logs", (screen) => ({ ...screen, dropped: true, problem: event.problem })))
+    case "app-states":
+      return stay(withStates(state, event.server, (app) => (Object.hasOwn(event.states, app) ? event.states[app]! : "unknown")))
+    case "tick": {
+      if (!refreshAllowed(state)) return stay(state)
+      const screen = top(state)
+      // Home shows every server; the app screen shows one app of one server.
+      return go(state, screen.name === "app" ? { kind: "refresh", server: screen.server } : { kind: "refresh" })
+    }
   }
 }

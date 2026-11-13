@@ -7,6 +7,20 @@
 export const REMOTE_MARK = "remote:"
 
 /**
+ * A table cell that names a state, such as whether an app is running. Plain
+ * output prints its word only. At a terminal its symbol and colour go with
+ * the word, so the state is never shown by colour alone (FR-008).
+ */
+export type MarkedCell = { text: string; mark: string; tone: "success" | "danger" | "warning" | "quiet" }
+export type Cell = string | MarkedCell
+
+/** The words of a cell, as plain output prints them. */
+export const cellText = (cell: Cell): string => (typeof cell === "string" ? cell : cell.text)
+
+/** One line of an app's logs, as `zekno logs` prints it. Each part is already cleaned or held to a pattern. */
+export type LogOutput = { time: string; service: string; text: string }
+
+/**
  * How commands talk to the person. Commands say what happened; a Ui decides
  * how it looks. At a terminal that is Ink; when output is piped, in scripts
  * and in tests it is plain lines.
@@ -21,7 +35,15 @@ export interface Ui {
   /** A labelled value worth reading carefully, such as a confirmation code. */
   field(label: string, value: string): void
   /** Rows of cells. Plain output joins cells with tabs. */
-  table(rows: string[][]): void
+  table(rows: Cell[][]): void
+  /**
+   * One line of an app's logs. Plain output prints `<time>\t<service>\t<text>`
+   * on standard output; the time is RFC 3339 as Docker wrote it, the service
+   * a name held to a pattern, and the text cleaned, so it has no tab and no
+   * line break that could make a field or a line of its own. A promise it
+   * returns settles once the interface can take another line.
+   */
+  logLine(line: LogOutput): void | Promise<void>
   /** Machine-readable output, exactly one JSON object. */
   json(value: unknown): void
   /**

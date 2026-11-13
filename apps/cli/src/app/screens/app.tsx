@@ -19,10 +19,22 @@ const NUMBER_WIDTH = 6
 const WHEN_WIDTH = 14
 const VERSION_WIDTH = 11
 
-/** A deploy's result as the history shows it: a symbol and words, never colour alone. */
-function Result({ deploy }: { deploy: DeployRow }) {
+/**
+ * A deploy's result as the history shows it: a symbol and words, never
+ * colour alone. The deploy the runner runs now, while every service of the
+ * app is running, is `● running now`, as on the board.
+ */
+function Result({ deploy, runningNow }: { deploy: DeployRow; runningNow: boolean }) {
   const theme = useTheme()
   const rollback = deploy.rollbackTo === undefined ? "" : `, a rollback to ${deploy.rollbackTo}`
+  if (runningNow) {
+    return (
+      <Text>
+        <Text color={theme.success}>● running now</Text>
+        {rollback}
+      </Text>
+    )
+  }
   switch (deploy.outcome) {
     case "started":
       return <Text>✔ started{rollback}</Text>
@@ -54,7 +66,20 @@ function DeployDetails({ deploy }: { deploy: DeployRow }) {
   return <Fields rows={rows} labelWidth={Math.max(10, label.length + 2)} />
 }
 
-function DeploysPane({ deploys, selected, focused, now }: { deploys?: readonly DeployRow[]; selected: number; focused: boolean; now: Date }) {
+function DeploysPane({
+  deploys,
+  selected,
+  focused,
+  now,
+  running,
+}: {
+  deploys?: readonly DeployRow[]
+  selected: number
+  focused: boolean
+  now: Date
+  /** The deploy that runs now, when the app is running. */
+  running?: number
+}) {
   const at = clampIndex(selected, deploys?.length ?? 0)
   const chosen = deploys?.[at]
   return (
@@ -81,7 +106,7 @@ function DeploysPane({ deploys, selected, focused, now }: { deploys?: readonly D
                 <Text bold={index === at}>{deploy.sequence}</Text>
               </Cell>
               <Cell>
-                <Result deploy={deploy} />
+                <Result deploy={deploy} runningNow={deploy.sequence === running} />
               </Cell>
               <Cell width={WHEN_WIDTH}>
                 <Text dimColor>{clockTime(deploy.at, now)}</Text>
@@ -212,7 +237,13 @@ export function AppScreen({
   return (
     <Frame header={header} hints={HINTS.app} status={status}>
       <Box flexGrow={1} columnGap={1}>
-        <DeploysPane deploys={view?.deploys} selected={screen.deploy} focused={screen.pane === "deploys"} now={new Date()} />
+        <DeploysPane
+          deploys={view?.deploys}
+          selected={screen.deploy}
+          focused={screen.pane === "deploys"}
+          now={new Date()}
+          running={runState === "running" ? latest : undefined}
+        />
         <SecretsPane
           secrets={view?.secrets}
           selected={screen.secret}

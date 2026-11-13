@@ -7,7 +7,7 @@
  * Ink's back, so what a runner, Docker or SSH write on standard error comes
  * back as events too, never straight to the terminal.
  */
-import { CoreError, type RunnerVersion } from "@workspace/core"
+import { CoreError, type RunnerVersion, type TeamTrust } from "@workspace/core"
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { resolve } from "node:path"
@@ -17,16 +17,17 @@ import { CliError, UsageError } from "../errors"
 import type { InstallEvent } from "../install"
 import { prepareDeploy, prepareRollback, sendDeploy, type DeployPlan } from "../ops/deploy"
 import { createTeam } from "../ops/init"
+import { followLogs, LOG_TAIL, prepareLogs, type LogLine } from "../ops/logs"
 import { prepareSecretSet, removeSecret, setSecret } from "../ops/secret"
 import { addServer, isOutdated, prepareServerAdd, prepareServerUpdate, updateRunner } from "../ops/server"
-import { locateServer, readStatus } from "../ops/status"
+import { locateServer, readStatus, stateOf, type AppStates, type RunState } from "../ops/status"
 import { profileStore, type Server } from "../profile"
 import { RUNNER_RELEASE } from "../runner-release"
 import { sanitize } from "../sanitize"
 import type { SessionMode } from "../session"
 import type { ErrorLines, Target } from "../transport"
-import { askingConnect, oneAtATime, type Terminal } from "./hand-over"
-import type { AddStepName, AppEvent, Effect, Notice, Start, TeamView } from "./state"
+import { askingConnect, batchOnly, oneAtATime, wouldHaveAsked, type Terminal } from "./hand-over"
+import { LOG_LINES, LOG_TEXT_KEPT, type AddStepName, type AppEvent, type Effect, type Notice, type Start, type TeamView } from "./state"
 import { seconds } from "./time"
 import { appDetails, appsOf, latestAccepted, secretNamesOf } from "./views"
 
@@ -45,6 +46,22 @@ export const NOT_BUILT = "That is not built yet."
 
 /** The Compose file a deploy from the app uses, in the folder the app was started from. */
 export const COMPOSE_FILE = "compose.yaml"
+
+/** How long log lines are gathered before they are drawn together, so a burst is drawn once and not line by line. */
+export const LOG_BATCH_MS = 50
+
+/**
+ * Said for a server that SSH could not reach without asking something, when
+ * the app read it on its own. Only what the person does on purpose may ask.
+ */
+export const needsAnswer = (destination: string): string =>
+  `SSH needs an answer to reach ${sanitize(destination)}. zekno asks only when you deploy or open logs, never in the background.`
+
+/** Each app's state from a runner's answer, for `app-states`. With no answer, none is known. */
+export function statesFor(states: AppStates | undefined): Record<string, RunState> {
+  if (states === undefined) return {}
+  return Object.fromEntries(Object.keys(states).map((app) => [app, stateOf(states, app)]))
+}
 
 /**
  * The verified team as the screens show it, with each server's apps from
@@ -129,6 +146,8 @@ export type Effects = {
    * secret operation and nowhere else: not into an event, a line or the state.
    */
   saveSecret(where: { server: string; app: string; name: string }, value: string): Promise<void>
+  /** The app is closing: the logs being followed are let go, and nothing more is read in the background. */
+  close(): void
 }
 
 /** A size in bytes as the board writes it: "27 MB". */
@@ -155,7 +174,37 @@ export function createEffects(
   terminal?: Terminal
 ): Effects {
   const base: OpDeps = terminal ? { ...deps, connect: askingConnect(deps.connect, oneAtATime(terminal)) } : deps
-  const ops = routeErrorLines(base, (line) => dispatch({ type: "runner-line", line }))
+  /**
+   * SSH destinations that SSH could not reach without asking when the app
+   * read them on its own. They are not read in the background again until
+   * the person connects to them on purpose, which may ask and be answered:
+   * a background read every few seconds must never ask, and repeated failed
+   * logins could also get this machine shut out by the server.
+   */
+  const asking = new Set<string>()
+  const purposeful: OpDeps = {
+    ...base,
+    connect(target, localRunner, options) {
+      if (target.kind === "ssh") asking.delete(target.destination)
+      return base.connect(target, localRunner, options)
+    },
+  }
+  const ops = routeErrorLines(purposeful, (line) => dispatch({ type: "runner-line", line }))
+
+  /**
+   * The verified team list and servers, from the last time the profile was
+   * verified. Reads in the background use them, so the keychain is not
+   * opened every few seconds. They hold no key.
+   */
+  let known: { team: Pick<Team, "trust">; servers: readonly Server[] } | undefined
+  const remember = (team: { trust: TeamTrust; profile: { servers: readonly Server[] } }) => {
+    known = { team: { trust: team.trust }, servers: team.profile.servers }
+  }
+
+  /** The servers being read now: one read per server at a time, however slow it is. */
+  const reading = new Set<string>()
+  let closed = false
+
   const carried = (deps.release ?? RUNNER_RELEASE).version
   const notice = (tone: Notice["tone"], text: string) => dispatch({ type: "notice", notice: { tone, text } })
 
@@ -259,7 +308,7 @@ export function createEffects(
     adding = true
     try {
       const local = effect.destination === THIS_MACHINE
-      const lines = routeErrorLines(base, (line) => dispatch({ type: "add-line", line }))
+      const lines = routeErrorLines(purposeful, (line) => dispatch({ type: "add-line", line }))
       const plan = await prepareServerAdd(lines, effect.name, local ? { local: true } : { ssh: effect.destination })
       const started = Date.now()
       dispatch({ type: "add-started", destination: local ? THIS_MACHINE : effect.destination, name: plan.name, local })
@@ -284,6 +333,7 @@ export function createEffects(
         code: (code) => dispatch({ type: "add-code", code }),
       })
       const team = await openTeam(ops)
+      remember(team)
       const runner = runnerOf(result.target, result.mode, result.runner, carried)
       const text = runner?.outdated
         ? `Connected ${result.name}. Its runner is older than this zekno: deploys work, and u updates it. Server code ${result.code}.`
@@ -295,16 +345,112 @@ export function createEffects(
     }
   }
 
-  /** Asks one server what it holds, and marks it reachable or not, with its runner's version. */
-  async function checkServer(team: Team, server: Server): Promise<void> {
+  /**
+   * Asks one server what it holds and what is running, over one connection,
+   * and marks it reachable or not, with its runner's version and its apps'
+   * state. A server still being read is not asked again: a slow server never
+   * piles up connections.
+   *
+   * In the background (`quietly`, the reads every few seconds and when a
+   * screen opens) SSH runs in batch mode only and the terminal is never
+   * handed over. Where SSH would have asked, the server counts as not reached
+   * and is not read in the background again until the person connects to it
+   * on purpose (`asking`).
+   */
+  async function readServer(team: Pick<Team, "trust">, server: Server, quietly: boolean): Promise<void> {
+    const destination = server.target.kind === "ssh" ? server.target.destination : undefined
+    if (reading.has(server.name) || (quietly && destination !== undefined && asking.has(destination))) return
+    reading.add(server.name)
+    // What SSH writes on standard error in the background is only looked at to tell whether it would have asked.
+    const lines: string[] = []
     try {
-      const result = await readStatus(ops, { team, server })
+      const result = await readStatus(quietly ? { ...deps, connect: batchOnly(deps.connect, lines) } : ops, { team, server })
+      if (closed) return
       dispatch({ type: "server-reached", server: server.name, reachable: true, runner: runnerOf(server.target, result.mode, result.runner, carried) })
+      dispatch({ type: "app-states", server: server.name, states: statesFor(result.states) })
     } catch (error) {
       const reason = reasonOf(error)
       if (reason === undefined) throw error
-      dispatch({ type: "server-reached", server: server.name, reachable: false, problem: sanitize(reason) })
+      if (closed) return
+      const asks = quietly && destination !== undefined && wouldHaveAsked(lines)
+      if (asks) asking.add(destination)
+      dispatch({ type: "server-reached", server: server.name, reachable: false, problem: asks ? needsAnswer(destination) : sanitize(reason) })
+    } finally {
+      reading.delete(server.name)
     }
+  }
+
+  /** Reads again, in the background, what is running: on one server, or on every server the app knows. */
+  function refreshStates(server: string | undefined): void {
+    if (!known || closed) return
+    const { team } = known
+    for (const entry of known.servers) {
+      if (server === undefined || entry.name === server) void readServer(team, entry, true).catch(fail)
+    }
+  }
+
+  /** The logs being followed for the logs screen. */
+  let following: { id: number; stop: AbortController } | undefined
+  let followed = 0
+
+  /** Lets go of the logs being followed: their session is closed, and the runner stops Docker's log command. */
+  function stopLogs(): void {
+    following?.stop.abort()
+    following = undefined
+  }
+
+  /**
+   * Follows an app's logs for the logs screen over a session of its own
+   * (research R4), and hands its lines to the reducer in small batches. Each
+   * line was cleaned as it arrived (session.ts) and only its first
+   * `LOG_TEXT_KEPT` characters are kept. Nothing is written anywhere. When
+   * the logs stop coming, the screen is told why, and Enter starts again.
+   */
+  function startLogs(effect: Extract<Effect, { kind: "logs" }>): void {
+    stopLogs()
+    const id = ++followed
+    const stop = new AbortController()
+    following = { id, stop }
+    const current = () => following?.id === id && !closed
+    let batch: { time: string; service: string; line: string }[] = []
+    let fresh = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const flush = () => {
+      clearTimeout(timer)
+      timer = undefined
+      if (!current() || batch.length === 0) return
+      const lines = batch
+      batch = []
+      // The first lines of a connection replace those of an earlier one: Docker sends its last lines again.
+      dispatch({ type: "log-lines", lines, ...(fresh ? { fresh: true } : {}) })
+      fresh = false
+    }
+    const onLine = (line: LogLine) => {
+      if (!current()) return
+      const text = line.text.length <= LOG_TEXT_KEPT ? line.text : [...line.text].slice(0, LOG_TEXT_KEPT).join("")
+      batch.push({ time: line.time, service: line.service, line: text })
+      // More than the screen keeps would only be let go of there.
+      if (batch.length > LOG_LINES) batch.splice(0, batch.length - LOG_LINES)
+      timer ??= setTimeout(flush, LOG_BATCH_MS)
+    }
+    void (async () => {
+      let problem: string
+      try {
+        const plan = await prepareLogs(ops, { app: effect.app, server: effect.server })
+        const end = await followLogs(ops, plan, { tail: LOG_TAIL, follow: true, stop: stop.signal }, onLine)
+        if (end === "stopped") return
+        problem = `Docker stopped sending the logs of ${effect.app}.`
+      } catch (error) {
+        if (!current()) return
+        const reason = reasonOf(error)
+        if (reason === undefined) return fail(error)
+        problem = sanitize(reason)
+      }
+      if (!current()) return
+      flush()
+      following = undefined
+      dispatch({ type: "logs-dropped", problem })
+    })()
   }
 
   /** The servers whose runner is being replaced, so one is never replaced twice at once. */
@@ -332,7 +478,8 @@ export function createEffects(
         : `The runner on ${result.server} already has version ${result.version}.`
     )
     const { team, server } = await locateServer(ops, effect.server)
-    await checkServer(team, server)
+    remember(team)
+    await readServer(team, server, false)
   }
 
   return {
@@ -345,8 +492,20 @@ export function createEffects(
         case "open-app":
           void perform(async () => {
             const { team, server } = await locateServer(ops, effect.server)
+            remember(team)
             dispatch({ type: "app-view", server: server.name, app: effect.app, ...appDetails(team, server, effect.app) })
+            // A screen that opens reads what is running (contracts/app.md, "Refresh"), in the background.
+            await readServer(team, server, true)
           })
+          return
+        case "refresh":
+          refreshStates(effect.server)
+          return
+        case "logs":
+          startLogs(effect)
+          return
+        case "stop-logs":
+          stopLogs()
           return
         case "deploy":
         case "rollback":
@@ -383,8 +542,13 @@ export function createEffects(
     checkServers: () =>
       perform(async () => {
         const team = await openTeam(ops)
-        await Promise.all(team.profile.servers.map((server) => checkServer(team, server)))
+        remember(team)
+        await Promise.all(team.profile.servers.map((server) => readServer(team, server, false)))
       }),
+    close() {
+      closed = true
+      stopLogs()
+    },
     async saveSecret(where, value) {
       try {
         const planned = await prepareSecretSet(ops, where.name, { app: where.app, server: where.server })

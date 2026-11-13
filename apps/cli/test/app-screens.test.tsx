@@ -137,14 +137,14 @@ describe("profile could not be verified (board 'Profile could not be verified')"
 })
 
 describe("screens a later part builds", () => {
-  test("say plainly that they are not built yet, with their place and their board's key hints", () => {
+  test("the last of them, the logs screen, is built now: its place and its board's key hints, and no placeholder", () => {
     const withApp: TeamView = { ...TEAM, servers: [{ ...TEAM.servers[0]!, apps: [{ name: "demo", deploy: 4, state: "unknown" }] }] }
     const onLogs = after(initialState({ kind: "team", team: withApp }, { columns: 100, rows: 30 }), { type: "key", key: { kind: "right" } }, key("l"))
     const lines = draw(onLogs, 100, 30)
     const text = lines.join("\n")
-    expect(text).toContain("The logs screen is not built yet.")
+    expect(text).not.toContain("not built yet")
     expect(text).toContain("› prod › demo › logs")
-    expect(text).toContain("pre-alpha, unaudited")
+    expect(text).toContain("Read straight from your server over SSH. Nothing passes through Zekno.")
     expect(lastLine(lines)).toBe("f pause following  / filter  1-9 one service  ↑↓ scroll  esc back")
 
     // "Add a server" is built now (first-run.test.tsx has its board); its place and keys are as before.

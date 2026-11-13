@@ -38,13 +38,19 @@ describe("User Story 1: first deploy to my own server", () => {
     expect(call!.args).toContain("compose -p zekno-web")
     expect(call!.env.GREETING).toBe(SECRET)
 
-    // Status.
+    // Status, with whether the app is running, as Docker says.
+    m.docker.ps("web", '{"Service":"web","State":"running","ExitCode":0,"Health":""}\n')
     m.out.length = 0
     expect(await m.zekno("status", "--server", "dev")).toBe(0)
-    expect(m.out).toEqual(["dev: team list version 2", "web\tdeploy 1", "web/GREETING\tversion 1"])
+    expect(m.out).toEqual(["dev: team list version 2", "web\tdeploy 1\trunning", "web/GREETING\tversion 1"])
     m.out.length = 0
     expect(await m.zekno("status", "--server", "dev", "--json")).toBe(0)
-    expect(JSON.parse(m.lastOut())).toMatchObject({ server: "dev", lastSequence: { web: 1 }, secrets: { "web/GREETING": { version: 1, removed: false } } })
+    expect(JSON.parse(m.lastOut())).toMatchObject({
+      server: "dev",
+      lastSequence: { web: 1 },
+      secrets: { "web/GREETING": { version: 1, removed: false } },
+      apps: { web: { state: "running", services: [{ service: "web", state: "running", exitCode: 0, health: "" }] } },
+    })
   })
 
   test("SC-004: no private key and no secret value is in any file either program wrote", async () => {

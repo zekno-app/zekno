@@ -36,8 +36,13 @@ export type SessionMode = "session" | "one-shot"
 export type RequestOptions = {
   /** The command's own request message. */
   input?: unknown
-  /** Each event of this request, its text already cleaned for the terminal. */
-  onEvent?: (event: SessionEvent) => void
+  /**
+   * Each event of this request, its text already cleaned for the terminal.
+   * What it returns is not used, except a promise: while that is pending,
+   * nothing more is read, so the runner, and Docker behind it, are slowed
+   * down instead of this process holding what it cannot show yet.
+   */
+  onEvent?: (event: SessionEvent) => unknown
 }
 
 export type Session = {
@@ -207,7 +212,7 @@ function live(started: Extract<Started, { kind: "session" }>): Session {
     stop(child, lines)
   }
 
-  async function answer<Schema extends z.ZodType>(command: SessionCommand, schema: Schema, onEvent?: (event: SessionEvent) => void) {
+  async function answer<Schema extends z.ZodType>(command: SessionCommand, schema: Schema, onEvent?: RequestOptions["onEvent"]) {
     try {
       for (;;) {
         const line = await lines.next()
@@ -218,7 +223,8 @@ function live(started: Extract<Started, { kind: "session" }>): Session {
         const value = frame.value
         if ("event" in value) {
           if (EVENTS[command] !== value.event) throw new CliError(UNEXPECTED)
-          onEvent?.(clean(value))
+          const busy = onEvent?.(clean(value))
+          if (busy instanceof Promise) await busy
           continue
         }
         const report = parseMessage(RunnerReportSchema, value.result)

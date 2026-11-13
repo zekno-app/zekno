@@ -37,6 +37,21 @@ export function needsAnswers(attempt: { exitCode: number; answered: boolean; lin
   return !attempt.answered && attempt.exitCode === 255 && attempt.lines.some((line) => WOULD_ASK.test(line))
 }
 
+/**
+ * For what the app reads on its own, every few seconds, with nobody having
+ * asked: SSH in batch mode only, and the terminal never handed over. What SSH
+ * writes on standard error goes to `lines` (the first few), so that a failure
+ * where SSH would have asked can be told from others (`wouldHaveAsked`).
+ * A runner on this machine is reached as usual.
+ */
+export function batchOnly(connect: Deps["connect"], lines: string[]): Deps["connect"] {
+  return (target, localRunner, options = {}) =>
+    connect(target, localRunner, { ...options, batch: true, errorLines: recording(lines, undefined) })
+}
+
+/** Whether SSH said it stopped where it would have asked for a password, a passphrase or a host key. */
+export const wouldHaveAsked = (lines: readonly string[]): boolean => lines.some((line) => WOULD_ASK.test(line))
+
 /** What SSH's question is about, shown on the normal screen before SSH asks. */
 export const handOverNote = (destination: string): string =>
   `SSH needs an answer to reach ${sanitize(destination)}. zekno carries on once it is connected.`

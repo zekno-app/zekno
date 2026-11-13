@@ -201,7 +201,8 @@ describe("effects", () => {
       throw error
     })
     effects.run({ kind: "exit" })
-    effects.run({ kind: "logs", server: "prod", app: "demo" })
+    // Going ahead with a deploy that waited on a question is built with the project file (T046).
+    effects.run({ kind: "deploy-continue", server: "prod", app: "demo", answer: "skip-values" })
     await Bun.sleep(10)
     expect(events).toEqual([{ type: "notice", notice: { tone: "info", text: NOT_BUILT } }])
   })

@@ -3,6 +3,7 @@ import { parseArgs } from "node:util"
 
 import { deploy, rollback } from "./commands/deploy"
 import { init } from "./commands/init"
+import { logs } from "./commands/logs"
 import { secretList, secretRemove, secretSet } from "./commands/secret"
 import { serverAdd, serverList, serverUpdate } from "./commands/server"
 import { status } from "./commands/status"
@@ -22,7 +23,8 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno secret ls --app <app> --server <name>
   zekno deploy --app <app> --server <name> [-f <compose file>] [--json]
   zekno rollback --app <app> --server <name> [--to <number>] [--json]
-  zekno status --server <name> [--json]`
+  zekno status --server <name> [--json]
+  zekno logs --app <app> --server <name> [--tail <n>] [--no-follow]`
 
 /** How many words each command takes, counting its own name. */
 const WORDS: Record<string, number> = {
@@ -36,6 +38,7 @@ const WORDS: Record<string, number> = {
   deploy: 1,
   rollback: 1,
   status: 1,
+  logs: 1,
 }
 
 /**
@@ -61,6 +64,8 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
         stdin: { type: "boolean" },
         file: { type: "string", short: "f" },
         to: { type: "string" },
+        tail: { type: "string" },
+        "no-follow": { type: "boolean" },
         json: { type: "boolean" },
         help: { type: "boolean", short: "h" },
       },
@@ -111,6 +116,9 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
         return await rollback(deps, values)
       case "status":
         await status(deps, values)
+        return 0
+      case "logs":
+        await logs(deps, values)
         return 0
       default:
         throw new UsageError(`Unknown command "${positionals.join(" ")}".`)

@@ -20,6 +20,7 @@ import { AppScreen } from "./screens/app"
 import { DeployScreen } from "./screens/deploy"
 import { HelpScreen } from "./screens/help"
 import { HomeScreen } from "./screens/home"
+import { LogsScreen } from "./screens/logs"
 import { Placeholder } from "./screens/placeholder"
 import { ProfileErrorScreen } from "./screens/profile-error"
 import { SetSecretScreen } from "./screens/set-secret"
@@ -30,6 +31,7 @@ import {
   initialState,
   MIN_COLUMNS,
   MIN_ROWS,
+  REFRESH_MS,
   tooSmall,
   top,
   update,
@@ -89,6 +91,8 @@ export function Screen({ state, columns, rows }: { state: State; columns: number
       return <WelcomeScreen screen={screen} columns={columns} rows={rows} status={status} />
     case "add-server":
       return <AddServerScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
+    case "logs":
+      return <LogsScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
     case "help":
       return <HelpScreen columns={columns} status={status} />
     case "profile-error":
@@ -203,6 +207,8 @@ export type AppOptions = {
   background: Background
   stdin?: NodeJS.ReadStream
   stdout?: NodeJS.WriteStream
+  /** How often what is running is read again while Home or the app screen shows. `REFRESH_MS` unless a check needs it sooner. */
+  refreshMs?: number
 }
 
 /**
@@ -216,7 +222,11 @@ export function openApp(deps: AppDeps, options: AppOptions): Promise<number> {
   let instance: Instance | undefined
   let failure: { error: unknown } | undefined
 
-  const close = () => instance?.unmount()
+  const close = () => {
+    // Nothing more is read in the background, and the logs being followed are let go.
+    effects.close()
+    instance?.unmount()
+  }
   const fail = (error: unknown) => {
     failure ??= { error }
     close()
@@ -235,11 +245,15 @@ export function openApp(deps: AppDeps, options: AppOptions): Promise<number> {
   const effects = createEffects(deps, (event) => store.dispatch(event), fail, handOver.terminal)
   const size = { columns: stdout.columns || MIN_COLUMNS, rows: stdout.rows || MIN_ROWS }
   const store = createStore(initialState(options.start, size), (effect) => (effect.kind === "exit" ? close() : effects.run(effect)))
+  // Every few seconds the reducer decides whether what is running is read again: only on Home or the app screen, with no question open.
+  const refresher = setInterval(() => store.dispatch({ type: "tick" }), options.refreshMs ?? REFRESH_MS)
 
   for (const signal of SIGNALS) process.on(signal, onSignal)
   process.on("uncaughtException", onCrash)
   process.on("unhandledRejection", onCrash)
   const cleanUp = () => {
+    clearInterval(refresher)
+    effects.close()
     for (const signal of SIGNALS) process.off(signal, onSignal)
     process.off("uncaughtException", onCrash)
     process.off("unhandledRejection", onCrash)

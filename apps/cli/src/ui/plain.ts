@@ -1,5 +1,5 @@
 import { CliError } from "../errors"
-import { REMOTE_MARK, type Ui } from "./types"
+import { cellText, REMOTE_MARK, type Ui } from "./types"
 
 /**
  * Writes to this process's standard error. When it is backed up, such as a
@@ -48,7 +48,10 @@ export function plainUi(
     warn: err,
     error: err,
     field: (label, value) => out(`${label}: ${value}`),
-    table: (rows) => rows.forEach((row) => out(row.join("\t"))),
+    table: (rows) => rows.forEach((row) => out(row.map(cellText).join("\t"))),
+    // `console.log`, which `out` is outside tests, waits while standard output is backed up, so a
+    // reader slower than the logs slows the reading down instead of filling memory.
+    logLine: (line) => out(`${line.time}\t${line.service}\t${line.text}`),
     json: (value) => out(JSON.stringify(value)),
     remote: (line) => remote(`${REMOTE_MARK} ${line}\n`),
     step: (_label, work) => work(),

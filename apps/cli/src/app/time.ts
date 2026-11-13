@@ -33,6 +33,24 @@ function day(date: Date, now: Date): string {
 
 const plural = (count: number, unit: string) => `${count} ${unit}${count === 1 ? "" : "s"} ago`
 
+/** A time as Docker writes it in a log line: RFC 3339, with up to nine digits of fractions (LogEvent's pattern). */
+const LOG_TIME = /^(\d{4}-\d{2}-\d{2}T(\d{2}:\d{2}:\d{2}))(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/
+
+/**
+ * The time of a log line as the logs screen shows it: `21:52:03`, in this
+ * machine's time zone. A time this machine cannot place in its own zone is
+ * shown as Docker wrote it, by its hours, minutes and seconds; anything else
+ * as `--:--:--`, the same width, so the columns stay in place.
+ */
+export function logClock(time: string): string {
+  const parts = LOG_TIME.exec(time)
+  if (!parts) return "--:--:--"
+  // Milliseconds at most: a date with nine digits of fractions is not one every parser reads.
+  const date = new Date(`${parts[1]}${(parts[3] ?? "").slice(0, 4)}${parts[4]}`)
+  if (Number.isNaN(date.getTime())) return parts[2]!
+  return `${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`
+}
+
 /** A length of time in seconds, to one decimal place: `6.1s`. */
 export const seconds = (ms: number): string => `${(Math.max(ms, 0) / 1000).toFixed(1)}s`
 
