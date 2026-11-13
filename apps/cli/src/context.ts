@@ -29,7 +29,14 @@ export type Deps = {
   localRunner: string[]
 }
 
-export const reach = (deps: Deps, target: Target): Transport => deps.connect(target, deps.localRunner)
+/**
+ * What an operation may use: everything but the interface. Operations report
+ * through their callbacks and results, and never draw anything themselves.
+ */
+export type OpDeps = Omit<Deps, "ui">
+
+export const reach = (deps: Pick<Deps, "connect" | "localRunner">, target: Target): Transport =>
+  deps.connect(target, deps.localRunner)
 
 /**
  * What the keychain entry holds: the signing key, and the code of the team's
@@ -87,7 +94,7 @@ const TAMPERED = "The profile folder may have been changed by something other th
  * admin of the one before, and every server the profile names must be in the
  * signed list under that name.
  */
-export async function openTeam(deps: Deps): Promise<Team> {
+export async function openTeam(deps: Pick<Deps, "home" | "keyStore">): Promise<Team> {
   const store = profileStore(deps.home)
   const profile = store.load()
   const identity = await readIdentity(deps.keyStore, profile.keyName)

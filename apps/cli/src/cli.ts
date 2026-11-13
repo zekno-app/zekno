@@ -1,10 +1,11 @@
 import { CoreError } from "@workspace/core"
 import { parseArgs } from "node:util"
 
-import { deploy, rollback, status } from "./commands/deploy"
+import { deploy, rollback } from "./commands/deploy"
 import { init } from "./commands/init"
 import { secretList, secretRemove, secretSet } from "./commands/secret"
 import { serverAdd, serverList } from "./commands/server"
+import { status } from "./commands/status"
 import type { Deps } from "./context"
 import { CliError, UsageError } from "./errors"
 
