@@ -18,10 +18,29 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs"
+import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 
+const SYSTEM_HOME = "/var/lib/zekno"
+
+/**
+ * Where the runner keeps its key and state when nothing says otherwise: the
+ * system folder for root, or when it is already there (a server set up by an
+ * earlier version); a folder in the user's own home for anyone else, who
+ * could not create the system one.
+ */
+export function defaultHome(input: { isRoot: boolean; systemExists: boolean; userHome: string }): string {
+  if (input.isRoot || input.systemExists) return SYSTEM_HOME
+  return join(input.userHome, ".local", "state", "zekno")
+}
+
 export function homeDir(): string {
-  return process.env.ZEKNO_RUNNER_HOME || "/var/lib/zekno"
+  if (process.env.ZEKNO_RUNNER_HOME) return process.env.ZEKNO_RUNNER_HOME
+  return defaultHome({
+    isRoot: typeof process.getuid === "function" && process.getuid() === 0,
+    systemExists: existsSync(SYSTEM_HOME),
+    userHome: homedir(),
+  })
 }
 
 const paths = (dir: string) => ({

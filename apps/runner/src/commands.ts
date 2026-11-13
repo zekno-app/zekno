@@ -26,12 +26,12 @@ import { composeUp } from "./compose"
 import { acquireLock, isPrivate, isSetUp, readKeys, readState, writeCompose, writeKeys, writeState } from "./home"
 
 type Reason = NonNullable<RunnerReport["reason"]>
-const refused = (reason: Reason): RunnerReport => ({ outcome: "refused", reason })
+export const refused = (reason: Reason): RunnerReport => ({ outcome: "refused", reason })
 
 type Loaded = { state: RunnerState; publicKey: ServerPublicKey; secretKey: ServerSecretKey }
 
 /** Reads the key and the state, or says why the runner cannot act. */
-function load(dir: string): Loaded | RunnerReport {
+export function load(dir: string): Loaded | RunnerReport {
   if (!isSetUp(dir)) return refused("not_set_up")
   // Someone else's folder, or a key others can read, is not a state to act on.
   if (!isPrivate(dir)) return refused("invalid_state")
@@ -57,7 +57,7 @@ function follow(state: RunnerState, rosters: readonly Envelope[]): RunnerState |
   return team === state.team ? state : { ...state, team }
 }
 
-const isReport = (value: object): value is RunnerReport => "outcome" in value
+export const isReport = (value: object): value is RunnerReport => "outcome" in value
 
 /**
  * Sets the server up for one team. Runs once: a server that already has a key
@@ -139,7 +139,7 @@ export function sync(dir: string, input: string): Promise<RunnerReport> {
  * core library has verified the deploy, and the new state is saved before
  * anything is started.
  */
-export function apply(dir: string, input: string): Promise<RunnerReport> {
+export function apply(dir: string, input: string, onProgress?: (line: string) => void): Promise<RunnerReport> {
   const request = parseMessage(RunnerApplyRequestSchema, input)
   if (!request.ok) return Promise.resolve(refused("invalid_request"))
   return locked(dir, async () => {
@@ -162,7 +162,7 @@ export function apply(dir: string, input: string): Promise<RunnerReport> {
     // From here the deploy is accepted and its number is used, whatever happens next.
     try {
       const file = writeCompose(dir, app, compose)
-      const exit = await composeUp({ app, file, secrets: secrets.value })
+      const exit = await composeUp({ app, file, secrets: secrets.value, onLine: onProgress })
       return { outcome: exit === 0 ? "started" : "start_failed", app, sequence }
     } catch {
       return { outcome: "start_failed", app, sequence }

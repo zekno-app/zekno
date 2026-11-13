@@ -1,18 +1,25 @@
 #!/usr/bin/env bun
 /**
  * zekno-runner: runs on your server. Each run does one thing: it reads one
- * JSON message from standard input (none for `status`), prints one JSON line
- * and exits. It opens no network port and never prompts.
+ * JSON message from standard input (none for `status` and `version`), prints
+ * one JSON line and exits. `session` does the same for several requests over
+ * one connection. It opens no network port and never prompts.
  *
  * Exit status: 0 when the work was done, 1 when it was refused or the app
- * did not start, 2 for wrong usage.
+ * did not start, 2 for wrong usage. For `session`: 0 when its input closed,
+ * 1 when it stopped because lines were not requests it could read.
  */
 import { LIMITS } from "@workspace/core"
 
-import { apply, setup, status, sync } from "./commands"
+import { apply, refused, setup, status, sync } from "./commands"
 import { homeDir } from "./home"
+import { runSession, stdoutSink, version } from "./session"
 
-const USAGE = "Usage: zekno-runner <setup|sync|apply|status>\nReads one JSON message from standard input and prints one JSON line."
+const COMMANDS = ["setup", "sync", "apply", "status", "version", "session"]
+const USAGE = `Usage: zekno-runner <${COMMANDS.join("|")}>\nReads one JSON message from standard input and prints one JSON line.\n\`session\` reads one request per line and answers each, until its input closes.`
+
+/** How long the last frames of a session may take to leave once it is over. */
+const FLUSH_MS = 5000
 
 async function readInput(): Promise<string | undefined> {
   const chunks: Uint8Array[] = []
@@ -25,15 +32,35 @@ async function readInput(): Promise<string | undefined> {
   return Buffer.concat(chunks).toString("utf8")
 }
 
+/** Runs a session on standard input and output. */
+async function session(dir: string): Promise<number> {
+  const sink = stdoutSink()
+  let code: number
+  try {
+    code = await runSession(dir, Bun.stdin.stream(), sink)
+  } catch {
+    // Details stay out of the output: they could describe the server's files.
+    console.error("zekno-runner stopped because of an unexpected error.")
+    sink.write({ result: refused("invalid_state") })
+    code = 1
+  }
+  // Answers still on their way are let out first; a reader that stopped reading is not waited for long.
+  await Promise.race([sink.drained(), Bun.sleep(FLUSH_MS)])
+  return code
+}
+
 async function main(): Promise<number> {
   const command = process.argv[2]
-  if (!command || !["setup", "sync", "apply", "status"].includes(command) || process.argv.length > 3) {
+  if (!command || !COMMANDS.includes(command) || process.argv.length > 3) {
     console.error(USAGE)
     return 2
   }
   const dir = homeDir()
+  if (command === "session") return session(dir)
   let result: object
-  if (command === "status") {
+  if (command === "version") {
+    result = version()
+  } else if (command === "status") {
     result = status(dir)
   } else {
     const input = await readInput()

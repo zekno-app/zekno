@@ -1,6 +1,6 @@
 {
   "name": "@workspace/runner",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "type": "module",
   "private": true,
   "license": "MIT",
@@ -8,7 +8,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "compile": "bun build --compile src/main.ts --outfile dist/zekno-runner"
+    "compile": "bun build --compile src/main.ts --outfile dist/zekno-runner",
+    "compile:linux-x64": "bun build --compile --target=bun-linux-x64 src/main.ts --outfile dist/zekno-runner-linux-x64",
+    "compile:linux-arm64": "bun build --compile --target=bun-linux-arm64 src/main.ts --outfile dist/zekno-runner-linux-arm64"
   },
   "dependencies": {
     "@workspace/core": "workspace:*"

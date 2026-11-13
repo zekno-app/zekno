@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { parseMessage, RunnerSetupResponseSchema, RunnerStatusSchema, serverConfirmationCode } from "@workspace/core"
-import { readFileSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { buildDeploy, COMPOSE, fakeDocker, filesUnder, runner, tempDir, world } from "./helpers"
+import { defaultHome, homeDir } from "../src/home"
+import { buildDeploy, COMPOSE, fakeDocker, filesUnder, RUNNER_MAIN, runner, tempDir, world } from "./helpers"
 
 describe("the runner", () => {
   test("sets itself up once: its own key, the team pinned by its code, private files", async () => {
@@ -130,5 +131,51 @@ describe("the runner", () => {
       expect(result.code).toBe(2)
       expect(result.stdout).toBe("")
     }
+  })
+})
+
+describe("the runner's folder", () => {
+  test("root, or a server that already has the system folder, uses /var/lib/zekno", () => {
+    expect(defaultHome({ isRoot: true, systemExists: false, userHome: "/root" })).toBe("/var/lib/zekno")
+    expect(defaultHome({ isRoot: true, systemExists: true, userHome: "/root" })).toBe("/var/lib/zekno")
+    // A server set up by an earlier version keeps its folder, whoever runs the runner.
+    expect(defaultHome({ isRoot: false, systemExists: true, userHome: "/home/deploy" })).toBe("/var/lib/zekno")
+  })
+
+  test("anyone else uses a folder in their own home", () => {
+    expect(defaultHome({ isRoot: false, systemExists: false, userHome: "/home/deploy" })).toBe("/home/deploy/.local/state/zekno")
+  })
+
+  test("ZEKNO_RUNNER_HOME wins when it is set", () => {
+    const saved = process.env.ZEKNO_RUNNER_HOME
+    try {
+      process.env.ZEKNO_RUNNER_HOME = "/srv/zekno"
+      expect(homeDir()).toBe("/srv/zekno")
+      // Set but empty counts as not set.
+      process.env.ZEKNO_RUNNER_HOME = ""
+      expect(homeDir()).not.toBe("")
+    } finally {
+      if (saved === undefined) delete process.env.ZEKNO_RUNNER_HOME
+      else process.env.ZEKNO_RUNNER_HOME = saved
+    }
+  })
+
+  // Only where running it cannot touch a real runner's folder.
+  const systemFolderInPlay = existsSync("/var/lib/zekno") || process.getuid?.() === 0
+  test.skipIf(systemFolderInPlay)("without ZEKNO_RUNNER_HOME, a user who is not root sets up in ~/.local/state/zekno", async () => {
+    const { team } = await world()
+    const home = tempDir("user-home")
+    const env: Record<string, string | undefined> = { ...process.env, HOME: home, ZEKNO_DOCKER: fakeDocker().path }
+    delete env.ZEKNO_RUNNER_HOME
+    const child = Bun.spawn([process.execPath, RUNNER_MAIN, "setup"], { env, stdin: "pipe", stdout: "pipe", stderr: "pipe" })
+    child.stdin.write(JSON.stringify({ founding: team.envelope, teamCode: team.confirmationCode }))
+    child.stdin.end()
+    const stdout = await new Response(child.stdout).text()
+    expect(await child.exited).toBe(0)
+    expect(JSON.parse(stdout).serverId).toStartWith("srv_")
+
+    const folder = join(home, ".local", "state", "zekno")
+    expect(statSync(folder).mode & 0o777).toBe(0o700)
+    expect(readFileSync(join(folder, "server.key"), "utf8")).toStartWith("zk_ssk_")
   })
 })
