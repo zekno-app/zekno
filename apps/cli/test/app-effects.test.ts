@@ -32,19 +32,54 @@ describe("starting the app", () => {
     })
   })
 
-  test("names read from the profile folder are cleaned before they are drawn", async () => {
-    const m = await ready()
+  test("a name or address in the profile folder changed to hold escape sequences is a damaged profile, never drawn", async () => {
     // The member's name and a server's address are not signed: anything on this machine could change them.
+    const changes: Record<string, (profile: any) => unknown> = {
+      memberName: (profile) => ({ ...profile, memberName: "\x1b]52;c;aGVsbG8=\x07Ada\x1b[2J" }),
+      destination: (profile) => ({
+        ...profile,
+        servers: profile.servers.map((server: object) => ({
+          ...server,
+          target: { kind: "ssh", destination: "x\x1b]8;;https://evil\x07y", runnerPath: "zekno-runner" },
+        })),
+      }),
+      runnerPath: (profile) => ({
+        ...profile,
+        servers: profile.servers.map((server: object) => ({
+          ...server,
+          target: { kind: "ssh", destination: "deploy@203.0.113.7", runnerPath: "zekno-runner\x1b[2J" },
+        })),
+      }),
+    }
+    for (const [field, change] of Object.entries(changes)) {
+      const m = await ready()
+      m.tamper("profile.json", change)
+      expect({ field, start: await loadStart(m.deps) }).toEqual({
+        field,
+        start: { kind: "profile-error", reason: `The profile at ${join(m.home, "profile.json")} is damaged.`, folder: tilde(m.home) },
+      })
+    }
+  })
+
+  test("what the profile names and its schema accepts is still cleaned before it is drawn", async () => {
+    const m = await ready()
+    // Characters drawn as nothing that are not control or format characters: Hangul fillers and the
+    // combining grapheme joiner. The profile's name rule lets them through; `sanitize` removes them.
+    const member = "Aᅟdㅤa͏"
     m.tamper("profile.json", (profile) => ({
       ...profile,
-      memberName: "\x1b]52;c;aGVsbG8=\x07Ada\x1b[2J",
+      memberName: member,
       servers: profile.servers.map((server: object) => ({
         ...server,
-        target: { kind: "ssh", destination: "x\x1b]8;;https://evil\x07y", runnerPath: "zekno-runner" },
+        target: { kind: "ssh", destination: "deploy@203.0.113.7", runnerPath: "zekno-runner" },
       })),
     }))
     const start = await loadStart(m.deps)
-    expect(start).toEqual({ kind: "team", team: { member: "Ada", version: 2, servers: [{ name: "dev", destination: "xy", apps: [] }] } })
+    expect(start).toEqual({
+      kind: "team",
+      team: { member: "Ada", version: 2, servers: [{ name: "dev", destination: "deploy@203.0.113.7", apps: [] }] },
+    })
+    expect(member).not.toBe("Ada")
   })
 
   test("a profile changed by something other than zekno is the error screen, with the reason", async () => {
