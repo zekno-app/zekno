@@ -83,9 +83,9 @@ name again later uses a higher version still.
 | Field | Type | Rule |
 |-------|------|------|
 | `v` | 1 | Format version |
-| `teamId` | team id | Must equal the agent's team |
-| `teamHash` | hash | The team list the signer worked from; must equal the agent's current list |
-| `serverId` | server id | Must equal the agent's own |
+| `teamId` | team id | Must equal the runner's team |
+| `teamHash` | hash | The team list the signer worked from; must equal the runner's current list |
+| `serverId` | server id | Must equal the runner's own |
 | `app` | string | `^[a-z0-9][a-z0-9-]{0,62}$` |
 | `sequence` | integer ≥ 1 | Higher than the last accepted for this app, by at most 1,048,576 |
 | `createdAt` | ISO 8601 UTC | Informational |
@@ -93,16 +93,16 @@ name again later uses a higher version still.
 | `secrets[]` | 0 to 256 | `{ name, hash, version }`, sorted by name, names unique |
 | `removed[]` | 0 to 256 | `{ name, version }` for retired secrets, sorted by name; no name appears in both lists |
 
-## Agent state
+## Runner state
 
 `{ serverId, team: TeamTrust, lastSequence: { [app]: number }, secrets: { ["app/NAME"]: { version, hash } } }`
 
 `hash` is null when the latest version of that name is a removal.
 
-Every field is required. `initialAgentState({ serverId, team })` builds the starting value.
+Every field is required. `initialRunnerState({ serverId, team })` builds the starting value.
 
 Transition: `verifyDeploy` succeeds → the result carries `nextState` with `lastSequence[app]` set to
-the deploy's number and `secrets` updated to the versions and hashes the deploy carries. The agent
+the deploy's number and `secrets` updated to the versions and hashes the deploy carries. The runner
 persists it before running the deploy.
 
 ## Refusal reasons

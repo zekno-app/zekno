@@ -20,11 +20,11 @@ import {
 import { COMPOSE, overTheWire, person, SAMPLE_SECRETS } from "../helpers"
 
 /**
- * End to end across real boundaries: the client is this process, the agent
+ * End to end across real boundaries: the client is this process, the runner
  * is a separate process, and everything between them crosses an HTTP relay
  * as JSON. The relay here is also the attacker.
  */
-const agentScript = join(import.meta.dir, "../fixtures/agent.ts")
+const runnerScript = join(import.meta.dir, "../fixtures/runner.ts")
 
 function startRelay(chain: RosterChainResponse) {
   const rosters = chain
@@ -65,7 +65,7 @@ function startRelay(chain: RosterChainResponse) {
   return { url: `http://127.0.0.1:${server.port}`, stored, rosters, stop: () => server.stop(true) }
 }
 
-/** Reads the agent's standard output as one JSON value per line. */
+/** Reads the runner's standard output as one JSON value per line. */
 function lines(stream: ReadableStream<Uint8Array>) {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
@@ -79,7 +79,7 @@ function lines(stream: ReadableStream<Uint8Array>) {
         return JSON.parse(line) as Record<string, unknown>
       }
       const { value, done } = await reader.read()
-      if (done) throw new Error(`the agent exited early; remaining output: ${buffer}`)
+      if (done) throw new Error(`the runner exited early; remaining output: ${buffer}`)
       buffer += decoder.decode(value, { stream: true })
     }
   }
@@ -97,13 +97,13 @@ describe("across processes and a real HTTP relay", () => {
     cleanup.push(relay.stop)
 
     // The server: a separate process. A person typed the team's code on it.
-    const agent = Bun.spawn(["bun", agentScript], {
+    const runner = Bun.spawn(["bun", runnerScript], {
       env: { ...process.env, RELAY_URL: relay.url, CONFIRMED_CODE: team.confirmationCode, EXPECTED: "5" },
       stdout: "pipe",
       stderr: "inherit",
     })
-    cleanup.push(() => agent.kill())
-    const next = lines(agent.stdout)
+    cleanup.push(() => runner.kill())
+    const next = lines(runner.stdout)
 
     // Pairing: the key arrives through the relay, the code out of band.
     const registered = await next()
@@ -113,7 +113,7 @@ describe("across processes and a real HTTP relay", () => {
     expect(confirmationCodesMatch(serverConfirmationCode(serverKey), String(registered.code))).toBe(true)
     expect(await next()).toMatchObject({ type: "paired", team: team.trust.teamId })
 
-    // The codes matched, so the admin adds the server to the team list. The agent picks it up.
+    // The codes matched, so the admin adds the server to the team list. The runner picks it up.
     const serverId = relay.stored.servers[0]!.serverId
     const added = await proposeRoster({ trust: team.trust, servers: [{ name: "prod-1", publicKey: serverKey }], signer: ada.signer })
     relay.rosters.rosters.push(added.envelope)
@@ -127,7 +127,7 @@ describe("across processes and a real HTTP relay", () => {
       )
       return createDeploy({ trust, serverId, app: "web", sequence, compose, secrets, signer: ada.signer })
     }
-    // The client hands the relay a deploy; the relay stores it and queues it for the agent.
+    // The client hands the relay a deploy; the relay stores it and queues it for the runner.
     const upload = (deploy: PublishDeployRequest) => {
       relay.stored.uploads.push(overTheWire(deploy))
       relay.stored.queue.push(overTheWire(deploy))
@@ -160,7 +160,7 @@ describe("across processes and a real HTTP relay", () => {
     // 5. The untouched second deploy still goes through afterwards.
     upload(second)
     expect(await next()).toMatchObject({ type: "deploy", outcome: "accepted", sequence: 2, secrets: { ...SAMPLE_SECRETS } })
-    expect(await agent.exited).toBe(0)
+    expect(await runner.exited).toBe(0)
 
     // What the relay ends up holding.
     expect(relay.stored.status.map((report) => [report.sequence, report.outcome])).toEqual([[1, "accepted"], [2, "accepted"]])
@@ -171,7 +171,7 @@ describe("across processes and a real HTTP relay", () => {
     for (const upload of relay.stored.uploads) expect(parseMessage(PublishDeployRequestSchema, upload).ok).toBe(true)
   }, 30_000)
 
-  test("an agent given the wrong confirmation code refuses to pair", async () => {
+  test("a runner given the wrong confirmation code refuses to pair", async () => {
     const ada = person("Ada")
     const mallory = person("Mallory")
     const genuine = await createTeam({ founderName: "Ada", signer: ada.signer })
@@ -180,15 +180,15 @@ describe("across processes and a real HTTP relay", () => {
     const relay = startRelay({ rosters: [substituted.envelope] })
     cleanup.push(relay.stop)
 
-    const agent = Bun.spawn(["bun", agentScript], {
+    const runner = Bun.spawn(["bun", runnerScript], {
       env: { ...process.env, RELAY_URL: relay.url, CONFIRMED_CODE: genuine.confirmationCode, EXPECTED: "1" },
       stdout: "pipe",
       stderr: "inherit",
     })
-    cleanup.push(() => agent.kill())
-    const next = lines(agent.stdout)
+    cleanup.push(() => runner.kill())
+    const next = lines(runner.stdout)
     expect((await next()).type).toBe("registered")
     expect(await next()).toEqual({ type: "pairing-refused", reason: "code_mismatch" })
-    expect(await agent.exited).toBe(2)
+    expect(await runner.exited).toBe(2)
   }, 30_000)
 })

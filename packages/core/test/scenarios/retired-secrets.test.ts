@@ -161,7 +161,7 @@ describe("retired secrets: the relay cannot bring back a secret the team stopped
     await expect(createDeploy({ ...base, sequence: 2, secrets: [database, debug], removals: [removal] })).rejects.toMatchObject({ code: "invalid_argument" })
     await expect(createDeploy({ ...base, sequence: 2, secrets: [database], removals: [removal, removal] })).rejects.toMatchObject({ code: "invalid_argument" })
 
-    // An agent refuses one built by other means.
+    // A runner refuses one built by other means.
     const { signEnvelope } = await import("../../src/envelope")
     const { PAYLOAD_TYPES } = await import("../../src/index")
     const good = await createDeploy({ ...base, sequence: 2, secrets: [debug] })

@@ -114,7 +114,7 @@ describe("edge cases from the specification", () => {
     expect(code(verifyDeploy({ envelope: invalidUtf8, secrets: [], state: server.state }))).toBe("malformed")
   })
 
-  test("an invalid or incomplete agent state is an error, never a weaker check", async () => {
+  test("an invalid or incomplete runner state is an error, never a weaker check", async () => {
     const { founder, relay, server, trust } = await setup()
     const deploy = await publish({ relay, trust, server, signer: founder.signer, sequence: 1 })
     const { secrets: _secrets, ...withoutSecrets } = server.state

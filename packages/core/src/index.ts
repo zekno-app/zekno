@@ -1,7 +1,7 @@
 /**
  * Zekno core: the public interface.
  *
- * Clients seal secrets and sign deploys; the agent verifies before anything
+ * Clients seal secrets and sign deploys; the runner verifies before anything
  * is decrypted. The control plane in between is treated as hostile. Import
  * from this file only.
  */
@@ -26,13 +26,14 @@ export {
   proposeRoster,
   ROLES,
   teamConfirmationCode,
+  TeamTrustSchema,
   trustFoundingRoster,
   type Member,
   type Role,
   type ServerEntry,
   type TeamTrust,
 } from "./roster"
-export { SealedSecretSchema, type SealedSecret } from "./secrets"
+export { isReservedSecretName, SealedSecretSchema, type SealedSecret } from "./secrets"
 export {
   createSecret,
   createSecretRemoval,
@@ -47,10 +48,12 @@ export {
 } from "./secret-record"
 export {
   createDeploy,
-  initialAgentState,
+  initialRunnerState,
   openSecrets,
+  parseRunnerState,
+  readSignedDeploy,
   verifyDeploy,
-  type AgentState,
+  type RunnerState,
   type Deploy,
   type VerifiedDeploy,
 } from "./deploy"
@@ -63,6 +66,14 @@ export {
   PublishSecretRequestSchema,
   RegisterServerRequestSchema,
   RosterChainResponseSchema,
+  RUNNER_OUTCOMES,
+  RUNNER_REFUSALS,
+  RunnerApplyRequestSchema,
+  RunnerReportSchema,
+  RunnerSetupRequestSchema,
+  RunnerSetupResponseSchema,
+  RunnerStatusSchema,
+  RunnerSyncRequestSchema,
   SecretsResponseSchema,
   STATUS_OUTCOMES,
   StatusReportSchema,
@@ -73,6 +84,12 @@ export {
   type PublishSecretRequest,
   type RegisterServerRequest,
   type RosterChainResponse,
+  type RunnerApplyRequest,
+  type RunnerReport,
+  type RunnerSetupRequest,
+  type RunnerSetupResponse,
+  type RunnerStatus,
+  type RunnerSyncRequest,
   type SecretsResponse,
   type StatusReport,
 } from "./protocol"

@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import { openSecrets, verifyDeploy } from "../src/index"
 import { publish, setup } from "./helpers"
 
-test("SC-004: an agent verifies and opens a deploy with 50 secrets in under 100 ms", async () => {
+test("SC-004: a runner verifies and opens a deploy with 50 secrets in under 100 ms", async () => {
   const { founder, relay, server, trust } = await setup()
   const values = Object.fromEntries(Array.from({ length: 50 }, (_, index) => [`SECRET_${index}`, `demo-value-${index}-${"x".repeat(200)}`]))
   const deploy = await publish({ relay, trust, server, signer: founder.signer, sequence: 1, values })

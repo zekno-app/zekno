@@ -29,7 +29,7 @@
 
 ## Phase 3: User Story 1 - A deploy only the team can authorize and only the server can read (P1) 🎯 MVP
 
-**Goal**: seal secrets, sign a deploy, verify it as the agent, open the secrets.
+**Goal**: seal secrets, sign a deploy, verify it as the runner, open the secrets.
 
 **Independent Test**: `bun test test/scenarios/round-trip.test.ts` in packages/core.
 
@@ -95,9 +95,9 @@
 - [X] T037 Run the quickstart checks from specs/002-core-library/quickstart.md and record the results there
 - [X] T038 End-to-end pass over every scenario, including a cross-process run behind a real HTTP relay in packages/core/test/scenarios/cross-process.test.ts, and record the outcome in specs/002-core-library/quickstart.md
 - [X] T039 Internal security review of packages/core, fix every finding rated high or critical, and record the outcome in specs/002-core-library/security-review.md
-- [X] T041 Fix the independent reviewer's findings in packages/core/src/roster.ts, packages/core/src/secret-record.ts and packages/core/src/deploy.ts: server keys in the team list (FR-031), founding hash in trust and `teamConfirmationCode` (FR-032), `teamHash` in deploys with refusal `stale_team` (FR-033), version-and-hash secret memory, required agent state, sequence step limit `sequence_jump` (FR-034), `proposeRoster` returning trust, stricter display names
+- [X] T041 Fix the independent reviewer's findings in packages/core/src/roster.ts, packages/core/src/secret-record.ts and packages/core/src/deploy.ts: server keys in the team list (FR-031), founding hash in trust and `teamConfirmationCode` (FR-032), `teamHash` in deploys with refusal `stale_team` (FR-033), version-and-hash secret memory, required runner state, sequence step limit `sequence_jump` (FR-034), `proposeRoster` returning trust, stricter display names
 
-- [X] T042 [US2] Signed secret removals (FR-035): `createSecretRemoval`, `verifySecretRemoval` and `currentSecrets` in packages/core/src/secret-record.ts; `removed` entries in deploys and removal memory in the agent state in packages/core/src/deploy.ts; `PublishSecretRemovalRequest` and removals in `SecretsResponse` in packages/core/src/protocol.ts; scenarios in packages/core/test/scenarios/retired-secrets.test.ts
+- [X] T042 [US2] Signed secret removals (FR-035): `createSecretRemoval`, `verifySecretRemoval` and `currentSecrets` in packages/core/src/secret-record.ts; `removed` entries in deploys and removal memory in the runner state in packages/core/src/deploy.ts; `PublishSecretRemovalRequest` and removals in `SecretsResponse` in packages/core/src/protocol.ts; scenarios in packages/core/test/scenarios/retired-secrets.test.ts
 
 ## Dependencies & Execution Order
 

@@ -4,7 +4,14 @@ import { fromUtf8, utf8 } from "./encoding"
 import { EnvelopeSchema } from "./envelope"
 import { isKey, serverIdOf, type ServerPublicKey } from "./keys"
 import { LIMITS } from "./limits"
-import { DEPLOY_REFUSALS, ok, refuse, type MessageRefusal, type Result } from "./result"
+import {
+  DEPLOY_REFUSALS,
+  ok,
+  refuse,
+  ROSTER_REFUSALS,
+  type MessageRefusal,
+  type Result,
+} from "./result"
 import { isoTime, TEAM_ID } from "./roster"
 import { SecretRecordSchema } from "./secret-record"
 import { APP_NAME, SealedSecretSchema, SERVER_ID } from "./secrets"
@@ -43,7 +50,7 @@ export const PublishDeployRequestSchema = z.strictObject({
 })
 export type PublishDeployRequest = z.infer<typeof PublishDeployRequestSchema>
 
-/** Control plane to agent: deploys the agent has not fetched yet. */
+/** Control plane to runner: deploys the runner has not fetched yet. */
 export const PendingDeploysResponseSchema = z.strictObject({
   deploys: z.array(PublishDeployRequestSchema).max(LIMITS.pendingDeploys),
 })
@@ -52,7 +59,7 @@ export type PendingDeploysResponse = z.infer<typeof PendingDeploysResponseSchema
 export const STATUS_OUTCOMES = ["accepted", "refused", "started", "failed"] as const
 
 /**
- * Agent to control plane: what happened to a deploy. Metadata only. There is
+ * Runner to control plane: what happened to a deploy. Metadata only. There is
  * deliberately no free-text field, so no log line or secret can travel here.
  */
 export const StatusReportSchema = z
@@ -73,13 +80,13 @@ export type StatusReport = z.infer<typeof StatusReportSchema>
 export const PublishRosterRequestSchema = z.strictObject({ envelope: EnvelopeSchema })
 export type PublishRosterRequest = z.infer<typeof PublishRosterRequestSchema>
 
-/** Control plane to client or agent: team lists in version order. */
+/** Control plane to client or runner: team lists in version order. */
 export const RosterChainResponseSchema = z.strictObject({
   rosters: z.array(EnvelopeSchema).max(LIMITS.rosterChain),
 })
 export type RosterChainResponse = z.infer<typeof RosterChainResponseSchema>
 
-/** Agent to control plane: this server's public key. The id must be the one derived from it. */
+/** Runner to control plane: this server's public key. The id must be the one derived from it. */
 export const RegisterServerRequestSchema = z
   .strictObject({
     serverPublicKey: z.custom<ServerPublicKey>((value) => isKey("serverPublic", value)),
@@ -87,6 +94,87 @@ export const RegisterServerRequestSchema = z
   })
   .refine((request) => serverIdOf(request.serverPublicKey) === request.serverId)
 export type RegisterServerRequest = z.infer<typeof RegisterServerRequestSchema>
+
+/*
+ * Messages between the CLI and the runner when there is no control plane:
+ * the CLI runs the runner (over SSH or as a local process), writes one of
+ * these to its standard input and reads one back from its standard output.
+ */
+
+/** CLI to runner: set this server up for a team. `teamCode` is the code a person confirmed. */
+export const RunnerSetupRequestSchema = z.strictObject({
+  founding: EnvelopeSchema,
+  teamCode: z.string().min(1).max(64),
+})
+export type RunnerSetupRequest = z.infer<typeof RunnerSetupRequestSchema>
+
+/** Runner to CLI: the server's public key and the code a person compares before adding it. */
+export const RunnerSetupResponseSchema = z
+  .strictObject({
+    serverPublicKey: z.custom<ServerPublicKey>((value) => isKey("serverPublic", value)),
+    serverId: z.string().regex(SERVER_ID),
+    code: z.string().min(1).max(64),
+  })
+  .refine((response) => serverIdOf(response.serverPublicKey) === response.serverId)
+export type RunnerSetupResponse = z.infer<typeof RunnerSetupResponseSchema>
+
+const rosterChain = z.array(EnvelopeSchema).max(LIMITS.rosterChain)
+
+/** CLI to runner: newer team lists, in version order. */
+export const RunnerSyncRequestSchema = z.strictObject({ rosters: rosterChain })
+export type RunnerSyncRequest = z.infer<typeof RunnerSyncRequestSchema>
+
+/** CLI to runner: newer team lists, then one deploy. */
+export const RunnerApplyRequestSchema = z.strictObject({
+  rosters: rosterChain,
+  deploy: PublishDeployRequestSchema,
+})
+export type RunnerApplyRequest = z.infer<typeof RunnerApplyRequestSchema>
+
+/** Reasons that come from the runner itself, not from a check in this library. */
+export const RUNNER_REFUSALS = [
+  "invalid_request",
+  "invalid_state",
+  "not_set_up",
+  "already_set_up",
+  "busy",
+] as const
+
+export const RUNNER_OUTCOMES = ["ok", "started", "start_failed", "refused"] as const
+
+/**
+ * Runner to CLI: what happened. `refused` always carries a reason; nothing
+ * else does. There is no free-text field.
+ */
+export const RunnerReportSchema = z
+  .strictObject({
+    outcome: z.enum(RUNNER_OUTCOMES),
+    app: z.string().regex(APP_NAME).optional(),
+    sequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
+    reason: z.enum([...DEPLOY_REFUSALS, ...ROSTER_REFUSALS, ...RUNNER_REFUSALS]).optional(),
+  })
+  .refine((report) => (report.outcome === "refused") === (report.reason !== undefined))
+export type RunnerReport = z.infer<typeof RunnerReportSchema>
+
+/** Runner to CLI: what the server holds. Versions and numbers only, never a value. */
+export const RunnerStatusSchema = z
+  .strictObject({
+  serverId: z.string().regex(SERVER_ID),
+  serverPublicKey: z.custom<ServerPublicKey>((value) => isKey("serverPublic", value)),
+  team: z.strictObject({
+    teamId: z.string().regex(TEAM_ID),
+    version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    hash: z.string().regex(/^[0-9a-f]{64}$/),
+  }),
+  // Keys are shown to a person, so they are held to the same patterns as app and secret names.
+  lastSequence: z.record(z.string().regex(APP_NAME), z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)),
+  secrets: z.record(
+    z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}\/[A-Za-z_][A-Za-z0-9_]*$/),
+    z.strictObject({ version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), removed: z.boolean() })
+  ),
+  })
+  .refine((status) => serverIdOf(status.serverPublicKey) === status.serverId)
+export type RunnerStatus = z.infer<typeof RunnerStatusSchema>
 
 /**
  * Validates a message from outside. Raw text or bytes are checked for size

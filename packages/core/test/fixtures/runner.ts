@@ -1,7 +1,7 @@
 /**
- * A minimal agent, run as its own process by the cross-process scenario. It
+ * A minimal runner, run as its own process by the cross-process scenario. It
  * uses only the library's public interface and talks to the relay over HTTP,
- * exactly as a real agent would. Everything it learns arrives as JSON.
+ * exactly as a real runner would. Everything it learns arrives as JSON.
  *
  * Environment: RELAY_URL, CONFIRMED_CODE (the code a person typed on the
  * server), EXPECTED (how many deploys to process before exiting).
@@ -9,7 +9,7 @@
 import {
   applyRosterUpdate,
   generateServerKeyPair,
-  initialAgentState,
+  initialRunnerState,
   openSecrets,
   parseMessage,
   PendingDeploysResponseSchema,
@@ -17,7 +17,7 @@ import {
   serverConfirmationCode,
   trustFoundingRoster,
   verifyDeploy,
-  type AgentState,
+  type RunnerState,
   type StatusReport,
 } from "../../src/index"
 
@@ -49,7 +49,7 @@ if (!trusted.ok) {
 }
 say({ type: "paired", team: trusted.value.teamId })
 
-let state: AgentState = initialAgentState({ serverId: server.serverId, team: trusted.value })
+let state: RunnerState = initialRunnerState({ serverId: server.serverId, team: trusted.value })
 let processed = 0
 
 /** Applies any newer team lists the relay holds. A refused list changes nothing. */

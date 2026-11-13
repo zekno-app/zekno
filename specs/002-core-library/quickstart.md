@@ -21,7 +21,7 @@ bun test test/scenarios     # the end-to-end scenarios
 ```ts
 import {
   applyRosterUpdate, createDeploy, createSecret, createSigner, createTeam, generateMemberKeyPair,
-  generateServerKeyPair, initialAgentState, openSecrets, proposeRoster, serverConfirmationCode,
+  generateServerKeyPair, initialRunnerState, openSecrets, proposeRoster, serverConfirmationCode,
   trustFoundingRoster, verifyDeploy,
 } from "@workspace/core"
 
@@ -34,7 +34,7 @@ const team = await createTeam({ founderName: "Ada", signer })
 const server = generateServerKeyPair()
 const pinned = trustFoundingRoster(team.envelope, team.confirmationCode)
 if (!pinned.ok) throw new Error(pinned.error.code)
-let state = initialAgentState({ serverId: server.serverId, team: pinned.value })
+let state = initialRunnerState({ serverId: server.serverId, team: pinned.value })
 
 // The admin compares the server's code with the one shown on the server, then adds it to the team.
 console.log("Compare on both sides:", serverConfirmationCode(server.publicKey))
@@ -73,7 +73,7 @@ if (opened.ok) console.log(opened.value.DATABASE_URL)  // postgres://demo@db/app
 | `round-trip.test.ts` | A deploy is accepted and every secret recovered; the relay's copy contains no readable secret |
 | `hostile-relay.test.ts` | Replayed, redirected and value-swapped deploys, a ciphertext planted by the relay and a rolled-back secret are each refused with their own reason |
 | `retired-secrets.test.ts` | A retired secret stays retired: removals are signed, honoured by clients and remembered by the server |
-| `cross-process.test.ts` | The same guarantees with the agent in its own process behind a real HTTP relay |
+| `cross-process.test.ts` | The same guarantees with the runner in its own process behind a real HTTP relay |
 | `team.test.ts` | Adding and removing members works only through an admin's signature, in order |
 | `pairing.test.ts` | A substituted key or founding list produces a different confirmation code, at any version of the team list |
 | `messages.test.ts` | Every message kind round-trips, and malformed ones are rejected |
@@ -94,7 +94,7 @@ Recorded 2026-11-13 on macOS, Bun 1.4.2.
 |-------|--------|
 | `bun run typecheck` (repository root) | Pass, 3 workspaces |
 | `bun run test` (repository root) | Pass: core 85 tests, web 28 tests |
-| End-to-end scenarios (`packages/core/test/scenarios`) | Pass: 7 files, including the cross-process run with the agent in its own process behind a real HTTP relay |
+| End-to-end scenarios (`packages/core/test/scenarios`) | Pass: 7 files, including the cross-process run with the runner in its own process behind a real HTTP relay |
 | SC-004, verify and open 50 secrets | About 4 ms (limit 100 ms) |
 | The example above, run as written | Prints the confirmation code and `postgres://demo@db/app` |
 | Security review | See [security-review.md](./security-review.md) |

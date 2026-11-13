@@ -6,11 +6,11 @@ import {
   createTeam,
   generateMemberKeyPair,
   generateServerKeyPair,
-  initialAgentState,
+  initialRunnerState,
   proposeRoster,
   teamConfirmationCode,
   trustFoundingRoster,
-  type AgentState,
+  type RunnerState,
   type Envelope,
   type SealedSecret,
   type SecretRecord,
@@ -35,8 +35,8 @@ export function person(name: string): Person {
   return { name, signer, publicKey: signer.publicKey }
 }
 
-/** A server as its agent sees it: its keys and the state it persists. */
-export type Server = ReturnType<typeof generateServerKeyPair> & { name: string; state: AgentState }
+/** A server as its runner sees it: its keys and the state it persists. */
+export type Server = ReturnType<typeof generateServerKeyPair> & { name: string; state: RunnerState }
 
 /** Everything an attacker who controls the relay holds. Team lists are in version order. */
 export type Relay = {
@@ -63,7 +63,7 @@ export async function addServer(input: { relay: Relay; trust: TeamTrust; admin: 
   const keys = generateServerKeyPair()
   const pinned = trustFoundingRoster(input.relay.rosters[0], teamConfirmationCode(input.trust))
   if (!pinned.ok) throw new Error(`pairing failed: ${pinned.error.code}`)
-  const server: Server = { ...keys, name: input.name, state: initialAgentState({ serverId: keys.serverId, team: pinned.value }) }
+  const server: Server = { ...keys, name: input.name, state: initialRunnerState({ serverId: keys.serverId, team: pinned.value }) }
   const trust = await changeTeam({
     relay: input.relay,
     trust: input.trust,

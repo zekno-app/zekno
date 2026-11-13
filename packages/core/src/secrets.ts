@@ -14,6 +14,16 @@ export const SERVER_ID = /^srv_[0-9a-f]{32}$/
 
 export const secretName = z.string().regex(SECRET_NAME).max(LIMITS.secretNameLength)
 
+/**
+ * Names a runner keeps for itself when it starts an app: a secret with one of
+ * these would change how the app is started instead of reaching the app.
+ */
+export function isReservedSecretName(name: string): boolean {
+  return /^(?:PATH|HOME|TMPDIR|XDG_RUNTIME_DIR|GODEBUG)$|^(?:DOCKER_|COMPOSE_|BUILDKIT_|BUILDX_|LD_|DYLD_|SSL_CERT_)|_PROXY$/i.test(
+    name
+  )
+}
+
 /** Room for the record around the value: version, server, app and name. */
 const RECORD_OVERHEAD = 1024
 /** JSON escaping can turn one byte of the value into six ("\u0001"). */

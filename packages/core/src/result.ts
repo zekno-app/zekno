@@ -18,7 +18,7 @@ export function refuse<C extends string>(code: C, message: string): Refused<C> {
 export const MESSAGE_REFUSALS = ["malformed", "too_large"] as const
 export type MessageRefusal = (typeof MESSAGE_REFUSALS)[number]
 
-/** Reasons an agent refuses a deploy. Safe to report to the control plane. */
+/** Reasons a runner refuses a deploy. Safe to report to the control plane. */
 export const DEPLOY_REFUSALS = [
   "malformed",
   "too_large",

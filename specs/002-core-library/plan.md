@@ -7,9 +7,9 @@
 ## Summary
 
 Build `packages/core`, a TypeScript library with no framework, network or storage code. It gives
-clients and the agent one implementation of: member and server keys, secrets sealed for one
+clients and the runner one implementation of: member and server keys, secrets sealed for one
 server, deploys signed by a member, a signed chain of team lists, confirmation codes for pairing,
-an agent-side check that must pass before anything can be decrypted, and validated definitions of
+a runner-side check that must pass before anything can be decrypted, and validated definitions of
 every message exchanged with the control plane.
 
 Cryptography comes from libsodium (through `libsodium-wrappers`): Ed25519 signatures, sealed boxes
@@ -22,11 +22,11 @@ implements no primitive of its own. Untrusted input is validated with zod before
 
 **Primary Dependencies**: `libsodium-wrappers` 0.8.4 (audited libsodium compiled to WebAssembly), `zod` 4.6.7 (validation of untrusted input)
 
-**Storage**: none. The agent and clients store what the library returns.
+**Storage**: none. The runner and clients store what the library returns.
 
-**Testing**: `bun test`. Unit tests beside each concern, plus end-to-end scenario tests that play the client, a hostile relay and the agent against each other.
+**Testing**: `bun test`. Unit tests beside each concern, plus end-to-end scenario tests that play the client, a hostile relay and the runner against each other.
 
-**Target Platform**: Bun 1.4 (CLI, agent, desktop main process). Also loads on Node 26. Not intended for browsers: the website never handles keys.
+**Target Platform**: Bun 1.4 (CLI, runner, desktop main process). Also loads on Node 26. Not intended for browsers: the website never handles keys.
 
 **Project Type**: library in the existing Bun workspace (`packages/core`)
 
@@ -86,7 +86,7 @@ packages/core/
 │   ├── envelope.ts      # sign and verify exact bytes, per message kind
 │   ├── roster.ts        # team lists: founding, updating, applying
 │   ├── secrets.ts       # seal and open one secret
-│   ├── deploy.ts        # create, verify, open; the agent-side gate
+│   ├── deploy.ts        # create, verify, open; the runner-side gate
 │   └── protocol.ts      # message definitions for the control plane
 └── test/
     ├── *.test.ts        # unit tests per concern
@@ -96,7 +96,7 @@ packages/core/
 
 **Structure Decision**: one flat library package. Callers import only from `@workspace/core`
 (`src/index.ts`); the other files are internal. A single small interface over the cryptography is
-the point: the CLI, agent and desktop app cannot each get verification order or domain separation
+the point: the CLI, runner and desktop app cannot each get verification order or domain separation
 subtly wrong if there is one function that does it. Root `turbo.json` already has `typecheck` and
 `test` tasks, so the package joins the existing checks by declaring those scripts.
 

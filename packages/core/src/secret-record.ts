@@ -61,7 +61,7 @@ export type SecretRecord = z.infer<typeof SecretRecordSchema>
 /** A secret record that passed verification against the team list. */
 export type VerifiedSecret = {
   readonly name: string
-  /** Goes up each time the secret is set again. An agent never goes back to a lower one. */
+  /** Goes up each time the secret is set again. A runner never goes back to a lower one. */
   readonly version: number
   readonly hash: string
   /** The member who set it. */

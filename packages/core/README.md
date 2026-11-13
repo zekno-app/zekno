@@ -1,7 +1,7 @@
 # @workspace/core
 
 The one place where Zekno's keys are made, secrets are encrypted, deploys are signed and checked,
-and team membership is proven. Every client and the server agent use it, so both ends encrypt and
+and team membership is proven. Every client and the server runner use it, so both ends encrypt and
 verify in exactly the same way.
 
 > **Unaudited.** The cryptographic building blocks are libsodium's. How they are combined here
@@ -43,10 +43,10 @@ Two rules shape the interface:
 2. **Nothing unsigned is trusted.** There is no public way to seal a secret without signing it,
    and `createDeploy` verifies every secret it is given.
 
-The library does no I/O and keeps no state. The agent stores the state `verifyDeploy` hands back;
+The library does no I/O and keeps no state. The runner stores the state `verifyDeploy` hands back;
 clients store keys however they choose and pass in a `Signer`.
 
-An agent must process deploys one at a time (verify, persist `nextState`, open, run). What was
+A runner must process deploys one at a time (verify, persist `nextState`, open, run). What was
 reviewed, what was fixed and what remains open is in
 [`security-review.md`](../../specs/002-core-library/security-review.md).
 
@@ -54,7 +54,7 @@ reviewed, what was fixed and what remains open is in
 
 ```bash
 bun test                  # unit tests and end-to-end scenarios
-bun test test/scenarios   # only the scenarios: client, hostile relay and agent
+bun test test/scenarios   # only the scenarios: client, hostile relay and runner
 bun run typecheck
 ```
 

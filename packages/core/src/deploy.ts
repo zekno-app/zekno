@@ -84,10 +84,10 @@ const DeploySchema = z.strictObject({
 export type Deploy = z.infer<typeof DeploySchema>
 
 /**
- * What an agent remembers between deploys. The agent stores it; this library
+ * What a runner remembers between deploys. The runner stores it; this library
  * only reads it and returns the next value.
  */
-export type AgentState = {
+export type RunnerState = {
   readonly serverId: string
   readonly team: TeamTrust
   /** The last accepted deploy number for each app. */
@@ -99,7 +99,7 @@ export type AgentState = {
   readonly secrets: Readonly<Record<string, { readonly version: number; readonly hash: string | null }>>
 }
 
-const AgentStateSchema = z.strictObject({
+const RunnerStateSchema = z.strictObject({
   serverId: z.string().regex(SERVER_ID),
   team: TeamTrustSchema,
   lastSequence: z.record(z.string().regex(APP_NAME), z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)),
@@ -110,9 +110,9 @@ const AgentStateSchema = z.strictObject({
 })
 
 /** The state of a server that has just pinned its team and accepted nothing yet. */
-export function initialAgentState(input: { serverId: string; team: TeamTrust }): AgentState {
+export function initialRunnerState(input: { serverId: string; team: TeamTrust }): RunnerState {
   const state = { serverId: input.serverId, team: input.team, lastSequence: {}, secrets: {} }
-  if (!AgentStateSchema.safeParse(state).success) {
+  if (!RunnerStateSchema.safeParse(state).success) {
     throw new CoreError("invalid_argument", "The server id or team trust is not valid.")
   }
   return state
@@ -124,7 +124,7 @@ export type VerifiedDeploy = {
   /** The member who signed it. */
   readonly signer: Member
   /** Persist this before running the deploy, so the same deploy cannot be accepted twice. */
-  readonly nextState: AgentState
+  readonly nextState: RunnerState
 }
 
 /** Deploys that came out of `verifyDeploy`, with the sealed secrets that were checked. */
@@ -226,15 +226,50 @@ export async function createDeploy(input: {
   return { envelope, secrets: secrets.map((secret) => secret.sealed) }
 }
 
-/** Stored state is checked in full, so a damaged or incomplete file is an error, not a weaker check. */
-function readState(state: AgentState): AgentState {
-  const parsed = AgentStateSchema.safeParse(state)
-  if (!parsed.success) throw new CoreError("invalid_argument", "The agent state is not valid.")
-  return parsed.data as AgentState
+/**
+ * Reads a signed deploy without judging whether a server should accept it:
+ * the signature must be a current team member's, and the content must be a
+ * well-formed deploy. For a client that kept its own signed deploys and wants
+ * to use one again, for example to roll back, without trusting the file it
+ * was kept in.
+ */
+export function readSignedDeploy(input: {
+  envelope: unknown
+  trust: TeamTrust
+}): Result<{ deploy: Deploy; signer: Member }, DeployRefusal> {
+  assertTrust(input.trust)
+  const opened = openEnvelope(
+    input.envelope,
+    PAYLOAD_TYPES.deploy,
+    (keyId) => memberByKeyId(input.trust.members, keyId)?.publicKey
+  )
+  if (!opened.ok) return opened
+  const json = parseJson(opened.value.payload)
+  if (json === undefined || hasOtherVersion(json)) return refuse("malformed", "The deploy is not readable.")
+  const parsed = DeploySchema.safeParse(json)
+  if (!parsed.success) return refuse("malformed", "The deploy does not match its definition.")
+  const signer = input.trust.members.find((member) => member.publicKey === opened.value.signerKey)!
+  return ok({ deploy: parsed.data, signer })
 }
 
 /**
- * The agent-side gate. A deploy is accepted only when it is signed by a
+ * Validates state a runner read back from disk. Throws `CoreError` when it is
+ * damaged or incomplete, so a runner never mistakes a broken file for an
+ * empty one.
+ */
+export function parseRunnerState(value: unknown): RunnerState {
+  return readState(value as RunnerState)
+}
+
+/** Stored state is checked in full, so a damaged or incomplete file is an error, not a weaker check. */
+function readState(state: RunnerState): RunnerState {
+  const parsed = RunnerStateSchema.safeParse(state)
+  if (!parsed.success) throw new CoreError("invalid_argument", "The runner state is not valid.")
+  return parsed.data as RunnerState
+}
+
+/**
+ * The runner-side gate. A deploy is accepted only when it is signed by a
  * current team member allowed to deploy, addressed to this team and this
  * server, numbered higher than the last deploy accepted for its app,
  * accompanied by exactly the sealed secrets it lists, and not bringing back
@@ -243,11 +278,11 @@ function readState(state: AgentState): AgentState {
 export function verifyDeploy(input: {
   envelope: unknown
   secrets: unknown
-  state: AgentState
+  state: RunnerState
 }): Result<VerifiedDeploy, DeployRefusal> {
   const state = readState(input.state)
 
-  // 1. Signature, against the team list this agent already trusts.
+  // 1. Signature, against the team list this runner already trusts.
   const opened = openEnvelope(
     input.envelope,
     PAYLOAD_TYPES.deploy,
@@ -324,7 +359,7 @@ export function verifyDeploy(input: {
   }
 
   // 6. No secret goes back: not to a lower version, and not to a different
-  //    value under the version this agent already accepted.
+  //    value under the version this runner already accepted.
   //    A removal counts as a version too, so a retired secret stays retired.
   const secrets: Record<string, { version: number; hash: string | null }> = { ...state.secrets }
   const entries = [

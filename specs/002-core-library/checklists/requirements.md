@@ -32,7 +32,7 @@
 ## Notes
 
 - The subject is a security library, so "users" are the developer deploying, the admin managing the
-  team, and the people building the CLI, agent and control plane against it.
+  team, and the people building the CLI, runner and control plane against it.
 - Six scope questions were resolved with documented defaults instead of being asked; see the
   Clarifications section of the spec. The one most worth the maintainer's attention is that a
   secret cannot be read back after it is set.

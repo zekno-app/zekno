@@ -27,7 +27,7 @@ anything marked "feel-check" is tuned in the browser.
 | M4 | How-it-works stepper | State indication, explanation | Motion `layoutId` + CSS | Active pill slides between steps; a linear progress line fills over 5s; the packet dot moves to the active party; the caption cross-fades in 200ms | Pill and dot jump; no progress line |
 | M5 | Feature blocks | Preventing a jarring change | CSS scroll-driven animation | Text and media fade up as they enter the viewport | None |
 | M6a | Block (a) leak demo | Explanation | Motion + scramble | Rows of a database dump re-scramble; a scan line passes; caption stays fixed | Static dump |
-| M6b | Block (b) signature demo | Explanation | Motion | An unsigned manifest reaches the agent and is refused, then a signed one is accepted | Shows both results side by side |
+| M6b | Block (b) signature demo | Explanation | Motion | An unsigned manifest reaches the runner and is refused, then a signed one is accepted | Shows both results side by side |
 | M6c | Block (c) uptime demo | Explanation | Motion | Zekno dims to "offline"; containers keep their running pulse; a direct machine-to-server line draws | Offline state, static |
 | M6d | Block (d) team composition | Explanation, delight | Motion `layoutId` | Four-stage shared-element composition (see below) | Final stage, tabs cross-fade |
 | M7 | Threat model | State indication | CSS / Motion opacity | Result panel cross-fades in 200ms; the compromised party re-shades | Same |

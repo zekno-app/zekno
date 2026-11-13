@@ -5,8 +5,10 @@ description: What Zekno is, how it keeps your keys on your side, and where the p
 
 <Callout type="warn" title="Pre-alpha">
   Nothing here is ready for production use, and the security design has not
-  been independently audited. The desktop app, the server agent and the core
-  library are not written yet. These docs describe the design they will follow.
+  been independently audited. First versions of the core library, the
+  command-line tool and the server runner are in the repository. The desktop
+  app and the hosted service are not written yet; these docs describe the
+  design they will follow.
 </Callout>
 
 ## What Zekno is
@@ -31,14 +33,14 @@ secrets and no ability to run code on customer servers.
 | --- | --- | --- | --- | --- |
 | Desktop app | A team member's machine | Team signing key | Yes | Yes |
 | Control plane | Zekno's infrastructure | None | No | No |
-| Agent | Your server | Server decryption key | Yes | No, it only verifies |
+| Runner | Your server | Server decryption key | Yes | No, it only verifies |
 
 ## How a deploy works
 
 1. **Encrypt.** The desktop app encrypts each secret for your server's public key before anything leaves your machine.
 2. **Sign.** The app signs the deploy with your team's key.
-3. **Relay.** The control plane stores the sealed, signed packet. It has no key to open it. Your server's agent pulls it over an outbound connection.
-4. **Verify.** The agent checks the signature before doing anything, and refuses a deploy your team did not sign.
+3. **Relay.** The control plane stores the sealed, signed packet. It has no key to open it. Your server's runner pulls it over an outbound connection.
+4. **Verify.** The runner checks the signature before doing anything, and refuses a deploy your team did not sign.
 5. **Run.** The server decrypts with its own key and starts your containers.
 
 ## What it protects against
@@ -55,7 +57,7 @@ secrets and no ability to run code on customer servers.
 | --- | --- |
 | A team member's machine is compromised | That machine holds a signing key |
 | One of your servers is compromised | Secrets are plaintext in memory where the app runs |
-| A Zekno app or agent release is tampered with | The client is the trust anchor. Mitigated by public code and signed releases |
+| A Zekno app or runner release is tampered with | The client is the trust anchor. Mitigated by public code and signed releases |
 
 <Callout title="Metadata">
   The control plane still sees metadata: server addresses, app names, deploy
@@ -67,8 +69,9 @@ secrets and no ability to run code on customer servers.
 | Part | Status |
 | --- | --- |
 | Website (`apps/web`) | Landing page and these docs; the signed-in dashboard is planned |
-| Core library (`packages/core`): encryption, signing, manifest format | Planned |
-| Server agent (`apps/agent`) | Planned |
+| Core library (`packages/core`): encryption, signing, team lists, message formats | First version built; internal review only |
+| Command-line tool (`apps/cli`) | First version built: one developer, deploying directly over SSH |
+| Server runner (`apps/runner`) | First version built: verifies, decrypts, starts Docker Compose |
 | Desktop app (`apps/desktop`) | Planned |
 | Control plane | Hosted by Zekno, closed source |
 

@@ -11,7 +11,7 @@ Decisions made before design. The library API was read from the installed type d
   `crypto_sign_verify_detached` (Ed25519), `crypto_box_seal` and `crypto_box_seal_open` (anonymous
   encryption to a public key), `crypto_generichash` (BLAKE2b), `randombytes_buf`, `memcmp`
   (constant time) and `memzero`. It is WebAssembly embedded in JavaScript, so it runs in Bun, in
-  Node and inside a compiled single-file agent with no native build step.
+  Node and inside a compiled single-file runner with no native build step.
 - **Alternatives considered**: the `@noble` packages are audited and smaller, but have no sealed
   box, so the library would have to compose its own public-key encryption scheme, which FR-027
   rules out. HPKE (RFC 9180) through `@hpke/core` is the modern standard but adds three packages
@@ -54,11 +54,11 @@ Decisions made before design. The library API was read from the installed type d
 
 ## R5. Replay protection
 
-- **Decision**: each deploy carries a `sequence` number per app. The agent remembers the last
+- **Decision**: each deploy carries a `sequence` number per app. The runner remembers the last
   accepted number for each app and refuses anything not higher. A rollback is a new signed deploy
   with the next number and the old content.
 - **Rationale**: simple, needs no clock (the spec assumes clocks may be wrong), and makes the
-  agent's persistent state one integer per app. Binding the deploy to `teamId` and `serverId`
+  runner's persistent state one integer per app. Binding the deploy to `teamId` and `serverId`
   stops cross-server and cross-team replays.
 - **Alternatives considered**: expiry times (depends on clocks); a hash chain of deploys (stops
   two members deploying concurrently without coordination).
@@ -85,7 +85,7 @@ Decisions made before design. The library API was read from the installed type d
 - **Decision**: zod strict objects for every payload and message; byte-size checks before parsing;
   all limits in `limits.ts`.
 - **Rationale**: FR-024. Strict objects reject unknown fields, which keeps a later format version
-  from being half-understood by an older agent.
+  from being half-understood by an older runner.
 
 ## R9. Loading libsodium
 

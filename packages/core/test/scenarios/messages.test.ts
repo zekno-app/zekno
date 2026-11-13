@@ -20,7 +20,7 @@ const code = (result: { ok: boolean; error?: { code: string } }) =>
   result.ok ? "accepted" : result.error!.code
 
 describe("User Story 5: one description of every message", () => {
-  test("a deploy travels client to control plane to agent using only the shared definitions", async () => {
+  test("a deploy travels client to control plane to runner using only the shared definitions", async () => {
     const { founder, relay, server, trust } = await setup()
     const deploy = await publish({ relay, trust, server, signer: founder.signer, sequence: 1 })
 
@@ -28,7 +28,7 @@ describe("User Story 5: one description of every message", () => {
     const upload = parseMessage(PublishDeployRequestSchema, JSON.stringify(deploy))
     expect(upload.ok).toBe(true)
     if (!upload.ok) return
-    // Control plane to agent, as bytes.
+    // Control plane to runner, as bytes.
     const body = new TextEncoder().encode(JSON.stringify({ deploys: [upload.value] }))
     const pending = parseMessage(PendingDeploysResponseSchema, body)
     expect(pending.ok).toBe(true)
@@ -91,10 +91,40 @@ describe("User Story 5: one description of every message", () => {
     }
     expect(code(parseMessage(StatusReportSchema, { ...report, reason: "the database password is hunter2" }))).toBe("malformed")
     expect(code(parseMessage(StatusReportSchema, { ...report, v: 2 }))).toBe("malformed")
-    // Every refusal an agent can produce is reportable.
+    // Every refusal a runner can produce is reportable.
     for (const reason of DEPLOY_REFUSALS) {
       expect(parseMessage(StatusReportSchema, { ...report, reason }).ok).toBe(true)
     }
+  })
+
+  test("the messages between the CLI and the runner round-trip and reject anything else", async () => {
+    const core = await import("../../src/index")
+    const { founder, team, relay, server, trust } = await setup()
+    const deploy = await publish({ relay, trust, server, signer: founder.signer, sequence: 1 })
+
+    expect(parseMessage(core.RunnerSetupRequestSchema, JSON.stringify({ founding: team.envelope, teamCode: team.confirmationCode })).ok).toBe(true)
+    const answer = { serverPublicKey: server.publicKey, serverId: server.serverId, code: core.serverConfirmationCode(server.publicKey) }
+    expect(parseMessage(core.RunnerSetupResponseSchema, answer).ok).toBe(true)
+    // An id that does not belong to the key is rejected.
+    expect(code(parseMessage(core.RunnerSetupResponseSchema, { ...answer, serverId: `srv_${"0".repeat(32)}` }))).toBe("malformed")
+    expect(parseMessage(core.RunnerSyncRequestSchema, { rosters: relay.rosters }).ok).toBe(true)
+    expect(parseMessage(core.RunnerApplyRequestSchema, JSON.stringify({ rosters: relay.rosters, deploy })).ok).toBe(true)
+    expect(code(parseMessage(core.RunnerApplyRequestSchema, { rosters: relay.rosters }))).toBe("malformed")
+
+    // A report says what happened and, only for a refusal, why. No free text.
+    for (const report of [{ outcome: "ok" }, { outcome: "started", app: "web", sequence: 1 }, { outcome: "start_failed", app: "web", sequence: 1 }, { outcome: "refused", reason: "replayed" }, { outcome: "refused", reason: "busy" }, { outcome: "refused", reason: "code_mismatch" }]) {
+      expect(parseMessage(core.RunnerReportSchema, report).ok).toBe(true)
+    }
+    for (const report of [{ outcome: "refused" }, { outcome: "started", reason: "replayed" }, { outcome: "refused", reason: "something else" }, { outcome: "started", message: "DATABASE_URL=..." }, { outcome: "done" }]) {
+      expect(code(parseMessage(core.RunnerReportSchema, report))).toBe("malformed")
+    }
+    const status = {
+      serverId: server.serverId, serverPublicKey: server.publicKey,
+      team: { teamId: trust.teamId, version: trust.version, hash: trust.hash },
+      lastSequence: { web: 1 }, secrets: { "web/DATABASE_URL": { version: 1, removed: false } },
+    }
+    expect(parseMessage(core.RunnerStatusSchema, status).ok).toBe(true)
+    expect(code(parseMessage(core.RunnerStatusSchema, { ...status, secrets: { "web/DATABASE_URL": { version: 1, removed: false, value: "x" } } }))).toBe("malformed")
   })
 
   test("a signed payload with an unknown format version is refused with that reason", async () => {

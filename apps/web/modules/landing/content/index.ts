@@ -79,7 +79,7 @@ export const parties: Party[] = [
   {
     id: "server",
     label: "Your server",
-    title: "Agent",
+    title: "Runner",
     holds: [
       "Verifies the signature",
       "Decrypts with its own key",
@@ -108,21 +108,21 @@ export const steps: DeployStep[] = [
     label: "Relay",
     party: "zekno",
     description:
-      "Zekno stores the ciphertext and the signed manifest, which it cannot open or alter, until your server's agent pulls them over an outbound connection.",
+      "Zekno stores the ciphertext and the signed manifest, which it cannot open or alter, until your server's runner pulls them over an outbound connection.",
   },
   {
     id: "verify",
     label: "Verify",
     party: "server",
     description:
-      "The agent checks the signature against your team's public keys and refuses anything that does not match.",
+      "The runner checks the signature against your team's public keys and refuses anything that does not match.",
   },
   {
     id: "run",
     label: "Run",
     party: "server",
     description:
-      "The agent decrypts with a key that never leaves your server and starts your containers.",
+      "The runner decrypts with a key that never leaves your server and starts your containers.",
   },
 ]
 
@@ -130,7 +130,7 @@ export const howItWorks = {
   eyebrow: "How it works",
   heading: "Keys live at the two ends",
   intro: "The service in the middle holds nothing it can open.",
-  connectors: ["ciphertext + signed manifest", "agent pulls, outbound only"],
+  connectors: ["ciphertext + signed manifest", "runner pulls, outbound only"],
   packetLabel: "sealed packet",
 } as const
 
@@ -175,7 +175,7 @@ export const stage = {
     loot: "Everything the attacker can read",
   },
   server: {
-    waiting: "Agent waiting",
+    waiting: "Runner waiting",
     verified: "Signature verified",
     refused: "Refused: no team signature",
     container: "container",
@@ -188,8 +188,8 @@ export const stage = {
     encrypt: "Secrets are sealed on your machine before they leave it.",
     sign: "The deploy is signed with your team's key.",
     relayZekno: "Zekno stores the sealed packet. It has no key to open it.",
-    relayServer: "Your server's agent pulls the packet.",
-    verify: "The agent checks the signature before doing anything.",
+    relayServer: "Your server's runner pulls the packet.",
+    verify: "The runner checks the signature before doing anything.",
     run: "Your server decrypts with its own key and runs your containers.",
   },
 } as const
@@ -218,12 +218,12 @@ export const features: FeatureBlock[] = [
   {
     id: "signature",
     heading: "Nobody deploys to your servers but you",
-    body: "Every deploy is signed on your machine. The agent on your server refuses anything unsigned, including anything we send.",
+    body: "Every deploy is signed on your machine. The runner on your server refuses anything unsigned, including anything we send.",
   },
   {
     id: "uptime",
     heading: "We go down, you stay up",
-    body: "Your servers never depend on Zekno at runtime. If we are offline, the desktop app deploys to the agent directly.",
+    body: "Your servers never depend on Zekno at runtime. If we are offline, the desktop app deploys to the runner directly.",
   },
   {
     id: "team",
@@ -246,7 +246,7 @@ export const demos = {
   },
   signature: {
     incoming: "Incoming deploy",
-    agent: "Agent on your server",
+    runner: "Runner on your server",
     unsigned: { title: "Deploy from Zekno", mark: "No team signature", result: "Refused" },
     signed: { title: "Deploy from your team", mark: "Signed by your team", result: "Accepted" },
     waiting: "Checking signature",
@@ -258,7 +258,7 @@ export const demos = {
     online: "online",
     offline: "offline",
     running: "running",
-    direct: "Deploying directly to the agent",
+    direct: "Deploying directly to the runner",
     viaZekno: "Deploying through Zekno",
   },
 } as const
@@ -371,7 +371,7 @@ export const threats = {
     },
     {
       id: "release",
-      title: "A Zekno app or agent release is tampered with",
+      title: "A Zekno app or runner release is tampered with",
       outcome: "unprotected",
       outcomeLabel: "Not protected",
       result: notProtected,
@@ -457,7 +457,7 @@ export const openSource = {
   statusLabels: { open: "Open", closed: "Closed" },
   parts: [
     { label: "Core library", status: "open" },
-    { label: "Server agent", status: "open" },
+    { label: "Server runner", status: "open" },
     { label: "Desktop app", status: "open" },
     { label: "Website and dashboard", status: "open" },
     { label: "Control plane (hosted by Zekno)", status: "closed" },
@@ -488,13 +488,13 @@ export const faq = {
       id: "down",
       question: "What happens if Zekno goes down?",
       answer:
-        "Your apps keep running, because your servers don't depend on Zekno at runtime. While we are offline, the desktop app can deploy to the agent directly.",
+        "Your apps keep running, because your servers don't depend on Zekno at runtime. While we are offline, the desktop app can deploy to the runner directly.",
     },
     {
       id: "limits",
       question: "What does Zekno not protect against?",
       answer:
-        "A compromised team member's machine, because it holds a signing key. A compromised server of yours, because secrets are plaintext in memory where the app runs. A tampered Zekno app or agent release, which public code and signed releases reduce but do not remove.",
+        "A compromised team member's machine, because it holds a signing key. A compromised server of yours, because secrets are plaintext in memory where the app runs. A tampered Zekno app or runner release, which public code and signed releases reduce but do not remove.",
     },
     {
       id: "providers",

@@ -1,0 +1,27 @@
+{
+  "name": "@workspace/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "bin": {
+    "zekno": "./src/main.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "compile": "bun build.ts"
+  },
+  "dependencies": {
+    "@workspace/core": "workspace:*",
+    "ink": "8.0.0",
+    "react": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/react": "19.3.0",
+    "@workspace/typescript-config": "workspace:*",
+    "typescript": "^5"
+  }
+}

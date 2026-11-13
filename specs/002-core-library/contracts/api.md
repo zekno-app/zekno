@@ -60,11 +60,11 @@ pass them to `currentSecrets`, show `ignored` to the person deploying, and pass 
 `removals` to `createDeploy`. `ignored` lists each item that failed verification with its
 refusal code, and each name where two different items claim the same version (`conflict`).
 
-## Deploys: agent side
+## Deploys: runner side
 
 | Function | Returns |
 |----------|---------|
-| `initialAgentState({ serverId, team })` | the state of a server that has accepted nothing yet |
+| `initialRunnerState({ serverId, team })` | the state of a server that has accepted nothing yet |
 | `verifyDeploy({ envelope, secrets, state })` | `Result<VerifiedDeploy>` |
 | `openSecrets(verified, serverSecretKey)` | `Result<Record<name, value>>` |
 
@@ -76,7 +76,7 @@ Order of checks in `verifyDeploy`, each with its own refusal code: size, envelop
 type, signer known, signature, payload shape and version, role, team, team-list version, server,
 server listed, sequence, sequence step, secrets, secret versions.
 
-An agent processes deploys one at a time: verify, persist `nextState`, open, run, then verify the
+A runner processes deploys one at a time: verify, persist `nextState`, open, run, then verify the
 next one against the persisted state. Verifying a batch against one state would accept a
 duplicate twice.
 
@@ -90,11 +90,11 @@ Each has a zod schema (`…Schema`) and a type. Schemas are strict.
 | `PublishSecretRemovalRequest` | client → control plane | `{ envelope }` |
 | `SecretsResponse` | control plane → client | `{ secrets: record[], removals: envelope[] }`; the client passes both to `currentSecrets` |
 | `PublishDeployRequest` | client → control plane | `{ envelope, secrets[] }` |
-| `PendingDeploysResponse` | control plane → agent | `{ deploys: [{ envelope, secrets[] }] }` |
-| `StatusReport` | agent → control plane | `{ v, teamId, serverId, app, sequence, outcome, reason?, at }` |
+| `PendingDeploysResponse` | control plane → runner | `{ deploys: [{ envelope, secrets[] }] }` |
+| `StatusReport` | runner → control plane | `{ v, teamId, serverId, app, sequence, outcome, reason?, at }` |
 | `PublishRosterRequest` | client → control plane | `{ envelope }` |
-| `RosterChainResponse` | control plane → client or agent | `{ rosters: envelope[] }` in version order |
-| `RegisterServerRequest` | agent → control plane | `{ serverPublicKey, serverId }` |
+| `RosterChainResponse` | control plane → client or runner | `{ rosters: envelope[] }` in version order |
+| `RegisterServerRequest` | runner → control plane | `{ serverPublicKey, serverId }` |
 
 `StatusReport.outcome` is `accepted`, `refused`, `started` or `failed`. `reason` is a refusal code.
 There is no free-text field.

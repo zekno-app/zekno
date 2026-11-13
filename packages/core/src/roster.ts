@@ -93,7 +93,7 @@ export type TeamTrust = {
   readonly servers: readonly (ServerEntry & { readonly serverId: string })[]
 }
 
-/** The shape of stored trust, for checking what an agent or client reads back from disk. */
+/** The shape of stored trust, for checking what a runner or client reads back from disk. */
 export const TeamTrustSchema = z.strictObject({
   teamId: z.string().regex(TEAM_ID),
   version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
@@ -101,7 +101,11 @@ export const TeamTrustSchema = z.strictObject({
   foundingHash: z.string().regex(HASH_HEX),
   members: z.array(MemberSchema).min(1).max(LIMITS.members),
   servers: z
-    .array(ServerEntrySchema.extend({ serverId: z.string().regex(/^srv_[0-9a-f]{32}$/) }))
+    .array(
+      ServerEntrySchema.extend({ serverId: z.string().regex(/^srv_[0-9a-f]{32}$/) })
+        // A stored id must be the one that belongs to the stored key.
+        .refine((server) => serverIdOf(server.publicKey) === server.serverId)
+    )
     .max(LIMITS.servers),
 })
 
