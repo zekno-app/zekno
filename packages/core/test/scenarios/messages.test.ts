@@ -127,6 +127,38 @@ describe("User Story 5: one description of every message", () => {
     expect(code(parseMessage(core.RunnerStatusSchema, { ...status, secrets: { "web/DATABASE_URL": { version: 1, removed: false, value: "x" } } }))).toBe("malformed")
   })
 
+  test("session messages: requests, frames, state and logs", async () => {
+    const core = await import("../../src/index")
+    expect(parseMessage(core.RunnerVersionSchema, { version: "0.2.0", protocol: core.RUNNER_PROTOCOL }).ok).toBe(true)
+    expect(code(parseMessage(core.RunnerVersionSchema, { version: "0.2", protocol: 2 }))).toBe("malformed")
+    expect(code(parseMessage(core.RunnerVersionSchema, { version: "0.2.0; rm -rf /", protocol: 2 }))).toBe("malformed")
+
+    for (const command of core.SESSION_COMMANDS) expect(parseMessage(core.SessionRequestSchema, { command }).ok).toBe(true)
+    expect(parseMessage(core.SessionRequestSchema, JSON.stringify({ command: "logs", input: { app: "web", tail: 10 } })).ok).toBe(true)
+    expect(code(parseMessage(core.SessionRequestSchema, { command: "exec" }))).toBe("malformed")
+    expect(code(parseMessage(core.SessionRequestSchema, { command: "status", extra: 1 }))).toBe("malformed")
+
+    // A frame is an event or a result, never both and nothing else.
+    expect(parseMessage(core.SessionFrameSchema, { event: "progress", line: " Container web-1  Started" }).ok).toBe(true)
+    expect(parseMessage(core.SessionFrameSchema, { event: "log", service: "web", time: "2026-11-13T16:56:04.136118801Z", line: "started" }).ok).toBe(true)
+    expect(parseMessage(core.SessionFrameSchema, { result: { outcome: "ok" } }).ok).toBe(true)
+    expect(code(parseMessage(core.SessionFrameSchema, { event: "progress", line: "x".repeat(4097) }))).toBe("malformed")
+    expect(code(parseMessage(core.SessionFrameSchema, { event: "log", service: "web", time: "yesterday", line: "x" }))).toBe("malformed")
+    expect(code(parseMessage(core.SessionFrameSchema, { event: "log", service: "we b", time: "2026-11-13T16:56:04Z", line: "x" }))).toBe("malformed")
+    expect(code(parseMessage(core.SessionFrameSchema, { event: "shell", line: "x" }))).toBe("malformed")
+    expect(code(parseMessage(core.SessionFrameSchema, { event: "progress", line: "x", result: {} }))).toBe("malformed")
+
+    const states = { apps: { web: { services: [{ service: "web", state: "running", exitCode: 0, health: "" }, { service: "worker", state: "exited", exitCode: 3, health: "" }] } } }
+    expect(parseMessage(core.RunnerAppStatesSchema, states).ok).toBe(true)
+    expect(code(parseMessage(core.RunnerAppStatesSchema, { apps: { web: { services: [{ service: "web", state: "running", exitCode: 0, health: "", labels: "com.docker…" }] } } }))).toBe("malformed")
+    expect(code(parseMessage(core.RunnerAppStatesSchema, { apps: { "../etc": { services: [] } } }))).toBe("malformed")
+    expect(code(parseMessage(core.RunnerAppStatesSchema, { apps: { web: { services: [{ service: "web", state: "on fire", exitCode: 0, health: "" }] } } }))).toBe("malformed")
+
+    expect(parseMessage(core.RunnerLogsRequestSchema, { app: "web", tail: 200 }).ok).toBe(true)
+    expect(code(parseMessage(core.RunnerLogsRequestSchema, { app: "web", tail: 100000 }))).toBe("malformed")
+    expect(code(parseMessage(core.RunnerLogsRequestSchema, { app: "web; cat /etc/passwd", tail: 1 }))).toBe("malformed")
+  })
+
   test("a signed payload with an unknown format version is refused with that reason", async () => {
     const { founder, server, trust } = await setup()
     const { PAYLOAD_TYPES } = await import("../../src/index")

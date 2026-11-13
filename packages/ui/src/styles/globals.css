@@ -30,6 +30,7 @@
     --color-surface: var(--surface);
     --color-brand-foreground: var(--brand-foreground);
     --color-brand: var(--brand);
+    --color-brand-darker: var(--brand-darker);
     --color-info-foreground: var(--info-foreground);
     --color-info: var(--info);
     --color-signal-foreground: var(--signal-foreground);
@@ -80,6 +81,8 @@
     --signal: oklch(0.44 0.13 155);
     --signal-foreground: oklch(0.985 0 0);
     --brand: #2383e2;
+    /* Brand blue for small text on a light ground, where --brand is below 4.5:1. */
+    --brand-darker: #1a73d1;
     --brand-foreground: #ffffff;
     --info: oklch(0.546 0.245 262.9);
     --info-foreground: oklch(0.985 0 0);
@@ -123,6 +126,8 @@
     --signal: oklch(0.8 0.17 155);
     --signal-foreground: oklch(0.2 0.04 155);
     --brand: #2383e2;
+    /* Brand blue for small text on a light ground, where --brand is below 4.5:1. */
+    --brand-darker: #1a73d1;
     --brand-foreground: #ffffff;
     --info: oklch(0.546 0.245 262.9);
     --info-foreground: oklch(0.985 0 0);

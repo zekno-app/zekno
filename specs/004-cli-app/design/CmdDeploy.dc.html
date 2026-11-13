@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>zekno deploy: success and failure</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 960px; height: 600px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+    <div><span style="color: #8b949e">$</span> zekno deploy</div>
+
+    <div style="position: relative; box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 16px 16px 12px 16px">
+      <div style="position: absolute; top: -11px; left: 12px; background: #0b0d10; padding: 0 8px; color: #ffffff; font-weight: 600">Deploy 5</div>
+      <div style="display: grid; grid-template-columns: 84px 1fr; row-gap: 2px">
+        <span style="color: #8b949e">app</span><span>demo</span>
+        <span style="color: #8b949e">server</span><span>prod</span>
+        <span style="color: #8b949e">secrets</span><span>2</span>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 20px; flex-wrap: wrap">
+      <span><span style="color: #3fb950">✔</span> Checked</span>
+      <span><span style="color: #3fb950">✔</span> Signed</span>
+      <span><span style="color: #3fb950">✔</span> Sent</span>
+      <span><span style="color: #3fb950">✔</span> Started</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <div><span style="color: #3fb950">✔</span> <span style="color: #ffffff; font-weight: 600">demo is live on prod</span> <span style="color: #8b949e">in 6.1s</span></div>
+      <div style="color: #8b949e; padding-left: 17px">zekno logs to watch it, zekno rollback to undo</div>
+    </div>
+
+    <div><span style="color: #8b949e">$</span> <span style="background: #d7dde4; color: #0b0d10">&nbsp;</span></div>
+  </div>
+
+  <div style="width: 1px; background: #2a313a"></div>
+
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+    <div><span style="color: #8b949e">$</span> zekno deploy</div>
+
+    <div style="position: relative; box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 16px 16px 12px 16px">
+      <div style="position: absolute; top: -11px; left: 12px; background: #0b0d10; padding: 0 8px; color: #ffffff; font-weight: 600">Deploy 6</div>
+      <div style="display: grid; grid-template-columns: 84px 1fr; row-gap: 2px">
+        <span style="color: #8b949e">app</span><span>demo</span>
+        <span style="color: #8b949e">server</span><span>prod</span>
+        <span style="color: #8b949e">secrets</span><span>2</span>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 20px; flex-wrap: wrap">
+      <span><span style="color: #3fb950">✔</span> Checked</span>
+      <span><span style="color: #3fb950">✔</span> Signed</span>
+      <span><span style="color: #3fb950">✔</span> Sent</span>
+      <span style="color: #f85149">✖ Starting</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">prod accepted deploy 6, but the app did not start.</span></div>
+      <div style="color: #8b949e; padding-left: 17px">Number 6 is used, so the next deploy will be 7.</div>
+    </div>
+
+    <div style="position: relative; box-sizing: border-box; border: 1px solid #f85149; border-radius: 6px; padding: 16px 16px 12px 16px">
+      <div style="position: absolute; top: -11px; left: 12px; background: #0b0d10; padding: 0 8px; color: #f85149; font-weight: 600">Docker said</div>
+      <div style="color: #d7dde4">pull access denied for example/web, repository does not exist or may require 'docker login'</div>
+    </div>
+
+    <div style="color: #8b949e">Fix compose.yaml and run zekno deploy again, or go back with zekno rollback.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":600}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

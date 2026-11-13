@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zekno app home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 960px; height: 600px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px">
+  <div style="display: flex; justify-content: space-between; align-items: baseline">
+    <div style="display: flex; gap: 12px; align-items: baseline">
+      <svg role="img" aria-label="zekno.app" viewBox="0 0 41 5" shape-rendering="crispEdges" style="width: 344px; height: 50px; display: block; flex-shrink: 0"><path fill="#ffffff" d="M0 0h4v1h-4zM3 1h1v1h-1zM1 2h2v1h-2zM0 3h1v1h-1zM0 4h4v1h-4zM6 0h2v1h-2zM5 1h1v1h-1zM8 1h1v1h-1zM5 2h4v1h-4zM5 3h1v1h-1zM6 4h3v1h-3zM10 0h1v1h-1zM13 0h1v1h-1zM10 1h1v1h-1zM12 1h1v1h-1zM10 2h2v1h-2zM10 3h1v1h-1zM12 3h1v1h-1zM10 4h1v1h-1zM13 4h1v1h-1zM15 0h3v1h-3zM15 1h1v4h-1zM18 1h1v4h-1zM21 0h2v1h-2zM20 1h1v3h-1zM23 1h1v3h-1zM21 4h2v1h-2z"></path><path fill="#2383e2" d="M25 4h1v1h-1zM28 0h2v1h-2zM30 1h1v1h-1zM28 2h3v1h-3zM27 3h1v1h-1zM30 3h1v1h-1zM28 4h3v1h-3zM32 0h3v1h-3zM32 1h1v1h-1zM35 1h1v1h-1zM32 2h3v1h-3zM32 3h1v1h-1zM32 4h1v1h-1zM37 0h3v1h-3zM37 1h1v1h-1zM40 1h1v1h-1zM37 2h3v1h-3zM37 3h1v1h-1zM37 4h1v1h-1z"></path></svg>
+      <span style="color: #8b949e">ada's team</span>
+    </div>
+    <div style="display: flex; gap: 16px; color: #8b949e">
+      <span>team list v2</span>
+      <span>pre-alpha, unaudited</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; gap: 12px; min-height: 0">
+    <div style="width: 220px; box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+      <div style="color: #8b949e; font-weight: 600">Servers</div>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; flex-direction: column; background: #131a22; margin: 0 -8px; padding: 2px 8px; border-radius: 4px">
+          <div style="display: flex; gap: 8px"><span style="color: #2383e2">❯</span><span style="color: #ffffff; font-weight: 600; flex-grow: 1">prod</span><span style="color: #3fb950">●</span></div>
+          <div style="color: #8b949e; padding-left: 16px">deploy@203.0.113.7</div>
+        </div>
+        <div style="display: flex; flex-direction: column">
+          <div style="display: flex; gap: 8px"><span style="color: #0b0d10">❯</span><span style="flex-grow: 1">staging</span><span style="color: #3fb950">●</span></div>
+          <div style="color: #8b949e; padding-left: 16px">staging-box</div>
+        </div>
+        <div style="display: flex; gap: 8px; color: #8b949e"><span style="color: #0b0d10">❯</span><span>+ add a server</span></div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; box-sizing: border-box; border: 1px solid #2383e2; border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0">
+      <div style="display: flex; justify-content: space-between"><span style="color: #ffffff; font-weight: 600">Apps on prod</span><span style="color: #8b949e">3</span></div>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <div style="display: grid; grid-template-columns: 16px 1fr 92px 110px 96px; column-gap: 8px; color: #8b949e">
+          <span></span><span>app</span><span>deploy</span><span>state</span><span>when</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 16px 1fr 92px 110px 96px; column-gap: 8px; background: #131a22; margin: 0 -8px; padding: 2px 8px; border-radius: 4px">
+          <span style="color: #2383e2">❯</span><span style="color: #ffffff; font-weight: 600">demo</span><span>4</span><span style="color: #3fb950">● running</span><span style="color: #8b949e">2 min ago</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 16px 1fr 92px 110px 96px; column-gap: 8px">
+          <span></span><span>api</span><span>12</span><span style="color: #3fb950">● running</span><span style="color: #8b949e">yesterday</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 16px 1fr 92px 110px 96px; column-gap: 8px">
+          <span></span><span>worker</span><span>3</span><span style="color: #f85149">● stopped</span><span style="color: #8b949e">3 days ago</span>
+        </div>
+      </div>
+      <div style="flex-grow: 1"></div>
+      <div style="color: #8b949e">This folder is linked to <span style="color: #d7dde4">demo</span> on <span style="color: #d7dde4">prod</span> by zekno.json.</div>
+    </div>
+
+    <div style="width: 290px; box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div style="color: #8b949e; font-weight: 600">demo</div>
+      <div style="display: grid; grid-template-columns: 84px 1fr; row-gap: 2px">
+        <span style="color: #8b949e">deploy</span><span>4, started</span>
+        <span style="color: #8b949e">signed by</span><span>ada</span>
+        <span style="color: #8b949e">secrets</span><span>2</span>
+        <span style="color: #8b949e">file</span><span>compose.yaml</span>
+      </div>
+      <div style="border-top: 1px solid #2a313a"></div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <div style="display: flex; gap: 10px"><span style="color: #2383e2; font-weight: 600">d</span><span>Deploy this folder</span></div>
+        <div style="display: flex; gap: 10px"><span style="color: #2383e2; font-weight: 600">r</span><span>Roll back to deploy 3</span></div>
+        <div style="display: flex; gap: 10px"><span style="color: #2383e2; font-weight: 600">l</span><span>Logs</span></div>
+        <div style="display: flex; gap: 10px"><span style="color: #2383e2; font-weight: 600">s</span><span>Secrets</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 18px; color: #8b949e; flex-wrap: wrap">
+    <span><span style="color: #d7dde4">↑↓</span> move</span>
+    <span><span style="color: #d7dde4">←→</span> pane</span>
+    <span><span style="color: #d7dde4">enter</span> open</span>
+    <span><span style="color: #d7dde4">a</span> add</span>
+    <span><span style="color: #d7dde4">?</span> help</span>
+    <span><span style="color: #d7dde4">q</span> quit</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":600}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

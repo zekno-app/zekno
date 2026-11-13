@@ -176,6 +176,94 @@ export const RunnerStatusSchema = z
   .refine((status) => serverIdOf(status.serverPublicKey) === status.serverId)
 export type RunnerStatus = z.infer<typeof RunnerStatusSchema>
 
+/*
+ * A session: several requests over one connection to a runner. The CLI
+ * writes one request per line; the runner answers each with zero or more
+ * event lines and exactly one result line.
+ */
+
+/** The protocol this version of the messages belongs to. A runner reports it with its version. */
+export const RUNNER_PROTOCOL = 2
+
+/** Runner to CLI: which runner this is. */
+export const RunnerVersionSchema = z.strictObject({
+  version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+$/),
+  protocol: z.number().int().min(1).max(1_000_000),
+})
+export type RunnerVersion = z.infer<typeof RunnerVersionSchema>
+
+export const SESSION_COMMANDS = ["setup", "sync", "apply", "status", "state", "logs", "version"] as const
+export type SessionCommand = (typeof SESSION_COMMANDS)[number]
+
+/** CLI to runner: one request. `input` is that command's own request message, checked by the runner. */
+export const SessionRequestSchema = z.strictObject({
+  command: z.enum(SESSION_COMMANDS),
+  input: z.unknown().optional(),
+})
+export type SessionRequest = z.infer<typeof SessionRequestSchema>
+
+/** The name of one service of an app, as Docker Compose reports it. */
+export const SERVICE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/
+
+/** A time as Docker writes it: RFC 3339 with up to nanoseconds. */
+const LOG_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/
+
+/** Runner to CLI, during `apply`: one line of what Docker printed. Text for a person, never trusted. */
+export const ProgressEventSchema = z.strictObject({
+  event: z.literal("progress"),
+  line: z.string().max(4096),
+})
+export type ProgressEvent = z.infer<typeof ProgressEventSchema>
+
+/** Runner to CLI, during `logs`: one line an app's container wrote. Text for a person, never trusted. */
+export const LogEventSchema = z.strictObject({
+  event: z.literal("log"),
+  service: z.string().regex(SERVICE_NAME),
+  time: z.string().regex(LOG_TIME),
+  line: z.string().max(16384),
+})
+export type LogEvent = z.infer<typeof LogEventSchema>
+
+export const SessionEventSchema = z.discriminatedUnion("event", [ProgressEventSchema, LogEventSchema])
+export type SessionEvent = z.infer<typeof SessionEventSchema>
+
+/** Runner to CLI: the end of one request. `result` is that command's own answer, checked by the CLI. */
+export const SessionResultSchema = z.strictObject({ result: z.unknown() })
+
+/** Runner to CLI: one line of a session. */
+export const SessionFrameSchema = z.union([SessionEventSchema, SessionResultSchema])
+export type SessionFrame = z.infer<typeof SessionFrameSchema>
+
+export const SERVICE_STATES = ["running", "exited", "created", "restarting", "paused", "dead", "removing", "unknown"] as const
+export const SERVICE_HEALTH = ["healthy", "unhealthy", "starting", ""] as const
+
+/** Runner to CLI: what is running for each app. Names and states only. */
+export const RunnerAppStatesSchema = z.strictObject({
+  apps: z.record(
+    z.string().regex(APP_NAME),
+    z.strictObject({
+      services: z
+        .array(
+          z.strictObject({
+            service: z.string().regex(SERVICE_NAME),
+            state: z.enum(SERVICE_STATES),
+            exitCode: z.number().int().min(0).max(255),
+            health: z.enum(SERVICE_HEALTH),
+          })
+        )
+        .max(256),
+    })
+  ),
+})
+export type RunnerAppStates = z.infer<typeof RunnerAppStatesSchema>
+
+/** CLI to runner: follow the logs of one app, starting with its last `tail` lines. */
+export const RunnerLogsRequestSchema = z.strictObject({
+  app: z.string().regex(APP_NAME),
+  tail: z.number().int().min(0).max(1000),
+})
+export type RunnerLogsRequest = z.infer<typeof RunnerLogsRequestSchema>
+
 /**
  * Validates a message from outside. Raw text or bytes are checked for size
  * before they are parsed, so pass the body as received: a value that was
