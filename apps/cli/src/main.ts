@@ -4,6 +4,8 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 
 import { run } from "./cli"
+import type { OpDeps } from "./context"
+import { CliError } from "./errors"
 import { osKeychain } from "./keystore"
 import { connect } from "./transport"
 import { plainUi } from "./ui/plain"
@@ -14,43 +16,71 @@ const argv = process.argv.slice(2)
 const sibling = join(import.meta.dir, "../../runner/src/main.ts")
 const localRunner = existsSync(sibling) ? [process.execPath, sibling] : ["zekno-runner"]
 
-// At a terminal the interface is drawn with Ink. Piped, in a script or with
-// `--json` it is plain lines, so output stays stable for whatever reads it.
-const plain = argv.includes("--json") || !process.stdout.isTTY || process.env.TERM === "dumb"
-const ui = plain
-  ? plainUi(
-      (line) => console.log(line),
-      (line) => console.error(line)
-    )
-  : await terminalUi()
+const deps: OpDeps = {
+  home: process.env.ZEKNO_HOME || join(homedir(), ".zekno"),
+  cwd: process.cwd(),
+  keyStore: osKeychain(),
+  connect,
+  localRunner,
+}
 
 /**
  * Ink turns on React's developer tooling when DEV=true, which can hand a
  * component's state to a listener on this machine. A hidden prompt has no
- * business near that, so Ink never sees the variable. It is put back
- * afterwards, because programs started from here inherit the environment.
+ * business near that, so Ink never sees the variable: it is removed before
+ * Ink is loaded and put back once Ink has started, because programs started
+ * from here inherit the environment.
  */
-async function terminalUi() {
+async function withoutDev<T>(work: () => Promise<T>): Promise<T> {
   const dev = process.env.DEV
   delete process.env.DEV
   try {
-    return (await import("./ui/ink")).inkUi()
+    return await work()
   } finally {
     if (dev !== undefined) process.env.DEV = dev
   }
 }
 
-let code: number
-try {
-  code = await run(argv, {
-    home: process.env.ZEKNO_HOME || join(homedir(), ".zekno"),
-    cwd: process.cwd(),
-    keyStore: osKeychain(),
-    connect,
-    ui,
-    localRunner,
-  })
-} finally {
-  await ui.close()
+/** One command: an operation plus the interface, Ink at a terminal or plain lines. */
+async function command(): Promise<number> {
+  // Piped, in a script or with `--json` it is plain lines, so output stays stable for whatever reads it.
+  const plain = argv.includes("--json") || !process.stdout.isTTY || process.env.TERM === "dumb"
+  const ui = plain
+    ? plainUi(
+        (line) => console.log(line),
+        (line) => console.error(line)
+      )
+    : await withoutDev(async () => (await import("./ui/ink")).inkUi())
+  try {
+    return await run(argv, { ...deps, ui })
+  } finally {
+    await ui.close()
+  }
 }
-process.exit(code)
+
+/**
+ * The full-screen app. The terminal is asked for its background colour and
+ * the profile is verified before anything is drawn; neither reaches a server.
+ */
+async function app(): Promise<number> {
+  const { detectBackground } = await import("./ui/background")
+  const background = await detectBackground()
+  let closed: Promise<number> | undefined
+  await withoutDev(async () => {
+    const [{ loadStart }, { openApp }] = await Promise.all([import("./app/effects"), import("./app/app")])
+    const start = await loadStart(deps)
+    closed = openApp(deps, { start, background })
+  })
+  try {
+    return await closed!
+  } catch (error) {
+    // The terminal has been restored by now, so this is read on the normal screen.
+    if (!(error instanceof CliError)) throw error
+    console.error(error.message)
+    return 1
+  }
+}
+
+// `zekno` alone at a terminal opens the app. Anywhere else, alone, it prints the help as before.
+const opensApp = argv.length === 0 && Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY) && process.env.TERM !== "dumb"
+process.exit(opensApp ? await app() : await command())

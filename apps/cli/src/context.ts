@@ -12,7 +12,7 @@ import { z } from "zod"
 import { CliError } from "./errors"
 import type { KeyStore } from "./keystore"
 import { profileStore, type Profile, type ProfileStore } from "./profile"
-import type { Target, Transport } from "./transport"
+import type { ConnectOptions, Target, Transport } from "./transport"
 import type { Ui } from "./ui/types"
 
 /** Everything a command needs from the outside world. Tests pass their own. */
@@ -22,7 +22,7 @@ export type Deps = {
   /** The folder commands were run from, for finding the Compose file. */
   cwd: string
   keyStore: KeyStore
-  connect(target: Target, localRunner: string[]): Transport
+  connect(target: Target, localRunner: string[], options?: ConnectOptions): Transport
   /** How results, progress and questions reach the person. */
   ui: Ui
   /** The command that starts a runner on this machine, for `--local`. */
@@ -85,7 +85,7 @@ export type Team = {
   withSigner<T>(work: (signer: Signer) => Promise<T>): Promise<T>
 }
 
-const TAMPERED = "The profile folder may have been changed by something other than zekno."
+export const TAMPERED = "The profile folder may have been changed by something other than zekno."
 
 /**
  * Loads the profile and proves it. The profile folder is ordinary files, so

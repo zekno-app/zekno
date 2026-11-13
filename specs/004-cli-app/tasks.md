@@ -12,7 +12,7 @@
 
 - [ ] T001 [P] Add apps/cli/src/runner-release.json (`{ "version": "0.2.0", "files": { "linux-x64": { "sha256": null }, "linux-arm64": { "sha256": null } } }`) and a strict loader in apps/cli/src/runner-release.ts: `version` matches `^[0-9]+\.[0-9]+\.[0-9]+$`, each `sha256` is 64 lowercase hex characters or `null`
 - [X] T002 [P] Set the runner's version to 0.2.0 in apps/runner/package.json and add `compile:linux-x64` and `compile:linux-arm64` scripts (`bun build --compile --target=bun-linux-x64|arm64`)
-- [ ] T003 [P] Add the `brand-darker` token (`#1a73d1`) beside `brand` in packages/ui/src/styles/globals.css, and apps/cli/src/ui/theme.ts: the terminal's own text colour for normal text, dim for secondary, green/red/yellow for state, `brand` (`#2383e2`) on a dark terminal and `brand-darker` on a light one, chosen by asking the terminal for its background colour at start and assuming dark when it does not answer; selection is shown by the marker and bold text, never by a background
+- [X] T003 [P] Add the `brand-darker` token (`#1a73d1`) beside `brand` in packages/ui/src/styles/globals.css, and apps/cli/src/ui/theme.ts: the terminal's own text colour for normal text, dim for secondary, green/red/yellow for state, `brand` (`#2383e2`) on a dark terminal and `brand-darker` on a light one, chosen by asking the terminal for its background colour at start and assuming dark when it does not answer; selection is shown by the marker and bold text, never by a background
 
 ## Phase 2: Foundational (blocks every story)
 
@@ -23,11 +23,11 @@
 - [X] T008 [P] Implement apps/cli/src/sanitize.ts (remove terminal control characters and escape sequences from text that came from a server) with tests in apps/cli/test/sanitize.test.ts covering colour codes, cursor movement, OSC 52 clipboard writes, hyperlinks and a lone escape byte
 - [X] T009 Implement the session client in apps/cli/src/session.ts: start the runner once, send requests, validate frames, read up to the message size limit, clean event text with apps/cli/src/sanitize.ts, and fall back to one-shot commands when `session` exits with status 2; tests in apps/cli/test/session.test.ts
 - [X] T010 Move what each command does into apps/cli/src/ops/ (deploy.ts, server.ts, secret.ts, status.ts): operations take callbacks for stages and progress, return results, draw nothing, and reach a server through one session of apps/cli/src/session.ts per command (FR-034); apps/cli/src/commands/*.ts become an operation plus the `Ui`. All tests in apps/cli/test/ pass unchanged
-- [ ] T011 [P] Implement the pixel wordmark in apps/cli/src/ui/logo.ts: the 5-row bitmap of "zekno.app" drawn with half-block characters, 41 columns by 3 lines, "zekno" in the text colour and ".app" in the brand blue; test in apps/cli/test/logo.test.ts that every line is 41 columns and the bitmap matches the canvas letter shapes
-- [ ] T012 [P] Implement apps/cli/src/ui/panel.tsx (a box with a title on its top line), stages.tsx (the stage row) and key-hints.tsx, with `renderToString` tests in apps/cli/test/ui-parts.test.tsx
-- [ ] T013 [P] Implement apps/cli/src/ui/select.tsx, text-input.tsx and confirm.tsx with their key handling as pure functions (as apps/cli/src/ui/secret-input.ts does) and tests in apps/cli/test/ui-inputs.test.ts
-- [ ] T014 Implement the app shell: apps/cli/src/app/state.ts (pure reducer: screen stack, selection per screen, which keys do what per contracts/app.md), apps/cli/src/app/effects.ts (runs operations, dispatches results), apps/cli/src/app/app.tsx (alternate screen, window size, header with the logo and "pre-alpha, unaudited", key hints, restores the terminal on every exit path); open it from apps/cli/src/main.ts when there are no arguments and a terminal, and print the help with exit status 2 when there is no terminal
-- [ ] T015 Tests for the reducer in apps/cli/test/app-state.test.ts: every key in contracts/app.md on every screen, a key that does nothing is ignored, letters type into an open question, `q` during a deploy waits
+- [X] T011 [P] Implement the pixel wordmark in apps/cli/src/ui/logo.ts: the 5-row bitmap of "zekno.app" drawn with half-block characters, 41 columns by 3 lines, "zekno" in the text colour and ".app" in the brand blue; test in apps/cli/test/logo.test.ts that every line is 41 columns and the bitmap matches the canvas letter shapes
+- [X] T012 [P] Implement apps/cli/src/ui/panel.tsx (a box with a title on its top line), stages.tsx (the stage row) and key-hints.tsx, with `renderToString` tests in apps/cli/test/ui-parts.test.tsx
+- [X] T013 [P] Implement apps/cli/src/ui/select.tsx, text-input.tsx and confirm.tsx with their key handling as pure functions (as apps/cli/src/ui/secret-input.ts does) and tests in apps/cli/test/ui-inputs.test.ts
+- [X] T014 Implement the app shell: apps/cli/src/app/state.ts (pure reducer: screen stack, selection per screen, which keys do what per contracts/app.md), apps/cli/src/app/effects.ts (runs operations, dispatches results), apps/cli/src/app/app.tsx (alternate screen, window size, header with the logo and "pre-alpha, unaudited", key hints, restores the terminal on every exit path); open it from apps/cli/src/main.ts when there are no arguments and a terminal, and print the help with exit status 2 when there is no terminal
+- [X] T015 Tests for the reducer in apps/cli/test/app-state.test.ts: every key in contracts/app.md on every screen, a key that does nothing is ignored, letters type into an open question, `q` during a deploy waits
 
 ## Phase 3: User Story 1 - Operate my servers and apps from one screen (P1) 🎯 MVP
 
@@ -40,7 +40,7 @@
 - [ ] T020 [US1] Implement setting and removing a secret in apps/cli/src/app/screens/set-secret.tsx with the hidden prompt rules of apps/cli/src/ui/secret-input.ts (echo off before the question is drawn, multi-line refused, empty not stored, Ctrl-C cancels the prompt only) and a confirm before removing
 - [ ] T021 [US1] Show an unreachable server on Home without blocking the others, in apps/cli/src/app/effects.ts and apps/cli/src/app/screens/home.tsx
 - [ ] T022 [US1] Tests in apps/cli/test/app-operate.test.tsx: each of the three screens rendered at 100 columns contains the wording, symbols and keys of its canvas board; deploy, failed start, rollback, set and remove a secret driven through the reducer and effects against a real runner process with a stand-in Docker
-- [ ] T023 [US1] (canvas: "Help", approved 2026-11-14) implement the help screen in apps/cli/src/app/screens/help.tsx and its test
+- [X] T023 [US1] (canvas: "Help", approved 2026-11-14) implement the help screen in apps/cli/src/app/screens/help.tsx and its test
 - [ ] T024 [US1] Walk through User Story 1 in a pseudo-terminal that reads continuously (open, move, open an app, deploy, leave during a deploy, roll back, set a secret, quit) and record what was and was not checked in specs/004-cli-app/quickstart.md
 
 ## Phase 4: User Story 2 - From nothing to a running app without leaving the app (P2)
@@ -94,9 +94,9 @@
 ## Phase 8: Polish & Cross-Cutting
 
 - [ ] T053 (canvas: "Home at 80 columns" and "One app at 80 columns", approved 2026-11-14) arrange Home and the app screen at 80 columns in apps/cli/src/app/screens/home.tsx and app.tsx, with `renderToString` tests at 80 columns
-- [ ] T054 (canvas: "Terminal too small", approved 2026-11-14) implement the message in apps/cli/src/app/app.tsx for a window under 80 by 24, returning to the same screen when there is room
-- [ ] T055 (canvas: "Home on a light terminal", approved 2026-11-14) implement background detection in apps/cli/src/ui/background.ts (ask the terminal with OSC 11, short timeout, assume dark) with tests for the answer parser, and apply the colour rules of apps/cli/src/ui/theme.ts to every screen
-- [ ] T056 (canvas: "Profile could not be verified", approved 2026-11-14) implement the error screen for a profile that does not verify in apps/cli/src/app/screens/profile-error.tsx
+- [X] T054 (canvas: "Terminal too small", approved 2026-11-14) implement the message in apps/cli/src/app/app.tsx for a window under 80 by 24, returning to the same screen when there is room
+- [X] T055 (canvas: "Home on a light terminal", approved 2026-11-14) implement background detection in apps/cli/src/ui/background.ts (ask the terminal with OSC 11, short timeout, assume dark) with tests for the answer parser, and apply the colour rules of apps/cli/src/ui/theme.ts to every screen
+- [X] T056 (canvas: "Profile could not be verified", approved 2026-11-14) implement the error screen for a profile that does not verify in apps/cli/src/app/screens/profile-error.tsx
 - [ ] T057 [P] Confirm every test of apps/cli/test/hardening.test.ts, journey.test.ts, secret-input.test.ts and apps/runner/test/refusals.test.ts still passes, and extend the "no key and no value in any file" test of apps/cli/test/journey.test.ts to a run that used the app, logs and state
 - [ ] T058 Independent internal security review of the new surface (session mode, the install script and `--runner-file`, state and log text reaching the terminal, `zekno.json`, the release workflow), fix every finding rated high or critical, and record all findings in specs/004-cli-app/security-review.md
 - [ ] T059 [P] Update apps/cli/README.md and apps/runner/README.md to describe exactly what exists: the app and its keys, every command, `zekno.json`, the install route and its limits, the session command

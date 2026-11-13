@@ -61,14 +61,30 @@ const ERROR_LINE = 4096
 /** How long to wait, once a runner has exited, for the last of its standard error. */
 const ERROR_GRACE_MS = 1000
 
+/** Where a runner's standard error goes, one cleaned line at a time. */
+export type ErrorLines = (line: string) => void
+
+/** A single command's way: straight to this process's standard error. */
+const toStandardError: ErrorLines = (line) => void process.stderr.write(`${line}\n`)
+
+export type ConnectOptions = {
+  /**
+   * Receives what the runner, Docker or SSH write on standard error, one
+   * cleaned line at a time, instead of this process's standard error. The
+   * full-screen app passes one: a write to the terminal behind Ink's back
+   * would draw over the screen.
+   */
+  errorLines?: ErrorLines
+}
+
 /**
- * Passes what a runner, Docker or SSH writes on standard error on to ours, one
- * cleaned line at a time. It comes from the server and could hold anything a
- * terminal would act on.
+ * Passes what a runner, Docker or SSH writes on standard error on to `out`,
+ * one cleaned line at a time. It comes from the server and could hold
+ * anything a terminal would act on.
  */
-async function passOn(stream: ReadableStream<Uint8Array>): Promise<void> {
+async function passOn(stream: ReadableStream<Uint8Array>, out: ErrorLines): Promise<void> {
   const decoder = new TextDecoder()
-  const emit = (line: string) => void process.stderr.write(`${sanitize(line)}\n`)
+  const emit = (line: string) => out(sanitize(line))
   let rest = ""
   try {
     for await (const chunk of stream) {
@@ -119,9 +135,9 @@ function quietly(work: () => unknown): void {
   }
 }
 
-async function run(argv: string[], input: string | undefined, env: Record<string, string | undefined> | undefined) {
+async function run(argv: string[], input: string | undefined, env: Record<string, string | undefined> | undefined, out: ErrorLines) {
   const child = spawn(argv, env)
-  const errors = passOn(child.stderr)
+  const errors = passOn(child.stderr, out)
   try {
     if (input !== undefined) child.stdin.write(input)
     await child.stdin.end()
@@ -139,9 +155,9 @@ async function run(argv: string[], input: string | undefined, env: Record<string
   return { exitCode, stdout }
 }
 
-function open(argv: string[], env: Record<string, string | undefined> | undefined): RunnerProcess {
+function open(argv: string[], env: Record<string, string | undefined> | undefined, out: ErrorLines): RunnerProcess {
   const child = spawn(argv, env)
-  void passOn(child.stderr)
+  void passOn(child.stderr, out)
   let writable = true
   return {
     output: child.stdout,
@@ -166,15 +182,20 @@ function open(argv: string[], env: Record<string, string | undefined> | undefine
 }
 
 /** A transport that starts `argv(word)` for each runner command word. */
-function transport(argv: (word: string) => string[], env: () => Record<string, string | undefined> | undefined, firstAnswerMs?: number): Transport {
+function transport(
+  argv: (word: string) => string[],
+  env: () => Record<string, string | undefined> | undefined,
+  out: ErrorLines,
+  firstAnswerMs?: number
+): Transport {
   const command = (word: string): string[] => {
     // The type already says so; this holds even for a caller that got around it.
     if (!WORDS.includes(word)) throw new CliError(`"${word}" is not a runner command.`)
     return argv(word)
   }
   return {
-    run: async (word, input) => run(command(word), input, env()),
-    open: () => open(command("session"), env()),
+    run: async (word, input) => run(command(word), input, env(), out),
+    open: () => open(command("session"), env(), out),
     firstAnswerMs,
   }
 }
@@ -183,12 +204,16 @@ function transport(argv: (word: string) => string[], env: () => Record<string, s
  * Reaches a runner by running it. `localRunner` is the command that starts a
  * runner on this machine. An SSH destination and path are checked here as
  * well as when the server was added, because they are read back from a file.
+ * What the runner writes on standard error goes to `options.errorLines`, or
+ * to this process's standard error when there is none.
  */
-export function connect(target: Target, localRunner: string[]): Transport {
+export function connect(target: Target, localRunner: string[], options: ConnectOptions = {}): Transport {
+  const out = options.errorLines ?? toStandardError
   if (target.kind === "local") {
     return transport(
       (word) => [...localRunner, word],
       () => ({ ...process.env, ZEKNO_RUNNER_HOME: target.home }),
+      out,
       LOCAL_FIRST_ANSWER_MS
     )
   }
@@ -201,7 +226,8 @@ export function connect(target: Target, localRunner: string[]): Transport {
   // nothing else.
   return transport(
     (word) => ["ssh", "--", target.destination, `${target.runnerPath} ${word}`],
-    () => undefined
+    () => undefined,
+    out
   )
 }
 
