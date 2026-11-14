@@ -162,8 +162,8 @@ A Turborepo monorepo on Bun workspaces. The table shows what exists today.
 | `packages/eslint-config` | Shared ESLint configuration | Available |
 | `packages/typescript-config` | Shared TypeScript configuration | Available |
 | `packages/core` | Key generation, secret encryption, signed deploys, team membership and protocol types | First version built; unaudited. The control-plane client is not written yet |
-| `apps/cli` | Command-line tool: your key, secrets and deploys. Its terminal interface is built with Ink | First version built: one developer, deploying directly over SSH. Internal review only; unaudited |
-| `apps/runner` | Program that runs on your servers | First version built: verifies, decrypts, starts Docker Compose. Internal review only; unaudited |
+| `apps/cli` | Command-line tool: your key, servers, secrets, deploys, running state and logs. Running `zekno` opens a full-screen terminal app built with Ink; single commands stay for scripts | Second version built: the terminal app, running state and logs read from your server, a project file (`zekno.json`), and installing the runner over SSH. No runner release is published yet, so a server still needs a runner installed by hand. One developer, deploying directly over SSH. Internal reviews only; unaudited |
+| `apps/runner` | Program that runs on your servers | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything, over one connection per command. Internal reviews only; unaudited |
 | `apps/desktop` | Desktop app (Electrobun: React UI + Bun main process) | Planned |
 
 - `packages/core` contains no framework code. The desktop app and the runner both depend on it, so they encrypt and verify in exactly the same way.
@@ -251,6 +251,11 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 
 - [x] Runner: verify, decrypt, run Docker Compose (driven directly over SSH; pulling from the control plane comes with it)
 - [x] CLI: connect a server, set and remove secrets, deploy, roll back, status (direct over SSH)
+- [x] CLI terminal app: Home, an app's deploys and secrets, deploys with stages, first run and adding a server from the app
+- [x] Running state and live logs, read from your server over SSH (CLI and runner)
+- [x] Project file `zekno.json`, used only once this machine accepted it
+- [x] Installing the runner over SSH from a release, checked against a checksum the CLI holds, and the release workflow
+- [ ] Publish the first runner release (until then a server needs a runner installed by hand)
 - [ ] Desktop app: connect a server, set secrets, deploy, roll back, logs
 - [ ] Website: landing pages and docs, then the signed-in dashboard
 - [ ] Local mock of the control plane for development

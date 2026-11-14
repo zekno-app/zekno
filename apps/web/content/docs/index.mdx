@@ -70,8 +70,8 @@ secrets and no ability to run code on customer servers.
 | --- | --- |
 | Website (`apps/web`) | Landing page and these docs; the signed-in dashboard is planned |
 | Core library (`packages/core`): encryption, signing, team lists, message formats | First version built; internal review only |
-| Command-line tool (`apps/cli`) | First version built: one developer, deploying directly over SSH |
-| Server runner (`apps/runner`) | First version built: verifies, decrypts, starts Docker Compose |
+| Command-line tool (`apps/cli`) | Second version built: a full-screen terminal app and single commands for scripts, running state and logs read from your server, and a project file. One developer, deploying directly over SSH. It can install the runner on a server, but no runner release is published yet. Internal reviews only. See [Command-line tool](/docs/cli) |
+| Server runner (`apps/runner`) | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything. One connection per command. Internal reviews only. See [Server runner](/docs/runner) |
 | Desktop app (`apps/desktop`) | Planned |
 | Control plane | Hosted by Zekno, closed source |
 
