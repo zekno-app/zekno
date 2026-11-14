@@ -8,5 +8,5 @@
     "noEmit": true,
     "types": ["bun"]
   },
-  "include": ["src", "test", "build.ts"]
+  "include": ["src", "test", "tests", "build.ts", "e2e.config.ts"]
 }

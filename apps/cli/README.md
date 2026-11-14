@@ -584,3 +584,53 @@ app (`src/app/`) uses too. The app's keys are a pure reducer, `src/app/state.ts`
 press does at the hidden prompt is a pure function, `src/ui/secret-input.ts`. Tests use the plain
 interface and an in-memory key store, so they need no terminal and never touch the real keychain. `test/docs.test.ts` checks that this file and the docs page name every command, flag and
 key, and nothing that does not exist.
+
+## End-to-end tests
+
+Tests of the full-screen app as a person uses it: `zekno` runs in a real pseudo-terminal, and an
+agent presses keys toward a goal written in the words on the screen ("deploy this folder", "roll
+back to deploy 1"). After each goal the test checks exactly what the screen shows and what really
+happened: what the stand-in Docker was asked to run, what the runner accepted, which files were
+written. They use the [e2e](https://www.npmjs.com/package/e2e) test runner with the AI SDK, and
+Claude Sonnet 5.5 through the Vercel AI Gateway.
+
+```bash
+cd apps/cli
+bun run test:e2e          # every end-to-end test but the real-Docker one
+bun run test:e2e:docker   # one real container; skipped when Docker or caddy:2.11.9 is missing
+```
+
+Neither is part of `bun run test`, and neither runs in turbo's `test` task.
+
+**They cost money.** Each model call is billed to whoever owns the key. A run from an empty replay
+cache made 38 model calls, about $0.15 (2026-11-14). A goal that passed is recorded in
+`.e2e/cache/` and replayed with no model call while its screens stay the same, so a second run
+makes none. `.e2e/` is output (`apps/cli/.gitignore`); whether to commit the replay cache is open.
+
+**The key** goes in `apps/cli/.env.local` as `AI_GATEWAY_API_KEY=...`. Git ignores it. Only the
+test runner reads it, through `--env-file` in the two scripts; `bun test` does not load
+`.env.local`. Nothing the tests start sees it: the app, the runner and the stand-ins get an
+environment built from an allow-list (`tests/support/world.ts`). Without the file, a goal for the
+model fails at its first model call, unless the replay cache has it; the tests with no goal pass
+as before.
+
+**What is sent to the model:** the goal and its parameters, the test's title, the agent's
+instructions in `e2e.config.ts`, and the screen as a tree of its lines. Only test data is ever on
+that screen: a member `ada`, servers `prod` and `staging`, apps `demo` and `api`, example
+addresses, made-up values. The app runs with a temporary home folder, so paths show as `~`. A
+secret value is never sent: the model gets its name, and the runner types it into the hidden
+prompt.
+
+**What the model can do:** press keys and type text in the app's terminal, nothing else. It has
+no tool that runs a command, reads a file or reaches the network. The app it drives is a test
+build (`tests/support/zekno-test.ts`) that cannot do harm whatever is typed: a key store file in
+the test's temporary folder instead of the keychain, temporary folders for the profile, the
+project and the runner, the stand-in Docker, and SSH that reaches only the stand-in server of
+`test/stand-in-server.ts`. Without one, any SSH destination fails closed; no `ssh` is ever
+started.
+
+How it fits together: `tests/support/engine.ts` is the e2e engine, `terminal.ts` the
+pseudo-terminal, `screen-model.ts` the screen it reads, and `screen-tree.ts` the tree the runner
+and the model see. Each test sets its world up with exact steps (`tests/support/world.ts`) and
+opens the app on the screen it is about. The screen model has its own unit tests in
+`test/e2e-screen-model.test.ts`, which `bun test` runs.

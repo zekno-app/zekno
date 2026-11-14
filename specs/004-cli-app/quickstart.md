@@ -492,3 +492,61 @@ Left for the maintainer, each a question of design:
 
 Checks at the end, at `ccffd32`, run without the cache: typecheck 5 of 5, lint passes, tests
 core 88, runner 80, cli 565, web 28, none failing.
+
+### End-to-end tests with an agent (2026-11-14)
+
+`apps/cli` has agent end-to-end tests of the full-screen app (README, "End-to-end tests"): the
+`e2e` runner 0.23.1 with an engine of our own that runs `zekno` in a pseudo-terminal from
+`Bun.spawn({ terminal })` at 100 by 30, Claude Sonnet 5.5 (`anthropic/claude-sonnet-5.5`) through
+the Vercel AI Gateway, the stand-in Docker for every test and the stand-in server for SSH.
+`cd apps/cli && bun run test:e2e`; `bun run test:e2e:docker` for the one real container.
+
+Runs on Bun 1.4.4, with the runner's own figures:
+
+- From an empty replay cache: 11 of 11 passed, 12 goals run by the model, 38 model calls, $0.15,
+  36.8 s.
+- Straight after, the same command: 11 of 11 passed, 12 goals replayed, no model call, 8.7 s.
+- `bun run test:e2e:docker`: 1 of 1 passed, twice; the container and its network were gone
+  afterwards.
+
+| Test | Goals for the model | Result |
+|------|---------------------|--------|
+| First run: create the key `ada`, add this machine as `prod` | 2 | pass |
+| Add `staging` over SSH through the stand-in, to the server code (checked against the signed team list) | 1 | pass |
+| A real-looking destination (`deploy@203.0.113.7`) starts no `ssh` | none: exact keys | pass |
+| Deploy a linked folder from Home, to "Started" | 1 | pass |
+| Set GREETING at the hidden prompt (a `secrets` value), then deploy | 1 | pass |
+| Decline the missing value: esc, esc, `n`; nothing deployed | 1 | pass |
+| Logs: open, filter for `job`, show `worker`, pause | 4 | pass |
+| Roll back to deploy 1 from the app screen | 1 | pass |
+| A linked folder with `api` selected: the question, `n` deploys nothing | 1, then exact `d` and `n` | pass |
+| A team-signed `zekno.json` copied elsewhere: asked on opening, `n` leaves it unused | none: exact keys | pass |
+| A `zekno.json` with no signature: said on Home, `d` deploys nothing | none: exact keys | pass |
+| Real Docker: one container, running, cleaned up (tagged `docker`) | none: exact keys | pass |
+
+The tests with no goal check a refusal or a set-up that needs no judgement; the safety test's
+guarantee is below the keyboard, in how the test build connects, so it holds whoever types.
+
+Checks of the key (`apps/cli/.env.local`, never read by anything but the test runner):
+
+1. The key does not reach the app or anything it starts. With
+   `AI_GATEWAY_API_KEY=dummy-key-for-leak-check`, `TMPDIR` set to a scratch folder and
+   `ZEKNO_E2E_KEEP=1` (the tests' folders are kept), `bun run test:e2e` passed 11 of 11 from the
+   replay cache. Of the 2,179 files it wrote (11 test worlds, the stand-in Docker's logs, which
+   record the environment Docker was started with, the stand-in server, `.e2e/`), none holds the
+   value and none names the variable. A live model step with the same dummy key and `--ai-trace`
+   was refused by the gateway; `.e2e/ai-trace.json` and the rest of `.e2e/` do not hold it either.
+2. `bun test` does not load the key. Checked with a dummy file in a scratch folder: Bun 1.4.4
+   loads `.env`, `.env.test` and `.env.test.local` under `bun test` but never `.env.local`, also
+   with `NODE_ENV` set to `development` or `production`, and `bun run <script>` passes no value
+   from `.env.local` to the script. Nothing had to change for the `test` script.
+
+`.e2e/` (reports, traces, the replay cache, `ai-trace.json`) holds no key, no secret value, no
+real path and not the maintainer's name. The replay cache holds key presses, typed test data, a
+secret's name only, and screen text; committing it is the maintainer's decision.
+
+Not run: the real-Docker test with Docker stopped (it then says why and is skipped); no test asks
+for the 80 by 24 window yet.
+
+Seen while writing them, not changed: after a rollback from the app screen, the marker stays on
+the same row of the list, which now holds the next older deploy (deploy 2 rather than deploy 1).

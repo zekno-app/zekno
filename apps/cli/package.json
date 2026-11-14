@@ -10,7 +10,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "compile": "bun build.ts"
+    "compile": "bun build.ts",
+    "test:e2e": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 bun --bun --env-file=.env.local e2e run --exclude-tag docker",
+    "test:e2e:docker": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 ZEKNO_E2E_REAL_DOCKER=1 bun --bun --env-file=.env.local e2e run --tag docker"
   },
   "dependencies": {
     "@workspace/core": "workspace:*",
@@ -22,6 +24,8 @@
     "@types/bun": "^1.4.4",
     "@types/react": "19.3.0",
     "@workspace/typescript-config": "workspace:*",
+    "ai": "^7",
+    "e2e": "0.23.1",
     "typescript": "^5"
   }
 }
