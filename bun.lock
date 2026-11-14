@@ -44,7 +44,7 @@
     },
     "apps/runner": {
       "name": "@workspace/runner",
-      "version": "0.1.0-dev.1",
+      "version": "0.1.0",
       "bin": {
         "zekno-runner": "./src/main.ts",
       },
