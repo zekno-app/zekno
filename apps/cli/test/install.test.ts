@@ -482,7 +482,8 @@ describe("the script, run with sh against stand-ins", () => {
         }
         expect(pairs.filter(({ there, carried }) => compareRunnerVersions(there, carried) > 0)).toHaveLength(55)
         expect(server.calls("curl")).toEqual([])
-      })
+        // 121 runs of the script: a second or two alone, more when the whole suite runs beside it.
+      }, 30_000)
 
       test("a runner's own version is read with the same grammar: anything else is unknown", async () => {
         const server = standInServer()
