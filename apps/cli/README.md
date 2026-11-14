@@ -374,7 +374,7 @@ Docker reported are written to standard error after the failure sentence.
 
 Lines that a runner, Docker or SSH write on standard error are passed on after the mark
 `remote:`, so they cannot pass for zekno's own. One place has no mark: at a terminal, `zekno deploy`
-and `zekno rollback` show Docker's latest line dim under the stage row while the deploy runs, and
+and `zekno rollback` show Docker's latest line dim and set in by two columns under the stage row, and
 on a failed start show Docker's lines inside a panel titled "Docker said". Those lines are the
 server's words, not zekno's. Text from a server is cleaned of terminal control sequences before it
 reaches the terminal, in the app and in single commands.

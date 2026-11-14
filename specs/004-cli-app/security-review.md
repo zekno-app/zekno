@@ -414,7 +414,7 @@ phase (`6482285`). Nothing was rated high or critical. Four low findings and fiv
 
 | Id | Rating | Finding | State |
 |----|--------|---------|-------|
-| F1 | Low | At a terminal, `zekno deploy` and `zekno rollback` draw Docker's lines with no `remote:` mark: the latest line, dim, under the stage row, and on a failed start the lines in the "Docker said" panel. A lying server can print a line that reads like zekno's own result. C8 above, the README and the docs said every such line carries the mark. | Not changed. The approved board ("zekno deploy: success and failure") shows these lines without a mark, and the result line that follows is zekno's own. The record, the README and the docs now say what the screen does. Whether to add the mark is the maintainer's decision. Plain output is as C8 says. |
+| F1 | Low | At a terminal, `zekno deploy` and `zekno rollback` draw Docker's lines with no `remote:` mark: the latest line, dim, under the stage row, and on a failed start the lines in the "Docker said" panel. A lying server can print a line that reads like zekno's own result. C8 above, the README and the docs said every such line carries the mark. | Decided by the maintainer on 2026-11-14: no mark, as the approved board ("zekno deploy: success and failure") shows. The failure panel is titled "Docker said", which says whose words they are. The live line is now set in by two columns, however the server began it, so nothing a server says starts at the left edge, where zekno's own result line starts. The record, the README and the docs say what the screen does. Plain output is as C8 says. |
 | F2 | Low | `zekno link --app <name>` in a sub-folder took the server from a `zekno.json` above that this machine never accepted, wrote a new file with it and accepted that. The same with `--server` and the app. Reproduced. | Fixed in `ccffd32`: a missing name is filled only from an accepted file. Otherwise the command stops with exit status 2 before writing anything. |
 | F3 | Low | `zekno secret set` asked for the value before it checked the name. `zekno secret set DB_PASSWORD=hunter2` at a terminal repeated what was typed in the prompt. Reproduced. | Fixed in `ccffd32`: the name is checked before any prompt, and the refusal states the rule without repeating what was typed. |
 | F4 | Low | The read made when the app starts, and after `u`, had no time limit, so a server that stalled just then stayed "not asked" and was never retried. Reproduced. | Fixed in `ccffd32`: the 20-second limit starts as soon as the session is open. Only connecting, where SSH may be asking for a password, has none. |
@@ -485,7 +485,6 @@ and the runner's and the plumbing's own tests (S1 to S3, S6 to S8, L6, C7 to C10
 
 - S4: anyone who can start the runner on the server can read `state` and `logs` of every app,
   with no team signature. Accept it, or require signed requests.
-- F1: mark Docker's lines in the terminal deploy view, or keep the board as it is.
 - N1 and N5 above.
 - From the installer review: restrict who can push `runner-v*` tags, and compare the release's
   checksums with a build made elsewhere before recording them.

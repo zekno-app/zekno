@@ -58,6 +58,9 @@ function After({ children }: { children: ReactNode }) {
  * it. Every part fits the window: panels are no wider than it, and text
  * wraps inside its own box, so a narrow window wraps, it never breaks lines.
  */
+/** How far Docker's live line is set in from the left edge. */
+export const LIVE_LINE_INDENT = 2
+
 export function DeployBlock({ shown, columns }: { shown: DeployShown; columns: number }) {
   const theme = useTheme()
   const { start, deploy } = shown
@@ -69,9 +72,13 @@ export function DeployBlock({ shown, columns }: { shown: DeployShown; columns: n
       <Summary deploy={deploy} width={width} tone="plain" />
       <Stages stages={stagesOf(deploy)} gap={2} />
       {deploy.running ? (
-        <Text dimColor wrap="truncate-end">
-          {deploy.lines.at(-1) ?? " "}
-        </Text>
+        // Docker's words, not zekno's: dim, and set in by two columns, so nothing a server says
+        // starts at the left edge, where zekno's own lines start.
+        <Box paddingLeft={LIVE_LINE_INDENT}>
+          <Text dimColor wrap="truncate-end">
+            {deploy.lines.at(-1)?.trimStart() || " "}
+          </Text>
+        </Box>
       ) : null}
       {!deploy.running && deploy.outcome === "started" ? (
         <Box flexDirection="column">

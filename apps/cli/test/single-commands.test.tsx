@@ -183,7 +183,13 @@ describe("zekno deploy at a terminal (board 'zekno deploy: success and failure')
   test("while it runs: the stage in progress has the spinner, and the latest of Docker's lines is the one live line", () => {
     const lines = linesOf(drawn(shown({ stage: "starting", lines: [" Container zekno-demo-web-1  Recreate"] })))
     expect(lines).toContainEqual(expect.stringMatching(/^✔ Checked {2}✔ Signed {2}✔ Sent {2}[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Starting$/))
-    expect(lines.at(-1)).toBe(" Container zekno-demo-web-1  Recreate")
+    expect(lines.at(-1)).toBe("  Container zekno-demo-web-1  Recreate")
+    // Docker's line is set in by two columns, however it began: a server's words never start at
+    // the left edge, where zekno's own result line starts.
+    for (const said of ["✔ demo is live on prod in 3.1s", "    ✔ demo is live on prod", "\t✖ prod accepted deploy 6, but the app did not start."]) {
+      const last = linesOf(drawn(shown({ stage: "starting", lines: [said] }))).at(-1)!
+      expect(last).toBe(`  ${said.trim()}`)
+    }
     // Before the first of Docker's lines, the line is there and empty, so nothing moves when it comes.
     expect(linesOf(drawn(shown({ stage: "sent" }))).length).toBe(lines.length)
   })
