@@ -5,11 +5,13 @@
  *
  * The file is the developer's, but it can come from anywhere, such as a
  * cloned repository, so it is read as untrusted text: its size is limited
- * before it is parsed, the walk over what was parsed is bounded (YAML aliases
- * can make a small file stand for a huge or endless structure), and a file
- * that cannot be read, parsed or walked within the bounds yields no names,
- * never an error. The names are only ever shown and compared with secret
- * names, and each is held to the secret-name pattern first.
+ * and its aliases are counted before it is parsed (Bun's parser copies what
+ * an alias stands for, so a small file of many aliases to one long string
+ * becomes gigabytes), the walk over what was parsed is bounded, and a file
+ * that cannot be parsed or walked within the bounds yields no names, never
+ * an error. At most `MAX_NAMES` names are given. The names are only ever
+ * shown and compared with secret names, and each is held to the secret-name
+ * pattern first.
  *
  * Which names count as expected and have no value:
  *
@@ -26,9 +28,13 @@
  * - `env_file` is not read, and keys are not read for `$`.
  * - Reserved names (PATH, DOCKER_HOST, COMPOSE_*, ...) are left out: the
  *   runner never takes them from a secret.
+ *
+ * The names come in this order: those a service's `environment` lists with
+ * no value, service by service, then those used in values, as the parsed
+ * file gives them (document order, but for keys that are whole numbers,
+ * which JavaScript puts first). Past `MAX_NAMES`, the rest are left out.
  */
 import { isReservedSecretName, LIMITS, SECRET_NAME } from "@workspace/core"
-import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs"
 
 /** The most of a Compose file that is read: the same limit a deploy has. */
 export const COMPOSE_READ_BYTES = LIMITS.composeBytes
@@ -38,6 +44,32 @@ export const MAX_NODES = 100_000
 export const MAX_DEPTH = 64
 /** The most characters of strings read for `$`. Without aliases a file cannot have more than its size. */
 export const MAX_CHARS = 4 * LIMITS.composeBytes
+/** The most aliases a file may use to be parsed at all. A Compose file uses a handful. */
+export const MAX_ALIASES = 200
+/** The most names given: far more than a Compose file expects, few enough for the list before a deploy. */
+export const MAX_NAMES = 64
+
+/**
+ * Something that may be an alias: `*` followed by a character an anchor's
+ * name can start with. Quotes, comments and block scalars are not told apart,
+ * so a `*name` there counts too: a count too high only means no names are
+ * given, and one too low is never possible.
+ */
+const ALIAS = /\*[^ \t\r\n,[\]{}]/g
+
+/**
+ * Whether a Compose file's text uses more aliases than `MAX_ALIASES`, so it
+ * is not parsed. Bun's parser copies what each alias stands for: 30,000
+ * aliases to one string of 170 KB took 5 GB before anything could be walked.
+ */
+export function tooManyAliases(text: string): boolean {
+  let count = 0
+  ALIAS.lastIndex = 0
+  while (ALIAS.exec(text) !== null) {
+    if (++count > MAX_ALIASES) return true
+  }
+  return false
+}
 
 /** An environment variable's name, as Compose reads one. */
 const VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -137,11 +169,12 @@ const usable = (name: string): boolean =>
 
 /**
  * The names a Compose file's text expects that have no value, each once, in
- * the order they first appear. No names for text that is too large, cannot
- * be parsed, is not one mapping, or goes past the walk's bounds.
+ * the order above, at most `MAX_NAMES`. No names for text that is too large,
+ * uses too many aliases, cannot be parsed, is not one mapping, or goes past
+ * the walk's bounds.
  */
 export function expectedValues(compose: string): string[] {
-  if (compose.length > COMPOSE_READ_BYTES) return []
+  if (compose.length > COMPOSE_READ_BYTES || tooManyAliases(compose)) return []
   let parsed: unknown
   try {
     // Bun's parser refuses excessive aliasing and stops on nesting too deep for it.
@@ -152,7 +185,7 @@ export function expectedValues(compose: string): string[] {
   if (!isMap(parsed)) return []
   const names = new Set<string>()
   const found = (name: string) => {
-    if (usable(name)) names.add(name)
+    if (names.size < MAX_NAMES && usable(name)) names.add(name)
   }
   const budget: Budget = { nodes: 0, chars: 0 }
   try {
@@ -163,36 +196,4 @@ export function expectedValues(compose: string): string[] {
     throw error
   }
   return [...names]
-}
-
-/**
- * Reads a Compose file and returns the names it expects (`expectedValues`).
- * No names for a file that cannot be read, is not a regular file, is larger
- * than `COMPOSE_READ_BYTES` or is not UTF-8. Never throws.
- */
-export function expectedValuesIn(path: string): string[] {
-  let fd: number
-  try {
-    // Non-blocking, so a named pipe put where the file was expected cannot hold the reading up.
-    fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK)
-  } catch {
-    return []
-  }
-  try {
-    const stat = fstatSync(fd)
-    if (!stat.isFile() || stat.size > COMPOSE_READ_BYTES) return []
-    const buffer = Buffer.alloc(COMPOSE_READ_BYTES + 1)
-    let length = 0
-    while (length < buffer.length) {
-      const read = readSync(fd, buffer, length, buffer.length - length, null)
-      if (read === 0) break
-      length += read
-    }
-    if (length > COMPOSE_READ_BYTES) return []
-    return expectedValues(new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, length)))
-  } catch {
-    return []
-  } finally {
-    closeSync(fd)
-  }
 }

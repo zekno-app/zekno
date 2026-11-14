@@ -26,8 +26,8 @@ the app, and a last line listing its keys.
 | `↑` `↓` | Lists, logs | Move the selection, or scroll |
 | `←` `→`, `tab` | Home, App | Move between panes |
 | `enter` | Lists, questions | Open, or confirm |
-| `esc` | Everywhere but Home | Go back. On Deploy, the deploy carries on |
-| `d` | Home, App | Deploy the linked folder to the selected app |
+| `esc` | Everywhere but Home | Go back. On Deploy, the deploy carries on. At the hidden prompt before a deploy, back to the list of missing values; on that list, the question "deploy without them?" |
+| `d` | Home, App | Deploy this folder. A linked folder deploys only to its own app on its own server (on a server with no apps, only when that server is its own); with another app or server selected, it says so and deploys nothing |
 | `r` | Home, App | Roll back: on App to the selected deploy, on Home to the one before the latest |
 | `l` | Home, App | Logs |
 | `s` | Home, App | Set a secret |
@@ -49,7 +49,13 @@ keys type into it.
 
 - **Start**: the profile is verified before anything is drawn. A profile that does not verify
   is an error screen with the reason and no actions.
-- **Linked folder**: with a `zekno.json`, Home opens with that server and app selected.
+- **Linked folder**: with a `zekno.json` this machine accepted (data-model.md, "When a project
+  file is used"), Home opens with that server and app selected. One that was not made or accepted
+  here selects nothing: Home opens as it would without it, the line above the key hints says
+  "zekno.json here names &lt;app&gt; on &lt;server&gt;. It was not made or accepted on this
+  machine. Run `zekno link` to accept it." (the file's path in place of "zekno.json here" when it
+  is in a folder above), and `d` in that folder deploys nothing and offers nothing: it says the
+  same again. One that names a server this machine is not connected to selects nothing either.
 - **Refresh**: server and app state are read when a screen opens and every 5 seconds while Home
   or App is showing (Home reads every server, App its own). Nothing refreshes while a question
   is open, below 80 by 24, or while the app is quitting. The reads go over one session per
@@ -76,9 +82,21 @@ keys type into it.
   only when every service runs, its number is the runner's last accepted one, and it started;
   a latest deploy that did not start is "✖ did not start" and nothing is marked running now.
 - **Deploy from the app**: needs a linked folder or a Compose file in the current folder. With
-  neither, the app says so and names `zekno link`.
+  neither, the app says so and names `zekno link`. A linked folder deploys only to its own app
+  and server: with another selected, `d` says "This folder is linked to &lt;app&gt; on
+  &lt;server&gt;. Select it to deploy this folder. To deploy it elsewhere, run `zekno deploy
+  --app <name> --server <name>` here." and deploys nothing. The Compose file is read once, when
+  `d` is pressed; the names listed and the text signed come from that read, also after a
+  question.
 - **Missing values**: before a deploy, names the Compose file expects that have no secret are
-  listed; each can be set, or the deploy can go ahead without them.
+  listed (at most 64; as many as fit are drawn around the marked one, and "and &lt;n&gt; more"
+  says how many are not); each can be set, or the deploy can go ahead without them. At the
+  hidden prompt (`enter save`, `esc cancel`), esc closes the prompt only and returns to the
+  list; nothing is signed. On the list (`↑↓ move`, `enter set`, `esc deploy without them`), esc
+  asks "Deploy &lt;app&gt; to &lt;server&gt; without &lt;NAME&gt;?" (or "without &lt;n&gt;
+  values?") with `y deploy` and `n do not deploy`. `y` goes ahead without them; `n`, or esc on
+  the question, ends the deploy with nothing signed, back on the screen `d` was pressed on, with
+  "Nothing was deployed.".
 - **Leaving and quitting during a deploy**: `esc` returns to the previous screen and the result
   arrives as a line there; `q` shows "waiting for deploy <n> to finish" and closes when it ends.
 - **SSH questions**: if SSH has to ask for a password or a host key, the app hands the terminal

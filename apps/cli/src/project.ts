@@ -16,6 +16,13 @@
  *   symbolic links are followed;
  * - the server it names is looked up in the verified profile, and the app
  *   name is held to the app-name pattern, before anything is sent;
+ * - it is used only once this machine accepted it, byte for byte
+ *   (accepted.ts): written by `zekno link` or a "yes" in the app, or an
+ *   existing one accepted with `zekno link`. One that came with a cloned
+ *   repository, or changed since, is never used: a command that would take a
+ *   name from it stops and says so;
+ * - the Compose file it names is used only with the app it names (a command
+ *   given another `--app` deploys its own folder's compose.yaml);
  * - it is written only when asked, never over an existing one without
  *   `--force`, never through a link, and holds three names and nothing else:
  *   no secret and no key.
@@ -29,6 +36,7 @@ import {
   linkSync,
   lstatSync,
   openSync,
+  readdirSync,
   readSync,
   realpathSync,
   renameSync,
@@ -41,6 +49,7 @@ import { homedir } from "node:os"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { z } from "zod"
 
+import { isAccepted, sha256Of } from "./accepted"
 import { CliError, UsageError } from "./errors"
 import { NAME } from "./profile"
 import { sanitize } from "./sanitize"
@@ -85,8 +94,10 @@ export type ProjectLink = {
   compose: string
   /** The folder that holds the file. */
   folder: string
-  /** The file itself. */
+  /** The file itself, as a real path: what `links.json` records it by. */
   path: string
+  /** The SHA-256 of its bytes, exactly as they were read and parsed. */
+  sha256: string
 }
 
 /** The sentence for what is wrong with a project file's content. It quotes field names only, cleaned. */
@@ -124,8 +135,13 @@ function checkEntry(stat: Stats, shown: string): void {
   if (!ownedByMe(stat)) throw new CliError(`${shown} belongs to another user, so zekno does not use it.`)
 }
 
-/** The text of a project file, read from the file that was checked: never through a link, never more than `PROJECT_BYTES`. */
-function readText(path: string, shown: string): string {
+/**
+ * The text of a project file and the SHA-256 of its bytes, read from the
+ * file that was checked: never through a link, never more than
+ * `PROJECT_BYTES`. What is parsed and what is compared with the accepted
+ * list come from this one read.
+ */
+function readText(path: string, shown: string): { text: string; sha256: string } {
   let fd: number
   try {
     // No link is followed, and a pipe swapped in after the check cannot hold the read up.
@@ -146,8 +162,9 @@ function readText(path: string, shown: string): string {
       length += read
     }
     if (length > PROJECT_BYTES) throw new CliError(`${shown} is larger than the ${PROJECT_BYTES} bytes a project file may have.`)
+    const bytes = buffer.subarray(0, length)
     try {
-      return new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, length))
+      return { text: new TextDecoder("utf-8", { fatal: true }).decode(bytes), sha256: sha256Of(bytes) }
     } catch {
       throw new CliError(`${shown} is not valid JSON.`)
     }
@@ -159,21 +176,66 @@ function readText(path: string, shown: string): string {
   }
 }
 
+/** A JSON string, as it is written: what is between its quotes is read with `JSON.parse`. */
+const JSON_STRING = /"(?:[^"\\\u0000-\u001f]|\\.)*"/y
+
+/**
+ * The keys of a flat JSON object whose values are all strings, in the order
+ * written, each as `JSON.parse` reads it. `JSON.parse` keeps only the last of
+ * a key written twice, so this is how a second "app" is noticed. Undefined
+ * for text of any other shape.
+ */
+export function flatKeys(text: string): string[] | undefined {
+  let at = 0
+  const space = () => {
+    while (at < text.length && " \t\n\r".includes(text[at]!)) at++
+  }
+  const string = (): string | undefined => {
+    JSON_STRING.lastIndex = at
+    const found = JSON_STRING.exec(text)?.[0]
+    if (found === undefined) return undefined
+    at += found.length
+    return JSON.parse(found) as string
+  }
+  const keys: string[] = []
+  space()
+  if (text[at++] !== "{") return undefined
+  space()
+  if (text[at] === "}") return keys
+  for (;;) {
+    space()
+    const key = string()
+    if (key === undefined) return undefined
+    keys.push(key)
+    space()
+    if (text[at++] !== ":") return undefined
+    space()
+    if (string() === undefined) return undefined
+    space()
+    const next = text[at++]
+    if (next === "}") return keys
+    if (next !== ",") return undefined
+  }
+}
+
 /** Reads and checks the project file at `path`, in `folder`. Every problem stops the command and names the file. */
 function readProject(path: string, folder: string, entry: Stats): ProjectLink {
   const shown = shownPath(path)
   checkEntry(entry, shown)
+  const { text, sha256 } = readText(path, shown)
   let json: unknown
   try {
-    json = JSON.parse(readText(path, shown))
-  } catch (error) {
-    if (error instanceof CliError) throw error
+    json = JSON.parse(text)
+  } catch {
     throw new CliError(`${shown} is not valid JSON.`)
   }
   const parsed = ProjectSchema.safeParse(json)
   if (!parsed.success) throw new CliError(`${shown} ${problemOf(parsed.error.issues)}`)
+  // A field written twice is read as its last value, which someone reading the file from the top may not notice.
+  const keys = flatKeys(text)
+  if (keys === undefined || new Set(keys).size !== keys.length) throw new CliError(`${shown} has the same field more than once.`)
   const { app, server, compose = DEFAULT_COMPOSE } = parsed.data
-  return { app, server, compose, folder, path }
+  return { app, server, compose, folder, path, sha256 }
 }
 
 /** A folder as it really is, with no link in its path; as given when that cannot be found out. */
@@ -193,7 +255,20 @@ function homesOf(home: string): string[] {
 }
 
 /** Whether `dir` holds `path` somewhere below it. */
-const isAbove = (dir: string, path: string): boolean => dir !== path && path.startsWith(dir.endsWith(sep) ? dir : `${dir}${sep}`)
+export const isAbove = (dir: string, path: string): boolean => dir !== path && path.startsWith(dir.endsWith(sep) ? dir : `${dir}${sep}`)
+
+/**
+ * Whether a folder's listing has a file named exactly zekno.json. On a file
+ * system that ignores case, `ZEKNO.JSON` is found under that name too, and it
+ * is not a project file: what a person sees in the folder is what counts.
+ */
+function listedExactly(dir: string, shown: string): boolean {
+  try {
+    return readdirSync(dir).includes(PROJECT_FILE)
+  } catch {
+    throw new CliError(`${shown} could not be read.`)
+  }
+}
 
 /**
  * The project file that applies to `start`: the one in `start`, or else in
@@ -202,7 +277,8 @@ const isAbove = (dir: string, path: string): boolean => dir !== path && path.sta
  * home folder (whose own zekno.json counts) or at the filesystem root, and
  * never reads one from a folder above home. Undefined when there is none. A
  * file that is there but not right (a link, another user's, too large,
- * malformed) is an error that names it.
+ * malformed) is an error that names it. Whether this machine accepted it is
+ * not decided here (`isAccepted`).
  */
 export function findProject(start: string, home = homedir()): ProjectLink | undefined {
   const homes = homesOf(home)
@@ -216,41 +292,15 @@ export function findProject(start: string, home = homedir()): ProjectLink | unde
       // Not there, or a folder that cannot be looked into: nothing applies from it.
       entry = undefined
     }
-    if (entry) return readProject(path, dir, entry)
+    if (entry && listedExactly(dir, shownPath(path))) return readProject(path, dir, entry)
     const parent = dirname(dir)
     if (homes.includes(dir) || parent === dir) return undefined
     dir = parent
   }
 }
 
-/**
- * The Compose file a project file names, as a real path with no link left
- * in it. It must exist, be a regular file, and stay inside the project
- * file's folder once symbolic links are followed: a link that leads out of
- * the folder is refused, so a project file can never make zekno read and
- * send a file from elsewhere on this machine.
- */
-export function projectCompose(link: ProjectLink): string {
-  const shown = shownPath(link.path)
-  const named = sanitize(link.compose)
-  let folder: string
-  let real: string
-  try {
-    folder = realpathSync(link.folder)
-  } catch {
-    throw new CliError(`The folder of ${shown} could not be read.`)
-  }
-  try {
-    real = realpathSync(resolve(link.folder, link.compose))
-  } catch {
-    throw new CliError(`${shown} names ${named} as the Compose file, and there is no such file in ${shownPath(link.folder)}.`)
-  }
-  if (!isAbove(folder, real)) {
-    throw new CliError(`${named}, named by ${shown}, leads outside the folder that holds it. zekno does not follow it there.`)
-  }
-  if (!statSync(real).isFile()) throw new CliError(`${named}, named by ${shown}, is not a file.`)
-  return real
-}
+/** Where zekno.json in `folder` is, as `findProject` and `links.json` name it: by its real path. */
+export const projectFileIn = (folder: string): string => join(real(resolve(folder)), PROJECT_FILE)
 
 /**
  * The Compose file `zekno link -f <file>` names, as zekno.json keeps it:
@@ -264,45 +314,95 @@ export function composeFor(folder: string, file: string): string {
     throw new UsageError("The Compose file has to be inside this folder, since zekno.json names it from here.")
   }
   let real: string
+  let root: string
   try {
     real = realpathSync(path)
   } catch {
     throw new CliError(`No Compose file at ${shownPath(path)}. Point to one with \`-f <file>\`.`)
   }
-  if (!isAbove(realpathSync(folder), real)) {
+  try {
+    root = realpathSync(folder)
+  } catch {
+    throw new CliError(`${shownPath(folder)} could not be read.`)
+  }
+  if (!isAbove(root, real)) {
     throw new CliError(`${sanitize(named)} leads outside this folder through a symbolic link, so zekno.json cannot name it.`)
   }
-  if (!statSync(real).isFile()) throw new CliError(`${shownPath(path)} is not a file.`)
+  let isFile: boolean
+  try {
+    isFile = statSync(real).isFile()
+  } catch {
+    isFile = false
+  }
+  if (!isFile) throw new CliError(`${shownPath(path)} is not a file.`)
   return named
 }
 
-/** The details a command can take from the project file. `file` is the Compose file. */
+/** The details a command can take from the project file. `file` is the Compose file, as `-f` gives it. */
 export type Details = { app?: string; server?: string; file?: string }
+
+/**
+ * What `withProject` adds. `serverFrom` is the project file's path, as a
+ * sentence shows it, when the server came from it: for the sentence when no
+ * such server is connected. `project` is the accepted project file whose
+ * Compose file is deployed, when `-f` was not given and the app is its app.
+ */
+export type FromProject = { serverFrom?: string; project?: ProjectLink }
+
+/** Where a project file and the accepted list are looked for: the profile folder, and the home folder the search stops at. */
+export type ProjectPlaces = { profile: string; home?: string }
+
+/**
+ * Said when a command would take a name from a zekno.json this machine did
+ * not write or accept (data-model.md, "When a project file is used").
+ */
+export const notAccepted = (link: ProjectLink): string =>
+  `zekno.json in ${shownPath(link.folder)} names ${link.app} on ${link.server}. It was not made or accepted on this machine. ` +
+  "To use it, run `zekno link` in that folder. To leave it aside, give --app and --server."
+
+/** The same, as the app says it about the folder it was started in, `cwd`. */
+export function notAcceptedHere(link: ProjectLink, cwd: string): string {
+  const which = link.folder === real(resolve(cwd)) ? "zekno.json here" : shownPath(link.path)
+  return `${which} names ${link.app} on ${link.server}. It was not made or accepted on this machine. Run \`zekno link\` to accept it.`
+}
 
 /**
  * What a command was given, with each detail it was not given taken from the
  * project file: flags win, one detail at a time. The file is looked for only
  * when a wanted detail is missing, so a command given every flag never reads
- * it. `serverFrom` is the project file's path, as a sentence shows it, when
- * the server came from it: for the sentence when no such server is connected.
+ * it.
+ *
+ * Only a project file this machine accepted is used. One that was not would
+ * have chosen an app and a server unasked, and handed them a Compose file
+ * from a folder nobody here made, with the app's secrets: a command that
+ * needs a name from it stops before anything is read from the keychain,
+ * signed or sent. Given both `--app` and `--server`, the file is left aside.
+ *
+ * Its Compose file goes with its app: with another app named by `--app`, the
+ * Compose file is `-f`, or compose.yaml in the current folder, as without a
+ * project file.
  */
 export function withProject<T extends Details>(
   cwd: string,
   given: T,
   wanted: readonly (keyof Details)[],
-  home?: string
-): T & { serverFrom?: string } {
+  places: ProjectPlaces
+): T & FromProject {
   const missing = wanted.filter((detail) => given[detail] === undefined)
   if (missing.length === 0) return given
-  const link = findProject(cwd, home)
+  const link = findProject(cwd, places.home)
   if (!link) return given
-  const filled: T & { serverFrom?: string } = { ...given }
+  if (!isAccepted(places.profile, link)) {
+    if (missing.includes("app") || missing.includes("server")) throw new UsageError(notAccepted(link))
+    return given
+  }
+  const filled: T & FromProject = { ...given }
   if (missing.includes("app")) filled.app = link.app
   if (missing.includes("server")) {
     filled.server = link.server
     filled.serverFrom = shownPath(link.path)
   }
-  if (missing.includes("file")) filled.file = projectCompose(link)
+  if (missing.includes("file") && filled.app === link.app) filled.project = link
   return filled
 }
 

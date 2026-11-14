@@ -492,16 +492,40 @@ describe("setting a secret", () => {
     expect(last.effects).toEqual([{ kind: "deploy-continue", server: "prod", app: "demo", answer: "values-set" }])
   })
 
-  test("before a deploy, esc deploys without the missing values; Ctrl-C closes the prompt and leaves the list", () => {
+  test("before a deploy, esc and Ctrl-C at the prompt close it only, back to the list, and sign nothing", () => {
     const missing = play(onApp(), { type: "missing-values", server: "prod", app: "demo", names: ["A", "B"] }).state
-    const skipped = play(missing, K.esc)
-    expect(skipped.effects).toEqual([{ kind: "deploy-continue", server: "prod", app: "demo", answer: "skip-values" }])
-    const listed = play(missing, K.ctrlC).state
-    expect(top(listed)).toMatchObject({ name: "set-secret", question: undefined })
+    for (const close of [K.esc, K.ctrlC]) {
+      const closed = play(missing, close)
+      expect(closed.effects).toEqual([])
+      expect(closed.state.question).toBeUndefined()
+      expect(top(closed.state)).toMatchObject({ name: "set-secret", question: undefined, missing: ["A", "B"] })
+    }
+    const listed = play(missing, K.esc).state
     expect(screenAfter(listed, K.down)).toMatchObject({ at: 1 })
     expect(screenAfter(listed, K.down, K.enter)).toMatchObject({ at: 1, question: "value" })
-    expect(effectsOf(listed, K.esc)).toEqual([{ kind: "deploy-continue", server: "prod", app: "demo", answer: "skip-values" }])
     expectIgnored(listed, [K.up, K.down, K.enter, K.esc, text("?")])
+  })
+
+  test("before a deploy, esc on the list asks; y deploys without the values not set, n or esc deploys nothing and says so", () => {
+    const missing = play(onApp(), { type: "missing-values", server: "prod", app: "demo", names: ["A", "B"] }).state
+    const asked = play(missing, K.esc, K.esc)
+    expect(asked.effects).toEqual([])
+    expect(asked.state.question).toEqual({ kind: "skip-values", server: "prod", app: "demo", names: ["A", "B"] })
+    const yes = play(asked.state, text("y"))
+    expect(yes.effects).toEqual([{ kind: "deploy-continue", server: "prod", app: "demo", answer: "skip-values" }])
+    expect(top(yes.state)).toMatchObject({ name: "app" })
+    expect(yes.state.question).toBeUndefined()
+    for (const no of [text("n"), K.esc]) {
+      const step = play(asked.state, no)
+      expect(step.effects).toEqual([])
+      expect(top(step.state)).toMatchObject({ name: "app" })
+      expect(step.state.question).toBeUndefined()
+      expect(step.state.notice).toEqual({ tone: "info", text: "Nothing was deployed." })
+    }
+    // q does nothing in a question; Ctrl-C still quits.
+    expect(update(asked.state, text("q"))).toEqual({ state: asked.state, effects: [] })
+    expect(update(asked.state, K.ctrlC).effects).toEqual([{ kind: "exit" }])
+    expectIgnored(asked.state, [K.esc, text("n")])
   })
 })
 

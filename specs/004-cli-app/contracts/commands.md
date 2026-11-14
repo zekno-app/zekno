@@ -13,15 +13,32 @@ Everything in feature 003's command contract still holds unless this page change
 | `zekno server add <name> --local [--home <dir>]` | Unchanged. |
 | `zekno server update <name>` | Replaces the runner on a server with the version this CLI carries, by the same verified route. Asks first at a terminal; needs `--yes` without one. |
 | `zekno server ls` | Unchanged. |
-| `zekno secret set|rm|ls` | Unchanged. `--app` and `--server` may come from `zekno.json`. |
-| `zekno deploy [-f <file>]` | As before. `--app`, `--server` and the file may come from `zekno.json`. |
+| `zekno secret set|rm|ls` | Unchanged. `--app` and `--server` may come from an accepted `zekno.json`. `secret set` names both before the value is asked for: `Value for NAME (api on dev): `. |
+| `zekno deploy [-f <file>]` | As before. `--app`, `--server` and the file may come from an accepted `zekno.json`; the file only when the app is the one it names. |
 | `zekno rollback [--to <number>]` | As before, with the same defaults from `zekno.json`. |
 | `zekno status [--server <name>]` | As before, plus running or stopped for each app when the runner is new enough. |
 | `zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]` | Prints an app's logs, following until interrupted. Ctrl-C, or a reader that closes the pipe (`zekno logs \| head -1`), stops the reading on the server and ends the command quietly with status 0. |
-| `zekno link [--app <app>] [--server <name>] [-f <file>] [--force]` | Writes `zekno.json` in the current folder. Refuses to overwrite one without `--force`. An app or server not given is taken from a `zekno.json` that already applies to the folder; `-f` defaults to `compose.yaml` and must be a file inside the folder. |
+| `zekno link [--app <app>] [--server <name>] [-f <file>] [--force]` | Writes `zekno.json` in the current folder and records it as accepted on this machine. Refuses to overwrite one without `--force`. An app or server not given is taken from a `zekno.json` that already applies to the folder; `-f` defaults to `compose.yaml` and must be a file inside the folder. With no `--app`, `--server` or `-f`, a valid `zekno.json` that already applies (in this folder or one above) is checked as one being written would be (its server connected, its Compose file a file inside its folder) and accepted as it is, not rewritten: `Accepted zekno.json: <app> on <server>, file <compose>.` (the file's path in place of `zekno.json` when it is in a folder above). Names given that are exactly those of the `zekno.json` in this folder accept it the same way, with no `--force`. |
 
 Flags win over `zekno.json`. A command that still lacks a detail fails with a message naming the
 flag and the project file. A command never asks a question when there is no terminal (FR-033).
+
+A `zekno.json` is used only once this machine accepted it (data-model.md, "When a project file
+is used"). A command that would take its app or server from one that was not made or accepted
+here stops before anything is read from the keychain, signed or sent, with exit status 2 and:
+"zekno.json in &lt;folder&gt; names &lt;app&gt; on &lt;server&gt;. It was not made or accepted on
+this machine. To use it, run `zekno link` in that folder. To leave it aside, give --app and
+--server." (with the usage hint every exit status 2 has). Given both `--app` and `--server`, it
+is not used at all.
+
+Its Compose file goes with its app. With `--app` naming another app, the Compose file is `-f`, or
+`compose.yaml` in the current folder, as without a project file.
+
+Where nothing names another file, `compose.yaml` in the current folder must stay inside it: one
+that is a link leading out of the folder is refused ("compose.yaml leads outside this folder
+through a symbolic link, so zekno does not read it. To deploy that file, name it with `-f
+<file>`."). A file named with `-f` may be anywhere. Every Compose file is read once, from one open
+file, and must be a regular file of at most 256 KiB; a named pipe is refused, not waited on.
 
 Exit status: `0` success; `1` refused or failed; `2` wrong usage. Unchanged.
 

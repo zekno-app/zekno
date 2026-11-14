@@ -11,18 +11,21 @@ import { CoreError, type RunnerStatus, type RunnerVersion, type TeamTrust } from
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 
+import { isAccepted } from "../accepted"
 import { expectedValues } from "../compose-file"
+import { readCompose, type ComposeText } from "../compose-read"
 import { openTeam, reach, TAMPERED, type OpDeps, type Team } from "../context"
 import { CliError, UsageError } from "../errors"
 import type { InstallEvent } from "../install"
 import { prepareDeploy, prepareRollback, sendDeploy, type DeployPlan } from "../ops/deploy"
 import { createTeam } from "../ops/init"
+import { writeLink } from "../ops/link"
 import { followLogs, LOG_TAIL, prepareLogs, type LogLine } from "../ops/logs"
 import { prepareSecretSet, removeSecret, setSecret } from "../ops/secret"
 import { addServer, isOutdated, prepareServerAdd, prepareServerUpdate, updateRunner } from "../ops/server"
 import { locateServer, readOver, stateOf, type AppStates, type RunState, type StatusResult } from "../ops/status"
 import { profileStore, type Server } from "../profile"
-import { composeFor, DEFAULT_COMPOSE, findProject, projectCompose, shownPath, tilde, writeProject } from "../project"
+import { DEFAULT_COMPOSE, findProject, notAcceptedHere, shownPath, tilde, type ProjectLink } from "../project"
 import { RUNNER_RELEASE } from "../runner-release"
 import { sanitize } from "../sanitize"
 import { openSession, type Session, type SessionMode } from "../session"
@@ -163,9 +166,11 @@ export { tilde }
  * "Start"): no profile is first run, a profile that verifies is Home, and one
  * that does not is the error screen with the reason. The screen says in its
  * own words that the folder may have been changed, so that sentence is not
- * repeated after the reason. With a `cwd` linked by a zekno.json, Home opens
- * on its server and app ("Linked folder"); a zekno.json that cannot be used
- * is said on Home. Nothing here reaches a server.
+ * repeated after the reason. With a `cwd` linked by a zekno.json this
+ * machine accepted, Home opens on its server and app ("Linked folder"); a
+ * zekno.json that cannot be used is said on Home, and chooses nothing: one
+ * that was not made or accepted here, one that names a server that is not
+ * connected, one that cannot be read. Nothing here reaches a server.
  */
 export async function loadStart(deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?: string }): Promise<Start> {
   if (!profileStore(deps.home).exists()) return { kind: "no-team" }
@@ -183,9 +188,11 @@ export async function loadStart(deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?
   try {
     const link = findProject(deps.cwd)
     if (!link) return { kind: "team", team: view }
+    // A zekno.json from a cloned folder would otherwise choose the app that `d` replaces.
+    if (!isAccepted(deps.home, link)) return { kind: "team", team: view, problem: notAcceptedHere(link, deps.cwd) }
     // The server it names must be one of the verified team's; the app name was held to its pattern when it was read.
     if (!team.profile.servers.some((server) => server.name === link.server)) {
-      return { kind: "team", team: view, problem: `${shownPath(link.path)} names a server "${link.server}" that is not connected to this machine.` }
+      return { kind: "team", team: view, problem: notConnected(link) }
     }
     return { kind: "team", team: view, linked: { server: link.server, app: link.app, compose: sanitize(link.compose) } }
   } catch (error) {
@@ -194,6 +201,14 @@ export async function loadStart(deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?
     return { kind: "team", team: view, problem: sanitize(reason) }
   }
 }
+
+/** Said when a zekno.json names a server this machine is not connected to: it then chooses nothing. */
+const notConnected = (link: ProjectLink): string => `${shownPath(link.path)} names a server "${link.server}" that is not connected to this machine.`
+
+/** Said when `d` is pressed on an app or server other than the one the folder is linked to. */
+export const linkedElsewhere = (link: Pick<ProjectLink, "app" | "server">): string =>
+  `This folder is linked to ${link.app} on ${link.server}. Select it to deploy this folder. ` +
+  "To deploy it elsewhere, run `zekno deploy --app <name> --server <name>` here."
 
 /** What the add-server screen says beside a runner that was already on the server. */
 export function foundDetail(version: string | undefined, carried: string): string {
@@ -266,6 +281,13 @@ type Watch = {
   /** It is being opened or read: one read per server at a time. */
   busy: boolean
 }
+
+/**
+ * The Compose file a deploy from the app signs, read when `d` was pressed:
+ * its text and path, how the missing-values list names it, the app it
+ * deploys, and whether the folder is linked to that app.
+ */
+type Source = { read: ComposeText; named: string; app: string; linked: boolean }
 
 /** A size in bytes as the board writes it: "27 MB". */
 export const megabytes = (bytes: number): string => `${Math.max(1, Math.round(bytes / 1_000_000))} MB`
@@ -365,27 +387,54 @@ export function createEffects(
    * The deploy from the app that waits on a question: "remember this
    * folder?" (`link`) or the values the Compose file expects (`values`). Its
    * answer comes back as `deploy-continue` for the same server and app. Only
-   * names are kept while the question is open, never the team or its key.
+   * names and the Compose file's text are kept while the question is open,
+   * never the team or its key: the text that was read when `d` was pressed
+   * is the text whose names were listed and the text that is signed, and the
+   * file is not read again.
    */
-  let waiting: { server: string; app: string; on: "link" | "values" } | undefined
+  let waiting: { server: string; app: string; on: "link" | "values"; source: Source } | undefined
   /** "n" to "remember this folder?": it is not asked again while the app is open. */
   let linkSkipped = false
 
   /**
-   * Where a deploy from the app takes its service definition: the Compose
-   * file this folder's zekno.json names (with the app it names, `linked`),
-   * or compose.yaml in the folder the app was started in. Either must stay
-   * inside its folder once links are followed. Undefined, with a line saying
-   * why, when there is neither.
+   * Where a deploy from the app takes its service definition, read once
+   * (compose-read.ts): the Compose file the zekno.json that applies here
+   * names, or compose.yaml in the folder the app was started in. Either must
+   * stay inside its folder. Undefined, with a line saying why, when `d`
+   * deploys nothing:
+   *
+   * - the zekno.json was not made or accepted on this machine: it is never
+   *   used, and no other is offered in its place;
+   * - the folder is linked to another app or server than the one selected:
+   *   it deploys only to its own, and on a server with no apps only when
+   *   that server is its own (a zekno.json naming a server that is not
+   *   connected supplies nothing);
+   * - there is no Compose file, or no app is selected in a folder that is
+   *   not linked.
    */
-  function composeOf(): { file: string; named: string; linked?: string } | undefined {
+  function composeOf(server: string, selected: string | undefined): Source | undefined {
     const link = findProject(ops.cwd)
-    if (link) return { file: projectCompose(link), named: sanitize(link.compose), linked: link.app }
+    if (link) {
+      if (!isAccepted(deps.home, link)) {
+        notice("error", notAcceptedHere(link, ops.cwd))
+        return undefined
+      }
+      if (link.server !== server || (selected !== undefined && selected !== link.app)) {
+        const connected = known === undefined || known.servers.some((entry) => entry.name === link.server)
+        notice(connected ? "info" : "error", connected ? linkedElsewhere(link) : notConnected(link))
+        return undefined
+      }
+      return { read: readCompose({ kind: "project", link }), named: sanitize(link.compose), app: link.app, linked: true }
+    }
     if (!existsSync(resolve(ops.cwd, COMPOSE_FILE))) {
       notice("error", `There is no ${COMPOSE_FILE} in ${shownPath(ops.cwd)}, and no zekno.json names another. Run zekno link -f <file> here to name one.`)
       return undefined
     }
-    return { file: resolve(ops.cwd, composeFor(ops.cwd, COMPOSE_FILE)), named: COMPOSE_FILE }
+    if (selected === undefined) {
+      notice("info", `Choose an app first. To deploy a new app, run zekno link --app <name> --server ${server} in its folder.`)
+      return undefined
+    }
+    return { read: readCompose({ kind: "default", folder: ops.cwd }), named: COMPOSE_FILE, app: selected, linked: false }
   }
 
   /**
@@ -398,38 +447,35 @@ export function createEffects(
    */
   async function plan(
     effect: Extract<Effect, { kind: "deploy" | "rollback" }>,
-    after?: "link" | "values"
+    after?: NonNullable<typeof waiting>
   ): Promise<(DeployPlan & { from: string }) | undefined> {
     if (effect.kind === "rollback") {
       const to = effect.to === undefined ? undefined : String(effect.to)
       const rollback = await prepareRollback(ops, { app: effect.app, server: effect.server, to }, { warning: (text) => notice("warning", text) })
       return { ...rollback, from: `what deploy ${rollback.from} ran` }
     }
-    const source = composeOf()
+    // After a question, the Compose file read when `d` was pressed: not read again.
+    const source = after?.source ?? composeOf(effect.server, effect.app)
     if (!source) return undefined
-    // On a server with no apps yet, `d` deploys the app the folder is linked to.
-    const app = effect.app ?? source.linked
-    if (!app) {
-      notice("info", `Choose an app first. To deploy a new app, run zekno link --app <name> --server ${effect.server} in its folder.`)
-      return undefined
-    }
-    if (source.linked === undefined && after === undefined && !linkSkipped) {
-      waiting = { server: effect.server, app, on: "link" }
+    // On a server with no apps yet, `d` deploys the app the folder is linked to, when that server is the folder's.
+    const app = source.app
+    if (!source.linked && after === undefined && !linkSkipped) {
+      waiting = { server: effect.server, app, on: "link", source }
       dispatch({ type: "ask-remember-folder", server: effect.server, app, compose: COMPOSE_FILE })
       return undefined
     }
-    const planned = await prepareDeploy(ops, { app, server: effect.server, file: source.file })
-    if (after !== "values") {
+    const planned = await prepareDeploy(ops, { app, server: effect.server, read: source.read })
+    if (after?.on !== "values") {
       // Names only: the secrets' values are never opened here.
       const set = new Set(secretNamesOf(planned.team, planned.server, app))
       const missing = expectedValues(planned.compose).filter((name) => !set.has(name))
       if (missing.length > 0) {
-        waiting = { server: planned.server.name, app, on: "values" }
+        waiting = { server: planned.server.name, app, on: "values", source }
         dispatch({ type: "missing-values", server: planned.server.name, app, names: missing, file: source.named })
         return undefined
       }
     }
-    return { ...planned, from: shownPath(source.file) }
+    return { ...planned, from: shownPath(source.read.path) }
   }
 
   /**
@@ -445,15 +491,16 @@ export function createEffects(
     if (asked.on !== about) return
     waiting = undefined
     if (effect.answer === "write-link") {
-      writeProject(ops.cwd, { app: effect.app, server: effect.server, compose: COMPOSE_FILE })
+      // Written by a "yes" here, so accepted on this machine (accepted.ts).
+      writeLink(deps.home, ops.cwd, { app: effect.app, server: effect.server, compose: COMPOSE_FILE })
       dispatch({ type: "linked", linked: { server: effect.server, app: effect.app, compose: COMPOSE_FILE } })
     }
     if (effect.answer === "skip-link") linkSkipped = true
-    await deploy({ kind: "deploy", server: effect.server, app: effect.app }, about)
+    await deploy({ kind: "deploy", server: effect.server, app: effect.app }, asked)
   }
 
   /** Signs and sends a deploy, with its stages and Docker's lines as events, and its result as a line wherever the person is. */
-  async function deploy(effect: Extract<Effect, { kind: "deploy" | "rollback" }>, after?: "link" | "values"): Promise<void> {
+  async function deploy(effect: Extract<Effect, { kind: "deploy" | "rollback" }>, after?: NonNullable<typeof waiting>): Promise<void> {
     if (deploying) return notice("info", "A deploy is already in progress.")
     deploying = true
     try {

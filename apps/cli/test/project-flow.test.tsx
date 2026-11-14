@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { renderToString, type Key } from "ink"
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { tempDir, waitFor } from "../../runner/test/helpers"
+import { acceptedLinks } from "../src/accepted"
 import { AppView, createStore } from "../src/app/app"
-import { createEffects, loadStart, type Effects } from "../src/app/effects"
+import { createEffects, linkedElsewhere, loadStart, type Effects } from "../src/app/effects"
 import { emptyHiddenValue, hiddenPromptKey } from "../src/app/hidden-prompt"
 import type { AppKey } from "../src/app/keys"
-import { hiddenPromptOpen, initialState, top, update, type State } from "../src/app/state"
+import { nameWindow } from "../src/app/screens/set-secret"
+import { hiddenPromptOpen, initialState, NOT_DEPLOYED, top, update, type State } from "../src/app/state"
+import type { OpDeps } from "../src/context"
 import { MISSING_APP, MISSING_SERVER } from "../src/errors"
+import { connect } from "../src/transport"
 import { COMPOSE_V1, COMPOSE_V2, filesUnder, machine, ready } from "./helpers"
 
 type Machine = ReturnType<typeof machine>
@@ -20,8 +24,21 @@ const COMPOSE_TWO =
 /** One that expects nothing. */
 const COMPOSE_PLAIN = "services:\n  web:\n    image: example/web:1\n"
 
+/** Writes zekno.json by hand, as a cloned repository brings it. Nothing on this machine has accepted it. */
 const link = (m: Machine, content: unknown, folder = m.project) =>
   writeFileSync(join(folder, "zekno.json"), typeof content === "string" ? content : JSON.stringify(content))
+/** Writes zekno.json by hand and accepts it the way a person would: `zekno link` in its folder, with no names. */
+async function linkAccepted(m: Machine, content: unknown, folder = m.project) {
+  link(m, content, folder)
+  const cwd = m.deps.cwd
+  m.deps.cwd = folder
+  try {
+    expect(await m.zekno("link")).toBe(0)
+    expect(m.lastOut()).toStartWith("Accepted zekno.json: ")
+  } finally {
+    m.deps.cwd = cwd
+  }
+}
 const deployed = (m: Machine, app: string) => readFileSync(join(m.runnerHome, "apps", app, "compose.yaml"), "utf8")
 /**
  * The project folder as zekno finds it: the folders a program is in are
@@ -31,6 +48,8 @@ const folderOf = (m: Machine) => realpathSync(m.project)
 const fileOf = (m: Machine) => join(folderOf(m), "zekno.json")
 
 const draw = (state: State, columns = 100, rows = 30) => renderToString(<AppView state={state} columns={columns} rows={rows} />, { columns })
+/** The key hints: the last line drawn, without the margins. */
+const lastLine = (screen: string) => screen.trimEnd().split("\n").at(-1)!.trim()
 /** All the text, with the box lines and runs of spaces taken out, for wording that may wrap. */
 const words = (screen: string) => screen.replace(/[│╭╮╰╯─]/g, " ").replace(/\s+/g, " ")
 
@@ -39,7 +58,7 @@ describe("single commands in a linked folder", () => {
     const m = await ready()
     mkdirSync(join(m.project, "deploy"))
     writeFileSync(join(m.project, "deploy", "prod.yaml"), COMPOSE_V2)
-    link(m, { app: "web", server: "dev", compose: "deploy/prod.yaml" })
+    await linkAccepted(m, { app: "web", server: "dev", compose: "deploy/prod.yaml" })
     expect(await m.zekno("deploy")).toBe(0)
     expect(m.lastOut()).toBe("Deploy 1 of web is running on dev with 0 secret(s).")
     expect(deployed(m, "web")).toBe(COMPOSE_V2)
@@ -53,26 +72,51 @@ describe("single commands in a linked folder", () => {
     expect(m.docker.calls()).toHaveLength(2)
   })
 
-  test("flags win over the file, one detail at a time", async () => {
+  test("flags win over the file, one detail at a time, and its Compose file goes only with its own app", async () => {
     const m = await ready()
-    link(m, { app: "web", server: "dev" })
+    const WEB = COMPOSE_V1.replace("web:1", "web-from-zekno-json:1")
+    m.compose(WEB, "web.yaml")
     m.compose(COMPOSE_V2, "other.yaml")
+    await linkAccepted(m, { app: "web", server: "dev", compose: "web.yaml" })
+    // Another app: the server from the file, the Compose file as without one (compose.yaml here), never web.yaml.
     expect(await m.zekno("deploy", "--app", "api")).toBe(0)
     expect(m.lastOut()).toBe("Deploy 1 of api is running on dev with 0 secret(s).")
     expect(deployed(m, "api")).toBe(COMPOSE_V1)
+    expect(await m.zekno("deploy", "--app", "api", "--server", "dev")).toBe(0)
+    expect(deployed(m, "api")).toBe(COMPOSE_V1)
+    // The file's own app, named or not, deploys the file's Compose file; -f wins over it.
+    expect(await m.zekno("deploy", "--app", "web", "--server", "dev")).toBe(0)
+    expect(deployed(m, "web")).toBe(WEB)
     expect(await m.zekno("deploy", "-f", "other.yaml")).toBe(0)
-    expect(m.lastOut()).toBe("Deploy 1 of web is running on dev with 0 secret(s).")
+    expect(m.lastOut()).toBe("Deploy 2 of web is running on dev with 0 secret(s).")
     expect(deployed(m, "web")).toBe(COMPOSE_V2)
     // A server typed on the command line is the typist's: the sentence does not blame the file.
     expect(await m.zekno("deploy", "--server", "prod")).toBe(1)
     expect(m.lastErr()).toBe('No server named "prod". Connected servers: dev.')
   })
 
-  test("secret, status, rollback and logs take their defaults from it too", async () => {
+  test("a zekno.json in a folder above does not hand its Compose file to another app below it", async () => {
     const m = await ready()
-    link(m, { app: "web", server: "dev" })
+    m.compose("services:\n  rootsvc:\n    image: example/root:1\n", "root.yaml")
+    await linkAccepted(m, { app: "web", server: "dev", compose: "root.yaml" })
+    const billing = join(m.project, "services", "billing")
+    mkdirSync(billing, { recursive: true })
+    const BILLING = "services:\n  billing:\n    image: example/billing:1\n"
+    writeFileSync(join(billing, "compose.yaml"), BILLING)
+    m.deps.cwd = billing
+    expect(await m.zekno("deploy", "--app", "billing", "--server", "dev")).toBe(0)
+    expect(deployed(m, "billing")).toBe(BILLING)
+  })
+
+  test("secret, status, rollback and logs take their defaults from it too; the value is asked for with the app and server named", async () => {
+    const m = await ready()
+    await linkAccepted(m, { app: "web", server: "dev" })
+    const asked: string[] = []
+    const ask = m.deps.ui.askSecret
+    m.deps.ui.askSecret = (question, stdin) => (asked.push(question), ask(question, stdin))
     m.typing("hello")
     expect(await m.zekno("secret", "set", "GREETING")).toBe(0)
+    expect(asked).toEqual(["Value for GREETING (web on dev): "])
     expect(m.lastOut()).toBe("Set GREETING (version 1) for web on dev. It takes effect on the next deploy.")
     m.out.length = 0
     expect(await m.zekno("secret", "ls")).toBe(0)
@@ -101,7 +145,10 @@ describe("single commands in a linked folder", () => {
 
   test("a server it names that this machine does not know stops the command, naming the file and the server; nothing is signed", async () => {
     const m = await ready()
-    link(m, { app: "web", server: "prod" })
+    // Accepted while prod was connected; prod has since been taken off this machine's profile.
+    expect(await m.zekno("server", "add", "prod", "--local", "--home", tempDir("prod"))).toBe(0)
+    await linkAccepted(m, { app: "web", server: "prod" })
+    m.tamper("profile.json", (profile) => ({ ...profile, servers: profile.servers.filter((server: { name: string }) => server.name !== "prod") }))
     for (const args of [["deploy"], ["rollback"], ["status"], ["secret", "ls"], ["logs", "--no-follow"]]) {
       expect(await m.zekno(...args)).toBe(1)
       expect(m.lastErr()).toBe(`${fileOf(m)} names a server "prod" that is not connected to this machine. Connected servers: dev.`)
@@ -118,18 +165,23 @@ describe("single commands in a linked folder", () => {
       [{ app: "web", server: "dev", extra: true }, `${path} has a field zekno does not read: "extra". It holds only "app", "server" and "compose".`],
       [{ app: "../../etc", server: "dev" }, `${path} needs "app": an app name of lowercase letters, digits and hyphens.`],
       [{ app: "web", server: "dev", compose: "../compose.yaml" }, `${path} has a "compose" that is not a relative path inside its folder.`],
-      [{ app: "web", server: "dev", compose: "missing.yaml" }, `${path} names missing.yaml as the Compose file, and there is no such file in ${folderOf(m)}.`],
+      ['{"app":"web","server":"dev","app":"api"}', `${path} has the same field more than once.`],
     ]
     for (const [content, sentence] of cases) {
       link(m, content)
       expect(await m.zekno("deploy")).toBe(1)
       expect(m.lastErr()).toBe(sentence)
     }
+    // Accepted with its Compose file in place; the file then goes, or is swapped for a link out of the folder.
+    m.compose(COMPOSE_V1, "linked.yaml")
+    await linkAccepted(m, { app: "web", server: "dev", compose: "linked.yaml" })
+    rmSync(join(m.project, "linked.yaml"))
+    expect(await m.zekno("deploy")).toBe(1)
+    expect(m.lastErr()).toBe(`${path} names linked.yaml as the Compose file, and there is no such file in ${folderOf(m)}.`)
     // A Compose file reached through a link out of the folder is never read or sent.
     const outside = join(tempDir("outside"), "private.yaml")
     writeFileSync(outside, "services:\n  leak:\n    image: private\n")
     symlinkSync(outside, join(m.project, "linked.yaml"))
-    link(m, { app: "web", server: "dev", compose: "linked.yaml" })
     expect(await m.zekno("deploy")).toBe(1)
     expect(m.lastErr()).toBe(`linked.yaml, named by ${path}, leads outside the folder that holds it. zekno does not follow it there.`)
     expect(m.docker.calls()).toEqual([])
@@ -157,6 +209,114 @@ describe("single commands in a linked folder", () => {
     }
     expect(m.docker.calls()).toEqual([])
   })
+
+  test("with no zekno.json, a compose.yaml that is a link out of the folder is not sent; -f names a file anywhere", async () => {
+    const m = await ready()
+    const outside = join(tempDir("outside"), "private.yaml")
+    writeFileSync(outside, "services:\n  leak:\n    image: private\n")
+    rmSync(join(m.project, "compose.yaml"))
+    symlinkSync(outside, join(m.project, "compose.yaml"))
+    expect(await m.zekno("deploy", "--app", "web", "--server", "dev")).toBe(1)
+    expect(m.lastErr()).toBe("compose.yaml leads outside this folder through a symbolic link, so zekno does not read it. To deploy that file, name it with `-f <file>`.")
+    expect(m.docker.calls()).toEqual([])
+    expect(await m.zekno("deploy", "--app", "web", "--server", "dev", "-f", outside)).toBe(0)
+    // A named pipe in its place is not waited on.
+    rmSync(join(m.project, "compose.yaml"))
+    Bun.spawnSync(["mkfifo", join(m.project, "compose.yaml")])
+    expect(await m.zekno("deploy", "--app", "web", "--server", "dev")).toBe(1)
+    expect(m.lastErr()).toBe(`${join(m.project, "compose.yaml")} is not a file.`)
+  })
+})
+
+describe("a folder nobody on this machine linked (the reviewer's scenario)", () => {
+  const HOSTILE = "services:\n  exfil:\n    image: attacker/exfil:1\n    environment:\n      - DB_PASSWORD\n"
+
+  /** api on dev, deployed with a secret, and a cloned folder whose zekno.json names api on dev and whose Compose file wants that secret. */
+  async function cloned() {
+    const m = await ready()
+    m.compose("services:\n  api:\n    image: example/api:1\n    environment:\n      - DB_PASSWORD\n")
+    m.typing("hunter2-prod-db")
+    expect(await m.zekno("secret", "set", "DB_PASSWORD", "--app", "api", "--server", "dev")).toBe(0)
+    expect(await m.zekno("deploy", "--app", "api", "--server", "dev")).toBe(0)
+    const folder = tempDir("cloned")
+    writeFileSync(join(folder, "zekno.json"), JSON.stringify({ app: "api", server: "dev" }))
+    writeFileSync(join(folder, "compose.yaml"), HOSTILE)
+    m.deps.cwd = folder
+    // Every runner process a command starts, and every read of the keychain, is counted.
+    let started = 0
+    m.deps.connect = (...args) => (started++, connect(...args))
+    let keychain = 0
+    const get = m.keyStore.get
+    m.keyStore.get = (name) => (keychain++, get(name))
+    return { m, folder, started: () => started, keychain: () => keychain }
+  }
+
+  test("every command that would take a name from it stops with status 2 and says why; nothing is read, signed, sent or started", async () => {
+    const { m, folder, started, keychain } = await cloned()
+    const ups = m.docker.calls().length
+    const sentence = `zekno.json in ${realpathSync(folder)} names api on dev. It was not made or accepted on this machine. To use it, run \`zekno link\` in that folder. To leave it aside, give --app and --server.`
+    m.typing("sk_live_typed_here")
+    const commands = [["deploy"], ["rollback"], ["secret", "set", "X"], ["secret", "rm", "X"], ["secret", "ls"], ["status"], ["logs", "--no-follow"]]
+    for (const args of commands) {
+      expect({ args, status: await m.zekno(...args) }).toEqual({ args, status: 2 })
+      expect(m.lastErr()).toStartWith(sentence)
+    }
+    expect(started()).toBe(0)
+    expect(keychain()).toBe(0)
+    expect(m.docker.calls()).toHaveLength(ups)
+    // Nothing was asked for: the value queued for the prompt is still there.
+    m.deps.cwd = m.project
+    m.deps.connect = connect
+    expect(await m.zekno("secret", "set", "STRIPE_KEY", "--app", "api", "--server", "dev")).toBe(0)
+    expect(m.lastOut()).toStartWith("Set STRIPE_KEY (version 1)")
+  })
+
+  test("given --app and --server, it is left aside, Compose file and all; once accepted with zekno link it is used, until it changes", async () => {
+    const { m, folder } = await cloned()
+    writeFileSync(join(folder, "compose.yaml"), COMPOSE_V1)
+    writeFileSync(join(folder, "other.yaml"), HOSTILE)
+    writeFileSync(join(folder, "zekno.json"), JSON.stringify({ app: "api", server: "dev", compose: "other.yaml" }))
+    expect(await m.zekno("deploy", "--app", "api", "--server", "dev")).toBe(0)
+    expect(deployed(m, "api")).toBe(COMPOSE_V1)
+
+    writeFileSync(join(folder, "zekno.json"), JSON.stringify({ app: "api", server: "dev" }))
+    writeFileSync(join(folder, "compose.yaml"), HOSTILE)
+    expect(await m.zekno("link")).toBe(0)
+    expect(m.lastOut()).toBe("Accepted zekno.json: api on dev, file compose.yaml.")
+    expect(acceptedLinks(m.home)).toHaveLength(1)
+    expect(await m.zekno("deploy")).toBe(0)
+    expect(deployed(m, "api")).toBe(HOSTILE)
+
+    // A `git pull` that changes it: not used again until it is accepted again.
+    writeFileSync(join(folder, "zekno.json"), JSON.stringify({ app: "api", server: "dev", compose: "other.yaml" }))
+    expect(await m.zekno("deploy")).toBe(2)
+    expect(m.lastErr()).toContain("It was not made or accepted on this machine.")
+  })
+
+  test("in the app, Home does not move to its app, says why on the problem line, and d deploys nothing and offers nothing", async () => {
+    const { m, folder, started } = await cloned()
+    const ups = m.docker.calls().length
+    const deps: OpDeps = { ...m.deps, connect: m.deps.connect }
+    const app = openApp(m, await loadStart(deps), deps)
+    const sentence = "zekno.json here names api on dev. It was not made or accepted on this machine. Run `zekno link` to accept it."
+    expect(app.state.linked).toBeUndefined()
+    expect(top(app.state)).toEqual({ name: "home", pane: "servers", server: 0, app: 0 })
+    expect(app.state.notice).toEqual({ tone: "error", text: sentence })
+    expect(words(app.draw())).toContain(sentence)
+    expect(words(app.draw())).not.toContain("This folder is linked")
+    app.press({ kind: "right" })
+    app.type("d")
+    await Bun.sleep(150)
+    expect(app.state.notice).toEqual({ tone: "error", text: sentence })
+    expect(app.state.question).toBeUndefined()
+    expect(top(app.state).name).toBe("home")
+    expect(app.state.deploy).toBeUndefined()
+    expect(started()).toBe(0)
+    expect(m.docker.calls()).toHaveLength(ups)
+    expect(existsSync(join(folder, "zekno.json"))).toBe(true)
+    expect(readFileSync(join(folder, "zekno.json"), "utf8")).toBe(JSON.stringify({ app: "api", server: "dev" }))
+    expect(app.failures).toEqual([])
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -169,13 +329,13 @@ afterEach(async () => {
 })
 
 /** The app on a test machine, without a terminal: the reducer, the effects, and the window drawn on request. */
-function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>) {
+function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>, deps: OpDeps = m.deps) {
   const failures: unknown[] = []
   let effects: Effects | undefined
   const store = createStore(initialState(start, { columns: 100, rows: 30 }), (effect) => {
     if (effect.kind !== "exit") effects!.run(effect)
   })
-  effects = createEffects(m.deps, store.dispatch, (error) => failures.push(error))
+  effects = createEffects(deps, store.dispatch, (error) => failures.push(error))
   opened.push(effects)
   const held = emptyHiddenValue()
   return {
@@ -195,7 +355,7 @@ function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>) {
 type App = ReturnType<typeof openApp>
 
 /** A machine with demo deployed once from the command line, and the app open on Home with demo selected. */
-async function onHome(compose: string, prepare?: (m: Machine) => Promise<void> | void) {
+async function onHome(compose: string, prepare?: (m: Machine) => Promise<unknown> | unknown) {
   const m = await ready()
   expect(await m.zekno("deploy", "--app", "demo", "--server", "dev")).toBe(0)
   m.compose(compose)
@@ -206,6 +366,16 @@ async function onHome(compose: string, prepare?: (m: Machine) => Promise<void> |
 }
 
 const ended = (app: App) => app.until(() => app.state.deploy?.running === false, "the deploy to end")
+
+/** Goes ahead without the values not set: esc closes the prompt, esc on the list asks, and y answers (P4). */
+function skipValues(app: App) {
+  expect(hiddenPromptOpen(app.state)).toBe(true)
+  app.press({ kind: "escape" })
+  expect(top(app.state)).toMatchObject({ name: "set-secret", question: undefined })
+  app.press({ kind: "escape" })
+  expect(app.state.question?.kind).toBe("skip-values")
+  app.type("y")
+}
 
 /** Types a value at the hidden prompt and presses enter, and waits for it to be stored. */
 async function setValue(app: App, value: string) {
@@ -221,7 +391,7 @@ describe("the app in a project folder", () => {
     const m = await ready()
     expect(await m.zekno("server", "add", "staging", "--local", "--home", tempDir("staging"))).toBe(0)
     for (const app of ["demo", "web"]) expect(await m.zekno("deploy", "--app", app, "--server", "staging")).toBe(0)
-    link(m, { app: "demo", server: "staging" })
+    await linkAccepted(m, { app: "demo", server: "staging" })
     const start = await loadStart(m.deps)
     expect(start).toMatchObject({ kind: "team", linked: { server: "staging", app: "demo", compose: "compose.yaml" } })
     const state = initialState(start, { columns: 100, rows: 30 })
@@ -242,6 +412,19 @@ describe("the app in a project folder", () => {
     expect(screen).toContain("✖ ")
     expect(words(screen)).toContain("is not valid JSON.")
     link(m, { app: "web", server: "prod" })
+    const foreign = await loadStart(m.deps)
+    expect(foreign).toMatchObject({
+      kind: "team",
+      problem: "zekno.json here names web on prod. It was not made or accepted on this machine. Run `zekno link` to accept it.",
+    })
+    expect(foreign.kind === "team" && foreign.linked).toBeUndefined()
+    // From a folder below, the file is named by its path.
+    mkdirSync(join(m.project, "sub"))
+    expect(await loadStart({ ...m.deps, cwd: join(m.project, "sub") })).toMatchObject({ problem: `${fileOf(m)} names web on prod. It was not made or accepted on this machine. Run \`zekno link\` to accept it.` })
+    // Accepted while prod was connected; prod has since been taken off this machine's profile.
+    expect(await m.zekno("server", "add", "prod", "--local", "--home", tempDir("prod"))).toBe(0)
+    await linkAccepted(m, { app: "web", server: "prod" })
+    m.tamper("profile.json", (profile) => ({ ...profile, servers: profile.servers.filter((server: { name: string }) => server.name !== "prod") }))
     const unknown = await loadStart(m.deps)
     expect(unknown).toMatchObject({ kind: "team", problem: `${fileOf(m)} names a server "prod" that is not connected to this machine.` })
     expect(unknown.kind === "team" && unknown.linked).toBeUndefined()
@@ -269,6 +452,8 @@ describe("the app in a project folder", () => {
     const written = join(m.project, "zekno.json")
     expect(JSON.parse(readFileSync(written, "utf8"))).toEqual({ app: "demo", server: "dev", compose: "compose.yaml" })
     expect(statSync(written).mode & 0o777).toBe(0o644)
+    // Written by a "yes" here, so accepted on this machine.
+    expect(acceptedLinks(m.home).map((entry) => entry.path)).toEqual([fileOf(m)])
     expect(app.state.linked).toEqual({ server: "dev", app: "demo", compose: "compose.yaml" })
     app.press({ kind: "escape" })
     expect(words(app.draw())).toContain("This folder is linked to demo on dev by zekno.json.")
@@ -308,7 +493,7 @@ describe("the app in a project folder", () => {
   test("missing values are listed before a deploy, each set with the hidden prompt, then the deploy goes on with them", async () => {
     const DATABASE = "postgres://only-the-runner-reads-this"
     const SESSION = "session-value-never-shown"
-    const { m, app } = await onHome(COMPOSE_TWO, (m) => link(m, { app: "demo", server: "dev" }))
+    const { m, app } = await onHome(COMPOSE_TWO, (m) => linkAccepted(m, { app: "demo", server: "dev" }))
     app.type("d")
     await app.until(() => top(app.state).name === "set-secret", "the list")
     expect(top(app.state)).toMatchObject({ server: "dev", app: "demo", missing: ["DATABASE_URL", "SESSION_KEY"], file: "compose.yaml", at: 0, question: "value" })
@@ -355,20 +540,61 @@ describe("the app in a project folder", () => {
     expect(app.failures).toEqual([])
   })
 
-  test("or skipped: esc deploys without them, and the list is not shown again for that deploy", async () => {
-    const { m, app } = await onHome(COMPOSE_TWO, (m) => link(m, { app: "demo", server: "dev" }))
+  test("esc at the prompt returns to the list and signs nothing; esc on the list asks; n deploys nothing, y deploys without them", async () => {
+    const { m, app } = await onHome(COMPOSE_TWO, (m) => linkAccepted(m, { app: "demo", server: "dev" }))
+    const ups = m.docker.calls().length
     app.type("d")
     await app.until(() => top(app.state).name === "set-secret", "the list")
+    expect(lastLine(app.draw())).toBe("enter save  esc cancel")
     app.press({ kind: "escape" })
+    expect(top(app.state)).toMatchObject({ name: "set-secret", question: undefined })
+    expect(lastLine(app.draw())).toBe("↑↓ move  enter set  esc deploy without them")
+    await Bun.sleep(100)
+    expect(app.state.deploy).toBeUndefined()
+
+    app.press({ kind: "escape" })
+    expect(app.state.question).toEqual({ kind: "skip-values", server: "dev", app: "demo", names: ["DATABASE_URL", "SESSION_KEY"] })
+    const asked = app.draw()
+    expect(words(asked)).toContain("Deploy demo to dev without 2 values?")
+    expect(lastLine(asked)).toBe("y deploy  n do not deploy")
+    app.type("n")
+    expect(top(app.state).name).toBe("home")
+    expect(app.state.notice).toEqual({ tone: "info", text: NOT_DEPLOYED })
+    expect(words(app.draw())).toContain(NOT_DEPLOYED)
+    await Bun.sleep(100)
+    expect(app.state.deploy).toBeUndefined()
+    expect(m.docker.calls()).toHaveLength(ups)
+
+    // Esc on the question is no as well.
+    app.type("d")
+    await app.until(() => top(app.state).name === "set-secret", "the list again")
+    app.press({ kind: "escape" }, { kind: "escape" }, { kind: "escape" })
+    expect(top(app.state).name).toBe("home")
+    expect(app.state.notice?.text).toBe(NOT_DEPLOYED)
+
+    app.type("d")
+    await app.until(() => top(app.state).name === "set-secret", "the list once more")
+    skipValues(app)
     await ended(app)
     expect(app.state.deploy).toMatchObject({ sequence: 2, outcome: "started" })
+    expect(m.docker.calls()).toHaveLength(ups + 1)
     expect(m.docker.calls().at(-1)!.env.DATABASE_URL).toBeUndefined()
     expect(app.failures).toEqual([])
   })
 
+  test("what is signed is the text whose names were listed: an edit while the list is open is not deployed", async () => {
+    const { m, app } = await onHome(COMPOSE_TWO, (m) => linkAccepted(m, { app: "demo", server: "dev" }))
+    app.type("d")
+    await app.until(() => top(app.state).name === "set-secret", "the list")
+    m.compose(COMPOSE_PLAIN.replace("web:1", "edited-meanwhile:1"))
+    skipValues(app)
+    await ended(app)
+    expect(deployed(m, "demo")).toBe(COMPOSE_TWO)
+  })
+
   test("a value already set is not listed; with every value set there is no list", async () => {
     const { m, app } = await onHome(COMPOSE_TWO, async (m) => {
-      link(m, { app: "demo", server: "dev" })
+      await linkAccepted(m, { app: "demo", server: "dev" })
       m.typing("set-before")
       expect(await m.zekno("secret", "set", "DATABASE_URL")).toBe(0)
     })
@@ -390,7 +616,7 @@ describe("the app in a project folder", () => {
     app.press({ kind: "enter" })
     await app.until(() => top(app.state).name === "set-secret", "the list")
     expect(existsSync(join(m.project, "zekno.json"))).toBe(true)
-    app.press({ kind: "escape" })
+    skipValues(app)
     await ended(app)
     expect(app.state.deploy).toMatchObject({ sequence: 2, outcome: "started" })
   })
@@ -399,21 +625,63 @@ describe("the app in a project folder", () => {
     const m = await ready()
     expect(await m.zekno("server", "add", "staging", "--local", "--home", tempDir("staging"))).toBe(0)
     m.compose(COMPOSE_PLAIN)
-    link(m, { app: "fresh", server: "staging" })
+    await linkAccepted(m, { app: "fresh", server: "staging" })
+    expect(await m.zekno("server", "add", "empty", "--local", "--home", tempDir("empty"))).toBe(0)
     const app = openApp(m, await loadStart(m.deps))
     expect(top(app.state)).toEqual({ name: "home", pane: "servers", server: 1, app: 0 })
+    // Another server with no apps is not the folder's: nothing is deployed there.
+    app.press({ kind: "down" })
+    app.type("d")
+    await app.until(() => app.state.notice !== undefined, "a line")
+    expect(app.state.notice).toEqual({ tone: "info", text: linkedElsewhere({ app: "fresh", server: "staging" }) })
+    expect(app.state.deploy).toBeUndefined()
+    app.press({ kind: "up" })
     app.type("d")
     await ended(app)
     expect(app.state.deploy).toMatchObject({ server: "staging", app: "fresh", sequence: 1, outcome: "started" })
     expect(app.failures).toEqual([])
   })
 
+  test("a linked folder deploys only to its own app: d on another app says so, names how to deploy elsewhere, and deploys nothing", async () => {
+    const { m, app } = await onHome(COMPOSE_PLAIN, async (m) => {
+      expect(await m.zekno("deploy", "--app", "billing", "--server", "dev")).toBe(0)
+      expect(await m.zekno("link", "--app", "demo", "--server", "dev")).toBe(0)
+    })
+    const ups = m.docker.calls().length
+    const rows = app.state.team!.servers[0]!.apps.map((row) => row.name)
+    // billing was deployed last, so it is listed first.
+    expect(rows).toEqual(["billing", "demo"])
+    expect(top(app.state)).toMatchObject({ name: "home", pane: "apps", app: 1 })
+    app.press({ kind: "up" })
+    app.type("d")
+    await app.until(() => app.state.notice !== undefined, "a line")
+    const sentence =
+      "This folder is linked to demo on dev. Select it to deploy this folder. To deploy it elsewhere, run `zekno deploy --app <name> --server <name>` here."
+    expect(app.state.notice).toEqual({ tone: "info", text: sentence })
+    expect(words(app.draw())).toContain(sentence)
+    await Bun.sleep(100)
+    expect(app.state.deploy).toBeUndefined()
+    expect(m.docker.calls()).toHaveLength(ups)
+    // The same from the app screen. Opening it leaves the line behind.
+    app.press({ kind: "enter" })
+    await app.until(() => app.state.appView?.app === "billing", "billing's history")
+    expect(app.state.notice).toBeUndefined()
+    app.type("d")
+    await app.until(() => app.state.notice !== undefined, "a line")
+    expect(app.state.notice?.text).toBe(sentence)
+    expect(m.docker.calls()).toHaveLength(ups)
+    expect(app.failures).toEqual([])
+  })
+
   test("a zekno.json whose Compose file leads outside its folder is refused at d, and nothing is signed", async () => {
-    const { m, app } = await onHome(COMPOSE_PLAIN, (m) => {
+    const { m, app } = await onHome(COMPOSE_PLAIN, async (m) => {
+      // Accepted with its Compose file in place; then swapped for a link out of the folder.
+      m.compose(COMPOSE_PLAIN, "linked.yaml")
+      await linkAccepted(m, { app: "demo", server: "dev", compose: "linked.yaml" })
+      rmSync(join(m.project, "linked.yaml"))
       const outside = join(tempDir("outside"), "private.yaml")
       writeFileSync(outside, COMPOSE_PLAIN)
       symlinkSync(outside, join(m.project, "linked.yaml"))
-      link(m, { app: "demo", server: "dev", compose: "linked.yaml" })
     })
     app.type("d")
     await app.until(() => app.state.notice !== undefined, "a line")
@@ -442,6 +710,56 @@ describe("the two screens, and the reducer's part", () => {
     const list = draw(listed, 80, 24)
     fits(list, 80)
     expect(words(list)).toContain("! compose.yaml expects 2 values that are not set yet.")
+  })
+
+  test("the list of missing names fits the window: the line that says how many and the marked name are always drawn", () => {
+    for (const size of [
+      { columns: 80, rows: 24 },
+      { columns: 100, rows: 30 },
+    ]) {
+      for (const count of [3, 4, 20, 64]) {
+        const names = Array.from({ length: count }, (_, n) => `VALUE_NUMBER_${n}`)
+        let state = update(home(), { type: "missing-values", server: "prod", app: "demo", names, file: "compose.yaml" }).state
+        state = update(state, { type: "resize", ...size }).state
+        for (const at of [0, Math.floor(count / 2), count - 1]) {
+          const marked = { ...state, stack: [...state.stack.slice(0, -1), { ...top(state), at }] } as State
+          const shown = [marked, update(marked, { type: "key", key: { kind: "escape" } }).state, { ...marked, notice: { tone: "success", text: "Set A." } } as State]
+          for (const each of shown) {
+            const screen = draw(each, size.columns, size.rows)
+            const lines = screen.split("\n")
+            const what = { size, count, at, prompt: hiddenPromptOpen(each), notice: each.notice !== undefined }
+            expect({ what, lines: lines.length }).toEqual({ what, lines: size.rows })
+            expect({ what, said: lines.some((line) => line.includes(`! compose.yaml expects ${count} values that are not set yet.`)) }).toEqual({ what, said: true })
+            expect({ what, marked: lines.some((line) => new RegExp(`❯ VALUE_NUMBER_${at} +not set`).test(line)) }).toEqual({ what, marked: true })
+            expect({ what, hints: lastLine(screen).length > 0 }).toEqual({ what, hints: true })
+            // Nothing is drawn over anything else: the foot's lines are whole.
+            const foot = ["Encrypted on this machine for prod's key and signed by you.", "It cannot be shown again after it is set, only replaced."]
+            for (const text of foot) expect({ what, text, whole: lines.some((line) => line.trim() === text) }).toEqual({ what, text, whole: true })
+            if (count >= 20) expect(words(screen)).toMatch(/and \d+ more/)
+          }
+        }
+      }
+    }
+  })
+
+  test("which names are drawn: all when they fit, else a window around the marked one and a line for the rest", () => {
+    expect(nameWindow(3, 2, 5)).toEqual({ start: 0, end: 3, hidden: 0 })
+    expect(nameWindow(20, 0, 5)).toEqual({ start: 0, end: 4, hidden: 16 })
+    expect(nameWindow(20, 10, 5)).toEqual({ start: 8, end: 12, hidden: 16 })
+    expect(nameWindow(20, 19, 5)).toEqual({ start: 16, end: 20, hidden: 16 })
+    expect(nameWindow(64, 63, 2)).toEqual({ start: 63, end: 64, hidden: 63 })
+  })
+
+  test("the question before deploying without them: its words, its keys, and q and other keys do nothing", () => {
+    const listed = update(home(), { type: "missing-values", server: "prod", app: "demo", names: ["A", "B"] }).state
+    // A was set from the list, and the prompt for B closed: only B is left.
+    const left = { ...listed, stack: [...listed.stack.slice(0, -1), { ...top(listed), done: ["A"], at: 1, question: undefined }] } as State
+    const state = update(left, { type: "key", key: { kind: "escape" } }).state
+    expect(state.question).toEqual({ kind: "skip-values", server: "prod", app: "demo", names: ["B"] })
+    expect(words(draw(state, 80, 24))).toContain("Deploy demo to prod without B?")
+    for (const key of [{ kind: "text", text: "q" }, { kind: "enter" }, { kind: "down" }, { kind: "text", text: "d" }] as AppKey[]) {
+      expect(update(state, { type: "key", key })).toEqual({ state, effects: [] })
+    }
   })
 
   test("after a value is stored, the next name not set yet is asked, going round to an earlier one left out", () => {

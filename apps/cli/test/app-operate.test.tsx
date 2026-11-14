@@ -591,13 +591,16 @@ async function onHome(prepare?: (m: Machine) => Promise<void>, options: { linked
 
 /**
  * Presses d, and goes ahead without the value compose.yaml expects and no
- * secret gives (GREETING), as esc does on that list (board "Set a secret").
+ * secret gives (GREETING): esc closes the prompt, esc on the list asks
+ * whether to deploy without it, and y says yes (board "Set a secret").
  */
 async function deployKey(app: App) {
   app.type("d")
   await app.until(() => top(app.state).name === "set-secret", "the values compose.yaml expects")
   expect(top(app.state)).toMatchObject({ name: "set-secret", missing: ["GREETING"], file: "compose.yaml" })
-  app.press({ kind: "escape" })
+  app.press({ kind: "escape" }, { kind: "escape" })
+  expect(app.state.question).toEqual({ kind: "skip-values", server: "dev", app: "demo", names: ["GREETING"] })
+  app.type("y")
 }
 
 /** Opens demo's screen and waits for its history. */

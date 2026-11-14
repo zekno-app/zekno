@@ -16,6 +16,7 @@ import { currentSecrets, readSignedDeploy, verifySecret, verifySecretRemoval, ty
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 
+import { COMPOSE_READ_BYTES, tooManyAliases } from "../compose-file"
 import type { Team } from "../context"
 import type { History, Server } from "../profile"
 import { sanitize } from "../sanitize"
@@ -95,10 +96,13 @@ export function appsOf(team: Team, server: Server, home: string): AppRow[] {
 /**
  * Each service of a Compose file as `web (caddy:2)`, or as `web` when it is
  * built rather than pulled. Empty when the file is not a Compose file this
- * can read: it is only shown, never acted on. Bun's YAML parser refuses
- * excessive aliasing, so a file that would expand without end is refused.
+ * can read: it is only shown, never acted on. It is read for every deploy of
+ * an app each time the app screen opens or is read again, so a file with more
+ * aliases than any Compose file needs is not parsed at all (compose-file.ts
+ * `tooManyAliases`): Bun's parser copies what each alias stands for.
  */
 export function composeServices(compose: string): string[] {
+  if (compose.length > COMPOSE_READ_BYTES || tooManyAliases(compose)) return []
   let parsed: unknown
   try {
     parsed = Bun.YAML.parse(compose)

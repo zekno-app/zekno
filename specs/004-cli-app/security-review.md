@@ -313,3 +313,95 @@ test.
 - A runner from before sessions has nothing to keep open: it is read when the app starts and
   after `u`, never in the background.
 - A one-shot `status` answer from a runner before sessions is still read up to 32 MiB.
+
+## The project file (reviewed 2026-11-14)
+
+An independent reviewer (a separate agent that did not write the code) read commit `abcf8f4`, with
+someone who controls a folder the developer runs zekno in as the main attacker: a repository the
+developer cloned without fully trusting it, whose `zekno.json`, Compose file and links are all the
+attacker's. The reviewer reproduced each finding against the stand-in runner and Docker. One
+finding was rated high, four medium and three low. The fixes were made afterwards, on the code as
+it stood at `6fc818f`, by an assistant other than the reviewer, who reproduced each finding there
+first.
+
+| Id | Rating | Finding | State |
+|----|--------|---------|-------|
+| P1 | High | A `zekno.json` chose an existing app and server, and commands acted on it unasked. In a cloned folder holding `{"app":"api","server":"dev"}` and a Compose file that lists `DB_PASSWORD`, `zekno deploy` with no flags replaced `api` and handed its secret to the folder's container. `rollback`, `secret set` and `secret rm` took the same defaults, and `secret set` named the app only after the value was stored. In the app, Home opened on that app and one `d` replaced it. Reproduced. | Fixed: a `zekno.json` is used only once this machine accepted it, byte for byte. `links.json` in the profile folder holds the real path and the SHA-256 of each accepted file (data-model.md). `zekno link` and a "yes" in the app record what they write; `zekno link` with no names accepts a valid file as it is, after checking its server and its Compose file. A command that would take the app or server from a file that is not accepted stops with status 2 and says why, before the keychain is read, and before anything is signed, sent or started. The app does not select what such a file names, says why on Home, and `d` there deploys nothing and offers nothing. Any change to the file's bytes needs `zekno link` again. `zekno secret set` names the app and server before the value is typed. |
+| P2 | Medium | A `zekno.json` in a folder above supplied the Compose file even with `--app` and `--server` typed: `zekno deploy --app billing --server dev` in `services/billing` deployed the root's file as `billing`, and no output named it. Reproduced. | Fixed: its Compose file goes only with the app it names. With another app the Compose file is `-f`, or `compose.yaml` in the current folder, as without a project file. Given both `--app` and `--server`, a file that is not accepted is not used at all. |
+| P3 | Medium | In the app, `d` deployed the linked folder to whichever app and server were selected: with the folder linked to `web`, `billing` selected and `d`, billing ran web's definition. Reproduced. | Fixed: a linked folder deploys only to its own app on its own server, and on a server with no apps only when that server is its own. Otherwise `d` says so, names the command for deploying elsewhere, and deploys nothing. |
+| P4 | Medium | Before a deploy, the hidden prompt's hint bar said "esc cancel", but esc signed and sent the deploy. The only way out without deploying was Ctrl-C, then `q`, which quit the app. Reproduced. | Fixed: esc at the prompt closes it and returns to the list, and signs nothing. Esc on the list asks "Deploy <app> to <server> without ...?"; only `y` deploys. `n`, or esc on the question, ends the deploy with "Nothing was deployed.". Every hint now says what its key does. |
+| P5 | Low | `Bun.YAML.parse` copies what each alias stands for. A Compose file within the 256 KiB limit, one string of 172 KB and 30,000 aliases to it, took 5.2 GB before any bound applied: in the missing-values check, and in the app screen's history, for every deploy each time it was read. Reproduced (stopped at a 1.5 GB cap). | Fixed: a file with more than 200 aliases is not parsed, in `compose-file.ts` and in `views.ts`. It gives no names and no services, never an error. The count errs high, never low: every `*` followed by a character an anchor's name can start with counts, in quotes and comments too. The reviewer's file now costs 50 MiB at most and 1 ms. The runner parses no YAML (checked). |
+| P6 | Low | The Compose file was checked first and read later, through calls that follow links, with the keychain read in between: a link swapped in during that gap sent a file from outside the folder. Hard links were not checked. Reproduced. | Fixed: one reader (`compose-read.ts`) finds the file's real path, which must be inside the folder; opens it without following a link or waiting on a pipe; requires a regular file of this user's with one name on the disk and at most 256 KiB; reads it from that open file; then finds its real path again, which must still be inside the folder and be the same file. Its text is what is signed. In the app, the text read when `d` was pressed is kept through both questions and is not read again. |
+| P7 | Medium | With no `zekno.json`, `zekno deploy --app web --server dev` followed a `compose.yaml` that was a link to a file outside the folder and sent that file. The app refused the same file. Reproduced. | Fixed: the default `compose.yaml` goes through the same reader and must stay inside the current folder. `-f` still names any file, since the person typed it, and is read from one open file, a regular file within the limit, never a pipe. |
+| P8 | Low | The missing-values list had no bound. At 80 by 24, from 4 names the line saying how many were missing was drawn over, and from about 20 the marked name was not drawn. A 256 KiB file gave 20,263 names: 1.35 s and 1.7 GB for each frame. Measured by the reviewer. | Fixed: at most 64 names are taken from a file. The screen draws as many as fit around the marked name, and "and <n> more" for the rest. |
+
+**Notes**
+
+- A field written twice, `{"app":"good",…,"app":"evil"}`, was read as `evil`. Now it is an error
+  that names the file.
+- On a file system that ignores case, `ZEKNO.JSON` was used and called `zekno.json`. Now only a
+  file listed in its folder as exactly `zekno.json` counts.
+- Raw filesystem errors in `project.ts` (a race, a deleted folder) could escape with a path that
+  was not cleaned. They are now sentences with cleaned paths.
+- After either question in the app, the plan read `zekno.json` and the Compose file again, so the
+  text signed could differ from the text whose names were listed. Fixed with P6.
+- `expectedValuesIn` was not used, and its tests proved nothing about the path the app uses. It
+  was removed with its tests. Without a `zekno.json`, the CLI waited for ever on a named pipe at
+  `compose.yaml`; it now says it is not a file.
+- User Story 4, scenario 5 says an unknown app in `zekno.json` stops the command. Not changed:
+  the code checks the server against the verified profile and holds the app to the app-name
+  pattern, and an app this machine has not deployed is a first deploy. With P1 such a file is
+  used only after `zekno link` accepted it. Left for the maintainer to decide.
+- A `zekno.json` naming a server that is not connected still supplied its app for `d` on a server
+  with no apps. Now it supplies nothing, and `d` says the server is not connected.
+
+**Checked and found to hold**
+
+Run again while fixing, on the fixed code:
+
+- Hostile contents of `zekno.json` are refused with a sentence that names the file: `__proto__`
+  and `constructor` fields, NUL in a name, nesting 1,500 deep, `1e999999`, bidirectional and lone
+  surrogate characters in the Compose path, text after the object, an array (the reviewer's
+  `e11`). Compose paths the schema allows, such as `.`, `./compose.yaml`, `...`, full-width dots,
+  look-alike letters and 255 characters, either name a file inside the folder or are refused.
+- Writing `zekno.json` (the reviewer's `e15`) never replaces a file, folder, pipe or link without
+  `--force`; with `--force` it replaces a link or pipe itself, never through it, and does not
+  replace a folder; no temporary file is left; mode 644 also with umask 077.
+- Other YAML within the limit (the reviewer's `e5`): Bun refuses the billion-laughs file; flow
+  nesting 100,000 deep stops Bun's parser with an error that is caught; merge keys, 120,000
+  unclosed `${`, 60,000 nested `${` and a cyclic alias each finish in under 50 ms and 62 MiB.
+- When a command stops on a file that is not accepted, the keychain is not read, no runner
+  process is started, and Docker never runs `up` (counted in the tests).
+
+**Where each fix is tested**
+
+| Finding | Test |
+|---------|------|
+| P1 | `apps/cli/test/project-flow.test.tsx`, "a folder nobody on this machine linked (the reviewer's scenario)": `deploy`, `rollback`, `secret set`, `secret rm`, `secret ls`, `status` and `logs` each stop with status 2 and the sentence, with no keychain read, no runner started and no `up`; accepting with `zekno link`; a changed file; the app. `apps/cli/test/project.test.ts`: `withProject`, `zekno link` accepting, and `links.json` damaged, a link, a pipe, too large, more than 500 entries. |
+| P2 | `project-flow.test.tsx`, "flags win over the file, one detail at a time, and its Compose file goes only with its own app" and "a zekno.json in a folder above does not hand its Compose file to another app below it"; `project.test.ts`, "its Compose file goes with its app". |
+| P3 | `project-flow.test.tsx`, "a linked folder deploys only to its own app" and "on a server with no apps yet". |
+| P4 | `apps/cli/test/app-state.test.ts`, the two "before a deploy" tests; `project-flow.test.tsx`, "esc at the prompt returns to the list and signs nothing". |
+| P5 | `apps/cli/test/compose-file.test.ts`, "aliases are counted before anything is parsed". The memory test passes the 3 GB cap and is killed when the count is taken out. |
+| P6, P7 | `project.test.ts`, "the Compose file it names, read once"; `project-flow.test.tsx`, the swapped Compose file, "with no zekno.json, a compose.yaml that is a link out of the folder is not sent", and "what is signed is the text whose names were listed". |
+| P8 | `compose-file.test.ts`, "at most 64 names"; `project-flow.test.tsx`, "the list of missing names fits the window" (80 by 24 and 100 by 30, 3, 4, 20 and 64 names, the marked name first, in the middle and last, with the prompt, the list and a line above the hints). It fails when the window is taken out. |
+
+Also walked through in a pseudo-terminal (100 by 30, a driver that reads the terminal the whole
+time, an in-memory key store, a runner on this machine, the stand-in Docker), three runs of 24
+checks, all passed each time: in a folder with a `zekno.json` nobody accepted, Home showed the
+problem line, the first row was selected and `d` deployed nothing; in a linked folder whose
+Compose file expects two values, esc at the prompt returned to the list, esc there asked, `n`
+said "Nothing was deployed." and Docker never ran `up`, then `d`, esc, esc, `y` deployed; with
+another app selected, `d` showed the notice and deployed nothing; the app exited with status 0
+each time and left no process.
+
+**Left**
+
+- Someone who can write the profile folder (attacker B) can add an entry to `links.json`. By
+  design: they gain nothing they do not have already (data-model.md).
+- Two zekno processes accepting at the same moment: the last write wins, and the other file has to
+  be accepted again.
+- The alias count also counts `*name` inside quotes and comments. A Compose file with more than
+  200 of them gets no missing-values list before a deploy; the deploy itself is unaffected.
+- At 80 columns, the set-a-secret header cuts "set a secret" short once the count has two digits
+  ("33 of 64"). Seen while checking P8; not changed.
+- User Story 4, scenario 5 (see the notes).

@@ -7,7 +7,9 @@
  *
  * A hidden value (a secret being typed) never enters this state. While the
  * hidden prompt is open the reducer only knows that it is open: the keys go
- * to the prompt, and only Esc and Ctrl-C close it.
+ * to the prompt, and only Esc and Ctrl-C close it. Closing it never signs or
+ * sends anything: before a deploy it returns to the list of missing values,
+ * where going ahead without them is a question of its own.
  */
 import { isReservedSecretName } from "@workspace/core"
 
@@ -240,6 +242,8 @@ export type Question =
   | { kind: "remove-secret"; server: string; app: string; name: string }
   | { kind: "update-runner"; server: string }
   | { kind: "remember-folder"; server: string; app: string; compose: string }
+  /** Esc on the list before a deploy: go ahead without the values in `names`, which are not set? */
+  | { kind: "skip-values"; server: string; app: string; names: readonly string[] }
 
 /** The answers to each question and their keys. The boards give the words for the last two. */
 export const CHOICES = {
@@ -256,7 +260,21 @@ export const CHOICES = {
     { key: "n", answer: "skip", does: "deploy without it" },
     { key: "esc", answer: "no", does: "cancel" },
   ],
+  // Esc answers no as well (`onQuestion`): it never deploys.
+  "skip-values": [
+    { key: "y", answer: "yes", does: "deploy" },
+    { key: "n", answer: "no", does: "do not deploy" },
+  ],
 } as const satisfies Record<Question["kind"], readonly Choice<string>[]>
+
+/** Said when a deploy that waited on the list of missing values was not made. */
+export const NOT_DEPLOYED = "Nothing was deployed."
+
+/** The question esc on that list asks: deploy without the values not set yet? */
+export function skipValuesTitle(question: Extract<Question, { kind: "skip-values" }>): string {
+  const without = question.names.length === 1 ? question.names[0]! : `${question.names.length} values`
+  return `Deploy ${question.app} to ${question.server} without ${without}?`
+}
 
 // ---------------------------------------------------------------------------
 // Effects: what the reducer asks for. effects.ts runs them.
@@ -589,9 +607,10 @@ function inputOf(key: AppKey): [string, { return?: boolean; escape?: boolean; ba
 function onQuestion(state: State, question: Question, key: AppKey): Step {
   if (key.kind === "ctrl-c") return quit(state)
   const [input, flags] = inputOf(key)
-  const answer = applyConfirmKey<string>(CHOICES[question.kind], input, flags)
+  const answer = applyConfirmKey<string>(CHOICES[question.kind], input, flags) ?? (question.kind === "skip-values" && flags.escape ? "no" : undefined)
   if (answer === undefined) return stay(state)
   const closed = { ...state, question: undefined }
+  if (question.kind === "skip-values") return skipValues(closed, question, answer === "yes")
   if (answer === "no") return stay(closed)
   switch (question.kind) {
     case "remove-secret":
@@ -606,6 +625,19 @@ function onQuestion(state: State, question: Question, key: AppKey): Step {
         answer: answer === "yes" ? "write-link" : "skip-link",
       })
   }
+}
+
+/**
+ * The answer to "deploy without them?": yes goes on with the deploy without
+ * the values not set; no ends it, with nothing signed, back on the screen `d`
+ * was pressed on.
+ */
+function skipValues(state: State, question: Extract<Question, { kind: "skip-values" }>, yes: boolean): Step {
+  const screen = top(state)
+  if (screen.name !== "set-secret" || screen.server !== question.server || screen.app !== question.app) return stay(state)
+  if (yes) return pop(state, { kind: "deploy-continue", server: question.server, app: question.app, answer: "skip-values" })
+  const back = pop(state)
+  return { ...back, state: { ...back.state, notice: { tone: "info", text: NOT_DEPLOYED } } }
 }
 
 /** An open one-line question: letters type into it, Enter answers it, Esc leaves it. Ctrl-C still quits. */
@@ -661,7 +693,12 @@ function onTextQuestion(state: State, key: AppKey): Step {
   }
 }
 
-/** The hidden prompt has the keys. Esc closes it as the board's "esc cancel"; Ctrl-C closes the prompt only. */
+/**
+ * The hidden prompt has the keys. Esc is the board's "esc cancel": it
+ * cancels setting the secret, and before a deploy it closes the prompt only,
+ * back to the list, so nothing is ever signed by it. Ctrl-C closes the
+ * prompt only.
+ */
 function onHiddenPrompt(state: State, key: AppKey): Step {
   const screen = top(state)
   if (screen.name !== "set-secret") return stay(state)
@@ -669,14 +706,11 @@ function onHiddenPrompt(state: State, key: AppKey): Step {
     // Back to what was asked before the value, so nothing is lost but the value.
     return stay(replaceTop(state, { ...screen, question: screen.missing.length > 0 ? undefined : "name" }))
   }
-  if (key.kind === "escape") return leaveSetSecret(state, screen)
+  if (key.kind === "escape") {
+    if (screen.missing.length === 0) return pop(state)
+    return stay(replaceTop(state, { ...screen, question: undefined }))
+  }
   return stay(state)
-}
-
-/** Leaving "set a secret": before a deploy that means going ahead without the missing values. */
-function leaveSetSecret(state: State, screen: Extract<Screen, { name: "set-secret" }>): Step {
-  if (screen.missing.length === 0) return pop(state)
-  return pop(state, { kind: "deploy-continue", server: screen.server, app: screen.app, answer: "skip-values" })
 }
 
 function onHome(state: State, screen: Extract<Screen, { name: "home" }>, key: AppKey): Step | undefined {
@@ -816,8 +850,12 @@ function withLogLines(screen: LogsScreen, added: readonly LogLine[], fresh: bool
 }
 
 function onSetSecret(state: State, screen: Extract<Screen, { name: "set-secret" }>, key: AppKey): Step | undefined {
-  // No question is open here: the hidden prompt was closed with Ctrl-C, before a deploy.
-  if (key.kind === "escape") return leaveSetSecret(state, screen)
+  // No question is open here: the hidden prompt was closed, before a deploy. Esc asks before going ahead without the values.
+  if (key.kind === "escape") {
+    if (screen.missing.length === 0) return pop(state)
+    const names = screen.missing.filter((name) => !screen.done.includes(name))
+    return stay({ ...state, question: { kind: "skip-values", server: screen.server, app: screen.app, names } })
+  }
   if (key.kind === "up" || key.kind === "down") {
     const moved = applySelectKey(screen.at, screen.missing.length, listKey(key))
     return moved.kind === "moved" ? stay(replaceTop(state, { ...screen, at: moved.index })) : stay(state)

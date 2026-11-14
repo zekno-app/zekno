@@ -95,8 +95,8 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
       )
     }
 
-    // Details not given as flags come from the project file (contracts/commands.md). Flags win.
-    const project = (wanted: Parameters<typeof withProject>[2]) => withProject(deps.cwd, values, wanted)
+    // Details not given as flags come from the project file, once this machine accepted it (contracts/commands.md). Flags win.
+    const project = (wanted: Parameters<typeof withProject>[2]) => withProject(deps.cwd, values, wanted, { profile: deps.home })
     switch (name) {
       case "init":
         await init(deps, values)

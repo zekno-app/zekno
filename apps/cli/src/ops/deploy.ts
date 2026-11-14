@@ -1,10 +1,11 @@
-import { CoreError, createDeploy, currentSecrets, LIMITS, readSignedDeploy, RunnerReportSchema, RunnerStatusSchema, type RunnerReport } from "@workspace/core"
-import { existsSync, readFileSync, statSync } from "node:fs"
+import { CoreError, createDeploy, currentSecrets, readSignedDeploy, RunnerReportSchema, RunnerStatusSchema, type RunnerReport } from "@workspace/core"
 import { resolve } from "node:path"
 
+import { readCompose, type ComposeText } from "../compose-read"
 import { openTeam, reach, type OpDeps, type Team } from "../context"
 import { CliError, MISSING_APP, UsageError } from "../errors"
 import { findServer, NAME, type History, type Server } from "../profile"
+import type { ProjectLink } from "../project"
 import { sanitize } from "../sanitize"
 import { withSession, type SessionMode } from "../session"
 import { checkIdentity } from "./status"
@@ -92,16 +93,33 @@ function sentDeploys(team: Team, server: Server, app: string, history: History, 
   return sent.sort((a, b) => a.sequence - b.sequence)
 }
 
-/** Checks a deploy of the Compose file in the project folder. "Run init first" comes before any complaint about files. */
-export async function prepareDeploy(deps: OpDeps, input: Where & { file?: string }): Promise<DeployPlan> {
+/**
+ * What a deploy is of: `-f`, as the person typed it; else the Compose file
+ * of the accepted project file (`project`, from `withProject`); else
+ * compose.yaml in the current folder. `read` is a Compose file the app has
+ * already read, whose text is signed as it is.
+ */
+export type DeployInput = Where & { file?: string; project?: ProjectLink; read?: ComposeText }
+
+/**
+ * Checks a deploy of a Compose file. "Run init first" comes before any
+ * complaint about files. The file is read once, here (compose-read.ts), and
+ * the text read is the text the plan signs: never a path read again later.
+ */
+export async function prepareDeploy(deps: OpDeps, input: DeployInput): Promise<DeployPlan & { from: string }> {
   const where = await locate(deps, input)
-  const path = resolve(deps.cwd, input.file ?? "compose.yaml")
+  const read =
+    input.read ??
+    readCompose(
+      input.file !== undefined
+        ? { kind: "given", path: resolve(deps.cwd, input.file) }
+        : input.project
+          ? { kind: "project", link: input.project }
+          : { kind: "default", folder: deps.cwd }
+    )
   // A folder's name can hold anything, escape sequences included, so a path is cleaned before it is shown.
-  if (!existsSync(path)) throw new CliError(`No Compose file at ${sanitize(path)}. Point to one with \`-f <file>\`.`)
-  if (statSync(path).size > LIMITS.composeBytes) throw new CliError("The Compose file is larger than the 256 KiB limit.")
-  const compose = readFileSync(path, "utf8")
-  if (compose.trim() === "") throw new CliError(`The Compose file at ${sanitize(path)} is empty.`)
-  return { ...where, compose }
+  if (read.text.trim() === "") throw new CliError(`The Compose file at ${sanitize(read.path)} is empty.`)
+  return { ...where, compose: read.text, from: read.path }
 }
 
 /**

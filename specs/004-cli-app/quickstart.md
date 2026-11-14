@@ -51,6 +51,18 @@ zekno status --json | head -c 300
 zekno deploy < /dev/null     # never asks; succeeds from zekno.json
 ```
 
+In a folder whose `zekno.json` came from elsewhere, such as a cloned repository, nothing uses it
+until this machine accepts it:
+
+```bash
+zekno deploy                 # stops with status 2: "zekno.json in <folder> names <app> on <server>.
+                             # It was not made or accepted on this machine. ..." Nothing is sent.
+zekno                        # Home opens without selecting its app and says the same; d deploys nothing
+zekno link                   # checks it (server connected, Compose file inside the folder) and
+                             # accepts it as it is: "Accepted zekno.json: <app> on <server>, file <compose>."
+zekno deploy                 # now reads it; an edit to zekno.json (or a git pull) needs zekno link again
+```
+
 ## 3. A real server
 
 Needs a Linux server with Docker and Compose, and either a published runner release or a

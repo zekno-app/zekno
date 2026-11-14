@@ -90,7 +90,7 @@ export function Screen({ state, columns, rows }: { state: State; columns: number
     case "deploy":
       return <DeployScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
     case "set-secret":
-      return <SetSecretScreen state={state} screen={screen} columns={columns} status={status} />
+      return <SetSecretScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
     case "welcome":
       return <WelcomeScreen screen={screen} columns={columns} rows={rows} status={status} />
     case "add-server":

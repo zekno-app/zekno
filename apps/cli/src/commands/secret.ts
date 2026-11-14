@@ -3,7 +3,8 @@ import { listSecrets, prepareSecretSet, removeSecret, setSecret, type Where } fr
 
 export async function secretSet(deps: Deps, name: string | undefined, options: Where & { stdin?: boolean }): Promise<void> {
   const plan = await prepareSecretSet(deps, name, options)
-  const value = await deps.ui.askSecret(`Value for ${plan.name}: `, options.stdin === true)
+  // Where the value goes is said before it is typed: the app and server may have come from zekno.json.
+  const value = await deps.ui.askSecret(`Value for ${plan.name} (${plan.app} on ${plan.server.name}): `, options.stdin === true)
   const set = await setSecret(plan, value)
   deps.ui.success(`Set ${set.name} (version ${set.version}) for ${set.app} on ${set.server}. It takes effect on the next deploy.`)
 }

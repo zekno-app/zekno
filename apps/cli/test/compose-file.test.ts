@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { LIMITS } from "@workspace/core"
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
 
-import { tempDir } from "../../runner/test/helpers"
-import { expectedValues, expectedValuesIn, interpolated, MAX_NODES } from "../src/compose-file"
+import { composeServices } from "../src/app/views"
+import { COMPOSE_READ_BYTES, expectedValues, interpolated, MAX_ALIASES, MAX_NAMES, MAX_NODES, tooManyAliases } from "../src/compose-file"
 
 describe("environment", () => {
   test("as a list: a name with no `=` is expected; `NAME=value` and `NAME=` are not", () => {
@@ -131,21 +129,61 @@ describe("files it cannot read or understand yield no names, never an error", ()
   test("text larger than a Compose file may be", () => {
     expect(expectedValues(`services:\n  web:\n    environment: [A]\n#${"x".repeat(LIMITS.composeBytes)}\n`)).toEqual([])
   })
+})
 
-  test("from a path: missing, a folder, a named pipe, too large, not UTF-8, or a link", () => {
-    const dir = tempDir("compose")
-    expect(expectedValuesIn(join(dir, "missing.yaml"))).toEqual([])
-    mkdirSync(join(dir, "folder"))
-    expect(expectedValuesIn(join(dir, "folder"))).toEqual([])
-    Bun.spawnSync(["mkfifo", join(dir, "pipe")])
-    expect(expectedValuesIn(join(dir, "pipe"))).toEqual([])
-    writeFileSync(join(dir, "big.yaml"), `services:\n  web:\n    environment: [A]\n#${"x".repeat(LIMITS.composeBytes)}\n`)
-    expect(expectedValuesIn(join(dir, "big.yaml"))).toEqual([])
-    writeFileSync(join(dir, "latin1.yaml"), Buffer.from("services:\n  web:\n    environment: [A]\n# caf\xe9\n", "latin1"))
-    expect(expectedValuesIn(join(dir, "latin1.yaml"))).toEqual([])
-    writeFileSync(join(dir, "compose.yaml"), "services:\n  web:\n    environment: [A]\n")
-    expect(expectedValuesIn(join(dir, "compose.yaml"))).toEqual(["A"])
-    symlinkSync(join(dir, "compose.yaml"), join(dir, "link.yaml"))
-    expect(expectedValuesIn(join(dir, "link.yaml"))).toEqual(["A"])
+describe("aliases are counted before anything is parsed", () => {
+  /** The reviewer's worst file: one string of about 170 KB behind an anchor, and 30,000 aliases to it, within the 256 KiB limit. */
+  function worst(): string {
+    const n = 30_000
+    const head = "services:\n  x:\n    image: y\n    environment:\n      - $A\n"
+    const big = "a".repeat(COMPOSE_READ_BYTES - head.length - 3 * n - 40)
+    return `${head}s: &s "${big}"\nl: [${Array.from({ length: n }, () => "*s").join(",")}]\n`
+  }
+
+  test("up to 200 aliases are parsed as before; past that the file gives no names and no services", () => {
+    const uses = (count: number) => `x-env: &env\n  SHARED:\nservices:\n  web:\n    image: caddy:2\n    environment: *env\nlist: [${Array(count - 1).fill("*env").join(", ")}]\n`
+    expect(tooManyAliases(uses(MAX_ALIASES))).toBe(false)
+    expect(expectedValues(uses(MAX_ALIASES))).toEqual(["SHARED"])
+    expect(composeServices(uses(MAX_ALIASES))).toEqual(["web (caddy:2)"])
+    expect(tooManyAliases(uses(MAX_ALIASES + 1))).toBe(true)
+    expect(expectedValues(uses(MAX_ALIASES + 1))).toEqual([])
+    expect(composeServices(uses(MAX_ALIASES + 1))).toEqual([])
+  })
+
+  test("the count errs high, never low: every form Bun reads as an alias counts, and so does a `*name` in quotes", () => {
+    for (const alias of ["*x", "[*x,*x]", '{"b":*x}', "\t*x", "*\u00a0", "*é", "'*x'", "\"*x\"", "# *x"]) {
+      expect({ alias, over: tooManyAliases(Array(MAX_ALIASES + 1).fill(alias).join("\n")) }).toEqual({ alias, over: true })
+    }
+    // A `*` that cannot start an alias does not count.
+    for (const text of ["* x", "*,", "*]", "*}", "*\n"]) expect(tooManyAliases(text.repeat(MAX_ALIASES + 1))).toBe(false)
+  })
+
+  test("the reviewer's worst file costs neither time nor memory: no names, no services", () => {
+    const text = worst()
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(COMPOSE_READ_BYTES)
+    Bun.gc(true)
+    const before = process.memoryUsage().rss
+    const started = performance.now()
+    expect(expectedValues(text)).toEqual([])
+    expect(composeServices(text)).toEqual([])
+    const took = performance.now() - started
+    const grew = process.memoryUsage().rss - before
+    // Parsed, it took about 5 GB.
+    expect(grew).toBeLessThan(64 * 1024 * 1024)
+    expect(took).toBeLessThan(500)
+  })
+})
+
+describe("at most 64 names", () => {
+  test("the first 64, in the order the list shows them: what environment lists first, then names used in values", () => {
+    const listed = Array.from({ length: 80 }, (_, n) => `      - LISTED_${n}`).join("\n")
+    const used = Array.from({ length: 20 }, (_, n) => `\${USED_${n}}`).join(" ")
+    const names = expectedValues(`services:\n  web:\n    command: "${used}"\n    environment:\n${listed}\n`)
+    expect(MAX_NAMES).toBe(64)
+    expect(names).toEqual(Array.from({ length: 64 }, (_, n) => `LISTED_${n}`))
+    expect(expectedValues(`services:\n  web:\n    command: "${used}"\n    environment:\n      - FIRST\n`)).toEqual([
+      "FIRST",
+      ...Array.from({ length: 20 }, (_, n) => `USED_${n}`),
+    ])
   })
 })
