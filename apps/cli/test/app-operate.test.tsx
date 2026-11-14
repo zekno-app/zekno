@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { renderToString, type Key } from "ink"
+import { Box, renderToString, Text, type Key } from "ink"
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -10,6 +10,7 @@ import { emptyHiddenValue, hiddenPromptKey } from "../src/app/hidden-prompt"
 import type { AppKey } from "../src/app/keys"
 import { changedNote } from "../src/app/screens/app"
 import { lastLines, numberUsed, stagesOf } from "../src/app/screens/deploy"
+import { inkRows, rowsOf } from "../src/app/screens/home"
 import { HINTS } from "../src/app/screens/placeholder"
 import {
   hiddenPromptOpen,
@@ -425,6 +426,71 @@ describe("at 80 columns (boards 'Home at 80 columns' and 'One app at 80 columns'
     // A server that could not be reached, with the folder linked elsewhere, still fits.
     const gone = play(onApi, { type: "server-reached", server: "prod", reachable: false, problem: "The connection to the runner ended before it answered." })
     fits(draw(gone, 80, 24), 80, 24)
+  })
+
+  test("Home: a long reason a server could not be reached is cut to the rows that are free, at a word, and the apps table keeps its rows whole", () => {
+    // Four lines and more of reason at 80 columns, as SSH can give.
+    const reason =
+      "ssh: connect to host 203.0.113.7 port 22: Operation timed out. The connection was closed by the remote host before any answer came back, " +
+      "and SSH gave up after three tries. Check the address, the port and the firewall in front of the server."
+    for (const [columns, rows] of [
+      [80, 24],
+      [100, 30],
+    ] as const) {
+      const gone = play(update(narrowHome(), { type: "resize", columns, rows }).state, { type: "server-reached", server: "prod", reachable: false, problem: reason })
+      for (const state of [gone, play(gone, key({ kind: "down" })), play(gone, key({ kind: "down" }), key({ kind: "down" }))]) {
+        const screen = draw(state, columns, rows)
+        const at = (top(state) as Extract<State["stack"][number], { name: "home" }>).app
+        const what = { columns, rows, selected: at }
+        fits(screen, columns, rows)
+        const marked = (name: string) => `${at === ["demo", "api", "worker"].indexOf(name) ? "❯" : " "} ${name}`
+        // Each row of the table whole, on a line of its own: its name, its number, its state and when.
+        for (const [name, deploy, when] of [
+          ["demo", 4, "2 min ago"],
+          ["api", 12, "yesterday"],
+          ["worker", 3, "3 days ago"],
+        ] as const) {
+          const row = new RegExp(`│ ${marked(name).replace(/[❯]/, "\\$&")} +${deploy} +● unknown +${when} +│`)
+          expect({ what, name, whole: screen.split("\n").some((line) => row.test(line)) }).toEqual({ what, name, whole: true })
+        }
+        expect({ what, header: /app +deploy +state +when/.test(screen) }).toEqual({ what, header: true })
+        const apps = pane(screen, "Apps on prod")
+        expect(apps).toContain("✖ prod could not be reached. Numbers are from this machine's history.")
+        // The reason as it was given, whole, or cut after a word with "…".
+        const from = apps.indexOf("ssh: connect to host 203.0.113.7 port 22:")
+        expect({ what, from: from >= 0 }).toEqual({ what, from: true })
+        const end = apps.indexOf("…", from)
+        if (end === -1) expect(apps).toContain(reason)
+        else {
+          const shown = apps.slice(from, end)
+          expect({ what, prefix: reason.startsWith(shown), atWord: reason.charAt(shown.length) === " " }).toEqual({ what, prefix: true, atWord: true })
+        }
+      }
+      // At 80 by 24 there is room for its first line only.
+      if (columns === 80) expect(pane(draw(gone, columns, rows), "Apps on prod")).toContain("ssh: connect to host 203.0.113.7 port 22:… ")
+    }
+  })
+
+  test("a text cut to the rows there are: wrapped at spaces, a long word broken, the last row ending at a word with …", () => {
+    expect(rowsOf("one two three", 1, 20)).toEqual(["one two three"])
+    expect(rowsOf("one two three four", 1, 12)).toEqual(["one two…"])
+    expect(rowsOf("one two three four", 2, 9)).toEqual(["one two", "three…"])
+    expect(rowsOf("/a/very/long/path/that/cannot/wrap and more", 2, 10)).toEqual(["/a/very/lo", "ng/path/t…"])
+    expect(rowsOf("anything", 0, 10)).toEqual([])
+    // The rows Ink draws, as measured with Ink: a space just past a full row starts the next one, even a row of its own.
+    expect(inkRows("ab cd ef", 5)).toBe(2)
+    expect(inkRows("abcdef", 3)).toBe(2)
+    expect(inkRows("abc def", 3)).toBe(3)
+    expect(inkRows("abcd efgh ijkl", 4)).toBe(5)
+    for (const [words, width] of [
+      ["✖ prod could not be reached. Numbers are from this machine's history.", 40],
+      ["This folder is linked to demo on prod by zekno.json.", 40],
+      ["ssh: connect to host 203.0.113.7 port 22: Operation timed out. The connection was closed", 51],
+      ["abc def", 3],
+    ] as const) {
+      const drawn = renderToString(<Box width={width}><Text>{words}</Text></Box>, { columns: 100 }).split("\n").length
+      expect({ words, rows: inkRows(words, width) }).toEqual({ words, rows: drawn })
+    }
   })
 
   test("`● partly running` is cut at a word where the boards' state column is, never in a word; in full where there is room", () => {

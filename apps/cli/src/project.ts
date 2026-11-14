@@ -3,7 +3,8 @@
  * deploys, to which server, from which Compose file. It saves typing `--app`
  * and `--server`; flags always win over it.
  *
- * It is not signed and not trusted. It may have come with a cloned
+ * It travels with a repository, and whoever wrote it chose the app and the
+ * server, so it is not trusted as it stands. It may have come with a cloned
  * repository, or been put in a parent folder by someone else, so:
  *
  * - its schema is strict, an unknown field is an error, and at most
@@ -16,17 +17,24 @@
  *   symbolic links are followed;
  * - the server it names is looked up in the verified profile, and the app
  *   name is held to the app-name pattern, before anything is sent;
- * - it is used only once this machine accepted it, byte for byte
- *   (accepted.ts): written by `zekno link` or a "yes" in the app, or an
- *   existing one accepted with `zekno link`. One that came with a cloned
- *   repository, or changed since, is never used: a command that would take a
- *   name from it stops and says so;
+ * - it is used only when it is signed by the team (`signerOf`): its `signed`
+ *   field is a link a current member signed (packages/core, link.ts), checked
+ *   against the verified team list, and it says exactly what the three plain
+ *   fields say. A file from someone outside the team cannot carry one, so it
+ *   is refused outright and not even offered;
+ * - a signature proves who wrote a file, not where it sits: anyone who can
+ *   read a repository can copy its zekno.json beside another Compose file.
+ *   So a file signed by the team is used without a question only once it
+ *   was used in its folder on this machine, byte for byte (accepted.ts,
+ *   `links.json`). The first time, the person is shown what it names and
+ *   asked once; where nobody can answer, the command stops;
  * - the Compose file it names is used only with the app it names (a command
  *   given another `--app` deploys its own folder's compose.yaml);
  * - it is written only when asked, never over an existing one without
- *   `--force`, never through a link, and holds three names and nothing else:
- *   no secret and no key.
+ *   `--force`, never through a link, and holds three names and the team's
+ *   signature of them: no secret and no key.
  */
+import { EnvelopeSchema, verifyLink, type Envelope, type Member, type TeamTrust } from "@workspace/core"
 import { randomBytes } from "node:crypto"
 import {
   closeSync,
@@ -49,7 +57,7 @@ import { homedir } from "node:os"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { z } from "zod"
 
-import { isAccepted, sha256Of } from "./accepted"
+import { accept, isAccepted, sha256Of } from "./accepted"
 import { CliError, UsageError } from "./errors"
 import { NAME } from "./profile"
 import { sanitize } from "./sanitize"
@@ -81,10 +89,16 @@ function isInsidePath(path: string): boolean {
 
 const ComposePathSchema = z.string().min(1).max(255).refine(isInsidePath)
 
+/**
+ * The three plain fields, for people, and `signed`, the team's signature of
+ * them (`signerOf`). A file without `signed` is well-formed, and not signed
+ * by the team.
+ */
 const ProjectSchema = z.strictObject({
   app: z.string().regex(NAME),
   server: z.string().regex(NAME),
   compose: ComposePathSchema.optional(),
+  signed: EnvelopeSchema.optional(),
 })
 
 /** What a project file says, and where it is. `compose` is relative to `folder`. */
@@ -92,6 +106,8 @@ export type ProjectLink = {
   app: string
   server: string
   compose: string
+  /** The link a member signed, as the file holds it: not yet checked (`signerOf`). */
+  signed?: Envelope
   /** The folder that holds the file. */
   folder: string
   /** The file itself, as a real path: what `links.json` records it by. */
@@ -102,15 +118,16 @@ export type ProjectLink = {
 
 /** The sentence for what is wrong with a project file's content. It quotes field names only, cleaned. */
 function problemOf(issues: readonly z.core.$ZodIssue[]): string {
-  const unknown = issues.flatMap((issue) => (issue.code === "unrecognized_keys" ? issue.keys : []))
+  const unknown = issues.flatMap((issue) => (issue.code === "unrecognized_keys" && issue.path.length === 0 ? issue.keys : []))
   if (unknown.length > 0) {
     const names = unknown.map((key) => `"${[...sanitize(key)].slice(0, 40).join("")}"`).join(", ")
-    return `has a field zekno does not read: ${names}. It holds only "app", "server" and "compose".`
+    return `has a field zekno does not read: ${names}. It holds only "app", "server", "compose" and "signed".`
   }
   const field = issues[0]?.path[0]
   if (field === "app") return `needs "app": an app name of lowercase letters, digits and hyphens.`
   if (field === "server") return `needs "server": a server name of lowercase letters, digits and hyphens.`
   if (field === "compose") return `has a "compose" that is not a relative path inside its folder.`
+  if (field === "signed") return `has a "signed" that is not a signature zekno reads. Run \`zekno link --app <name> --server <name> --force\` to sign it again.`
   return `is not a JSON object with an "app", a "server" and a "compose".`
 }
 
@@ -179,13 +196,18 @@ function readText(path: string, shown: string): { text: string; sha256: string }
 /** A JSON string, as it is written: what is between its quotes is read with `JSON.parse`. */
 const JSON_STRING = /"(?:[^"\\\u0000-\u001f]|\\.)*"/y
 
+/** How deep objects nest in a project file: the file, `signed`, and its `signature`. */
+const NESTING = 3
+
 /**
- * The keys of a flat JSON object whose values are all strings, in the order
- * written, each as `JSON.parse` reads it. `JSON.parse` keeps only the last of
- * a key written twice, so this is how a second "app" is noticed. Undefined
- * for text of any other shape.
+ * The keys of a JSON object, in the order written, each as `JSON.parse`
+ * reads it, when each value is a string or an object of the same kind, at
+ * most `NESTING` deep (as `signed` is). `JSON.parse` keeps only the last of a
+ * key written twice, so this is how a second "app" is noticed. The outer
+ * object's keys are returned; an object inside it that has a key twice makes
+ * the answer undefined, as does text of any other shape.
  */
-export function flatKeys(text: string): string[] | undefined {
+export function objectKeys(text: string): string[] | undefined {
   let at = 0
   const space = () => {
     while (at < text.length && " \t\n\r".includes(text[at]!)) at++
@@ -197,25 +219,36 @@ export function flatKeys(text: string): string[] | undefined {
     at += found.length
     return JSON.parse(found) as string
   }
-  const keys: string[] = []
-  space()
-  if (text[at++] !== "{") return undefined
-  space()
-  if (text[at] === "}") return keys
-  for (;;) {
+  const object = (depth: number): string[] | undefined => {
+    if (depth > NESTING || text[at++] !== "{") return undefined
+    const keys: string[] = []
     space()
-    const key = string()
-    if (key === undefined) return undefined
-    keys.push(key)
-    space()
-    if (text[at++] !== ":") return undefined
-    space()
-    if (string() === undefined) return undefined
-    space()
-    const next = text[at++]
-    if (next === "}") return keys
-    if (next !== ",") return undefined
+    if (text[at] === "}") {
+      at++
+      return keys
+    }
+    for (;;) {
+      space()
+      const key = string()
+      if (key === undefined) return undefined
+      keys.push(key)
+      space()
+      if (text[at++] !== ":") return undefined
+      space()
+      if (text[at] === "{") {
+        const inner = object(depth + 1)
+        if (inner === undefined || new Set(inner).size !== inner.length) return undefined
+      } else if (string() === undefined) return undefined
+      space()
+      const next = text[at++]
+      if (next === "}") return keys
+      if (next !== ",") return undefined
+    }
   }
+  space()
+  const keys = object(1)
+  space()
+  return at === text.length ? keys : undefined
 }
 
 /** Reads and checks the project file at `path`, in `folder`. Every problem stops the command and names the file. */
@@ -232,10 +265,10 @@ function readProject(path: string, folder: string, entry: Stats): ProjectLink {
   const parsed = ProjectSchema.safeParse(json)
   if (!parsed.success) throw new CliError(`${shown} ${problemOf(parsed.error.issues)}`)
   // A field written twice is read as its last value, which someone reading the file from the top may not notice.
-  const keys = flatKeys(text)
+  const keys = objectKeys(text)
   if (keys === undefined || new Set(keys).size !== keys.length) throw new CliError(`${shown} has the same field more than once.`)
-  const { app, server, compose = DEFAULT_COMPOSE } = parsed.data
-  return { app, server, compose, folder, path, sha256 }
+  const { app, server, compose = DEFAULT_COMPOSE, signed } = parsed.data
+  return { app, server, compose, ...(signed === undefined ? {} : { signed }), folder, path, sha256 }
 }
 
 /** A folder as it really is, with no link in its path; as given when that cannot be found out. */
@@ -344,26 +377,98 @@ export type Details = { app?: string; server?: string; file?: string }
 /**
  * What `withProject` adds. `serverFrom` is the project file's path, as a
  * sentence shows it, when the server came from it: for the sentence when no
- * such server is connected. `project` is the accepted project file whose
+ * such server is connected. `project` is the project file in use whose
  * Compose file is deployed, when `-f` was not given and the app is its app.
  */
 export type FromProject = { serverFrom?: string; project?: ProjectLink }
 
-/** Where a project file and the accepted list are looked for: the profile folder, and the home folder the search stops at. */
+/** Where a project file and the list of files used here are looked for: the profile folder, and the home folder the search stops at. */
 export type ProjectPlaces = { profile: string; home?: string }
 
 /**
- * Said when a command would take a name from a zekno.json this machine did
- * not write or accept (data-model.md, "When a project file is used").
+ * The member who signed a project file, when it is signed by the team
+ * (data-model.md): `signed` is a link that a member of the verified team
+ * list, as it is now, signed for this team and one of its servers
+ * (`verifyLink`), and it says exactly what the plain fields say: the same
+ * app, the same Compose file, and the server the team list names by the
+ * signed id. Undefined for any other file: no signature, another team's, a
+ * removed member's, one edited after signing, or one for a server of
+ * another name.
  */
-export const notAccepted = (link: ProjectLink): string =>
-  `zekno.json in ${shownPath(link.folder)} names ${link.app} on ${link.server}. It was not made or accepted on this machine. ` +
-  "To use it, run `zekno link` in that folder. To leave it aside, give --app and --server."
+export function signerOf(link: ProjectLink, trust: TeamTrust): Member | undefined {
+  if (link.signed === undefined) return undefined
+  const verified = verifyLink(trust, link.signed)
+  if (!verified.ok) return undefined
+  const { serverId, app, compose, signer } = verified.value
+  const server = trust.servers.find((entry) => entry.serverId === serverId)
+  return app === link.app && compose === link.compose && server?.name === link.server ? signer : undefined
+}
 
-/** The same, as the app says it about the folder it was started in, `cwd`. */
-export function notAcceptedHere(link: ProjectLink, cwd: string): string {
+/**
+ * How a project file stands on this machine (data-model.md, "When a project
+ * file is used"): not signed by the team; signed by the team and not yet used
+ * in its folder here (`new`); or signed and used here before, byte for byte
+ * (`used`). `member` is the signer's name from the team list, cleaned.
+ */
+export type Standing = { kind: "unsigned" } | { kind: "new" | "used"; member: string }
+
+export function standingOf(link: ProjectLink, trust: TeamTrust, profile: string): Standing {
+  const signer = signerOf(link, trust)
+  if (!signer) return { kind: "unsigned" }
+  return { kind: isAccepted(profile, link) ? "used" : "new", member: sanitize(signer.name) }
+}
+
+/** Said when a command would take a name from a zekno.json not signed by the team (S1). */
+export const notSigned = (link: ProjectLink): string =>
+  `zekno.json in ${shownPath(link.folder)} is not signed by your team, so zekno does not use it. It names ${link.app} on ${link.server}. ` +
+  "To link this folder yourself, run `zekno link --app <name> --server <name> --force`. To leave the file aside, give --app and --server."
+
+/** The same, as the app says it on Home about the folder it was started in, `cwd`. */
+export function notSignedHere(link: ProjectLink, cwd: string): string {
   const which = link.folder === real(resolve(cwd)) ? "zekno.json here" : shownPath(link.path)
-  return `${which} names ${link.app} on ${link.server}. It was not made or accepted on this machine. Run \`zekno link\` to accept it.`
+  return `${which} is not signed by your team, so zekno does not use it. It names ${link.app} on ${link.server}.`
+}
+
+/** Said where nobody can answer the question for a file signed by the team and not yet used here (S2). */
+export const notUsedHere = (member: string, link: ProjectLink): string =>
+  `${member} linked ${shownPath(link.folder)} to ${link.app} on ${link.server}, and it has not been used in this folder on this machine. ` +
+  "To use it, run `zekno link` there once. To leave it aside, give --app and --server."
+
+/** The question at a terminal the first time a file signed by the team is met here. */
+export const useQuestion = (member: string, link: Pick<ProjectLink, "app" | "server">): string =>
+  `${member} linked this folder to ${link.app} on ${link.server}. Use it here?`
+
+/** Said when the question is answered no. */
+export const NOTHING_DONE = "Nothing was done."
+
+/**
+ * What judging a project file needs, beyond the files: the verified team
+ * list, and a way to ask. `trust` reads the keychain, so it is called only
+ * once there is a file to judge; nothing is signed with it. `confirm` asks a
+ * yes-or-no question at a terminal and throws a `CliError` with `refusal`
+ * where there is none (`Ui.confirm`).
+ */
+export type ProjectJudge = {
+  trust(): Promise<TeamTrust>
+  confirm(question: string, refusal: string): Promise<boolean>
+}
+
+/**
+ * The first time a file signed by the team is met in its folder on this
+ * machine: what it names is shown and the person is asked once. Yes records
+ * it in `links.json`; anything else does nothing. Where nobody can answer,
+ * the command stops as for wrong usage, with exit status 2.
+ */
+async function useOnce(link: ProjectLink, member: string, places: ProjectPlaces & ProjectJudge): Promise<void> {
+  let yes: boolean
+  try {
+    yes = await places.confirm(useQuestion(member, link), notUsedHere(member, link))
+  } catch (error) {
+    if (error instanceof CliError) throw new UsageError(error.message)
+    throw error
+  }
+  if (!yes) throw new CliError(NOTHING_DONE)
+  accept(places.profile, link)
 }
 
 /**
@@ -372,23 +477,27 @@ export function notAcceptedHere(link: ProjectLink, cwd: string): string {
  * when a wanted detail is missing, so a command given every flag never reads
  * it.
  *
- * Only a project file this machine accepted is used. One that was not would
- * have chosen an app and a server unasked, and handed them a Compose file
- * from a folder nobody here made, with the app's secrets: a command that
- * needs a name from it stops before anything is read from the keychain,
- * signed or sent. Given both `--app` and `--server`, the file is left aside;
- * so is one that cannot be read, which then counts as no project file.
+ * A name is taken only from a file signed by the team (`standingOf`): one
+ * that is not would choose an app and a server unasked, and hand them a
+ * Compose file from a folder nobody in the team made, with the app's
+ * secrets. Such a file stops the command (S1). A file signed by the team that
+ * was not used here before is asked about once at a terminal, and stops the
+ * command where nobody can answer (S2). Judging reads the verified team list
+ * from the keychain; every refusal comes before any signer is made and
+ * before anything is signed or sent.
  *
- * Its Compose file goes with its app: with another app named by `--app`, the
- * Compose file is `-f`, or compose.yaml in the current folder, as without a
- * project file.
+ * Given both `--app` and `--server`, the file is left aside unless it is in
+ * use here, and is never asked about; one that cannot be read then counts as
+ * no project file. Its Compose file goes with its app: with another app
+ * named by `--app`, the Compose file is `-f`, or compose.yaml in the current
+ * folder, as without a project file.
  */
-export function withProject<T extends Details>(
+export async function withProject<T extends Details>(
   cwd: string,
   given: T,
   wanted: readonly (keyof Details)[],
-  places: ProjectPlaces
-): T & FromProject {
+  places: ProjectPlaces & ProjectJudge
+): Promise<T & FromProject> {
   const missing = wanted.filter((detail) => given[detail] === undefined)
   if (missing.length === 0) return given
   const named = !missing.includes("app") && !missing.includes("server")
@@ -401,10 +510,14 @@ export function withProject<T extends Details>(
     throw error
   }
   if (!link) return given
-  if (!isAccepted(places.profile, link)) {
-    if (missing.includes("app") || missing.includes("server")) throw new UsageError(notAccepted(link))
-    return given
+  if (named) {
+    // Only its Compose file could come from it, for its own app, and only from a file in use here.
+    if (!missing.includes("file") || given.app !== link.app || !isAccepted(places.profile, link)) return given
+    return standingOf(link, await places.trust(), places.profile).kind === "used" ? { ...given, project: link } : given
   }
+  const standing = standingOf(link, await places.trust(), places.profile)
+  if (standing.kind === "unsigned") throw new UsageError(notSigned(link))
+  if (standing.kind === "new") await useOnce(link, standing.member, places)
   const filled: T & FromProject = { ...given }
   if (missing.includes("app")) filled.app = link.app
   if (missing.includes("server")) {
@@ -415,12 +528,19 @@ export function withProject<T extends Details>(
   return filled
 }
 
-/** What a project file holds, exactly as it is written: three names, each held to its rule, and nothing else can go in. */
-export function projectText(link: { app: string; server: string; compose: string }): string {
-  const parsed = ProjectSchema.safeParse({ app: link.app, server: link.server, compose: link.compose })
+/**
+ * What a project file holds, exactly as it is written: three names, each
+ * held to its rule, and the team's signature of them when there is one.
+ * Nothing else can go in, and it always fits what is read back.
+ */
+export function projectText(link: { app: string; server: string; compose: string; signed?: Envelope }): string {
+  const fields = { app: link.app, server: link.server, compose: link.compose, ...(link.signed === undefined ? {} : { signed: link.signed }) }
+  const parsed = ProjectSchema.safeParse(fields)
   if (!parsed.success) throw new CliError("zekno.json holds only an app name, a server name and a Compose file inside its folder.")
-  const { app, server, compose } = parsed.data
-  return `${JSON.stringify({ app, server, compose }, null, 2)}\n`
+  const { app, server, compose, signed } = parsed.data
+  const text = `${JSON.stringify(signed === undefined ? { app, server, compose } : { app, server, compose, signed }, null, 2)}\n`
+  if (Buffer.byteLength(text) > PROJECT_BYTES) throw new CliError(`zekno.json would be larger than the ${PROJECT_BYTES} bytes a project file may have.`)
+  return text
 }
 
 /** File systems where a hard link cannot be made; writing there checks first, then renames. */
@@ -434,7 +554,7 @@ const NO_HARD_LINKS = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "EMLINK", "ENOS
  * appears in between. With `force` a rename replaces what is there: a link
  * is replaced itself, never written through. Returns the file's path.
  */
-export function writeProject(folder: string, link: { app: string; server: string; compose: string }, force = false): string {
+export function writeProject(folder: string, link: Parameters<typeof projectText>[0], force = false): string {
   const text = projectText(link)
   const path = join(folder, PROJECT_FILE)
   const shown = shownPath(path)

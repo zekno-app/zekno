@@ -70,6 +70,20 @@ export const SECRET_REFUSALS = [
 ] as const
 export type SecretRefusal = (typeof SECRET_REFUSALS)[number]
 
+/** Reasons a signed link is not trusted. */
+export const LINK_REFUSALS = [
+  "malformed",
+  "too_large",
+  "unsupported_version",
+  "wrong_payload_type",
+  "unknown_signer",
+  "bad_signature",
+  "role_not_allowed",
+  "wrong_team",
+  "unknown_server",
+] as const
+export type LinkRefusal = (typeof LINK_REFUSALS)[number]
+
 /** Reasons the secrets of a deploy cannot be opened. */
 export const OPEN_REFUSALS = [
   "not_verified",

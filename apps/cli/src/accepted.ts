@@ -1,18 +1,19 @@
 /**
- * Which project files this machine has accepted (data-model.md, "When a
- * project file is used"): `links.json` in the profile folder, a list of the
- * real path of each accepted `zekno.json` and the SHA-256 of its exact bytes.
- * A zekno.json is used only while it is byte for byte what was accepted, as
- * `direnv allow` or an editor's workspace trust work: a folder cloned from
- * someone else, or a file changed by an edit or a `git pull`, is used again
- * only once the person runs `zekno link` there.
+ * The record of first use (data-model.md, "When a project file is used"):
+ * `links.json` in the profile folder, a list of the real path of each
+ * `zekno.json` used in its folder on this machine and the SHA-256 of its
+ * exact bytes. A zekno.json counts only when it is signed by the team
+ * (project.ts `signerOf`); this list says whether it was used here before,
+ * byte for byte. A signed file copied into another folder, or changed by an
+ * edit or a `git pull`, is not in it, so the person is asked about it once.
  *
  * The list is not signed, on purpose. Someone who can write the profile
  * folder and also plant a project folder gains nothing from forging an entry
  * that they do not have already: whoever controls a project folder the
- * developer deploys from controls the Compose file that is deployed. The
- * list protects against the other case: a folder the developer did not make,
- * on a machine nobody else can write to. It holds no key and no secret.
+ * developer deploys from controls the Compose file that is deployed, and an
+ * entry alone never makes a file count. The list protects against the other
+ * case: a teammate's signed file copied into a folder the developer did not
+ * make, on a machine nobody else can write to. It holds no key and no secret.
  *
  * It is read with a size limit and a strict schema; a file that is missing,
  * too large, a link, not this user's or not readable counts as empty, so

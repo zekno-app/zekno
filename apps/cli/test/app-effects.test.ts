@@ -26,9 +26,12 @@ describe("starting the app", () => {
 
   test("a profile that verifies is the team, with its servers", async () => {
     const m = await ready()
+    const team = await openTeam(m.deps)
     expect(await loadStart(m.deps)).toEqual({
       kind: "team",
-      team: { member: "Ada", version: 2, code: (await openTeam(m.deps)).teamCode, servers: [{ name: "dev", destination: undefined, apps: [] }] },
+      team: { member: "Ada", version: 2, code: team.teamCode, servers: [{ name: "dev", destination: undefined, apps: [] }] },
+      // The verified team list a zekno.json here is judged against. It holds no key.
+      trust: team.trust,
     })
   })
 
@@ -75,9 +78,11 @@ describe("starting the app", () => {
       })),
     }))
     const start = await loadStart(m.deps)
+    const team = await openTeam(m.deps)
     expect(start).toEqual({
       kind: "team",
-      team: { member: "Ada", version: 2, code: (await openTeam(m.deps)).teamCode, servers: [{ name: "dev", destination: "deploy@203.0.113.7", apps: [] }] },
+      team: { member: "Ada", version: 2, code: team.teamCode, servers: [{ name: "dev", destination: "deploy@203.0.113.7", apps: [] }] },
+      trust: team.trust,
     })
     expect(member).not.toBe("Ada")
   })

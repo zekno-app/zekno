@@ -103,7 +103,8 @@ keys type into it.
 |----------|-------|---------|
 | Remove `NAME`? | `x` on a secret | `enter` removes it, `esc` cancels |
 | The runner on `<server>` is out of date | `u` | `u` updates now, `esc` leaves it for later |
-| Remember this folder? | `d` in a folder with no `zekno.json` | `enter` writes `zekno.json` and deploys, `n` deploys without it, `esc` cancels |
+| `<member>` linked this folder to `<app>` on `<server>` | The app opens where a teammate's signed `zekno.json` was not used here before | `y` uses it here, `n` or `esc` not now |
+| Remember this folder? | `d` in a folder with no `zekno.json` | `enter` writes `zekno.json`, signed by you, and deploys, `n` deploys without it, `esc` cancels |
 | This folder is linked to `<app>` on `<server>` | `d` in a linked folder with another app selected | `y` deploys the folder to the selected app, `n` or `esc` does not deploy |
 | Deploy `<app>` to `<server>` without `NAME`? | `esc` on the list of missing values | `y` deploys, `n` or `esc` does not deploy |
 
@@ -145,7 +146,7 @@ keys type into it.
 
 ### Deploying from the app
 
-- A folder linked by a `zekno.json` this machine accepted deploys at once to its own app on its
+- A folder linked by a `zekno.json` signed by your team and in use here deploys at once to its own app on its
   own server, and on its own server with no apps. With another app selected, on its own server
   or another, `d` first asks: "This folder is linked to web on dev. You selected billing. Deploy
   this folder to billing? It replaces what billing runs now." Only `y` deploys the folder's
@@ -155,9 +156,11 @@ keys type into it.
   on its own server, a linked app that has never been deployed there has no row to select yet,
   so `d` deploys it as its first deploy whichever row is marked. No other app is replaced.
 - A folder with no `zekno.json` deploys its `compose.yaml` to the selected app. Before the first
-  deploy, the app asks whether to remember the folder; yes writes `zekno.json` and accepts it.
-  With no app selected, it points you to `zekno link`.
-- A folder whose `zekno.json` was not accepted here deploys nothing, and Home says why.
+  deploy, the app asks whether to remember the folder; yes writes `zekno.json`, signed with your
+  key, and records it as used here. With no app selected, it points you to `zekno link`.
+- A folder whose `zekno.json` is not signed by your team deploys nothing, and Home says why. One
+  signed by your team that was not used here before is asked about when the app opens; until you
+  say yes, `d` deploys nothing and says so.
 - The Compose file is read once, when `d` is pressed. The names listed and the text signed come
   from that one read.
 - Before a deploy, names the Compose file expects that have no secret are listed, at most 64.
@@ -287,7 +290,7 @@ Signs a deploy of a Compose file with the next deploy number, and sends it to th
 connection. The Compose file is:
 
 1. `-f <file>`, when given. It may be anywhere.
-2. Otherwise the one an accepted `zekno.json` names, when the app is the one it names.
+2. Otherwise the one a `zekno.json` signed by your team and in use here names, when the app is the one it names.
 3. Otherwise `compose.yaml` in the current folder.
 
 The second and third must stay inside their folder: a symbolic link out of it is refused. Every
@@ -337,18 +340,21 @@ zekno logs --app api --server prod --tail 50 --no-follow
 
 ### `zekno link`
 
-Writes `zekno.json` in the current folder and records it as accepted on this machine. See
-[The project file](#the-project-file-zeknojson).
+Writes `zekno.json` in the current folder, signs it with your key, and records it as used here.
+See [The project file](#the-project-file-zeknojson).
 
-- An app or server not given is taken from a `zekno.json` that already applies to the folder, once
-  this machine accepted it. From one it did not accept nothing is taken: it stops with exit status
-  2 and says how to accept it.
+- An app or server not given is taken from a `zekno.json` that already applies to the folder,
+  only when it is signed by your team and in use here. From any other nothing is taken: it stops
+  with exit status 2 and says why.
 - `-f` defaults to `compose.yaml` and must be a file inside the folder.
-- It does not overwrite a `zekno.json` without `--force`.
-- With no `--app`, `--server` or `-f`, a `zekno.json` that already applies (in this folder or one
-  above) is checked as one being written would be, and accepted as it is, not rewritten:
-  `Accepted zekno.json: <app> on <server>, file <compose>.` Names given that are exactly those of
-  the `zekno.json` in this folder accept it the same way.
+- It does not overwrite a `zekno.json` without `--force`. With `--force` and names, it replaces
+  any file with one signed by you.
+- With no `--app`, `--server` or `-f`, a `zekno.json` signed by your team that already applies (in
+  this folder or one above) is checked as one being written would be, and recorded as used here,
+  not rewritten: `Accepted zekno.json: <app> on <server>, file <compose>.` This is how you use a
+  teammate's file for the first time where there is no terminal to ask on. A file not signed by
+  your team is refused. Names given that are exactly those of a signed `zekno.json` in this folder
+  record it the same way.
 
 ```bash
 zekno link --app api --server prod
@@ -360,7 +366,7 @@ zekno link --app api --server prod
 |--------|-------|
 | `0` | Success. Also the app when you quit, and `zekno logs` stopped with Ctrl-C or a closed pipe |
 | `1` | Refused or failed, including a deploy whose app did not start |
-| `2` | Wrong usage, including a `zekno.json` this machine has not accepted, and `zekno` with no arguments and no terminal |
+| `2` | Wrong usage, including a `zekno.json` not signed by your team, one not used here yet when there is no terminal to ask on, and `zekno` with no arguments and no terminal |
 
 ### Output
 
@@ -397,49 +403,71 @@ reaches the terminal, in the app and in single commands.
 ## The project file: `zekno.json`
 
 ```json
-{ "app": "api", "server": "prod", "compose": "compose.yaml" }
+{
+  "app": "api",
+  "server": "prod",
+  "compose": "compose.yaml",
+  "signed": { "payloadType": "zekno.link.v1", "payload": "...", "signature": { "keyId": "...", "sig": "..." } }
+}
 ```
 
-It saves typing `--app`, `--server` and `-f` in a project folder. It holds three names and
-nothing else: no secret and no key, so it is safe to commit.
+It saves typing `--app`, `--server` and `-f` in a project folder. It holds three names and your
+team's signature of them, nothing else: no secret and no key (the signature and the key id are
+public), so it is safe to commit, also to a public repository.
 
 | Field | Rule |
 |-------|------|
 | `app` | An app name: lowercase letters, digits and hyphens |
 | `server` | A server name, same rule. It must be a server connected on this machine when used |
 | `compose` | A relative path inside the folder that holds `zekno.json`. No `..`, not absolute. Default `compose.yaml` |
+| `signed` | The signature `zekno link` adds: a member of your team signed this app, server and Compose file |
 
 - An unknown field is an error, and so is a field written twice.
 - It is looked for in the current folder, then each folder above it, stopping at your home folder
   or the filesystem root. A folder above your home folder is never read.
 - Only a regular file named exactly `zekno.json`, of at most 4096 bytes, that belongs to you is
   used. A symbolic link, a pipe or another user's file is an error that names it.
-- It is written only by `zekno link` or a "yes" in the app, never over an existing one without
-  `--force`, as a whole file with mode 644.
+- It is written only by `zekno link` or a "yes" in the app, signed with your key, never over an
+  existing one without `--force`, as a whole file with mode 644.
 
-### Accepting it
+### Linking a folder
 
-A `zekno.json` is used only once this machine accepted it, byte for byte. It is accepted when
-`zekno link` writes it, when "Remember this folder?" in the app is answered yes, and when
-`zekno link` is run with no names in a folder where one already applies. Any change to its bytes,
-an edit or a `git pull`, makes it not accepted again: run `zekno link` there again.
+Run `zekno link --app <app> --server <server>` in the folder, or answer yes to "Remember this
+folder?" in the app. Commit the `zekno.json` it writes. From then on, in that folder and the
+folders below it, `zekno deploy`, `rollback`, `status`, `logs` and `secret` need no `--app` or
+`--server`, and the app opens on that app.
 
-One that was not accepted is never used:
+Two things must both be true before zekno uses a `zekno.json`:
 
-- A command that would take its app or server from it stops before anything is read from the
-  keychain, signed or sent, with exit status 2: "zekno.json in `<folder>` names `<app>` on
-  `<server>`. It was not made or accepted on this machine. To use it, run `zekno link` in that
-  folder. To leave it aside, give --app and --server." Given both `--app` and `--server`, it is
-  left aside, its Compose file too. So is one that cannot be read (a link, another user's file,
-  not valid JSON): it then counts as no `zekno.json`.
-- The app does not select what it names, says why on Home, and `d` in that folder deploys
-  nothing.
+1. **Someone in your team wrote it.** Its signature is checked against your verified team list,
+   as it is now. A file with no signature, one from another team, one signed by someone since
+   removed from the team, one edited by hand after it was signed, or one signed for a server of
+   another name is not signed by your team. It is refused outright and never offered:
 
-This protects you from a folder you did not make, such as a cloned repository, whose
-`zekno.json` would otherwise choose an existing app and replace it with the folder's Compose
-file. The list of accepted files is `links.json` in the profile folder. It is not signed, on
+   > zekno.json in ~/code/shop is not signed by your team, so zekno does not use it. It names api
+   > on prod. To link this folder yourself, run `zekno link --app <name> --server <name> --force`.
+   > To leave the file aside, give --app and --server.
+
+   A command stops with exit status 2. The app shows the first two sentences on Home, selects
+   nothing, and `d` deploys nothing.
+2. **You used it in this folder on this machine before, or you say yes once.** A signature proves
+   who wrote a file, not where it is: anyone who can read a repository can copy its `zekno.json`
+   into another folder beside another Compose file. So the first time a teammate's file is met in
+   a folder, zekno shows what it names and asks once. At a terminal: `Ada linked this folder to
+   api on prod. Use it here?` Only `y` goes on; anything else stops with "Nothing was done.". The
+   app asks when it opens, with `y use it` and `n not now`. With no terminal the command stops with
+   exit status 2:
+
+   > Ada linked ~/code/shop to api on prod, and it has not been used in this folder on this
+   > machine. To use it, run `zekno link` there once. To leave it aside, give --app and --server.
+
+What you have used is recorded in `links.json` in the profile folder: the real path of each file
+and the SHA-256 of its bytes. Any change to its bytes, such as a teammate's new link arriving with
+a `git pull`, is asked about once more. Given both `--app` and `--server`, a command leaves the
+file aside unless it is in use here, and never asks; a file that cannot be read (a link, another
+user's file, not valid JSON) then counts as no `zekno.json`. `links.json` is not signed, on
 purpose: someone who can write your profile folder and also plant a project folder gains nothing
-from it they do not have already.
+from it they do not have already, and an entry alone never makes a file count.
 
 Its Compose file goes with its app. With `--app` naming another app, the Compose file is `-f`, or
 `compose.yaml` in the current folder, as without a project file.
@@ -513,7 +541,7 @@ On this machine:
 | Team lists, connected servers | `~/.zekno/profile.json` (or `ZEKNO_HOME`). Public keys and signatures only. |
 | Secrets | `~/.zekno/secrets/<server id>/<app>.json`, as encrypted, signed records. A value cannot be shown again after it is set. |
 | Deploy history | `~/.zekno/history/<server id>/<app>.json`: the last 50 signed deploys of each app, for rollback. |
-| Accepted project files | `~/.zekno/links.json`: the real path and SHA-256 of each accepted `zekno.json`, at most 500. |
+| Project files used here | `~/.zekno/links.json`: the real path and SHA-256 of each `zekno.json` used on this machine, at most 500. |
 | A runner on this machine | `~/.zekno/runner/<name>`, unless `--home` named another folder. |
 | Which app a folder deploys | `zekno.json` in the project folder. |
 

@@ -326,7 +326,7 @@ first.
 
 | Id | Rating | Finding | State |
 |----|--------|---------|-------|
-| P1 | High | A `zekno.json` chose an existing app and server, and commands acted on it unasked. In a cloned folder holding `{"app":"api","server":"dev"}` and a Compose file that lists `DB_PASSWORD`, `zekno deploy` with no flags replaced `api` and handed its secret to the folder's container. `rollback`, `secret set` and `secret rm` took the same defaults, and `secret set` named the app only after the value was stored. In the app, Home opened on that app and one `d` replaced it. Reproduced. | Fixed: a `zekno.json` is used only once this machine accepted it, byte for byte. `links.json` in the profile folder holds the real path and the SHA-256 of each accepted file (data-model.md). `zekno link` and a "yes" in the app record what they write; `zekno link` with no names accepts a valid file as it is, after checking its server and its Compose file. A command that would take the app or server from a file that is not accepted stops with status 2 and says why, before the keychain is read, and before anything is signed, sent or started. The app does not select what such a file names, says why on Home, and `d` there deploys nothing and offers nothing. Any change to the file's bytes needs `zekno link` again. `zekno secret set` names the app and server before the value is typed. |
+| P1 | High | A `zekno.json` chose an existing app and server, and commands acted on it unasked. In a cloned folder holding `{"app":"api","server":"dev"}` and a Compose file that lists `DB_PASSWORD`, `zekno deploy` with no flags replaced `api` and handed its secret to the folder's container. `rollback`, `secret set` and `secret rm` took the same defaults, and `secret set` named the app only after the value was stored. In the app, Home opened on that app and one `d` replaced it. Reproduced. | Fixed: a `zekno.json` is used only once this machine accepted it, byte for byte. `links.json` in the profile folder holds the real path and the SHA-256 of each accepted file (data-model.md). `zekno link` and a "yes" in the app record what they write; `zekno link` with no names accepts a valid file as it is, after checking its server and its Compose file. A command that would take the app or server from a file that is not accepted stops with status 2 and says why, before the keychain is read, and before anything is signed, sent or started. The app does not select what such a file names, says why on Home, and `d` there deploys nothing and offers nothing. Any change to the file's bytes needs `zekno link` again. `zekno secret set` names the app and server before the value is typed. Later change, decided by the maintainer on 2026-11-14: a file must be signed by a member of the team, and is asked about once the first time it is met in a folder on a machine. See the section on the signed link. |
 | P2 | Medium | A `zekno.json` in a folder above supplied the Compose file even with `--app` and `--server` typed: `zekno deploy --app billing --server dev` in `services/billing` deployed the root's file as `billing`, and no output named it. Reproduced. | Fixed: its Compose file goes only with the app it names. With another app the Compose file is `-f`, or `compose.yaml` in the current folder, as without a project file. Given both `--app` and `--server`, a file that is not accepted is not used at all. |
 | P3 | Medium | In the app, `d` deployed the linked folder to whichever app and server were selected: with the folder linked to `web`, `billing` selected and `d`, billing ran web's definition. Reproduced. | Fixed: a linked folder deploys only to its own app on its own server, and on a server with no apps only when that server is its own. Otherwise `d` says so, names the command for deploying elsewhere, and deploys nothing. Later change, decided by the maintainer on 2026-11-14: instead of refusing, the app asks, naming the link and the selected app; only `y` deploys. |
 | P4 | Medium | Before a deploy, the hidden prompt's hint bar said "esc cancel", but esc signed and sent the deploy. The only way out without deploying was Ctrl-C, then `q`, which quit the app. Reproduced. | Fixed: esc at the prompt closes it and returns to the list, and signs nothing. Esc on the list asks "Deploy <app> to <server> without ...?"; only `y` deploys. `n`, or esc on the question, ends the deploy with "Nothing was deployed.". Every hint now says what its key does. |
@@ -377,7 +377,7 @@ Run again while fixing, on the fixed code:
 
 | Finding | Test |
 |---------|------|
-| P1 | `apps/cli/test/project-flow.test.tsx`, "a folder nobody on this machine linked (the reviewer's scenario)": `deploy`, `rollback`, `secret set`, `secret rm`, `secret ls`, `status` and `logs` each stop with status 2 and the sentence, with no keychain read, no runner started and no `up`; accepting with `zekno link`; a changed file; the app. `apps/cli/test/project.test.ts`: `withProject`, `zekno link` accepting, and `links.json` damaged, a link, a pipe, too large, more than 500 entries. |
+| P1 | `apps/cli/test/project-flow.test.tsx`, "a zekno.json not signed by the team (the reviewer's scenario, P1)" (renamed with the signed link; until then "a folder nobody on this machine linked"): `deploy`, `rollback`, `secret set`, `secret rm`, `secret ls`, `status` and `logs` each stop with status 2 and the sentence, with the keychain read once each to verify the team list and no further, no question, no runner started, no `up` and nothing this machine keeps changed; each way a file is not signed by the team; a changed file; the app. "a zekno.json signed by the team, copied into another folder (the copy)". `apps/cli/test/project.test.ts`: `withProject`, `zekno link` recording, and `links.json` damaged, a link, a pipe, too large, more than 500 entries. |
 | P2 | `project-flow.test.tsx`, "flags win over the file, one detail at a time, and its Compose file goes only with its own app" and "a zekno.json in a folder above does not hand its Compose file to another app below it"; `project.test.ts`, "its Compose file goes with its app". |
 | P3 | `project-flow.test.tsx`, "d on another app of a linked folder asks first", "the same question over the app screen", "another server: the question names it", "deploy this folder elsewhere?" and "on a server with no apps yet". |
 | P4 | `apps/cli/test/app-state.test.ts`, the two "before a deploy" tests; `project-flow.test.tsx`, "esc at the prompt returns to the list and signs nothing". |
@@ -489,3 +489,62 @@ and the runner's and the plumbing's own tests (S1 to S3, S6 to S8, L6, C7 to C10
 - From the installer review: restrict who can push `runner-v*` tags, and compare the release's
   checksums with a build made elsewhere before recording them.
 - An external audit is still required before anything here is relied on.
+
+## The signed link (2026-11-14)
+
+Decided by the maintainer on 2026-11-14 (research R17), replacing "accept once on this machine"
+(`2f79ede`) as the rule for when a `zekno.json` is used. Built at the commit that adds this
+section. **An independent review is to follow; its findings will be recorded here.**
+
+**What is signed.** A new kind of signed message in packages/core, `zekno.link.v1`, built only
+from the existing pieces: `signEnvelope` signs `zekno-sig-v1\n<kind>\n<length>\n` followed by
+the payload, so the kind is part of every signature. The payload is the UTF-8 of
+`JSON.stringify({ v: 1, teamId, serverId, app, compose })`, in that order, with no time in it, so
+the same content always gives the same bytes. `teamId` names the team as a deploy does, without
+the team list's hash, so a link outlives later team lists; `serverId` is the server's id from the
+signed team list; `app` is held to the app-name pattern; `compose` is 1 to 255 characters with no
+control, format or line-separator character. The schema is strict. `createLink` refuses a signer
+who is not a member and a server that is not in the team list.
+
+**Who may sign, and when a signature stops counting.** `verifyLink(trust, envelope)` opens the
+envelope as a link only (`openEnvelope` with the link kind; a size past the payload limit is
+refused before anything is parsed), finds the signer among the members of the team list held now
+(`memberByKeyId`, as every verifier does), checks the signature, then parses, and accepts only a
+signer whose role may deploy (`DEPLOY_ROLES`, the deploy's own list), this team's id, and a
+server in the team list. A member removed from the team, or a server taken off it, makes the
+signature stop counting. Every refusal is a `Result`; nothing hostile throws.
+
+**What the CLI checks.** A `zekno.json` is signed by the team only when `verifyLink` accepts its
+`signed` against the verified team list (`openTeam`: the founding list matched with the code in
+the keychain, every later list signed by an admin of the one before) and the signed content equals
+the plain fields: the same app, the same Compose path, and the name the team list gives the
+signed server id. A file signed by the team is used without a question only once it was used in
+its folder on this machine, byte for byte (`links.json`); otherwise a command asks once at a
+terminal and stops with exit status 2 without one, and the app asks once when it opens. A file
+not signed by the team is refused with exit status 2 and never offered. Judging reads the
+keychain (a read only); every refusal and the question come before a connection is opened, a
+signer made, or anything signed or sent. Given both `--app` and `--server`, the file is left
+aside unless it is in use here, and never asked about.
+
+**Tested.** `packages/core/test/scenarios/link.test.ts`: a member's link verifies and names its
+signer; another team's, a removed member's and one for a server taken off the list do not; a
+changed payload, signature or key id does not; every genuine deploy, team list (founding and
+later), secret and removal of this team placed in `signed` is refused, and a genuine link handed
+to `verifyDeploy`, `readSignedDeploy`, `applyRosterUpdate`, `trustFoundingRoster`,
+`verifySecret` and `verifySecretRemoval` is refused, as it is and relabelled; one kind's content
+signed as the other is refused by its content; oversized and malformed envelopes are refused
+without throwing. `apps/cli/test/project-flow.test.tsx`: the copy (a file signed by this team,
+copied byte for byte beside a hostile Compose file, the real app deployed with a secret): at a
+terminal the question is asked and `n` leaves the runner never started; with no terminal, status
+2 and S2, for `deploy`, `rollback`, `status`, `logs` and `secret set|rm|ls`; the app asks on
+opening and `n` deploys nothing; then each way a file is not signed, the happy paths and a second
+machine. `apps/cli/test/project.test.ts`: `signerOf`, `withProject` and `zekno link` in each state.
+
+**Left for the review**
+
+- `links.json` is not signed (as before). Someone who can write the profile folder can mark a
+  copied file as used; they could equally change the Compose file of a folder already linked.
+- The signature does not cover the Compose file's content, by design (research R17): after a
+  file is used in a folder, the Compose file beside it is deployed as it is, as before (N5).
+- A member can sign a link for any app of the team, also one they never deployed; the first-use
+  question shows the app and server, and the deploy itself is signed by whoever runs it.

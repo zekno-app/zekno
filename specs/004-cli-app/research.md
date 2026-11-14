@@ -200,6 +200,34 @@ follow from them or from what the installed tools provide.
   session a deploy or logs opens (a long deploy would hold up the reads, and those operations
   are tested to use exactly one connection).
 
+## R17. A zekno.json signed by the team, with a first-use check **(maintainer, 2026-11-14)**
+
+- **Decision**: a `zekno.json` counts only when it carries a link signed by a member of the
+  team (`signed`, a `zekno.link.v1` envelope of packages/core: the team id, the server's id, the
+  app and the Compose path), verified against the team list as it is now and equal to the
+  file's plain fields. And it is used without a question only once it was used in its folder on
+  this machine, byte for byte (`links.json`, the record of first use). The first time a file
+  signed by the team is met in a folder, zekno shows who linked it and to what, and asks once: a
+  command at a terminal and the app when it opens. With no terminal the command stops, and
+  `zekno link` with no names is how to say yes. A file not signed by the team is refused outright
+  and not even offered. `zekno link` and the app's "remember this folder?" sign what they write.
+  This replaces "accept once on this machine" (commit `2f79ede`).
+- **Rationale**: a `zekno.json` travels with a repository, and whoever wrote it picks the app and
+  the server. "Accept once" asked the person about a file anyone could have written, and a yes
+  given in a hurry to a stranger's repository handed it an app and its secrets. The signature
+  answers "did someone in my team write this?" without the person having to judge the file.
+  **A signature alone is not enough**: it proves who wrote a file, not where the file is sitting.
+  Anyone who can read a repository, a public one included, can copy its signed `zekno.json` into
+  another folder beside another Compose file, and a signature-only rule would then deploy that
+  Compose file as the team's app with the app's secrets. The first-use check closes that: a
+  copied file shows "api on prod" where the person did not expect it, once, before anything is
+  done.
+- **Alternatives considered**: signing the folder's path (paths differ between machines and
+  clones, so every teammate would need a file of their own); signing the Compose file's hash too
+  (every edit of the Compose file would need `zekno link` again, and the deploy already signs the
+  Compose text it sends); trusting a file signed by the team in any folder (the copy above);
+  keeping "accept once" alone (the person judges a file nobody vouched for).
+
 ## Design approvals
 
 All seven boards of the canvas's fourth row were approved by the maintainer on 2026-11-14: the

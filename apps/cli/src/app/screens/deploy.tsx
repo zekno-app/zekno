@@ -7,7 +7,7 @@ import type { KeyHint } from "../../ui/key-hints"
 import { Panel, type PanelTone } from "../../ui/panel"
 import { Stages, type Stage, type StageState } from "../../ui/stages"
 import { Frame, Header, NoticeLine, Trail } from "../frame"
-import { CHOICES, elsewhereChoices, elsewhereWords, type DeployProgress, type Question, type Screen, type State } from "../state"
+import { CHOICES, elsewhereChoices, elsewhereWords, useLinkWords, type DeployProgress, type Question, type Screen, type State } from "../state"
 import { seconds } from "../time"
 import { Fields } from "./parts"
 import { HINTS } from "./placeholder"
@@ -252,6 +252,44 @@ export function DeployElsewhereScreen({
           <Box flexDirection="column">
             <Text>{said.asked}</Text>
             <Text>{said.replaces}</Text>
+          </Box>
+        </Confirm>
+      </Box>
+    </Frame>
+  )
+}
+
+/** The answers to "use it here?", the reducer's own (state.ts `CHOICES`). */
+const USE_LINK_HINTS: readonly KeyHint[] = CHOICES["use-link"].map((choice) => [choice.key, choice.does] as const)
+
+/**
+ * When the app opens in a folder whose zekno.json is signed by the team and
+ * was not used in this folder on this machine: who linked it, to what, and
+ * whether to use it here, in the panel of "Remember this folder?". Only `y`
+ * uses it. A title too long for the panel's top line is cut there, so it is
+ * then said in full above the question: the names are what is being asked
+ * about.
+ */
+export function UseLinkScreen({
+  question,
+  columns,
+  status,
+}: {
+  question: Extract<Question, { kind: "use-link" }>
+  columns: number
+  status?: ReactNode
+}) {
+  const said = useLinkWords(question)
+  const width = Math.min(columns - 2, 76)
+  // The panel's top line: "╭─ ", the title, a space and at least "─╮".
+  const cut = [...said.title].length > width - 6
+  return (
+    <Frame header={<Header place={<Trail parts={[question.server, question.app]} />} />} hints={USE_LINK_HINTS} status={status}>
+      <Box width={width}>
+        <Confirm title={said.title} tone="focus" choices={CHOICES["use-link"]}>
+          <Box flexDirection="column">
+            {cut ? <Text>{said.title}.</Text> : null}
+            <Text>{said.body}</Text>
           </Box>
         </Confirm>
       </Box>

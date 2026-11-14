@@ -185,8 +185,12 @@ describe("User Story 1: first deploy to my own server", () => {
         expect([file.path, file.content.includes(kept)]).toEqual([file.path, false])
       }
     }
-    // zekno.json holds three names and nothing else.
-    expect(JSON.parse(readFileSync(join(m.project, "zekno.json"), "utf8"))).toEqual({ app: "web", server: "dev", compose: "compose.yaml" })
+    // zekno.json holds three names and this member's signature of them, and nothing else.
+    const linked = JSON.parse(readFileSync(join(m.project, "zekno.json"), "utf8"))
+    expect(Object.keys(linked)).toEqual(["app", "server", "compose", "signed"])
+    expect(linked).toMatchObject({ app: "web", server: "dev", compose: "compose.yaml", signed: { payloadType: "zekno.link.v1" } })
+    expect(Object.keys(linked.signed)).toEqual(["payloadType", "payload", "signature"])
+    expect(Object.keys(linked.signed.signature)).toEqual(["keyId", "sig"])
   }, 30_000)
 
   test("machine-readable deploy result", async () => {

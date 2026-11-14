@@ -7,7 +7,7 @@ import type { KeyHint } from "../../ui/key-hints"
 import { secretsWords } from "../../ui/deploy"
 import { useTheme } from "../../ui/theme"
 import { Frame, Header, PRE_ALPHA } from "../frame"
-import { CHOICES, selectedApp, selectedServer, type AppRow, type Screen, type ServerRow, type State } from "../state"
+import { CHOICES, selectedApp, selectedServer, type AppRow, type Linked, type Screen, type ServerRow, type State } from "../state"
 import { relativeTime } from "../time"
 import { Cell, Fields, Marker, Pane, Rule, StateCell, wordsThatFit } from "./parts"
 import { HINTS } from "./placeholder"
@@ -139,12 +139,13 @@ function ServersPane({ servers, selected, focused, narrow }: { servers: readonly
   )
 }
 
+/** The table is never made shorter: what is below it gives way (`footRoom`), so each row stays whole. */
 function AppTable({ apps, selected, now, columns }: { apps: readonly AppRow[]; selected: number; now: Date; columns: number }) {
   const when = apps.map((app) => (app.at ? relativeTime(app.at, now) : ""))
   const whenWidth = Math.max(columns >= HOME_WIDE ? WHEN_WIDTH.wide : WHEN_WIDTH.narrow, ...when.map((text) => text.length + 1))
   const state = stateWidth(columns, whenWidth)
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" flexShrink={0}>
       <Box>
         <Box width={2} flexShrink={0} />
         <Cell>
@@ -180,34 +181,169 @@ function AppTable({ apps, selected, now, columns }: { apps: readonly AppRow[]; s
 }
 
 /**
- * The foot of the apps pane: whether the server could be reached, and
- * whether this folder is linked. A server where SSH needs an answer is
- * marked `!` here too, as beside its name. Below 100 columns the selected
+ * Columns one character takes: two for the wide scripts (Hangul, the CJK
+ * blocks, full-width forms) and for pictographs, one for anything else, the
+ * marks and arrows zekno draws included.
+ */
+function columnsOf(char: string): number {
+  const code = char.codePointAt(0)!
+  const wide =
+    (code >= 0x1100 && code <= 0x115f) ||
+    (code >= 0x2e80 && code <= 0xa4cf) ||
+    (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xfe30 && code <= 0xfe4f) ||
+    (code >= 0xff00 && code <= 0xff60) ||
+    (code >= 0xffe0 && code <= 0xffe6) ||
+    code >= 0x1f300
+  return wide ? 2 : 1
+}
+const widthOf = (text: string): number => [...text].reduce((sum, char) => sum + columnsOf(char), 0)
+
+/**
+ * The rows Ink draws a sentence of plain words in at `width` columns: wrapped
+ * at spaces, a word longer than a row broken where the row ends, and a space
+ * that falls just past a full row starting the next one, as Ink wraps.
+ */
+export function inkRows(text: string, width: number): number {
+  const room = Math.max(width, 1)
+  let rows = 1
+  let used = 0
+  text.split(" ").forEach((word, index) => {
+    if (index > 0) {
+      if (used >= room) {
+        rows++
+        used = 0
+      }
+      used++
+    }
+    const length = widthOf(word)
+    if (used + length > room && used > 0 && length > 0) {
+      rows++
+      used = 0
+    }
+    used += length
+    while (used > room) {
+      rows++
+      used -= room
+    }
+  })
+  return rows
+}
+
+/**
+ * `text` wrapped at spaces into rows of at most `width` columns, a word
+ * longer than a row broken where the row ends, and at most `rows` of them.
+ * When it does not fit, it is cut after the last word that does, with "…".
+ * Each row is drawn as it is: Ink does not wrap it again.
+ */
+export function rowsOf(text: string, rows: number, width: number): string[] {
+  if (rows <= 0) return []
+  const room = Math.max(width, 2)
+  const lines: string[] = []
+  let line = ""
+  for (const word of text.split(/\s+/).filter((part) => part !== "")) {
+    // A word longer than a row, such as a path, is broken into pieces that each fit one.
+    const pieces: string[] = []
+    let piece = ""
+    for (const char of word) {
+      if (widthOf(piece) + columnsOf(char) > room) {
+        pieces.push(piece)
+        piece = ""
+      }
+      piece += char
+    }
+    pieces.push(piece)
+    for (const part of pieces) {
+      const joined = line === "" ? part : `${line} ${part}`
+      if (widthOf(joined) <= room) line = joined
+      else {
+        lines.push(line)
+        line = part
+      }
+    }
+  }
+  if (line !== "") lines.push(line)
+  if (lines.length <= rows) return lines
+  const kept = lines.slice(0, rows)
+  let last = kept[rows - 1]!
+  // Room for "…" after the last whole word that fits; a single piece too long for it loses its end.
+  while (widthOf(`${last}…`) > room) {
+    const space = last.lastIndexOf(" ")
+    last = space > 0 ? last.slice(0, space) : [...last].slice(0, -1).join("")
+  }
+  kept[rows - 1] = `${last}…`
+  return kept
+}
+
+/** The sentence under the apps of a server that could not be reached. */
+const unreachedWords = (server: ServerRow): string => `${server.name} could not be reached. Numbers are from this machine's history.`
+
+/** The sentence that says which app this folder is linked to. */
+const linkedWords = (linked: Linked): string => `This folder is linked to ${linked.app} on ${linked.server} by zekno.json.`
+
+/**
+ * The foot of the apps pane: whether the server could be reached and why
+ * not, and whether this folder is linked. A server where SSH needs an answer
+ * is marked `!` here too, as beside its name. Below 100 columns the selected
  * app's details say "this folder is linked" for the app it is linked to, so
  * the sentence is left out while that app is selected.
+ *
+ * It takes no more than the `room` rows the window leaves it at `width`
+ * columns, so the apps table above it is never squeezed: first the sentence
+ * that the server could not be reached, then the sentence about the link,
+ * and the reason, which a server or SSH may make long, in the rows that are
+ * left, cut at a word with "…".
  */
-function AppsFoot({ state, server, said }: { state: State; server: ServerRow; said: boolean }) {
+function AppsFoot({ state, server, said, room, width }: { state: State; server: ServerRow; said: boolean; room: number; width: number }) {
   const theme = useTheme()
+  const unreached = server.reachable === false
+  const asks = needsAnswerHere(server)
+  const mark = asks ? "!" : "✖"
+  const linked = state.linked?.server === server.name && !said ? state.linked : undefined
+  const sentence = unreached ? inkRows(`${mark} ${unreachedWords(server)}`, width) : 0
+  const short = unreached && sentence > room
+  const linkRows = linked ? inkRows(linkedWords(linked), width) : 0
+  const showLink = linked !== undefined && !short && (unreached ? sentence + 1 + linkRows : linkRows) <= room
+  const reason = unreached && !short && server.problem ? rowsOf(server.problem, room - sentence - (showLink ? 1 + linkRows : 0), width) : []
   const lines: ReactNode[] = []
-  if (server.reachable === false) {
-    const asks = needsAnswerHere(server)
+  if (short) {
+    // Not even the sentence fits whole: as much of it as there is room for.
+    const cut = rowsOf(`${mark} ${unreachedWords(server)}`, room, width)
+    if (cut.length > 0) {
+      lines.push(
+        <Box key="unreachable" flexDirection="column">
+          {cut.map((line, index) => (
+            <Text key={index} wrap="truncate-end">
+              {index === 0 ? <Text color={asks ? theme.warning : theme.danger}>{mark}</Text> : null}
+              {index === 0 ? line.slice(mark.length) : line}
+            </Text>
+          ))}
+        </Box>
+      )
+    }
+  } else if (unreached) {
     lines.push(
       <Box key="unreachable" flexDirection="column">
         <Text>
-          <Text color={asks ? theme.warning : theme.danger}>{asks ? "!" : "✖"}</Text> {server.name} could not be reached. Numbers are from this machine's history.
+          <Text color={asks ? theme.warning : theme.danger}>{mark}</Text> {unreachedWords(server)}
         </Text>
-        {server.problem ? <Text dimColor>{server.problem}</Text> : null}
+        {reason.map((line, index) => (
+          <Text key={index} dimColor wrap="truncate-end">
+            {line}
+          </Text>
+        ))}
       </Box>
     )
   }
-  if (state.linked?.server === server.name && !said) {
+  if (linked && showLink) {
     // Dim pieces beside the names: inside a dim text, Ink cannot draw a part that is not dim.
     lines.push(
       <Text key="linked">
         <Text dimColor>This folder is linked to </Text>
-        {state.linked.app}
+        {linked.app}
         <Text dimColor> on </Text>
-        {state.linked.server}
+        {linked.server}
         <Text dimColor> by zekno.json.</Text>
       </Text>
     )
@@ -220,6 +356,13 @@ function AppsFoot({ state, server, said }: { state: State; server: ServerRow; sa
   )
 }
 
+/** The second line of the selected app's details below 100 columns: its secrets, and its Compose file when this folder is linked to it. Empty when there is neither. */
+function detailsSecondLine(app: AppRow, file?: string): string {
+  return [app.secrets === undefined ? undefined : secretsWords(app.secrets), file, file === undefined ? undefined : "this folder is linked"]
+    .filter((part) => part !== undefined)
+    .join(", ")
+}
+
 /**
  * The selected app's details at the foot of the apps pane, below 100
  * columns, as on the board "Home at 80 columns": `demo deploy 4, started,
@@ -228,9 +371,7 @@ function AppsFoot({ state, server, said }: { state: State; server: ServerRow; sa
 function AppDetailsFoot({ app, file }: { app: AppRow; file?: string }) {
   const deploy = app.deploy === undefined ? "none yet" : `${app.deploy}${app.outcome ? `, ${OUTCOME_WORDS[app.outcome]}` : ""}`
   const signed = app.signer === undefined ? "" : `, signed by ${app.signer}`
-  const second = [app.secrets === undefined ? undefined : secretsWords(app.secrets), file, file === undefined ? undefined : "this folder is linked"]
-    .filter((part) => part !== undefined)
-    .join(", ")
+  const second = detailsSecondLine(app, file)
   return (
     <Box flexDirection="column" flexShrink={0}>
       <Rule />
@@ -257,6 +398,7 @@ function AppsPane({
   focused,
   now,
   columns,
+  inside,
   details,
 }: {
   state: State
@@ -265,6 +407,8 @@ function AppsPane({
   focused: boolean
   now: Date
   columns: number
+  /** The rows inside the pane's border. */
+  inside: number
   /** Below 100 columns: the selected app, whose details go at the foot, and its Compose file when this folder is linked to it. */
   details?: { app?: AppRow; file?: string }
 }) {
@@ -275,15 +419,25 @@ function AppsPane({
       </Pane>
     )
   }
+  const wide = columns >= HOME_WIDE
+  // The window's margins, the panes beside this one and the gaps between them, and this pane's border and padding.
+  const width = columns - 2 - (wide ? SERVERS_WIDTH.wide + DETAILS_WIDTH + 2 : SERVERS_WIDTH.narrow + 1) - 4
+  const empty = `Nothing deployed to ${server.name} from this machine yet.`
+  const table = server.apps.length > 0 ? 1 + server.apps.length : inkRows(empty, width)
+  const below = details?.app ? 2 + (detailsSecondLine(details.app, details.file) === "" ? 0 : 1) + 1 : 0
+  // What the foot may take: the rows inside the pane less its title, the table, the details below it, and the gaps between them.
+  const room = inside - 1 - 1 - table - 1 - below
   return (
     <Pane title={`Apps on ${server.name}`} right={<Text dimColor>{server.apps.length}</Text>} focused={focused}>
       {server.apps.length > 0 ? (
         <AppTable apps={server.apps} selected={selected} now={now} columns={columns} />
       ) : (
-        <Text dimColor>Nothing deployed to {server.name} from this machine yet.</Text>
+        <Text dimColor>{empty}</Text>
       )}
-      <Box flexGrow={1} />
-      <AppsFoot state={state} server={server} said={details?.file !== undefined} />
+      {/* The foot sits at the bottom of the room the table leaves; were it ever taller than that room, it is cut, never the table. */}
+      <Box flexGrow={1} flexDirection="column" justifyContent="flex-end" overflow="hidden">
+        <AppsFoot state={state} server={server} said={details?.file !== undefined} room={room} width={width} />
+      </Box>
       {details?.app ? <AppDetailsFoot app={details.app} file={details.file} /> : null}
     </Pane>
   )
@@ -409,7 +563,42 @@ function UpdateQuestion({ server, columns }: { server: ServerRow; columns: numbe
  * unreachable server is marked and its apps keep the numbers from this
  * machine's history (T021).
  */
-export function HomeScreen({ state, screen, columns, status }: { state: State; screen: HomeScreenState; columns: number; status?: ReactNode }) {
+/** The rows the key hints take at `columns`: they wrap between hints, two columns apart, inside the window's margins. */
+function hintRows(hints: readonly KeyHint[], columns: number): number {
+  const room = columns - 2
+  let rows = 1
+  let used = 0
+  for (const [key, does] of hints) {
+    const width = widthOf(`${key} ${does}`)
+    if (used > 0 && used + 2 + width > room) {
+      rows++
+      used = 0
+    }
+    used += (used > 0 ? 2 : 0) + width
+  }
+  return rows
+}
+
+/** The rows the line above the key hints takes: waiting for a deploy before closing, or a line about something done elsewhere (app.tsx `Status`). */
+function statusRows(state: State, columns: number): number {
+  if (state.quitting) return 1
+  if (!state.notice) return 0
+  return inkRows(state.notice.tone === "info" ? state.notice.text : `✖ ${state.notice.text}`, columns - 2)
+}
+
+export function HomeScreen({
+  state,
+  screen,
+  columns,
+  rows,
+  status,
+}: {
+  state: State
+  screen: HomeScreenState
+  columns: number
+  rows: number
+  status?: ReactNode
+}) {
   const team = state.team
   const servers = team?.servers ?? []
   const server = selectedServer(state, screen)
@@ -436,8 +625,11 @@ export function HomeScreen({ state, screen, columns, status }: { state: State; s
       </Frame>
     )
   }
+  const hints = homeHints(server, !wide, screen.pane)
+  // The header, the gaps around the body and the line above the hints (Frame), the hints, and the panes' borders.
+  const inside = rows - 3 - 1 - 1 - 1 - statusRows(state, columns) - hintRows(hints, columns) - 2
   return (
-    <Frame header={<Header place={place} right={right} />} hints={homeHints(server, !wide, screen.pane)} status={status}>
+    <Frame header={<Header place={place} right={right} />} hints={hints} status={status}>
       <Box flexGrow={1} columnGap={1}>
         <ServersPane servers={servers} selected={screen.server} focused={screen.pane === "servers"} narrow={!wide} />
         <AppsPane
@@ -447,6 +639,7 @@ export function HomeScreen({ state, screen, columns, status }: { state: State; s
           focused={screen.pane === "apps"}
           now={new Date()}
           columns={columns}
+          inside={inside}
           details={wide ? undefined : { app, file: linkedFile(state, server, app) }}
         />
         {wide ? <DetailsPane app={app} file={linkedFile(state, server, app)} /> : null}

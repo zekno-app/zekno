@@ -49,13 +49,29 @@ keys type into it.
 
 - **Start**: the profile is verified before anything is drawn. A profile that does not verify
   is an error screen with the reason and no actions.
-- **Linked folder**: with a `zekno.json` this machine accepted (data-model.md, "When a project
-  file is used"), Home opens with that server and app selected. One that was not made or accepted
-  here selects nothing: Home opens as it would without it, the line above the key hints says
-  "zekno.json here names &lt;app&gt; on &lt;server&gt;. It was not made or accepted on this
-  machine. Run `zekno link` to accept it." (the file's path in place of "zekno.json here" when it
-  is in a folder above), and `d` in that folder deploys nothing and offers nothing: it says the
-  same again. One that names a server this machine is not connected to selects nothing either.
+- **Linked folder**: with a `zekno.json` signed by the team and used in this folder on this
+  machine before (data-model.md, "Signed by the team" and "When a project file is used"), Home
+  opens with that server and app selected. One that names a server this machine is not connected
+  to selects nothing.
+- **A zekno.json signed by the team** (decided by the maintainer on 2026-11-14, research R17),
+  not used in this folder on this machine before: the app opens with Home under a question in the
+  panel of "Remember this folder?": the title "&lt;member&gt; linked this folder to &lt;app&gt; on
+  &lt;server&gt;", the line "The link is signed by your team. It has not been used in this folder
+  on this machine. Use it here?", and `y use it`, `n not now`. `y` records it (`links.json`),
+  selects its server and app as a linked folder opens, and says nothing more. `n`, or `esc`,
+  leaves the file unused while the app is open: Home selects nothing, and `d` deploys nothing and
+  offers nothing; it says "This folder's zekno.json is not in use. Open zekno here again to be
+  asked." It is asked again the next time the app opens here. Only `y` says yes; `enter` and
+  other keys do nothing. A file that changed while the question was open is not recorded: `y`
+  says "zekno.json here changed after zekno opened, so it was not used. Open zekno here again to
+  be asked." `<member>` is the signer's name from the signed team list, cleaned.
+- **A zekno.json not signed by the team** (no signature, another team's, a removed member's,
+  edited after signing, signed for a server of another name): it selects nothing and is never
+  offered: Home opens as it would without it, the line above the key hints says "zekno.json here
+  is not signed by your team, so zekno does not use it. It names &lt;app&gt; on &lt;server&gt;."
+  (the file's path in place of "zekno.json here" when it is in a folder above), and `d` in that
+  folder deploys nothing and offers nothing: it says the same again. The file is judged against
+  the team list verified when the app opened; nothing is read from the keychain for it.
 - **Refresh**: server and app state are read when a screen opens and every 5 seconds while Home
   or App is showing (Home reads every server, App its own). Nothing refreshes while a question
   is open, below 80 by 24, or while the app is quitting. The reads go over one session per
@@ -89,12 +105,15 @@ keys type into it.
   standard error. A connection refused, a timeout or a host that does not resolve is "could not
   be reached" (`✖`), as before.
 - **Unreachable server**: marked as such; its apps show their last deploy numbers from the
-  local history and "unknown" for state. Other servers are unaffected.
+  local history and "unknown" for state. Other servers are unaffected. The reason is shown at
+  the foot of the apps pane in the rows the table, the line about the link and the selected
+  app's details leave it, cut at a word with "…" when it is longer; the table's rows are never
+  made shorter or drawn over.
 - **Deploy numbers**: once a server has answered, Home's deploy column, the app header and
   "running now" use the runner's last accepted deploy of each app. A deploy is "running now"
   only when every service runs, its number is the runner's last accepted one, and it started;
   a latest deploy that did not start is "✖ did not start" and nothing is marked running now.
-- **Deploy from the app**: needs a linked folder or a Compose file in the current folder. With
+- **Deploy from the app**: needs a linked folder or a Compose file in the current folder. "Remember this folder?" answered yes writes zekno.json signed with this member's key and records it as used here. With
   neither, the app says so and names `zekno link`. A linked folder deploys at once to its own
   app on its own server. With another app selected, on its own server or another, `d` asks
   first, in the panel of "Remember this folder?": the title is "This folder is linked to

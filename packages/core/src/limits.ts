@@ -34,6 +34,8 @@ export const LIMITS = {
   servicesPerApp: 256,
   /** Services across all apps in an answer about what is running. A runner leaves out the apps past it. */
   servicesPerServer: 4096,
+  /** Characters in the Compose file's path a signed link names, relative to the linked folder. */
+  linkComposeLength: 255,
 } as const
 
 /** Longest base64url text that can encode `bytes` bytes. */

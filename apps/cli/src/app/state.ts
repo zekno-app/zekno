@@ -11,7 +11,7 @@
  * sends anything: before a deploy it returns to the list of missing values,
  * where going ahead without them is a question of its own.
  */
-import { isReservedSecretName } from "@workspace/core"
+import { isReservedSecretName, type TeamTrust } from "@workspace/core"
 
 import type { DeployStage } from "../ops/deploy"
 import type { RunState } from "../ops/status"
@@ -179,12 +179,23 @@ export type AddProgress = {
 export type Linked = { server: string; app: string; compose?: string }
 
 /**
+ * A zekno.json signed by the team that has not been used in this folder on
+ * this machine: who signed it (cleaned) and what it names, for the question
+ * asked when the app opens; and the file as it was judged, its real path and
+ * the SHA-256 of its bytes, so that a "yes" records only what was shown.
+ */
+export type FirstUse = Linked & { member: string; path: string; sha256: string }
+
+/**
  * How the app starts: the profile has been read and verified, or not
  * (effects.ts `loadStart`). `problem` is why this folder's zekno.json could
- * not be used, shown as a line on Home.
+ * not be used, shown as a line on Home. `firstUse` is a file signed by the
+ * team to ask about. `trust` is the verified team list the file was judged
+ * against; it holds no key, and lets a later `d` judge the file again
+ * without reading the keychain.
  */
 export type Start =
-  | { kind: "team"; team: TeamView; linked?: Linked; problem?: string }
+  | { kind: "team"; team: TeamView; linked?: Linked; problem?: string; firstUse?: FirstUse; trust?: TeamTrust }
   | { kind: "no-team" }
   | { kind: "profile-error"; reason: string; folder: string }
 
@@ -260,11 +271,19 @@ export type Question =
    * selected server all the same?
    */
   | { kind: "deploy-elsewhere"; server: string; app: string; linked: { server: string; app: string } }
+  /**
+   * When the app opens in a folder whose zekno.json is signed by the team
+   * (`member` signed it) and was not used in this folder on this machine:
+   * use it here?
+   */
+  | { kind: "use-link"; member: string; server: string; app: string }
 
 /**
  * The answers to each question and their keys. The boards give the words for
  * the two before `deploy-elsewhere`, whose words the maintainer approved on
- * 2026-11-14 (contracts/app.md, "Deploy from the app").
+ * 2026-11-14 (contracts/app.md, "Deploy from the app"). Those of `use-link`
+ * are the plan's for the signed link, decided by the maintainer the same day
+ * (contracts/app.md, "A zekno.json signed by the team").
  */
 export const CHOICES = {
   "remove-secret": [
@@ -290,7 +309,20 @@ export const CHOICES = {
     { key: "y", answer: "yes", does: "deploy to" },
     { key: "n", answer: "no", does: "do not deploy" },
   ],
+  // Esc answers no as well, and enter answers nothing: only `y` uses the file.
+  "use-link": [
+    { key: "y", answer: "yes", does: "use it" },
+    { key: "n", answer: "no", does: "not now" },
+  ],
 } as const satisfies Record<Question["kind"], readonly Choice<string>[]>
+
+/** The words of "use this zekno.json here?", asked when the app opens. */
+export function useLinkWords(question: Extract<Question, { kind: "use-link" }>): { title: string; body: string } {
+  return {
+    title: `${question.member} linked this folder to ${question.app} on ${question.server}`,
+    body: "The link is signed by your team. It has not been used in this folder on this machine. Use it here?",
+  }
+}
 
 /** Said when a deploy that waited on a question was not made. */
 export const NOT_DEPLOYED = "Nothing was deployed."
@@ -359,6 +391,8 @@ export type Effect =
    * reads that follow, as the one opened when the app starts.
    */
   | { kind: "connect"; server: string }
+  /** `y` to "use it here?": record this folder's zekno.json, signed by the team, as used here, once it is still what was shown. */
+  | { kind: "use-link"; server: string; app: string }
 
 // ---------------------------------------------------------------------------
 // Events
@@ -425,6 +459,8 @@ export type AppEvent =
   | { type: "ask-deploy-elsewhere"; server: string; app: string; linked: { server: string; app: string } }
   /** zekno.json was written: this folder is now linked to that app on that server. */
   | { type: "linked"; linked: Linked }
+  /** This folder's zekno.json, signed by the team, was recorded as used here: Home moves to its server and app. */
+  | { type: "link-used"; linked: Linked }
   /** The hidden prompt stored a value, or refused one; it is closed either way. */
   | { type: "secret-saved"; notice: Notice }
   | { type: "secret-refused"; notice: Notice }
@@ -465,21 +501,33 @@ export type Step = { state: State; effects: Effect[] }
 // ---------------------------------------------------------------------------
 // Start
 
-/** The first screen: Home for a verified team (on the linked server and app), first run, or the profile error. */
+/**
+ * Home, on the server and app a linked folder names (contracts/app.md,
+ * "Linked folder"); on the first server when there is no link, or it names
+ * a server Home does not list.
+ */
+function homeOn(team: TeamView, linked: Linked | undefined): Extract<Screen, { name: "home" }> {
+  const found = team.servers.findIndex((entry) => entry.name === linked?.server)
+  const server = Math.max(found, 0)
+  const app = found === -1 ? -1 : team.servers[found]!.apps.findIndex((entry) => entry.name === linked?.app)
+  return { name: "home", pane: app === -1 ? "servers" : "apps", server, app: Math.max(app, 0) }
+}
+
+/**
+ * The first screen: Home for a verified team (on the linked server and app),
+ * first run, or the profile error. A zekno.json signed by the team that was
+ * not used here before is asked about at once, over Home, which is on no app.
+ */
 export function initialState(start: Start, size: { columns: number; rows: number }): State {
   const base = { size, runnerLines: [], quitting: false, exiting: false }
   if (start.kind === "no-team") return { ...base, stack: [{ name: "welcome", value: "", creating: false }] }
   if (start.kind === "profile-error") {
     return { ...base, stack: [{ name: "profile-error", reason: start.reason, folder: start.folder }] }
   }
-  // A linked folder opens on its server and app (contracts/app.md, "Linked folder").
-  const { team, linked } = start
-  const found = team.servers.findIndex((entry) => entry.name === linked?.server)
-  const server = Math.max(found, 0)
-  const app = found === -1 ? -1 : team.servers[found]!.apps.findIndex((entry) => entry.name === linked?.app)
-  const home: Screen = { name: "home", pane: app === -1 ? "servers" : "apps", server, app: Math.max(app, 0) }
+  const { team, linked, firstUse } = start
   const notice: Notice | undefined = start.problem === undefined ? undefined : { tone: "error", text: start.problem }
-  return { ...base, stack: [home], team, linked, notice }
+  const question: Question | undefined = firstUse && { kind: "use-link", member: firstUse.member, server: firstUse.server, app: firstUse.app }
+  return { ...base, stack: [homeOn(team, linked)], team, linked, notice, ...(question ? { question } : {}) }
 }
 
 // ---------------------------------------------------------------------------
@@ -678,8 +726,8 @@ function inputOf(key: AppKey): [string, { return?: boolean; escape?: boolean; ba
 function onQuestion(state: State, question: Question, key: AppKey): Step {
   if (key.kind === "ctrl-c") return quit(state)
   const [input, flags] = inputOf(key)
-  // Where esc is not one of the answers, it is no: neither question deploys on it.
-  const escapeIsNo = (question.kind === "skip-values" || question.kind === "deploy-elsewhere") && flags.escape
+  // Where esc is not one of the answers, it is no: none of these questions deploys, or uses a file, on it.
+  const escapeIsNo = (question.kind === "skip-values" || question.kind === "deploy-elsewhere" || question.kind === "use-link") && flags.escape
   const answer = applyConfirmKey<string>(CHOICES[question.kind], input, flags) ?? (escapeIsNo ? "no" : undefined)
   if (answer === undefined) return stay(state)
   const closed = { ...state, question: undefined }
@@ -688,6 +736,8 @@ function onQuestion(state: State, question: Question, key: AppKey): Step {
     if (answer !== "yes") return stay({ ...closed, notice: { tone: "info", text: NOT_DEPLOYED } })
     return go(closed, { kind: "deploy-continue", server: question.server, app: question.app, answer: "deploy-elsewhere" })
   }
+  // No leaves the file unused while the app is open, and says nothing: `d` says so if it is pressed.
+  if (question.kind === "use-link") return answer === "yes" ? go(closed, { kind: "use-link", server: question.server, app: question.app }) : stay(closed)
   if (answer === "no") return stay(closed)
   switch (question.kind) {
     case "remove-secret":
@@ -1193,6 +1243,12 @@ export function update(state: State, event: AppEvent): Step {
       return stay({ ...state, question: { kind: "deploy-elsewhere", server: event.server, app: event.app, linked: event.linked } })
     case "linked":
       return stay({ ...state, linked: event.linked })
+    case "link-used": {
+      // As a linked folder opens: Home on its server and app.
+      const team = state.team
+      const used = { ...state, linked: event.linked }
+      return stay(team ? updateScreens(used, "home", () => homeOn(team, event.linked)) : used)
+    }
     case "secret-saved": {
       const screen = top(state)
       if (screen.name !== "set-secret") return stay({ ...state, notice: event.notice })

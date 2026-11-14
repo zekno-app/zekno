@@ -11,7 +11,7 @@ import { CoreError, type RunnerStatus, type RunnerVersion, type TeamTrust } from
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 
-import { isAccepted } from "../accepted"
+import { accept } from "../accepted"
 import { expectedValues } from "../compose-file"
 import { readCompose, type ComposeText } from "../compose-read"
 import { openTeam, reach, TAMPERED, type OpDeps, type Team } from "../context"
@@ -25,7 +25,7 @@ import { prepareSecretSet, removeSecret, setSecret } from "../ops/secret"
 import { addServer, isOutdated, prepareServerAdd, prepareServerUpdate, updateRunner } from "../ops/server"
 import { locateServer, readOver, stateOf, type AppStates, type RunState, type StatusResult } from "../ops/status"
 import { profileStore, type Server } from "../profile"
-import { DEFAULT_COMPOSE, findProject, notAcceptedHere, shownPath, tilde, type ProjectLink } from "../project"
+import { DEFAULT_COMPOSE, findProject, notSignedHere, shownPath, standingOf, tilde, type ProjectLink, type Standing } from "../project"
 import { RUNNER_RELEASE } from "../runner-release"
 import { sanitize } from "../sanitize"
 import { openSession, SshUnreachable, type Session, type SessionMode } from "../session"
@@ -168,10 +168,12 @@ export { tilde }
  * "Start"): no profile is first run, a profile that verifies is Home, and one
  * that does not is the error screen with the reason. The screen says in its
  * own words that the folder may have been changed, so that sentence is not
- * repeated after the reason. With a `cwd` linked by a zekno.json this
- * machine accepted, Home opens on its server and app ("Linked folder"); a
- * zekno.json that cannot be used is said on Home, and chooses nothing: one
- * that was not made or accepted here, one that names a server that is not
+ * repeated after the reason. A zekno.json that applies to `cwd` is judged
+ * against the verified team list (project.ts `standingOf`): signed by the
+ * team and used here before, Home opens on its server and app ("Linked
+ * folder"); signed by the team and not used here before, the app asks first
+ * (`firstUse`); one that cannot be used is said on Home, and chooses
+ * nothing: one not signed by the team, one that names a server that is not
  * connected, one that cannot be read. Nothing here reaches a server.
  */
 export async function loadStart(deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?: string }): Promise<Start> {
@@ -185,27 +187,39 @@ export async function loadStart(deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?
     // A reason can quote a path or a name read from the profile folder.
     return { kind: "profile-error", reason: sanitize(reason.replace(` ${TAMPERED}`, "")), folder: sanitize(tilde(deps.home)) }
   }
-  const view = teamView(team, deps.home)
-  if (deps.cwd === undefined) return { kind: "team", team: view }
+  const verified: Extract<Start, { kind: "team" }> = { kind: "team", team: teamView(team, deps.home), trust: team.trust }
+  if (deps.cwd === undefined) return verified
   try {
     const link = findProject(deps.cwd)
-    if (!link) return { kind: "team", team: view }
-    // A zekno.json from a cloned folder would otherwise choose the app that `d` replaces.
-    if (!isAccepted(deps.home, link)) return { kind: "team", team: view, problem: notAcceptedHere(link, deps.cwd) }
+    if (!link) return verified
+    // A zekno.json from outside the team would otherwise choose the app that `d` replaces.
+    const standing = standingOf(link, team.trust, deps.home)
+    if (standing.kind === "unsigned") return { ...verified, problem: notSignedHere(link, deps.cwd) }
     // The server it names must be one of the verified team's; the app name was held to its pattern when it was read.
-    if (!team.profile.servers.some((server) => server.name === link.server)) {
-      return { kind: "team", team: view, problem: notConnected(link) }
-    }
-    return { kind: "team", team: view, linked: { server: link.server, app: link.app, compose: sanitize(link.compose) } }
+    if (!team.profile.servers.some((server) => server.name === link.server)) return { ...verified, problem: notConnected(link) }
+    const linked = { server: link.server, app: link.app, compose: sanitize(link.compose) }
+    // A copied file would otherwise deploy someone else's folder: the first time here, the person is asked.
+    if (standing.kind === "new") return { ...verified, firstUse: { ...linked, member: standing.member, path: link.path, sha256: link.sha256 } }
+    return { ...verified, linked }
   } catch (error) {
     const reason = reasonOf(error)
     if (reason === undefined) throw error
-    return { kind: "team", team: view, problem: sanitize(reason) }
+    return { ...verified, problem: sanitize(reason) }
   }
 }
 
 /** Said when a zekno.json names a server this machine is not connected to: it then chooses nothing. */
 const notConnected = (link: ProjectLink): string => `${shownPath(link.path)} names a server "${link.server}" that is not connected to this machine.`
+
+/**
+ * Said when `d` is pressed in a folder whose zekno.json, signed by the team,
+ * was not used here: "not now" was the answer when the app opened, or it
+ * changed since. It is asked about again the next time the app opens.
+ */
+export const NOT_IN_USE = "This folder's zekno.json is not in use. Open zekno here again to be asked."
+
+/** Said when `y` answers a question about a zekno.json that has changed since it was asked: it is not used. */
+export const LINK_CHANGED = "zekno.json here changed after zekno opened, so it was not used. Open zekno here again to be asked."
 
 /**
  * Said when `d` is pressed in a linked folder on a server with no apps that
@@ -312,13 +326,16 @@ function runnerOf(target: Target, mode: SessionMode, runner: RunnerVersion | und
  *
  * With a `terminal`, every connection over SSH is made in batch mode first,
  * and the terminal is handed over only when SSH has to ask (hand-over.ts).
+ * `start` is what the app opened on (`loadStart`): the verified team list
+ * this folder's zekno.json was judged against, and the file it asks about.
  */
 export function createEffects(
   deps: AppDeps,
   dispatch: (event: AppEvent) => void,
   fail: (error: unknown) => void,
   terminal?: Terminal,
-  timing: Timing = {}
+  timing: Timing = {},
+  start?: Start
 ): Effects {
   const now = timing.now ?? Date.now
   const readLimitMs = timing.readLimitMs ?? READ_LIMIT_MS
@@ -350,6 +367,17 @@ export function createEffects(
   const remember = (team: { trust: TeamTrust; profile: { servers: readonly Server[] } }) => {
     known = { team: { trust: team.trust }, servers: team.profile.servers }
   }
+  const opened = start?.kind === "team" ? start : undefined
+
+  /**
+   * The verified team list a zekno.json is judged against: the latest this
+   * run verified, or the one the app opened with. Only when neither is there
+   * is the profile verified again, which reads the keychain; nothing is
+   * signed with it. When one is known nothing is awaited, so a question `d`
+   * asks is open as soon as `d` was pressed.
+   */
+  const trustKnown = (): TeamTrust | undefined => known?.team.trust ?? opened?.trust
+  const trustNow = async (): Promise<TeamTrust> => trustKnown() ?? (await openTeam(ops)).trust
 
   /** Each server's kept session, by name (`Watch`). */
   const watches = new Map<string, Watch>()
@@ -432,8 +460,11 @@ export function createEffects(
    * stay inside its folder. Undefined, with a line saying why, when `d`
    * deploys nothing:
    *
-   * - the zekno.json was not made or accepted on this machine: it is never
-   *   used, and no other is offered in its place;
+   * - the zekno.json is not signed by the team: it is never used, and no
+   *   other is offered in its place;
+   * - it is signed by the team and was not used here: the answer when the
+   *   app opened was not "yes", and it is not used until the app opens here
+   *   again and asks;
    * - it names a server that is not connected: it supplies nothing;
    * - it names another server, and the selected server has no apps: there
    *   is no app to deploy it to;
@@ -448,11 +479,17 @@ export function createEffects(
    * the source says so (`elsewhere`), and `plan` asks before anything is
    * signed (the question the maintainer approved on 2026-11-14).
    */
-  function composeOf(server: string, selected: string | undefined): Source | undefined {
+  function composeOf(server: string, selected: string | undefined, trust: TeamTrust | undefined): Source | undefined {
     const link = findProject(ops.cwd)
     if (link) {
-      if (!isAccepted(deps.home, link)) {
-        notice("error", notAcceptedHere(link, ops.cwd))
+      // Judged again as it is now: the file may have changed since the app opened. Without a team list to judge it by, it is not the team's.
+      const standing: Standing = trust ? standingOf(link, trust, deps.home) : { kind: "unsigned" }
+      if (standing.kind === "unsigned") {
+        notice("error", notSignedHere(link, ops.cwd))
+        return undefined
+      }
+      if (standing.kind === "new") {
+        notice("info", NOT_IN_USE)
         return undefined
       }
       const named = sanitize(link.compose)
@@ -489,8 +526,9 @@ export function createEffects(
    * to another app than its own first asks whether to deploy it there all
    * the same; then the values its Compose file expects that have no secret
    * are listed (board "Set a secret"). Each question ends this plan, before
-   * the keychain is read; its answer starts the next part (`after`), with
-   * everything checked again.
+   * the keychain is read (this folder's zekno.json is judged against the
+   * team list verified when the app opened); its answer starts the next part
+   * (`after`), with everything checked again.
    */
   async function plan(
     effect: Extract<Effect, { kind: "deploy" | "rollback" }>,
@@ -501,8 +539,13 @@ export function createEffects(
       const rollback = await prepareRollback(ops, { app: effect.app, server: effect.server, to }, { warning: (text) => notice("warning", text) })
       return { ...rollback, from: `what deploy ${rollback.from} ran` }
     }
-    // After a question, the Compose file read when `d` was pressed: not read again.
-    const source = after?.source ?? composeOf(effect.server, effect.app)
+    // After a question, the Compose file read when `d` was pressed: not read again. A team list already
+    // verified is used without awaiting anything; otherwise it is verified now, only when a zekno.json applies.
+    let source = after?.source
+    if (!source) {
+      const trust = trustKnown() ?? (findProject(ops.cwd) === undefined ? undefined : (await openTeam(ops)).trust)
+      source = composeOf(effect.server, effect.app, trust)
+    }
     if (!source) return undefined
     // On a server with no apps yet, `d` deploys the app the folder is linked to, when that server is the folder's.
     const app = source.app
@@ -546,12 +589,31 @@ export function createEffects(
     if (asked.on !== about) return
     waiting = undefined
     if (effect.answer === "write-link") {
-      // Written by a "yes" here, so accepted on this machine (accepted.ts).
-      writeLink(deps.home, ops.cwd, { app: effect.app, server: effect.server, compose: COMPOSE_FILE })
+      // Written by a "yes" here: signed with this member's key, and recorded as used here (accepted.ts).
+      await writeLink(deps.home, await openTeam(ops), ops.cwd, { app: effect.app, server: effect.server, compose: COMPOSE_FILE })
       dispatch({ type: "linked", linked: { server: effect.server, app: effect.app, compose: COMPOSE_FILE } })
     }
     if (effect.answer === "skip-link") linkSkipped = true
     await deploy({ kind: "deploy", server: effect.server, app: effect.app }, asked)
+  }
+
+  /**
+   * `y` to "use it here?": this folder's zekno.json is judged again, and is
+   * recorded as used here only while it is still signed by the team, names
+   * what the question named, and is the very file that was shown, byte for
+   * byte. Then Home moves to its app, as for a linked folder, and nothing
+   * more is said.
+   */
+  async function useLink(effect: Extract<Effect, { kind: "use-link" }>): Promise<void> {
+    const link = findProject(ops.cwd)
+    if (!link) return notice("error", LINK_CHANGED)
+    const standing = standingOf(link, await trustNow(), deps.home)
+    if (standing.kind === "unsigned") return notice("error", notSignedHere(link, ops.cwd))
+    const shown = opened?.firstUse
+    const same = link.app === effect.app && link.server === effect.server && (shown === undefined || (shown.path === link.path && shown.sha256 === link.sha256))
+    if (!same) return notice("error", LINK_CHANGED)
+    if (standing.kind === "new") accept(deps.home, link)
+    dispatch({ type: "link-used", linked: { server: link.server, app: link.app, compose: sanitize(link.compose) } })
   }
 
   /** Signs and sends a deploy, with its stages and Docker's lines as events, and its result as a line wherever the person is. */
@@ -1023,6 +1085,9 @@ export function createEffects(
           return
         case "connect":
           void perform(() => connectOnPurpose(effect.server))
+          return
+        case "use-link":
+          void perform(() => useLink(effect))
           return
         case "remove-secret":
           void perform(async () => {

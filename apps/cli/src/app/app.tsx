@@ -17,7 +17,7 @@ import { emptyHiddenValue, hiddenPromptKey } from "./hidden-prompt"
 import { toAppKey } from "./keys"
 import { AddServerScreen } from "./screens/add-server"
 import { AppScreen } from "./screens/app"
-import { DeployElsewhereScreen, DeployScreen, RememberFolderScreen } from "./screens/deploy"
+import { DeployElsewhereScreen, DeployScreen, RememberFolderScreen, UseLinkScreen } from "./screens/deploy"
 import { HelpScreen } from "./screens/help"
 import { HomeScreen } from "./screens/home"
 import { LogsScreen } from "./screens/logs"
@@ -86,9 +86,13 @@ export function Screen({ state, columns, rows }: { state: State; columns: number
   if (state.question?.kind === "deploy-elsewhere" && !hiddenPromptOpen(state)) {
     return <DeployElsewhereScreen question={state.question} columns={columns} status={status} />
   }
+  // Asked over Home as the app opens in a folder whose zekno.json, signed by the team, was not used here before.
+  if (state.question?.kind === "use-link" && !hiddenPromptOpen(state)) {
+    return <UseLinkScreen question={state.question} columns={columns} status={status} />
+  }
   switch (screen.name) {
     case "home":
-      return <HomeScreen state={state} screen={screen} columns={columns} status={status} />
+      return <HomeScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
     case "app":
       return <AppScreen state={state} screen={screen} columns={columns} status={status} />
     case "deploy":
@@ -251,7 +255,7 @@ export function openApp(deps: AppDeps, options: AppOptions): Promise<number> {
 
   // Connections over SSH are made in batch mode first; the terminal goes to SSH only when it has to ask.
   const handOver = inkTerminal(stdin, stdout)
-  const effects = createEffects(deps, (event) => store.dispatch(event), fail, handOver.terminal)
+  const effects = createEffects(deps, (event) => store.dispatch(event), fail, handOver.terminal, {}, options.start)
   const size = { columns: stdout.columns || MIN_COLUMNS, rows: stdout.rows || MIN_ROWS }
   const store = createStore(initialState(options.start, size), (effect) => (effect.kind === "exit" ? close() : effects.run(effect)))
   // Every few seconds the reducer decides whether what is running is read again: only on Home or the app screen, with no question open.

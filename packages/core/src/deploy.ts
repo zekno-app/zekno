@@ -130,7 +130,8 @@ export type VerifiedDeploy = {
 /** Deploys that came out of `verifyDeploy`, with the sealed secrets that were checked. */
 const verified = new WeakMap<VerifiedDeploy, readonly SealedSecret[]>()
 
-const DEPLOY_ROLES: readonly Role[] = ["admin", "deployer"]
+/** The roles that may deploy. A link (link.ts) counts only from a member with one of them. */
+export const DEPLOY_ROLES: readonly Role[] = ["admin", "deployer"]
 
 function namesAreSortedAndUnique(names: readonly string[]): boolean {
   return names.every((name, index) => index === 0 || names[index - 1]! < name)

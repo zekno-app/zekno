@@ -57,6 +57,7 @@ export {
   type Deploy,
   type VerifiedDeploy,
 } from "./deploy"
+export { createLink, verifyLink, type VerifiedLink } from "./link"
 export {
   parseMessage,
   PendingDeploysResponseSchema,
@@ -121,12 +122,14 @@ export { LIMITS } from "./limits"
 export {
   CoreError,
   DEPLOY_REFUSALS,
+  LINK_REFUSALS,
   MESSAGE_REFUSALS,
   OPEN_REFUSALS,
   ROSTER_REFUSALS,
   SECRET_REFUSALS,
   type CoreErrorCode,
   type DeployRefusal,
+  type LinkRefusal,
   type MessageRefusal,
   type OpenRefusal,
   type Result,

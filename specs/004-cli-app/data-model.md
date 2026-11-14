@@ -5,7 +5,12 @@ Everything from feature 003's data model still holds. This lists what is added o
 ## In the project folder: `zekno.json`
 
 ```json
-{ "app": "demo", "server": "prod", "compose": "compose.yaml" }
+{
+  "app": "demo",
+  "server": "prod",
+  "compose": "compose.yaml",
+  "signed": { "payloadType": "zekno.link.v1", "payload": "<base64url>", "signature": { "keyId": "<32 hex>", "sig": "<base64url>" } }
+}
 ```
 
 | Field | Rule |
@@ -13,36 +18,66 @@ Everything from feature 003's data model still holds. This lists what is added o
 | `app` | `^[a-z0-9][a-z0-9-]{0,62}$` |
 | `server` | A server name: same pattern. Must be a server in the verified profile when used. |
 | `compose` | A relative path inside the folder that holds `zekno.json`. No `..`, not absolute. Default `compose.yaml`. |
+| `signed` | Optional. A signed envelope of the kind `zekno.link.v1` (packages/core, `createLink`): a member's signature over the team id, the server's id, the app and the Compose path. |
 
-Strict: an unknown field is an error, and so is a field written twice. No secret and no key ever
-goes in this file (FR-028). It is not signed and not trusted: the server it names is looked up in
-the verified profile, and the Compose file it names is read and signed like any other.
+Strict: an unknown field is an error, and so is a field written twice, also inside `signed`. No
+secret and no key ever goes in this file (FR-028): the signature and the key id are public, so it
+is safe to commit, also to a public repository. The three plain fields are for people; the
+signature is what makes the file count.
 
 It is looked for in the current folder, then each folder above it, stopping at the home folder
 or the filesystem root; a folder above home is never read. Only a regular file named exactly
 `zekno.json` (on a file system that ignores case, `ZEKNO.JSON` is not one), of at most 4096 bytes,
 that belongs to the user is used: a symbolic link, a pipe or another user's file is an error that
-names it. It is written only by `zekno link` or a "yes" in the app, never over an existing one
-without `--force`, as a whole file with mode 644.
+names it. It is written only by `zekno link` or a "yes" in the app, signed with this member's
+key, never over an existing one without `--force`, as a whole file with mode 644.
+
+### Signed by the team
+
+Decided by the maintainer on 2026-11-14 (research.md, R17). A file is **signed by the team** only
+when `verifyLink` accepts `signed` against the verified team list, as that list is now (a link
+signed by a current member whose role may deploy, for this team, naming one of its servers), and
+the signed content equals the plain fields: the same `app`, the same `compose`, and `server` is the
+name the team list gives the signed server id. Any other file is not signed by the team: one with
+no `signed`, one signed by another team, by a member since removed, one edited after signing, one
+signed for a server of another name, one whose `signed` is another kind of message (a deploy, a
+secret, a removal, a team list). Verifying needs the verified team list, so the keychain is read
+first; that is a read only, and every refusal comes before a signer is made, a connection opened
+or anything signed or sent.
 
 ### When a project file is used
 
-Only once this machine accepted it, byte for byte (`links.json`, below). It is accepted when
-`zekno link` writes it, when "remember this folder?" in the app is answered yes, and when
-`zekno link` is run with no names in a folder where a valid one already applies (it is then
-checked as one being written would be, recorded as it is and not rewritten). Any change to its
-bytes, an edit or a `git pull`, makes it not accepted again.
+A signature proves who wrote a file, not where it sits: anyone who can read a repository can copy
+its signed zekno.json into another folder beside another Compose file. So a file signed by the team
+is used without a question only once it was used in its folder on this machine, byte for byte
+(`links.json`, below, the record of first use).
 
-A zekno.json that is not accepted is never used:
+| The file | Command at a terminal | Command with no terminal | The app |
+|----------|-----------------------|--------------------------|---------|
+| Signed by the team, and in `links.json` | Used | Used | Used: focus, `d` |
+| Signed by the team, not in `links.json` | Asks once. Yes records it and goes on. No stops: nothing is done | Stops, exit status 2, sentence S2 | Asks once when the app opens |
+| Not signed by the team | Stops, exit status 2, sentence S1 | The same | Not used. Home shows S1's app form; `d` repeats it |
 
-- A command that would take the app or the server from it stops before anything is read from
-  the keychain, signed or sent, with exit status 2: "zekno.json in &lt;folder&gt; names &lt;app&gt;
-  on &lt;server&gt;. It was not made or accepted on this machine. To use it, run `zekno link` in
-  that folder. To leave it aside, give --app and --server." Given both `--app` and `--server`,
-  it is left aside, its Compose file too.
-- The app does not select what it names, and `d` deploys nothing in its folder: Home says
-  "zekno.json here names &lt;app&gt; on &lt;server&gt;. It was not made or accepted on this
-  machine. Run `zekno link` to accept it."
+- S1, commands: "zekno.json in &lt;folder&gt; is not signed by your team, so zekno does not use
+  it. It names &lt;app&gt; on &lt;server&gt;. To link this folder yourself, run `zekno link --app
+  <name> --server <name> --force`. To leave the file aside, give --app and --server."
+- S1, app (Home's problem line): "zekno.json here is not signed by your team, so zekno does not use
+  it. It names &lt;app&gt; on &lt;server&gt;." (from a folder below, the file's path in place of
+  "zekno.json here").
+- S2: "&lt;member&gt; linked &lt;folder&gt; to &lt;app&gt; on &lt;server&gt;, and it has not been
+  used in this folder on this machine. To use it, run `zekno link` there once. To leave it aside,
+  give --app and --server."
+- The question at a terminal: "&lt;member&gt; linked this folder to &lt;app&gt; on &lt;server&gt;.
+  Use it here?" Only `y` is yes; anything else stops with "Nothing was done." and exit status 1.
+- `<member>` is the signer's name from the signed team list, cleaned.
+
+It is recorded in `links.json` when `zekno link` writes and signs it, when "remember this folder?"
+in the app is answered yes, when the question above is answered yes, and when `zekno link` is run
+with no names where a file signed by the team applies (it is then checked as one being written
+would be, recorded as it is and not rewritten). Any change to its bytes, an edit or a `git pull`,
+makes it unused here again: still signed, it is asked about once more; edited by hand, it is not
+signed. A command given both `--app` and `--server` leaves the file aside unless it is in use here,
+and never asks about it; a file that cannot be read then counts as none.
 
 The Compose file it names goes with the app it names: a command whose app is another (`--app`)
 deploys `-f`, or compose.yaml in the current folder, as without a project file.
@@ -50,7 +85,7 @@ deploys `-f`, or compose.yaml in the current folder, as without a project file.
 ### The Compose file a deploy signs
 
 Read once, and the text read is the text signed and, in the app, the text whose expected values
-are listed. The one an accepted zekno.json names, and compose.yaml where nothing names another,
+are listed. The one a zekno.json in use names, and compose.yaml where nothing names another,
 must stay inside their folder: found by real path, opened without following a link or waiting
 on a pipe, a regular file of this user's with one name on the disk (no hard link), at most
 256 KiB, and still the same file inside the folder once read. A file named with `-f` may be
@@ -62,18 +97,20 @@ anywhere and is followed through links, but is read the same way otherwise.
 [{ "path": "/home/ada/code/shop/zekno.json", "sha256": "<64 hex>" }]
 ```
 
-The project files this machine accepted: the real path of each and the SHA-256 of its exact
-bytes, newest last, at most 500 (the oldest dropped first) and at most 1 MiB. Strict schema; a
+The record of first use: the project files used in their folder on this machine (written or
+signed here, or met signed by the team and answered yes), the real path of each and the SHA-256 of
+its exact bytes, newest last, at most 500 (the oldest dropped first) and at most 1 MiB. Strict schema; a
 file that is missing, too large, a link, another user's or does not match counts as empty, so
-nothing is accepted, and the next write replaces it. Written as a whole file (a temporary file,
+nothing is recorded, and the next write replaces it. Written as a whole file (a temporary file,
 then a rename that replaces a link instead of writing through it), mode 600. It holds no key and
 no secret.
 
 It is not signed, on purpose. Someone who can write the profile folder and also plant a project
 folder gains nothing from forging an entry that they do not have already: whoever controls a
-project folder the developer deploys from controls the Compose file that is deployed. The list
-protects against the other case: a folder the developer did not make, such as a cloned
-repository, on a machine nobody else can write to.
+project folder the developer deploys from controls the Compose file that is deployed. An entry
+alone never makes a file count either: a file must also be signed by the team. The list protects
+against the other case: a teammate's signed file copied into a folder the developer did not make,
+such as a cloned repository, on a machine nobody else can write to.
 
 ## In the CLI: the runner it installs (`apps/cli/src/runner-release.json`)
 

@@ -12,6 +12,8 @@ export const PAYLOAD_TYPES = {
   roster: "zekno.roster.v1",
   secret: "zekno.secret.v1",
   secretRemoval: "zekno.secret-removal.v1",
+  /** A member's statement that a folder deploys one app to one server (link.ts). Never sent to a runner. */
+  link: "zekno.link.v1",
 } as const
 export type PayloadType = (typeof PAYLOAD_TYPES)[keyof typeof PAYLOAD_TYPES]
 

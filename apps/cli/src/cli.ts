@@ -8,7 +8,7 @@ import { logs } from "./commands/logs"
 import { secretList, secretRemove, secretSet } from "./commands/secret"
 import { serverAdd, serverList, serverUpdate } from "./commands/server"
 import { status } from "./commands/status"
-import type { Deps } from "./context"
+import { openTeam, type Deps } from "./context"
 import { CliError, UsageError } from "./errors"
 import { withProject } from "./project"
 
@@ -101,8 +101,13 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
       throw new UsageError(name === "secret set" ? valueAsArgument(third) : `Unexpected "${positionals[WORDS[name]!]}" after \`zekno ${name}\`.`)
     }
 
-    // Details not given as flags come from the project file, once this machine accepted it (contracts/commands.md). Flags win.
-    const project = (wanted: Parameters<typeof withProject>[2]) => withProject(deps.cwd, values, wanted, { profile: deps.home })
+    // Details not given as flags come from the project file, when it is signed by the team and in use here (contracts/commands.md). Flags win.
+    const project = (wanted: Parameters<typeof withProject>[2]) =>
+      withProject(deps.cwd, values, wanted, {
+        profile: deps.home,
+        trust: async () => (await openTeam(deps)).trust,
+        confirm: (question, refusal) => deps.ui.confirm(question, refusal),
+      })
     switch (name) {
       case "init":
         await init(deps, values)
@@ -117,23 +122,23 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
         await serverList(deps)
         return 0
       case "secret set":
-        await secretSet(deps, third, project(["app", "server"]))
+        await secretSet(deps, third, await project(["app", "server"]))
         return 0
       case "secret rm":
-        await secretRemove(deps, third, project(["app", "server"]))
+        await secretRemove(deps, third, await project(["app", "server"]))
         return 0
       case "secret ls":
-        await secretList(deps, project(["app", "server"]))
+        await secretList(deps, await project(["app", "server"]))
         return 0
       case "deploy":
-        return await deploy(deps, { ...project(["app", "server", "file"]), typed: { app: values.app, server: values.server } })
+        return await deploy(deps, { ...(await project(["app", "server", "file"])), typed: { app: values.app, server: values.server } })
       case "rollback":
-        return await rollback(deps, { ...project(["app", "server"]), typed: { app: values.app, server: values.server } })
+        return await rollback(deps, { ...(await project(["app", "server"])), typed: { app: values.app, server: values.server } })
       case "status":
-        await status(deps, project(["server"]))
+        await status(deps, await project(["server"]))
         return 0
       case "logs":
-        await logs(deps, project(["app", "server"]))
+        await logs(deps, await project(["app", "server"]))
         return 0
       case "link":
         await link(deps, values)

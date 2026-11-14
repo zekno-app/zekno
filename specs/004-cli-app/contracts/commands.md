@@ -13,24 +13,40 @@ Everything in feature 003's command contract still holds unless this page change
 | `zekno server add <name> --local [--home <dir>]` | Unchanged. |
 | `zekno server update <name>` | Replaces the runner on a server with the version this CLI carries, by the same verified route. Asks first at a terminal; needs `--yes` without one. |
 | `zekno server ls` | Unchanged. |
-| `zekno secret set|rm|ls` | Unchanged. `--app` and `--server` may come from an accepted `zekno.json`. `secret set` names both before the value is asked for: `Value for NAME (api on dev): `. |
-| `zekno deploy [-f <file>]` | As before. `--app`, `--server` and the file may come from an accepted `zekno.json`; the file only when the app is the one it names. |
+| `zekno secret set|rm|ls` | Unchanged. `--app` and `--server` may come from a `zekno.json` signed by the team and in use here. `secret set` names both before the value is asked for: `Value for NAME (api on dev): `. |
+| `zekno deploy [-f <file>]` | As before. `--app`, `--server` and the file may come from a `zekno.json` signed by the team and in use here; the file only when the app is the one it names. |
 | `zekno rollback [--to <number>]` | As before, with the same defaults from `zekno.json`. |
 | `zekno status [--server <name>]` | As before, plus running or stopped for each app when the runner is new enough. |
 | `zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]` | Prints an app's logs, following until interrupted. Ctrl-C, or a reader that closes the pipe (`zekno logs \| head -1`), stops the reading on the server and ends the command quietly with status 0. |
-| `zekno link [--app <app>] [--server <name>] [-f <file>] [--force]` | Writes `zekno.json` in the current folder and records it as accepted on this machine. Refuses to overwrite one without `--force`. An app or server not given is taken from a `zekno.json` that already applies to the folder, only once this machine accepted it; from one it did not accept, nothing is taken and the command stops with exit status 2 and the sentence below; `-f` defaults to `compose.yaml` and must be a file inside the folder. With no `--app`, `--server` or `-f`, a valid `zekno.json` that already applies (in this folder or one above) is checked as one being written would be (its server connected, its Compose file a file inside its folder) and accepted as it is, not rewritten: `Accepted zekno.json: <app> on <server>, file <compose>.` (the file's path in place of `zekno.json` when it is in a folder above). Names given that are exactly those of the `zekno.json` in this folder accept it the same way, with no `--force`. |
+| `zekno link [--app <app>] [--server <name>] [-f <file>] [--force]` | Writes `zekno.json` in the current folder, signed with this member's key, and records it as used here (`links.json`). Refuses to overwrite one without `--force`; with `--force` and names it replaces any file with one signed here. An app or server not given is taken from a `zekno.json` that already applies to the folder, only when it is signed by the team and in use here; from any other, nothing is taken and the command stops with exit status 2 and S1 or S2 below; `-f` defaults to `compose.yaml` and must be a file inside the folder. With no `--app`, `--server` or `-f`, a `zekno.json` signed by the team that already applies (in this folder or one above) is checked as one being written would be (its server connected, its Compose file a file inside its folder) and recorded as it is, not rewritten: `Accepted zekno.json: <app> on <server>, file <compose>.` (the file's path in place of `zekno.json` when it is in a folder above). This is how a teammate's file is used here for the first time without a terminal. A file not signed by the team is refused with S1. Names given that are exactly those of a `zekno.json` signed by the team in this folder record it the same way, with no `--force`. |
 
 Flags win over `zekno.json`. A command that still lacks a detail fails with a message naming the
 flag and the project file. A command never asks a question when there is no terminal (FR-033).
 
-A `zekno.json` is used only once this machine accepted it (data-model.md, "When a project file
-is used"). A command that would take its app or server from one that was not made or accepted
-here stops before anything is read from the keychain, signed or sent, with exit status 2 and:
-"zekno.json in &lt;folder&gt; names &lt;app&gt; on &lt;server&gt;. It was not made or accepted on
-this machine. To use it, run `zekno link` in that folder. To leave it aside, give --app and
---server." (with the usage hint every exit status 2 has). Given both `--app` and `--server`, it
-is not used at all, and one that cannot be read (a link, another user's file, not valid JSON)
-counts as no `zekno.json`.
+A `zekno.json` is used only when it is signed by the team, and without a question only once it
+was used in its folder on this machine (data-model.md, "Signed by the team" and "When a project
+file is used"; decided by the maintainer on 2026-11-14, research R17):
+
+| The file | Command at a terminal | Command with no terminal |
+|----------|-----------------------|--------------------------|
+| Signed by the team, and in `links.json` | Used | Used |
+| Signed by the team, not in `links.json` | Asks once (`Ui.confirm`). Yes records it and goes on. No, or anything but `y`, stops with "Nothing was done." and exit status 1 | Stops, exit status 2, S2 |
+| Not signed by the team (no signature, another team, a removed member, changed after signing, a server this team does not have) | Stops, exit status 2, S1 | The same |
+
+- The question: "&lt;member&gt; linked this folder to &lt;app&gt; on &lt;server&gt;. Use it here?"
+- S1: "zekno.json in &lt;folder&gt; is not signed by your team, so zekno does not use it. It names
+  &lt;app&gt; on &lt;server&gt;. To link this folder yourself, run `zekno link --app <name>
+  --server <name> --force`. To leave the file aside, give --app and --server."
+- S2: "&lt;member&gt; linked &lt;folder&gt; to &lt;app&gt; on &lt;server&gt;, and it has not been
+  used in this folder on this machine. To use it, run `zekno link` there once. To leave it aside,
+  give --app and --server."
+
+S1 and S2 carry the usage hint every exit status 2 has. `<member>` is the signer's name from the
+signed team list, cleaned. Judging a file reads the verified team list, so the keychain is read
+first; every refusal and the question come before any connection is opened, any signer made or
+anything signed or sent. Given both `--app` and `--server`, the file is left aside unless it is
+in use here, and is never asked about; one that cannot be read (a link, another user's file, not
+valid JSON) counts as no `zekno.json`.
 
 Its Compose file goes with its app. With `--app` naming another app, the Compose file is `-f`, or
 `compose.yaml` in the current folder, as without a project file.

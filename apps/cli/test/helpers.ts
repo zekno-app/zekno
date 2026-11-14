@@ -72,6 +72,21 @@ export function machine(options: { realDocker?: boolean } = {}) {
   }
 }
 
+/**
+ * Another machine of the same member: a profile folder of its own with the
+ * same team and servers, and the same key in a key store of its own, as on a
+ * second computer. It has no `links.json` of its own yet, so a zekno.json
+ * used on the first machine is new to it.
+ */
+export async function twin(m: ReturnType<typeof machine>) {
+  const other = machine()
+  const profile = readFileSync(join(m.home, "profile.json"), "utf8")
+  writeFileSync(join(other.home, "profile.json"), profile, { mode: 0o600 })
+  const keyName: string = JSON.parse(profile).keyName
+  await other.keyStore.set(keyName, (await m.keyStore.get(keyName))!)
+  return other
+}
+
 /** A machine with a team, a connected local runner, and a Compose file. */
 export async function ready(options: { realDocker?: boolean } = {}) {
   const m = machine(options)

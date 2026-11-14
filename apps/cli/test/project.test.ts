@@ -1,5 +1,17 @@
 import { describe, expect, spyOn, test } from "bun:test"
-import { LIMITS } from "@workspace/core"
+import {
+  createDeploy,
+  createLink,
+  createSecret,
+  createSigner,
+  createTeam,
+  generateMemberKeyPair,
+  generateServerKeyPair,
+  LIMITS,
+  proposeRoster,
+  type Signer,
+  type TeamTrust,
+} from "@workspace/core"
 import {
   existsSync,
   linkSync,
@@ -18,11 +30,26 @@ import { join } from "node:path"
 import { tempDir } from "../../runner/test/helpers"
 import { accept, acceptedLinks, isAccepted, LINKS_BYTES, LINKS_FILE, LINKS_KEPT, sha256Of } from "../src/accepted"
 import { readCompose } from "../src/compose-read"
+import { openTeam } from "../src/context"
 import { CliError, UsageError } from "../src/errors"
-import { composeFor, findProject, flatKeys, notAccepted, PROJECT_BYTES, withProject, writeProject, type Details, type ProjectLink } from "../src/project"
-import { machine, ready } from "./helpers"
+import {
+  composeFor,
+  findProject,
+  notSigned,
+  notUsedHere,
+  objectKeys,
+  PROJECT_BYTES,
+  signerOf,
+  withProject,
+  writeProject,
+  type Details,
+  type ProjectLink,
+} from "../src/project"
+import { machine, ready, twin } from "./helpers"
 
 const LINK = { app: "demo", server: "dev", compose: "compose.yaml" }
+/** A `signed` of the right shape. Whether it is the team's is judged later (`signerOf`), not when the file is read. */
+const SIGNED = { payloadType: "zekno.link.v1", payload: "e30", signature: { keyId: "0".repeat(32), sig: "A".repeat(86) } }
 const json = (value: unknown) => JSON.stringify(value)
 
 /** A folder tree for searching: a home folder with a project in it, and a folder outside home. Real paths, with no link in them. */
@@ -117,7 +144,11 @@ describe("a zekno.json that is not right stops the command and names it", () => 
     ["not UTF-8", "\xff\xfe{}", "is not valid JSON."],
     ["not an object", json(["demo", "dev"]), 'is not a JSON object with an "app", a "server" and a "compose".'],
     ["null", "null", 'is not a JSON object with an "app", a "server" and a "compose".'],
-    ["an unknown field", json({ ...LINK, token: "x" }), 'has a field zekno does not read: "token". It holds only "app", "server" and "compose".'],
+    ["an unknown field", json({ ...LINK, token: "x" }), 'has a field zekno does not read: "token". It holds only "app", "server", "compose" and "signed".'],
+    ["a signed that is not a signature", json({ ...LINK, signed: 5 }), 'has a "signed" that is not a signature zekno reads.'],
+    ["a signed with a field more", json({ ...LINK, signed: { ...SIGNED, folder: "/home/ada" } }), 'has a "signed" that is not a signature zekno reads.'],
+    ["a signed with a field more in its signature", json({ ...LINK, signed: { ...SIGNED, signature: { ...SIGNED.signature, by: "Ada" } } }), 'has a "signed" that is not a signature zekno reads.'],
+    ["a field written twice inside signed", json({ ...LINK, signed: SIGNED }).replace('"payload":', '"payload":"","payload":'), "has the same field more than once."],
     ["a secret", json({ ...LINK, secrets: { API_KEY: "v" } }), 'has a field zekno does not read: "secrets".'],
     ["an unknown field with escapes", json({ ...LINK, "\u001b]52;c;aGk=\u0007x": 1 }), 'has a field zekno does not read: "x".'],
     ["no app", json({ server: "dev" }), 'needs "app": an app name of lowercase letters, digits and hyphens.'],
@@ -283,39 +314,103 @@ describe("the Compose file it names, read once", () => {
   })
 })
 
-describe("flags win over the file, and only a file this machine accepted is used", () => {
-  /** A tree whose zekno.json is accepted in a profile folder of its own. */
-  function acceptedTree(content: unknown = LINK) {
+/**
+ * A team of one admin with two servers, dev and prod, made with the core
+ * library as `zekno init` and `zekno server add` make it, and a way to sign
+ * a zekno.json for it as `zekno link` does.
+ */
+async function signingTeam(name = "Ada") {
+  const pair = generateMemberKeyPair()
+  const signer = createSigner(pair.secretKey)
+  const founded = await createTeam({ founderName: name, signer })
+  const servers = { dev: generateServerKeyPair(), prod: generateServerKeyPair() }
+  const { trust } = await proposeRoster({
+    trust: founded.trust,
+    servers: Object.entries(servers).map(([server, keys]) => ({ name: server, publicKey: keys.publicKey })),
+    signer,
+  })
+  /** The file's content, signed for the server `as` (its own by default) by `by` (the founder by default). */
+  const signed = async (link: { app: string; server: string; compose?: string }, options: { as?: "dev" | "prod"; by?: Signer; trust?: TeamTrust } = {}) => ({
+    ...link,
+    signed: await createLink({
+      trust: options.trust ?? trust,
+      serverId: servers[options.as ?? (link.server as "dev" | "prod")].serverId,
+      app: link.app,
+      compose: link.compose ?? "compose.yaml",
+      signer: options.by ?? signer,
+    }),
+  })
+  return { trust, signer, servers, signed }
+}
+
+/**
+ * How a command judges a file in these tests: the team list given, and a
+ * terminal that answers `answer`, or none at all when it is undefined. Each
+ * question and each read of the team list is counted.
+ */
+function judge(trust: TeamTrust, answer?: boolean) {
+  const asked: { question: string; refusal: string }[] = []
+  let reads = 0
+  return {
+    asked,
+    reads: () => reads,
+    trust: async () => (reads++, trust),
+    confirm: async (question: string, refusal: string) => {
+      asked.push({ question, refusal })
+      if (answer === undefined) throw new CliError(refusal)
+      return answer
+    },
+  }
+}
+
+/** The sentence a promise rejects with, and whether it is the person's to fix (1) or wrong usage (2). */
+async function rejected(work: () => Promise<unknown>): Promise<{ status: 1 | 2; message: string } | undefined> {
+  try {
+    await work()
+  } catch (error) {
+    if (error instanceof UsageError) return { status: 2, message: error.message }
+    if (error instanceof CliError) return { status: 1, message: error.message }
+    throw error
+  }
+  return undefined
+}
+
+describe("flags win over the file, and only a file signed by the team and in use here is used", () => {
+  /** A tree whose zekno.json is signed by the team and was used here, as recorded in a profile folder of its own. */
+  async function usedTree(content: { app: string; server: string; compose?: string } = LINK) {
     const t = tree()
+    const team = await signingTeam()
     const profile = tempDir("profile")
-    writeFileSync(join(t.project, "zekno.json"), json(content))
+    writeFileSync(join(t.project, "zekno.json"), json(await team.signed(content)))
     writeFileSync(join(t.project, "compose.yaml"), "services: {}\n")
     accept(profile, findProject(t.project, t.home)!)
-    return { ...t, profile, places: { profile, home: t.home } }
+    const judged = judge(team.trust)
+    return { ...t, team, profile, judged, places: { profile, home: t.home, ...judged } }
   }
 
-  test("each detail not given comes from an accepted file; the server's source is named for its sentence", () => {
-    const t = acceptedTree()
+  test("each detail not given comes from a file in use here; the server's source is named for its sentence; nothing is asked", async () => {
+    const t = await usedTree()
     const link = findProject(t.project, t.home)!
-    expect(withProject<Details>(t.sub, {}, ["app", "server", "file"], t.places)).toEqual({
+    expect(await withProject<Details>(t.sub, {}, ["app", "server", "file"], t.places)).toEqual({
       app: "demo",
       server: "dev",
       serverFrom: join(t.project, "zekno.json"),
       project: link,
     })
-    expect(withProject<Details>(t.sub, { server: "prod" }, ["app", "server"], t.places)).toEqual({ app: "demo", server: "prod" })
+    expect(await withProject<Details>(t.sub, { server: "prod" }, ["app", "server"], t.places)).toEqual({ app: "demo", server: "prod" })
+    expect(t.judged.asked).toEqual([])
   })
 
-  test("its Compose file goes with its app: another --app gets -f or the current folder's compose.yaml, the same app gets the file's", () => {
-    const t = acceptedTree()
-    expect(withProject<Details>(t.sub, { app: "other" }, ["app", "server", "file"], t.places)).toEqual({
+  test("its Compose file goes with its app: another --app gets -f or the current folder's compose.yaml, the same app gets the file's", async () => {
+    const t = await usedTree()
+    expect(await withProject<Details>(t.sub, { app: "other" }, ["app", "server", "file"], t.places)).toEqual({
       app: "other",
       server: "dev",
       serverFrom: join(t.project, "zekno.json"),
     })
-    expect(withProject<Details>(t.sub, { app: "other", server: "dev" }, ["app", "server", "file"], t.places)).toEqual({ app: "other", server: "dev" })
-    expect(withProject<Details>(t.sub, { app: "demo", server: "dev" }, ["app", "server", "file"], t.places)).toMatchObject({ project: { app: "demo" } })
-    expect(withProject<Details>(t.sub, { file: "x.yaml" }, ["app", "server", "file"], t.places)).toEqual({
+    expect(await withProject<Details>(t.sub, { app: "other", server: "dev" }, ["app", "server", "file"], t.places)).toEqual({ app: "other", server: "dev" })
+    expect(await withProject<Details>(t.sub, { app: "demo", server: "dev" }, ["app", "server", "file"], t.places)).toMatchObject({ project: { app: "demo" } })
+    expect(await withProject<Details>(t.sub, { file: "x.yaml" }, ["app", "server", "file"], t.places)).toEqual({
       app: "demo",
       server: "dev",
       serverFrom: join(t.project, "zekno.json"),
@@ -323,48 +418,133 @@ describe("flags win over the file, and only a file this machine accepted is used
     })
   })
 
-  test("a file this machine did not accept stops a command that needs a name from it; given --app and --server it is left aside", () => {
+  test("a file not signed by the team stops a command that needs a name from it (S1), and is never asked about; given --app and --server it is left aside", async () => {
     const t = tree()
-    const places = { profile: tempDir("profile"), home: t.home }
+    const team = await signingTeam()
+    const judged = judge(team.trust, true)
+    const places = { profile: tempDir("profile"), home: t.home, ...judged }
     writeFileSync(join(t.project, "zekno.json"), json(LINK))
     const link = findProject(t.project, t.home)!
-    const sentence = `zekno.json in ${t.project} names demo on dev. It was not made or accepted on this machine. To use it, run \`zekno link\` in that folder. To leave it aside, give --app and --server.`
-    expect(notAccepted(link)).toBe(sentence)
+    const sentence =
+      `zekno.json in ${t.project} is not signed by your team, so zekno does not use it. It names demo on dev. ` +
+      "To link this folder yourself, run `zekno link --app <name> --server <name> --force`. To leave the file aside, give --app and --server."
+    expect(notSigned(link)).toBe(sentence)
     for (const given of [{}, { app: "demo" }, { server: "dev" }] as Details[]) {
-      expect(thrown(() => withProject(t.sub, given, ["app", "server", "file"], places))).toEqual({ status: 2, message: sentence })
+      expect(await rejected(() => withProject(t.sub, given, ["app", "server", "file"], places))).toEqual({ status: 2, message: sentence })
     }
-    expect(thrown(() => withProject(t.sub, {}, ["server"], places))).toEqual({ status: 2, message: sentence })
+    expect(await rejected(() => withProject(t.sub, {}, ["server"], places))).toEqual({ status: 2, message: sentence })
+    // Recorded here, as the zekno before signed links accepted a file, it is still not used.
+    accept(places.profile, link)
+    expect(await rejected(() => withProject(t.sub, {}, ["app", "server"], places))).toEqual({ status: 2, message: sentence })
+    expect(judged.asked).toEqual([])
     // Its Compose file is not taken either.
-    expect(withProject<Details>(t.sub, { app: "demo", server: "dev" }, ["app", "server", "file"], places)).toEqual({ app: "demo", server: "dev" })
+    expect(await withProject<Details>(t.sub, { app: "demo", server: "dev" }, ["app", "server", "file"], places)).toEqual({ app: "demo", server: "dev" })
   })
 
-  test("any change to its bytes makes it not accepted again; accepting it again uses it", () => {
-    const t = acceptedTree()
-    expect(withProject<Details>(t.sub, {}, ["app", "server"], t.places)).toMatchObject({ app: "demo" })
-    // An edit, or a `git pull`, that changes one byte.
-    writeFileSync(join(t.project, "zekno.json"), `${json(LINK)}\n`)
-    expect(thrown(() => withProject(t.sub, {}, ["app", "server"], t.places))?.status).toBe(2)
-    writeFileSync(join(t.project, "zekno.json"), json({ ...LINK, app: "evil" }))
-    expect(thrown(() => withProject(t.sub, {}, ["app", "server"], t.places))?.message).toContain("names evil on dev.")
-    accept(t.profile, findProject(t.project, t.home)!)
-    expect(withProject<Details>(t.sub, {}, ["app", "server"], t.places)).toMatchObject({ app: "evil" })
+  test("not signed by the team: another team's, a removed member's, a plain field edited after signing, another server's, another kind of message", async () => {
+    const t = tree()
+    const team = await signingTeam()
+    const other = await signingTeam("Mallory")
+    const grace = createSigner(generateMemberKeyPair().secretKey)
+    const withGrace = await proposeRoster({ trust: team.trust, members: [...team.trust.members, { name: "Grace", publicKey: grace.publicKey, role: "deployer" }], signer: team.signer })
+    const without = await proposeRoster({ trust: withGrace.trust, members: team.trust.members, signer: team.signer })
+    const genuine = await team.signed(LINK)
+    const deploy = await createDeploy({ trust: team.trust, serverId: team.servers.dev.serverId, app: "demo", sequence: 1, compose: "services: {}\n", secrets: [], signer: team.signer })
+    const secret = await createSecret({ trust: team.trust, serverId: team.servers.dev.serverId, app: "demo", name: "API_KEY", value: "demo-value", version: 1, signer: team.signer })
+    const cases: [string, unknown, TeamTrust][] = [
+      ["another team's", await other.signed(LINK), team.trust],
+      ["a removed member's", await team.signed(LINK, { by: grace, trust: withGrace.trust }), without.trust],
+      ["the app edited after signing", { ...genuine, app: "web" }, team.trust],
+      ["the server edited after signing", { ...genuine, server: "prod" }, team.trust],
+      ["the Compose file edited after signing", { ...genuine, compose: "other.yaml" }, team.trust],
+      ["the Compose file left out, signed for another", { app: "demo", server: "dev", signed: (await team.signed({ ...LINK, compose: "other.yaml" })).signed }, team.trust],
+      ["signed for a server of another name", await team.signed(LINK, { as: "prod" }), team.trust],
+      ["a deploy of this team", { ...LINK, signed: deploy.envelope }, team.trust],
+      ["a secret of this team", { ...LINK, signed: secret.envelope }, team.trust],
+    ]
+    // The removed member's link counted while she was in the team.
+    writeFileSync(join(t.project, "zekno.json"), json(cases[1]![1]))
+    expect(signerOf(findProject(t.project, t.home)!, withGrace.trust)?.name).toBe("Grace")
+    for (const [what, content, trust] of cases) {
+      writeFileSync(join(t.project, "zekno.json"), json(content))
+      const link = findProject(t.project, t.home)!
+      expect({ what, signer: signerOf(link, trust) }).toEqual({ what, signer: undefined })
+      const places = { profile: tempDir("profile"), home: t.home, ...judge(trust, true) }
+      accept(places.profile, link)
+      expect({ what, refused: (await rejected(() => withProject(t.sub, {}, ["app", "server"], places)))?.message }).toEqual({ what, refused: notSigned(link) })
+    }
+    // And the genuine one is signed by Ada.
+    writeFileSync(join(t.project, "zekno.json"), json(genuine))
+    expect(signerOf(findProject(t.project, t.home)!, team.trust)).toMatchObject({ name: "Ada", role: "admin" })
+  })
+
+  test("a file signed by the team and not used here before is asked about once: with no terminal it stops (S2); no does nothing; yes records it", async () => {
+    const t = tree()
+    const team = await signingTeam()
+    const profile = tempDir("profile")
+    writeFileSync(join(t.project, "zekno.json"), json(await team.signed(LINK)))
+    const link = findProject(t.project, t.home)!
+    const s2 = `Ada linked ${t.project} to demo on dev, and it has not been used in this folder on this machine. To use it, run \`zekno link\` there once. To leave it aside, give --app and --server.`
+    expect(notUsedHere("Ada", link)).toBe(s2)
+    const question = "Ada linked this folder to demo on dev. Use it here?"
+
+    const none = judge(team.trust)
+    expect(await rejected(() => withProject(t.sub, {}, ["app", "server"], { profile, home: t.home, ...none }))).toEqual({ status: 2, message: s2 })
+    expect(none.asked).toEqual([{ question, refusal: s2 }])
+    expect(acceptedLinks(profile)).toEqual([])
+
+    const no = judge(team.trust, false)
+    expect(await rejected(() => withProject(t.sub, {}, ["app", "server"], { profile, home: t.home, ...no }))).toEqual({ status: 1, message: "Nothing was done." })
+    expect(acceptedLinks(profile)).toEqual([])
+
+    // Given both names it is never asked about, and its Compose file is not taken while it is not in use here.
+    const both = judge(team.trust, true)
+    expect(await withProject<Details>(t.sub, { app: "demo", server: "dev" }, ["app", "server", "file"], { profile, home: t.home, ...both })).toEqual({ app: "demo", server: "dev" })
+    expect(both.asked).toEqual([])
+
+    const yes = judge(team.trust, true)
+    const places = { profile, home: t.home, ...yes }
+    expect(await withProject<Details>(t.sub, {}, ["app", "server", "file"], places)).toMatchObject({ app: "demo", server: "dev", project: link })
+    expect(acceptedLinks(profile)).toEqual([{ path: link.path, sha256: link.sha256 }])
+    expect(await withProject<Details>(t.sub, {}, ["app", "server"], places)).toMatchObject({ app: "demo", server: "dev" })
+    expect(yes.asked).toEqual([{ question, refusal: s2 }])
+    expect(await withProject<Details>(t.sub, { app: "demo", server: "dev" }, ["app", "server", "file"], places)).toMatchObject({ project: link })
+  })
+
+  test("any change to its bytes makes it new here again: signed still, it is asked about; edited, it is not signed", async () => {
+    const t = await usedTree()
+    expect(await withProject<Details>(t.sub, {}, ["app", "server"], t.places)).toMatchObject({ app: "demo" })
+    // A byte more, still signed: not used here before.
+    const text = readFileSync(join(t.project, "zekno.json"), "utf8")
+    writeFileSync(join(t.project, "zekno.json"), `${text}\n`)
+    expect((await rejected(() => withProject(t.sub, {}, ["app", "server"], t.places)))?.message).toStartWith("Ada linked ")
+    // Signed again for another app, as a teammate's `zekno link --force` and a `git pull` bring it.
+    writeFileSync(join(t.project, "zekno.json"), json(await t.team.signed({ ...LINK, app: "evil" })))
+    expect((await rejected(() => withProject(t.sub, {}, ["app", "server"], t.places)))?.message).toStartWith(`Ada linked ${t.project} to evil on dev,`)
+    // Edited by hand: not signed.
+    writeFileSync(join(t.project, "zekno.json"), json({ ...JSON.parse(text), app: "evil" }))
+    expect((await rejected(() => withProject(t.sub, {}, ["app", "server"], t.places)))?.message).toStartWith(`zekno.json in ${t.project} is not signed by your team`)
     // The same bytes in another folder are another file.
-    writeFileSync(join(t.home, "zekno.json"), json({ ...LINK, app: "evil" }))
-    expect(thrown(() => withProject(t.home, {}, ["app", "server"], t.places))?.status).toBe(2)
+    writeFileSync(join(t.project, "zekno.json"), text)
+    writeFileSync(join(t.home, "zekno.json"), text)
+    expect(await withProject<Details>(t.sub, {}, ["app", "server"], t.places)).toMatchObject({ app: "demo" })
+    expect((await rejected(() => withProject(t.home, {}, ["app", "server"], t.places)))?.status).toBe(2)
   })
 
-  test("a command given every detail never reads the file, so a broken one does not get in its way", () => {
+  test("a command given every detail never reads the file, nor the team list, so a broken one does not get in its way", async () => {
     const t = tree()
     writeFileSync(join(t.project, "zekno.json"), "{ broken")
     const given = { app: "demo", server: "dev", file: "c.yaml", json: true }
-    const places = { profile: tempDir("profile"), home: t.home }
-    expect(withProject(t.project, given, ["app", "server", "file"], places)).toBe(given)
-    expect(thrown(() => withProject(t.project, { app: "demo" }, ["app", "server"], places))?.message).toContain("is not valid JSON.")
+    const judged = judge((await signingTeam()).trust, true)
+    const places = { profile: tempDir("profile"), home: t.home, ...judged }
+    expect(await withProject(t.project, given, ["app", "server", "file"], places)).toBe(given)
+    expect((await rejected(() => withProject(t.project, { app: "demo" }, ["app", "server"], places)))?.message).toContain("is not valid JSON.")
+    expect(judged.reads()).toBe(0)
   })
 
-  test("given --app and --server, a file that cannot be read is no file: here or above, a link, bad JSON or another user's", () => {
+  test("given --app and --server, a file that cannot be read is no file: here or above, a link, bad JSON or another user's", async () => {
     const t = tree()
-    const places = { profile: tempDir("profile"), home: t.home }
+    const places = { profile: tempDir("profile"), home: t.home, ...judge((await signingTeam()).trust, true) }
     const both = { app: "demo", server: "dev" }
     const broken: [string, () => void][] = [
       ["bad JSON here", () => writeFileSync(join(t.sub, "zekno.json"), "{ broken")],
@@ -375,33 +555,42 @@ describe("flags win over the file, and only a file this machine accepted is used
       rmSync(join(t.sub, "zekno.json"), { force: true })
       rmSync(join(t.project, "zekno.json"), { force: true })
       plant()
-      expect({ what, details: withProject<Details>(t.sub, both, ["app", "server", "file"], places) }).toEqual({ what, details: both })
+      expect({ what, details: await withProject<Details>(t.sub, both, ["app", "server", "file"], places) }).toEqual({ what, details: both })
       // A command that needs a name from it is still stopped, and says why.
-      expect({ what, problem: thrown(() => withProject(t.sub, { app: "demo" }, ["app", "server", "file"], places))?.status }).toEqual({ what, problem: 1 })
+      expect({ what, problem: (await rejected(() => withProject(t.sub, { app: "demo" }, ["app", "server", "file"], places)))?.status }).toEqual({ what, problem: 1 })
     }
     // Another user's: where there are user ids, a file that is not this user's is refused the same way.
     const getuid = spyOn(process, "getuid").mockReturnValue((process.getuid?.() ?? 0) + 1)
     try {
       rmSync(join(t.sub, "zekno.json"), { force: true })
       writeFileSync(join(t.sub, "zekno.json"), json(LINK))
-      expect(withProject<Details>(t.sub, both, ["app", "server", "file"], places)).toEqual(both)
-      expect(thrown(() => withProject(t.sub, {}, ["app", "server"], places))?.message).toContain("belongs to another user")
+      expect(await withProject<Details>(t.sub, both, ["app", "server", "file"], places)).toEqual(both)
+      expect((await rejected(() => withProject(t.sub, {}, ["app", "server"], places)))?.message).toContain("belongs to another user")
     } finally {
       getuid.mockRestore()
     }
   })
 
-  test("with no file, what was given is passed on as it is", () => {
+  test("with no file, what was given is passed on as it is, and the team list is not read", async () => {
     const t = tree()
-    expect(withProject(t.sub, { app: "demo" }, ["app", "server"], { profile: tempDir("profile"), home: t.home })).toEqual({ app: "demo" })
+    const judged = judge((await signingTeam()).trust, true)
+    expect(await withProject(t.sub, { app: "demo" }, ["app", "server"], { profile: tempDir("profile"), home: t.home, ...judged })).toEqual({ app: "demo" })
+    expect(judged.reads()).toBe(0)
   })
 
-  test("a duplicate field is noticed however it is written; other shapes are not read as flat", () => {
-    expect(flatKeys('{"app":"a","server":"s"}')).toEqual(["app", "server"])
-    expect(flatKeys(' { "app" : "a" , "\\u0061pp" : "b" } ')).toEqual(["app", "app"])
-    expect(flatKeys('{"a":"x\\"y"}')).toEqual(["a"])
-    expect(flatKeys("{}")).toEqual([])
-    for (const text of ['["a"]', '{"a":1}', '{"a":"b"', '{"a" "b"}', '{"a":"b",}']) expect(flatKeys(text)).toBeUndefined()
+  test("a duplicate field is noticed however it is written, inside `signed` too; other shapes are not read", () => {
+    expect(objectKeys('{"app":"a","server":"s"}')).toEqual(["app", "server"])
+    expect(objectKeys(' { "app" : "a" , "\\u0061pp" : "b" } ')).toEqual(["app", "app"])
+    expect(objectKeys('{"a":"x\\"y"}')).toEqual(["a"])
+    expect(objectKeys("{}")).toEqual([])
+    for (const text of ['["a"]', '{"a":1}', '{"a":"b"', '{"a" "b"}', '{"a":"b",}']) expect(objectKeys(text)).toBeUndefined()
+    // Objects inside: their keys are checked, and only the outer ones are returned.
+    expect(objectKeys('{"app":"a","signed":{"payload":"p","signature":{"keyId":"k","sig":"s"}}}')).toEqual(["app", "signed"])
+    expect(objectKeys('{"signed":{"payload":"p","payload":"q"}}')).toBeUndefined()
+    expect(objectKeys('{"signed":{"signature":{"sig":"s","\\u0073ig":"t"}}}')).toBeUndefined()
+    expect(objectKeys('{"a":{"b":{"c":{"d":"too deep"}}}}')).toBeUndefined()
+    expect(objectKeys(`${'{"a":'.repeat(2000)}"x"${"}".repeat(2000)}`)).toBeUndefined()
+    expect(objectKeys('{"a":"b"} {"c":"d"}')).toBeUndefined()
   })
 })
 
@@ -544,66 +733,98 @@ describe("the Compose file `zekno link -f` names", () => {
 })
 
 describe("zekno link", () => {
-  test("writes zekno.json in the current folder from the flags, with the server checked against the verified profile", async () => {
+  /** Who signed the zekno.json that applies to `folder`, judged against `m`'s verified team list; undefined when it is not signed by the team. */
+  async function signer(m: ReturnType<typeof machine>, folder = m.project) {
+    return signerOf(findProject(folder)!, (await openTeam(m.deps)).trust)
+  }
+
+  test("writes zekno.json in the current folder from the flags, signed with this member's key, with the server checked against the verified profile", async () => {
     const m = await ready()
     expect(await m.zekno("link", "--app", "web", "--server", "dev")).toBe(0)
     expect(m.lastOut()).toBe(
       `Wrote ${join(m.project, "zekno.json")}: this folder deploys web to dev from compose.yaml. It holds no secret and is safe to commit.`
     )
-    expect(JSON.parse(readFileSync(join(m.project, "zekno.json"), "utf8"))).toEqual({ app: "web", server: "dev", compose: "compose.yaml" })
+    const written = JSON.parse(readFileSync(join(m.project, "zekno.json"), "utf8"))
+    // Three names and the team's signature of them, nothing else.
+    expect(Object.keys(written)).toEqual(["app", "server", "compose", "signed"])
+    expect(written).toMatchObject({ app: "web", server: "dev", compose: "compose.yaml", signed: { payloadType: "zekno.link.v1" } })
+    expect(Object.keys(written.signed.signature)).toEqual(["keyId", "sig"])
+    expect(await signer(m)).toMatchObject({ name: "Ada", role: "admin" })
   })
 
-  test("refuses to replace one without --force; with --force a name not given is kept from it", async () => {
+  test("refuses to replace one without --force; with --force a name not given is kept from it, and the new file is signed", async () => {
     const m = await ready()
     expect(await m.zekno("link", "--app", "web", "--server", "dev")).toBe(0)
     expect(await m.zekno("link", "--app", "api", "--server", "dev")).toBe(1)
     expect(m.lastErr()).toBe(`There is already a zekno.json in ${m.project}. Run \`zekno link --force\` to replace it.`)
     m.compose("services: {}\n", "other.yaml")
     expect(await m.zekno("link", "--app", "api", "-f", "other.yaml", "--force")).toBe(0)
-    expect(JSON.parse(readFileSync(join(m.project, "zekno.json"), "utf8"))).toEqual({ app: "api", server: "dev", compose: "other.yaml" })
+    expect(JSON.parse(readFileSync(join(m.project, "zekno.json"), "utf8"))).toMatchObject({ app: "api", server: "dev", compose: "other.yaml" })
+    expect(await signer(m)).toMatchObject({ name: "Ada" })
   })
 
-  test("what it writes is accepted on this machine: links.json holds its real path and the SHA-256 of its bytes", async () => {
+  test("what it writes is used on this machine: links.json holds its real path and the SHA-256 of its bytes", async () => {
     const m = await ready()
     expect(await m.zekno("link", "--app", "web", "--server", "dev")).toBe(0)
     const path = join(realpathSync(m.project), "zekno.json")
     expect(acceptedLinks(m.home)).toEqual([{ path, sha256: sha256Of(readFileSync(path)) }])
   })
 
-  test("with no names, it accepts a zekno.json that came from elsewhere as it is, without rewriting it, once its server is connected", async () => {
+  test("with no names, it records a zekno.json signed by the team as it is, without rewriting it; one not signed by the team is refused (S1)", async () => {
     const m = await ready()
-    const path = join(m.project, "zekno.json")
-    const text = '{"app":"web","server":"dev"}'
-    writeFileSync(path, text)
-    expect(await m.zekno("link")).toBe(0)
-    expect(m.lastOut()).toBe("Accepted zekno.json: web on dev, file compose.yaml.")
-    expect(readFileSync(path, "utf8")).toBe(text)
-    expect(isAccepted(m.home, findProject(m.project)!)).toBe(true)
-    // From a folder below, the one that applies is accepted, and named.
-    writeFileSync(path, '{"app":"api","server":"dev"}')
-    mkdirSync(join(m.project, "sub"))
-    m.deps.cwd = join(m.project, "sub")
-    expect(await m.zekno("link")).toBe(0)
-    expect(m.lastOut()).toBe(`Accepted ${join(realpathSync(m.project), "zekno.json")}: api on dev, file compose.yaml.`)
-    expect(readdirSync(join(m.project, "sub"))).toEqual([])
-    m.deps.cwd = m.project
-    // Names that are exactly its own accept it too, with no --force; others need --force, as before.
-    writeFileSync(path, '{"app":"web","server":"dev"}')
     expect(await m.zekno("link", "--app", "web", "--server", "dev")).toBe(0)
-    expect(m.lastOut()).toBe("Accepted zekno.json: web on dev, file compose.yaml.")
-    expect(readFileSync(path, "utf8")).toBe('{"app":"web","server":"dev"}')
+    const path = join(m.project, "zekno.json")
+    const text = readFileSync(path, "utf8")
+    // The same member on a second machine meets it for the first time: `zekno link` is how it is used there without a terminal.
+    const other = await twin(m)
+    other.deps.cwd = m.project
+    expect(await other.zekno("link")).toBe(0)
+    expect(other.lastOut()).toBe("Accepted zekno.json: web on dev, file compose.yaml.")
+    expect(readFileSync(path, "utf8")).toBe(text)
+    expect(acceptedLinks(other.home)).toEqual([{ path: join(realpathSync(m.project), "zekno.json"), sha256: sha256Of(text) }])
+    // From a folder below, the one that applies is recorded, and named.
+    rmSync(join(other.home, "links.json"))
+    mkdirSync(join(m.project, "sub"))
+    other.deps.cwd = join(m.project, "sub")
+    expect(await other.zekno("link")).toBe(0)
+    expect(other.lastOut()).toBe(`Accepted ${join(realpathSync(m.project), "zekno.json")}: web on dev, file compose.yaml.`)
+    expect(readdirSync(join(m.project, "sub"))).toEqual([])
+    // Names that are exactly its own record it too, with no --force.
+    rmSync(join(other.home, "links.json"))
+    other.deps.cwd = m.project
+    expect(await other.zekno("link", "--app", "web", "--server", "dev")).toBe(0)
+    expect(other.lastOut()).toBe("Accepted zekno.json: web on dev, file compose.yaml.")
+    expect(readFileSync(path, "utf8")).toBe(text)
+
+    // Not signed by the team: refused with status 2, nothing recorded and nothing rewritten; names exactly its own need --force, as any other.
+    const plain = '{"app":"web","server":"dev"}'
+    writeFileSync(path, plain)
+    expect(await m.zekno("link")).toBe(2)
+    expect(m.lastErr()).toStartWith(`zekno.json in ${realpathSync(m.project)} is not signed by your team, so zekno does not use it. It names web on dev.`)
+    expect(await m.zekno("link", "--app", "web", "--server", "dev")).toBe(1)
+    expect(m.lastErr()).toBe(`There is already a zekno.json in ${m.project}. Run \`zekno link --force\` to replace it.`)
+    expect(readFileSync(path, "utf8")).toBe(plain)
+    expect(acceptedLinks(m.home).some((entry) => entry.sha256 === sha256Of(plain))).toBe(false)
+    expect(await m.zekno("link", "--app", "web", "--server", "dev", "--force")).toBe(0)
+    expect(await signer(m)).toMatchObject({ name: "Ada" })
   })
 
-  test("a zekno.json naming a server that is not connected, or a Compose file that is not there, is not accepted", async () => {
+  test("a zekno.json signed for a server not connected here, or naming a Compose file that is not there, is not recorded", async () => {
     const m = await ready()
-    const path = join(m.project, "zekno.json")
-    writeFileSync(path, json({ app: "web", server: "prod" }))
-    expect(await m.zekno("link")).toBe(1)
-    expect(m.lastErr()).toBe(`${join(realpathSync(m.project), "zekno.json")} names a server "prod" that is not connected to this machine. Connected servers: dev.`)
-    writeFileSync(path, json({ app: "web", server: "dev", compose: "missing.yaml" }))
-    expect(await m.zekno("link")).toBe(1)
-    expect(m.lastErr()).toBe(`No Compose file at ${join(realpathSync(m.project), "missing.yaml")}. Point to one with \`-f <file>\`.`)
-    expect(acceptedLinks(m.home)).toEqual([])
+    expect(await m.zekno("server", "add", "prod", "--local", "--home", tempDir("prod"))).toBe(0)
+    expect(await m.zekno("link", "--app", "web", "--server", "prod")).toBe(0)
+    // A second machine of the same member, connected to dev only.
+    const other = await twin(m)
+    other.tamper("profile.json", (profile) => ({ ...profile, servers: profile.servers.filter((server: { name: string }) => server.name !== "prod") }))
+    other.deps.cwd = m.project
+    expect(await other.zekno("link")).toBe(1)
+    expect(other.lastErr()).toBe(`${join(realpathSync(m.project), "zekno.json")} names a server "prod" that is not connected to this machine. Connected servers: dev.`)
+    m.compose("services: {}\n", "other.yaml")
+    expect(await m.zekno("link", "--app", "web", "--server", "dev", "-f", "other.yaml", "--force")).toBe(0)
+    rmSync(join(m.project, "other.yaml"))
+    expect(await other.zekno("link")).toBe(1)
+    expect(other.lastErr()).toBe(`No Compose file at ${join(realpathSync(m.project), "other.yaml")}. Point to one with \`-f <file>\`.`)
+    expect(acceptedLinks(other.home)).toEqual([])
   })
 
   test("a missing detail is wrong usage naming the flag and the project file; an unknown server names itself", async () => {
