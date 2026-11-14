@@ -12,7 +12,7 @@ import {
   type TeamTrust,
 } from "@workspace/core"
 
-import { openTeam, type OpDeps, type Team } from "../context"
+import { teamOf, type OpDeps, type Team } from "../context"
 import { CliError, UsageError } from "../errors"
 import { findServer, type SecretStore, type Server } from "../profile"
 import { checkApp, type Where } from "./deploy"
@@ -20,7 +20,7 @@ import { checkApp, type Where } from "./deploy"
 export type { Where }
 
 async function locate(deps: OpDeps, where: Where) {
-  const team = await openTeam(deps)
+  const team = await teamOf(deps)
   const server = findServer(team.profile, where.server, where.serverFrom)
   const app = checkApp(where.app)
   return { team, trust: team.trust, server, app, secrets: team.store.secrets(server.serverId, app) }

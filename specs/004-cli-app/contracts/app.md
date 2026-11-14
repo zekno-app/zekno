@@ -48,7 +48,10 @@ keys type into it.
 ## Behaviour
 
 - **Start**: the profile is verified before anything is drawn. A profile that does not verify
-  is an error screen with the reason and no actions.
+  is an error screen with the reason and no actions. The terminal is asked for its background
+  after the profile is verified, just before the first frame: reading its answer also takes
+  whatever was typed before (a key typed while the keychain asked), and throws it away, so no key
+  typed before the first frame reaches the app.
 - **Linked folder**: with a `zekno.json` signed by the team and used in this folder on this
   machine before (data-model.md, "Signed by the team" and "When a project file is used"), Home
   opens with that server and app selected. One that names a server this machine is not connected
@@ -56,7 +59,10 @@ keys type into it.
 - **A zekno.json signed by the team** (decided by the maintainer on 2026-11-14, research R17),
   not used in this folder on this machine before: the app opens with Home under a question in the
   panel of "Remember this folder?": the title "&lt;member&gt; linked this folder to &lt;app&gt; on
-  &lt;server&gt;", the line "The link is signed by your team. It has not been used in this folder
+  &lt;server&gt;" (for a file in a folder above, "&lt;member&gt; linked &lt;folder&gt; to
+  &lt;app&gt; on &lt;server&gt;, with &lt;folder&gt;/&lt;compose&gt;", naming the Compose file a
+  yes deploys; a title too long for the panel's top line is said whole above the line that
+  follows), the line "The link is signed by your team. It has not been used in this folder
   on this machine. Use it here?", and `y use it`, `n not now`. `y` records it (`links.json`),
   selects its server and app as a linked folder opens, and says nothing more. `n`, or `esc`,
   leaves the file unused while the app is open: Home selects nothing, and `d` deploys nothing and

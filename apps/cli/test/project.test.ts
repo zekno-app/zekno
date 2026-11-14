@@ -484,13 +484,20 @@ describe("flags win over the file, and only a file signed by the team and in use
     const profile = tempDir("profile")
     writeFileSync(join(t.project, "zekno.json"), json(await team.signed(LINK)))
     const link = findProject(t.project, t.home)!
-    const s2 = `Ada linked ${t.project} to demo on dev, and it has not been used in this folder on this machine. To use it, run \`zekno link\` there once. To leave it aside, give --app and --server.`
+    const s2 =
+      `Ada linked ${t.project} to demo on dev, and it has not been used in this folder on this machine. ` +
+      "To use it, run `zekno link` there once and answer its question, or `zekno link --yes` from a script. To leave it aside, give --app and --server."
     expect(notUsedHere("Ada", link)).toBe(s2)
-    const question = "Ada linked this folder to demo on dev. Use it here?"
+    // Asked from a folder below the file's, the question names the file's folder and its Compose file; in its own folder, "this folder".
+    const question = `Ada linked ${t.project} to demo on dev, with ${t.project}/compose.yaml. Use it here?`
 
     const none = judge(team.trust)
     expect(await rejected(() => withProject(t.sub, {}, ["app", "server"], { profile, home: t.home, ...none }))).toEqual({ status: 2, message: s2 })
-    expect(none.asked).toEqual([{ question, refusal: s2 }])
+    expect(await rejected(() => withProject(t.project, {}, ["app", "server"], { profile, home: t.home, ...none }))).toEqual({ status: 2, message: s2 })
+    expect(none.asked).toEqual([
+      { question, refusal: s2 },
+      { question: "Ada linked this folder to demo on dev. Use it here?", refusal: s2 },
+    ])
     expect(acceptedLinks(profile)).toEqual([])
 
     const no = judge(team.trust, false)
@@ -509,6 +516,27 @@ describe("flags win over the file, and only a file signed by the team and in use
     expect(await withProject<Details>(t.sub, {}, ["app", "server"], places)).toMatchObject({ app: "demo", server: "dev" })
     expect(yes.asked).toEqual([{ question, refusal: s2 }])
     expect(await withProject<Details>(t.sub, { app: "demo", server: "dev" }, ["app", "server", "file"], places)).toMatchObject({ project: link })
+  })
+
+  test("a flag that sends the command elsewhere than the file names: the question says both; a flag for a detail the command does not take changes nothing", async () => {
+    const t = tree()
+    const team = await signingTeam()
+    writeFileSync(join(t.project, "zekno.json"), json(await team.signed(LINK)))
+    const no = judge(team.trust, false)
+    const places = { profile: tempDir("profile"), home: t.home, ...no }
+    const asks: [string, Details, (keyof Details)[], string][] = [
+      [t.project, { server: "prod" }, ["app", "server", "file"], "Ada linked this folder to demo on dev. This command uses demo on prod. Use it here?"],
+      [t.project, { app: "web" }, ["app", "server", "file"], "Ada linked this folder to demo on dev. This command uses web on dev. Use it here?"],
+      [t.project, { server: "dev" }, ["app", "server", "file"], "Ada linked this folder to demo on dev. Use it here?"],
+      [t.project, { app: "web" }, ["server"], "Ada linked this folder to demo on dev. Use it here?"],
+      [t.sub, { server: "prod" }, ["app", "server"], `Ada linked ${t.project} to demo on dev, with ${t.project}/compose.yaml. This command uses demo on prod. Use it here?`],
+    ]
+    for (const [cwd, given, wanted, question] of asks) {
+      no.asked.length = 0
+      expect(await rejected(() => withProject(cwd, given, wanted, places))).toEqual({ status: 1, message: "Nothing was done." })
+      expect({ given, wanted, asked: no.asked.map((entry) => entry.question) }).toEqual({ given, wanted, asked: [question] })
+    }
+    expect(acceptedLinks(places.profile)).toEqual([])
   })
 
   test("any change to its bytes makes it new here again: signed still, it is asked about; edited, it is not signed", async () => {
@@ -741,9 +769,7 @@ describe("zekno link", () => {
   test("writes zekno.json in the current folder from the flags, signed with this member's key, with the server checked against the verified profile", async () => {
     const m = await ready()
     expect(await m.zekno("link", "--app", "web", "--server", "dev")).toBe(0)
-    expect(m.lastOut()).toBe(
-      `Wrote ${join(m.project, "zekno.json")}: this folder deploys web to dev from compose.yaml. It holds no secret and is safe to commit.`
-    )
+    expect(m.lastOut()).toBe(`Wrote ${join(m.project, "zekno.json")}: this folder deploys web to dev from compose.yaml. It holds no secret.`)
     const written = JSON.parse(readFileSync(join(m.project, "zekno.json"), "utf8"))
     // Three names and the team's signature of them, nothing else.
     expect(Object.keys(written)).toEqual(["app", "server", "compose", "signed"])
@@ -770,29 +796,55 @@ describe("zekno link", () => {
     expect(acceptedLinks(m.home)).toEqual([{ path, sha256: sha256Of(readFileSync(path)) }])
   })
 
-  test("with no names, it records a zekno.json signed by the team as it is, without rewriting it; one not signed by the team is refused (S1)", async () => {
+  test("with no names, a zekno.json signed by the team is asked about and recorded as it is, without rewriting it; with no terminal it needs --yes; one not signed by the team is refused (S1)", async () => {
     const m = await ready()
     expect(await m.zekno("link", "--app", "web", "--server", "dev")).toBe(0)
     const path = join(m.project, "zekno.json")
     const text = readFileSync(path, "utf8")
-    // The same member on a second machine meets it for the first time: `zekno link` is how it is used there without a terminal.
+    const folder = realpathSync(m.project)
+    // The same member on a second machine meets it for the first time.
     const other = await twin(m)
     other.deps.cwd = m.project
+    // With no terminal, nothing is recorded without --yes.
+    expect(await other.zekno("link")).toBe(2)
+    expect(other.lastErr()).toBe(
+      `There is no terminal to ask on. Ada linked ${folder} to web on dev. Add \`--yes\` to use it here.\nRun \`zekno --help\` for the list of commands.`
+    )
+    expect(acceptedLinks(other.home)).toEqual([])
+    // At a terminal it asks first, as any command does; only yes records it.
+    const asked: string[] = []
+    let answer = false
+    other.deps.ui.confirm = async (question) => (asked.push(question), answer)
+    expect(await other.zekno("link")).toBe(1)
+    expect(other.lastErr()).toBe("Nothing was done.")
+    expect(acceptedLinks(other.home)).toEqual([])
+    answer = true
     expect(await other.zekno("link")).toBe(0)
     expect(other.lastOut()).toBe("Accepted zekno.json: web on dev, file compose.yaml.")
+    expect(asked).toEqual(["Ada linked this folder to web on dev. Use it here?", "Ada linked this folder to web on dev. Use it here?"])
     expect(readFileSync(path, "utf8")).toBe(text)
-    expect(acceptedLinks(other.home)).toEqual([{ path: join(realpathSync(m.project), "zekno.json"), sha256: sha256Of(text) }])
-    // From a folder below, the one that applies is recorded, and named.
+    expect(acceptedLinks(other.home)).toEqual([{ path: join(folder, "zekno.json"), sha256: sha256Of(text) }])
+    // In use now: it says so, and asks nothing.
+    expect(await other.zekno("link")).toBe(0)
+    expect(other.lastOut()).toBe("Already in use: zekno.json, web on dev, file compose.yaml.")
+    expect(asked).toHaveLength(2)
+    // From a folder below, the one that applies is asked about with its folder and Compose file named, recorded, and named.
     rmSync(join(other.home, "links.json"))
     mkdirSync(join(m.project, "sub"))
     other.deps.cwd = join(m.project, "sub")
     expect(await other.zekno("link")).toBe(0)
-    expect(other.lastOut()).toBe(`Accepted ${join(realpathSync(m.project), "zekno.json")}: web on dev, file compose.yaml.`)
+    expect(asked.at(-1)).toBe(`Ada linked ${folder} to web on dev, with ${folder}/compose.yaml. Use it here?`)
+    expect(other.lastOut()).toBe(`Accepted ${join(folder, "zekno.json")}: web on dev, file compose.yaml.`)
     expect(readdirSync(join(m.project, "sub"))).toEqual([])
-    // Names that are exactly its own record it too, with no --force.
+    // Names that are exactly its own are asked about too, and record it with no --force; --yes answers for a script.
     rmSync(join(other.home, "links.json"))
     other.deps.cwd = m.project
     expect(await other.zekno("link", "--app", "web", "--server", "dev")).toBe(0)
+    expect(asked).toHaveLength(4)
+    expect(other.lastOut()).toBe("Accepted zekno.json: web on dev, file compose.yaml.")
+    rmSync(join(other.home, "links.json"))
+    expect(await other.zekno("link", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(asked).toHaveLength(4)
     expect(other.lastOut()).toBe("Accepted zekno.json: web on dev, file compose.yaml.")
     expect(readFileSync(path, "utf8")).toBe(text)
 
@@ -851,6 +903,6 @@ describe("zekno link", () => {
   test("is in the help", async () => {
     const m = machine()
     expect(await m.zekno("--help")).toBe(0)
-    expect(m.lastOut()).toContain("zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force]")
+    expect(m.lastOut()).toContain("zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]")
   })
 })

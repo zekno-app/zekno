@@ -103,7 +103,7 @@ keys type into it.
 |----------|-------|---------|
 | Remove `NAME`? | `x` on a secret | `enter` removes it, `esc` cancels |
 | The runner on `<server>` is out of date | `u` | `u` updates now, `esc` leaves it for later |
-| `<member>` linked this folder to `<app>` on `<server>` | The app opens where a teammate's signed `zekno.json` was not used here before | `y` uses it here, `n` or `esc` not now |
+| `<member>` linked this folder to `<app>` on `<server>` | The app opens where a teammate's signed `zekno.json` was not used here before. A file in a folder above is named with that folder and its Compose file: `<member>` linked `<folder>` to `<app>` on `<server>`, with `<folder>/<compose>` | `y` uses it here, `n` or `esc` not now |
 | Remember this folder? | `d` in a folder with no `zekno.json` | `enter` writes `zekno.json`, signed by you, and deploys, `n` deploys without it, `esc` cancels |
 | This folder is linked to `<app>` on `<server>` | `d` in a linked folder with another app selected | `y` deploys the folder to the selected app, `n` or `esc` does not deploy |
 | Deploy `<app>` to `<server>` without `NAME`? | `esc` on the list of missing values | `y` deploys, `n` or `esc` does not deploy |
@@ -196,7 +196,7 @@ zekno deploy [--app <app>] [--server <name>] [-f <compose file>] [--json]
 zekno rollback [--app <app>] [--server <name>] [--to <number>] [--json]
 zekno status [--server <name>] [--json]
 zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
-zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force]
+zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
 ```
 
 `zekno --help`, `zekno -h` and `zekno help` print this list. In a folder linked with
@@ -351,10 +351,17 @@ See [The project file](#the-project-file-zeknojson).
   any file with one signed by you.
 - With no `--app`, `--server` or `-f`, a `zekno.json` signed by your team that already applies (in
   this folder or one above) is checked as one being written would be, and recorded as used here,
-  not rewritten: `Accepted zekno.json: <app> on <server>, file <compose>.` This is how you use a
-  teammate's file for the first time where there is no terminal to ask on. A file not signed by
-  your team is refused. Names given that are exactly those of a signed `zekno.json` in this folder
-  record it the same way.
+  not rewritten. Recording it is the same decision as the question every command asks the first
+  time it meets a teammate's file, so `zekno link` asks it too, and only `y` records it:
+  `Accepted zekno.json: <app> on <server>, file <compose>.` No stops with "Nothing was done." and
+  exit status 1. With no terminal it stops with exit status 2 unless you add `--yes`:
+
+  > There is no terminal to ask on. Ada linked ~/code/shop to api on prod. Add `--yes` to use it
+  > here.
+
+  A file already in use here is left as it is: `Already in use: zekno.json, <app> on <server>, file
+  <compose>.` A file not signed by your team is refused. Names given that are exactly those of a
+  signed `zekno.json` in this folder are asked about and recorded the same way.
 
 ```bash
 zekno link --app api --server prod
@@ -413,7 +420,10 @@ reaches the terminal, in the app and in single commands.
 
 It saves typing `--app`, `--server` and `-f` in a project folder. It holds three names and your
 team's signature of them, nothing else: no secret and no key (the signature and the key id are
-public), so it is safe to commit, also to a public repository.
+public), so committing it gives nothing away. Its signature vouches for the names (which app,
+which server, which Compose path), not for what the Compose file says. Whatever is checked out in
+a linked folder is what `zekno deploy` deploys there, so read a branch, such as a pull request's,
+before you deploy it.
 
 | Field | Rule |
 |-------|------|
@@ -454,12 +464,18 @@ Two things must both be true before zekno uses a `zekno.json`:
    who wrote a file, not where it is: anyone who can read a repository can copy its `zekno.json`
    into another folder beside another Compose file. So the first time a teammate's file is met in
    a folder, zekno shows what it names and asks once. At a terminal: `Ada linked this folder to
-   api on prod. Use it here?` Only `y` goes on; anything else stops with "Nothing was done.". The
-   app asks when it opens, with `y use it` and `n not now`. With no terminal the command stops with
-   exit status 2:
+   api on prod. Use it here?` Only `y` goes on; anything else stops with "Nothing was done.". A
+   file in a folder above is named with that folder and the Compose file a yes deploys: `Ada linked
+   ~/Downloads to api on prod, with ~/Downloads/compose.yaml. Use it here?` When `--app` or
+   `--server` sends the command elsewhere than the file names, the question says both: `Ada linked
+   this folder to api on dev. This command uses api on prod. Use it here?` A key typed before the
+   question is drawn, such as while the keychain asks, is thrown away: only a `y` typed at the
+   question answers it. `zekno link` asks the same question. The app asks when it opens, with
+   `y use it` and `n not now`. With no terminal the command stops with exit status 2:
 
    > Ada linked ~/code/shop to api on prod, and it has not been used in this folder on this
-   > machine. To use it, run `zekno link` there once. To leave it aside, give --app and --server.
+   > machine. To use it, run `zekno link` there once and answer its question, or
+   > `zekno link --yes` from a script. To leave it aside, give --app and --server.
 
 What you have used is recorded in `links.json` in the profile folder: the real path of each file
 and the SHA-256 of its bytes. Any change to its bytes, such as a teammate's new link arriving with

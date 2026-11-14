@@ -150,6 +150,33 @@ describe("single commands in a linked folder", () => {
     expect(m.lastOut()).toBe("Removed GREETING from web on dev. It takes effect on the next deploy.")
   })
 
+  test("each command reads the keychain once: judging zekno.json and the work itself share one verified team", async () => {
+    const m = await ready()
+    await linkHere(m, { app: "web", server: "dev" })
+    let reads = 0
+    const get = m.keyStore.get
+    m.keyStore.get = (key) => (reads++, get(key))
+    m.docker.logs("web", "web-1  | 2026-11-14T21:52:03Z hello\n")
+    m.typing("hello")
+    const runs = [
+      ["secret", "set", "GREETING"],
+      ["secret", "ls"],
+      ["deploy"],
+      ["deploy"],
+      ["deploy", "--app", "web", "--server", "dev"],
+      ["status"],
+      ["rollback"],
+      ["logs", "--no-follow"],
+      ["secret", "rm", "GREETING"],
+      ["link"],
+    ]
+    for (const args of runs) {
+      reads = 0
+      const status = await m.zekno(...args)
+      expect({ args, status, reads }).toEqual({ args, status: 0, reads: 1 })
+    }
+  })
+
   test("a server it names that this machine does not know stops the command, naming the file and the server; nothing is signed", async () => {
     const m = await ready()
     // Accepted while prod was connected; prod has since been taken off this machine's profile.
@@ -435,10 +462,10 @@ describe("a zekno.json not signed by the team (the reviewer's scenario, P1)", ()
     // Both names typed take nothing from it.
     expect(await m.zekno("link", "--app", "api", "--server", "dev")).toBe(0)
     expect(JSON.parse(readFileSync(join(sub, "zekno.json"), "utf8"))).toMatchObject({ app: "api", server: "dev", compose: "compose.yaml" })
-    // Once it is used here (`zekno link` with no names, in its folder), one name fills from it.
+    // Once it is used here (`zekno link --yes`, in its folder, with no terminal to ask on), one name fills from it.
     rmSync(join(sub, "zekno.json"))
     m.deps.cwd = folder
-    expect(await m.zekno("link")).toBe(0)
+    expect(await m.zekno("link", "--yes")).toBe(0)
     expect(m.lastOut()).toBe("Accepted zekno.json: api on dev, file compose.yaml.")
     m.deps.cwd = sub
     expect(await m.zekno("link", "--server", "dev", "--app", "worker")).toBe(0)
@@ -491,7 +518,7 @@ describe("a zekno.json signed by the team, copied into another folder (the copy)
   const QUESTION = "Ada linked this folder to api on dev. Use it here?"
   const s2 = (folder: string) =>
     `Ada linked ${realpathSync(folder)} to api on dev, and it has not been used in this folder on this machine. ` +
-    "To use it, run `zekno link` there once. To leave it aside, give --app and --server."
+    "To use it, run `zekno link` there once and answer its question, or `zekno link --yes` from a script. To leave it aside, give --app and --server."
 
   test("at a terminal the question names who linked it and to what; no stops with status 1, and nothing is recorded, signed, sent or started", async () => {
     const { m, started, asked, kept } = await copied()
@@ -527,14 +554,125 @@ describe("a zekno.json signed by the team, copied into another folder (the copy)
     expect(await m.deps.ui.askSecret("", false)).toBe("sk_live_typed_here")
   })
 
-  test("yes at a terminal records it and goes on; it is not asked again", async () => {
-    const { m, folder, asked } = await copied()
+  test("yes at a terminal records it and goes on; it is not asked again; each run reads the keychain once", async () => {
+    const { m, folder, asked, keychain } = await copied()
+    const reads = keychain()
     m.deps.ui.confirm = async (question) => (asked.push(question), true)
     expect(await m.zekno("status")).toBe(0)
     expect(m.out).toContain("api\tdeploy 1\tstopped")
     expect(await m.zekno("status")).toBe(0)
     expect(asked).toEqual([QUESTION])
     expect(acceptedLinks(m.home).map((entry) => entry.path)).toContain(join(realpathSync(folder), "zekno.json"))
+    expect(keychain() - reads).toBe(2)
+  })
+
+  test("`zekno link` there asks the same question before it records anything, also given the file's own names; no records nothing, and the next command asks again", async () => {
+    const { m, folder, started, asked, kept } = await copied()
+    const text = readFileSync(join(folder, "zekno.json"), "utf8")
+    const before = kept()
+    m.deps.ui.confirm = async (question) => (asked.push(question), false)
+    for (const args of [[], ["--app", "api", "--server", "dev"]]) {
+      expect({ args, status: await m.zekno("link", ...args) }).toEqual({ args, status: 1 })
+      expect(m.lastErr()).toBe("Nothing was done.")
+    }
+    expect(await m.zekno("deploy")).toBe(1)
+    expect(asked).toEqual([QUESTION, QUESTION, QUESTION])
+    expect(kept()).toEqual(before)
+    expect(started()).toBe(0)
+
+    // Yes: recorded as it is, never rewritten, and `zekno deploy` then asks nothing.
+    m.deps.ui.confirm = async (question) => (asked.push(question), true)
+    expect(await m.zekno("link")).toBe(0)
+    expect(m.lastOut()).toBe("Accepted zekno.json: api on dev, file compose.yaml.")
+    expect(readFileSync(join(folder, "zekno.json"), "utf8")).toBe(text)
+    expect(acceptedLinks(m.home).map((entry) => entry.path)).toContain(join(realpathSync(folder), "zekno.json"))
+    expect(asked).toHaveLength(4)
+    m.deps.ui.confirm = async (question) => (asked.push(question), false)
+    expect(await m.zekno("deploy")).toBe(0)
+    expect(deployed(m, "api")).toBe(HOSTILE)
+
+    // In use here now: `zekno link` says so and changes nothing, not even links.json.
+    const links = statSync(join(m.home, "links.json"))
+    for (const args of [[], ["--app", "api", "--server", "dev"]]) {
+      expect({ args, status: await m.zekno("link", ...args) }).toEqual({ args, status: 0 })
+      expect(m.lastOut()).toBe("Already in use: zekno.json, api on dev, file compose.yaml.")
+    }
+    const after = statSync(join(m.home, "links.json"))
+    expect([after.ino, after.mtimeMs]).toEqual([links.ino, links.mtimeMs])
+    expect(asked).toHaveLength(4)
+  })
+
+  test("with no terminal `zekno link` there stops with status 2 and names --yes; with --yes it records the file", async () => {
+    const { m, folder, started, asked, kept } = await copied()
+    const before = kept()
+    const refusal = `There is no terminal to ask on. Ada linked ${realpathSync(folder)} to api on dev. Add \`--yes\` to use it here.`
+    for (const args of [[], ["--app", "api", "--server", "dev"]]) {
+      expect({ args, status: await m.zekno("link", ...args) }).toEqual({ args, status: 2 })
+      expect(m.lastErr()).toBe(`${refusal}\nRun \`zekno --help\` for the list of commands.`)
+    }
+    // The plain interface was asked, and could not ask anyone.
+    expect(asked).toEqual([QUESTION, QUESTION])
+    expect(kept()).toEqual(before)
+    expect(await m.zekno("link", "--app", "api", "--server", "dev", "--yes")).toBe(0)
+    expect(m.lastOut()).toBe("Accepted zekno.json: api on dev, file compose.yaml.")
+    expect(acceptedLinks(m.home).map((entry) => entry.path)).toContain(join(realpathSync(folder), "zekno.json"))
+    expect(await m.zekno("link", "--yes")).toBe(0)
+    expect(m.lastOut()).toBe("Already in use: zekno.json, api on dev, file compose.yaml.")
+    expect(await m.zekno("status")).toBe(0)
+    expect(asked).toHaveLength(2)
+    expect(started()).toBe(1)
+  })
+
+  test("in a folder above, the question names that folder and its Compose file: at a terminal, for `zekno link`, and in the app's panel", async () => {
+    const { m, folder, started, asked } = await copied()
+    const sub = join(folder, "teammate-repo-main")
+    mkdirSync(sub)
+    writeFileSync(join(sub, "compose.yaml"), COMPOSE_V1)
+    m.deps.cwd = sub
+    const above = realpathSync(folder)
+    const question = `Ada linked ${above} to api on dev, with ${above}/compose.yaml. Use it here?`
+    const none = m.deps.ui.confirm
+    m.deps.ui.confirm = async (asking) => (asked.push(asking), false)
+    expect(await m.zekno("deploy")).toBe(1)
+    expect(await m.zekno("link")).toBe(1)
+    expect(asked).toEqual([question, question])
+    expect(started()).toBe(0)
+    // With no terminal, `zekno link` names the folder too, as it always does.
+    m.deps.ui.confirm = none
+    expect(await m.zekno("link")).toBe(2)
+    expect(m.lastErr()).toStartWith(`There is no terminal to ask on. Ada linked ${above} to api on dev. Add \`--yes\` to use it here.`)
+
+    const app = openApp(m, await loadStart(m.deps))
+    expect(app.state.question).toEqual({ kind: "use-link", member: "Ada", server: "dev", app: "api", above: { folder: above, compose: `${above}/compose.yaml` } })
+    // A path longer than the panel is wide is broken across lines: compared without the breaks.
+    const unbroken = (text: string) => words(text).replace(/ /g, "")
+    const screen = app.draw()
+    expect(unbroken(screen)).toContain(unbroken(`Ada linked ${above} to api on dev, with ${above}/compose.yaml.`))
+    expect(words(screen)).toContain("The link is signed by your team. It has not been used in this folder on this machine. Use it here?")
+    expect(acceptedLinks(m.home).map((entry) => entry.path)).not.toContain(join(above, "zekno.json"))
+  })
+
+  test("a flag that sends the folder elsewhere than the file names: the question says both", async () => {
+    const { m, folder, started, asked } = await copied()
+    m.deps.cwd = m.project
+    expect(await m.zekno("server", "add", "prod", "--local", "--home", tempDir("prod"))).toBe(0)
+    const starts = started()
+    m.deps.cwd = folder
+    m.deps.ui.confirm = async (question) => (asked.push(question), false)
+    const runs: [string[], string][] = [
+      [["deploy", "--server", "prod"], "Ada linked this folder to api on dev. This command uses api on prod. Use it here?"],
+      [["deploy", "--app", "web"], "Ada linked this folder to api on dev. This command uses web on dev. Use it here?"],
+      [["secret", "ls", "--server", "prod"], "Ada linked this folder to api on dev. This command uses api on prod. Use it here?"],
+      [["deploy", "--server", "dev"], QUESTION],
+      // status takes no app: an --app typed with it changes nothing it does.
+      [["status", "--app", "web"], QUESTION],
+    ]
+    for (const [args, question] of runs) {
+      asked.length = 0
+      expect({ args, status: await m.zekno(...args) }).toEqual({ args, status: 1 })
+      expect({ args, asked }).toEqual({ args, asked: [question] })
+    }
+    expect(started()).toBe(starts)
   })
 
   test("the app asks when it opens; n uses nothing and d deploys nothing; opened again it asks again; y moves Home to its app, and the next opening asks nothing", async () => {
@@ -742,6 +880,24 @@ async function setValue(app: App, value: string) {
 }
 
 describe("the app in a project folder", () => {
+  test("reads the keychain once as it opens, and once for its first deploy, which signs; zekno.json is judged against the team list it opened with", async () => {
+    const m = await ready()
+    m.compose(COMPOSE_PLAIN)
+    await linkHere(m, { app: "demo", server: "dev" })
+    let reads = 0
+    const get = m.keyStore.get
+    m.keyStore.get = (key) => (reads++, get(key))
+    const app = openApp(m, await loadStart(m.deps))
+    expect(app.state.linked).toEqual({ server: "dev", app: "demo", compose: "compose.yaml" })
+    expect(reads).toBe(1)
+    app.type("d")
+    await app.until(() => app.state.deploy !== undefined, "the deploy to start")
+    await ended(app)
+    expect(app.state.deploy?.outcome).toBe("started")
+    expect(reads).toBe(2)
+    expect(app.failures).toEqual([])
+  })
+
   test("opens focused on the linked server and app, says the folder is linked, and names its Compose file", async () => {
     const m = await ready()
     expect(await m.zekno("server", "add", "staging", "--local", "--home", tempDir("staging"))).toBe(0)
@@ -1338,6 +1494,14 @@ describe("the two screens, and the reducer's part", () => {
     const longScreen = draw(longAsked, 80, 24)
     fits(longScreen, 80)
     expect(words(longScreen)).toContain(`${long.member} linked this folder to ${long.app} on ${long.server}.`)
+    // In a folder above the one it opened in: that folder and its Compose file are named.
+    const above = { folder: "~/Downloads", compose: "~/Downloads/compose.yaml" }
+    const aboveAsked = initialState({ ...start, firstUse: { ...start.firstUse, above } }, { columns: 80, rows: 24 })
+    expect(aboveAsked.question).toEqual({ kind: "use-link", member: "Ada", server: "prod", app: "demo", above })
+    const aboveScreen = draw(aboveAsked, 80, 24)
+    fits(aboveScreen, 80)
+    expect(aboveScreen).toContain("╭─ Ada linked ~/Downloads to demo on prod, with ~/Downloads/compose.yaml ─")
+    expect(words(aboveScreen)).toContain("The link is signed by your team. It has not been used in this folder on this machine. Use it here?")
 
     const press = (state: State, k: AppKey) => update(state, { type: "key", key: k })
     expect(press(asked, { kind: "text", text: "y" })).toEqual({ state: { ...asked, question: undefined }, effects: [{ kind: "use-link", server: "prod", app: "demo" }] })

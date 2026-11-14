@@ -10,7 +10,7 @@ import {
 } from "@workspace/core"
 import { join, resolve } from "node:path"
 
-import { openTeam, reach, type OpDeps, type Team } from "../context"
+import { reach, teamOf, type OpDeps, type Team } from "../context"
 import { CliError, RunnerRefused, UsageError } from "../errors"
 import {
   isRunnerFileName,
@@ -110,7 +110,7 @@ export function isOutdated(mode: SessionMode, runner: RunnerVersion | undefined,
 
 /** Checks the name and how to reach the server; reads `--runner-file` once, here. */
 export async function prepareServerAdd(deps: OpDeps, name: string | undefined, options: ServerAddOptions): Promise<ServerAddPlan> {
-  const team = await openTeam(deps)
+  const team = await teamOf(deps)
   if (!name || !NAME.test(name)) {
     throw new UsageError("Give the server a name of lowercase letters, digits and hyphens.")
   }
@@ -330,6 +330,6 @@ export async function updateRunner(
 
 /** The servers of the verified team. */
 export async function listServers(deps: OpDeps): Promise<Server[]> {
-  const { profile } = await openTeam(deps)
+  const { profile } = await teamOf(deps)
   return profile.servers
 }

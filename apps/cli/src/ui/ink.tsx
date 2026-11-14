@@ -9,6 +9,7 @@ import { DeployBlock, type DeployShown } from "./deploy-view"
 import { readStdin } from "./plain"
 import { applySecretInput } from "./secret-input"
 import { BRAND } from "./theme"
+import { discardTypedAhead } from "./type-ahead"
 import { REMOTE_MARK, type Cell, type LogOutput, type Ui } from "./types"
 
 type Item =
@@ -445,21 +446,27 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
         })
       }).finally(() => process.stdin.setRawMode(false))
     },
-    confirm(question, refusal) {
+    async confirm(question, refusal) {
       if (!process.stdin.isTTY) throw new CliError(refusal)
       process.stdin.setRawMode(true)
-      return new Promise<boolean>((resolve) => {
-        store.set({
-          question: {
-            question,
-            settle(yes) {
-              store.set({ question: undefined })
-              add({ kind: "info", text: `${question} ${yes ? "yes" : "no"}` })
-              resolve(yes)
+      try {
+        // What was typed before the question is drawn is not its answer, such as a `y` typed while the keychain asked.
+        await discardTypedAhead(process.stdin)
+        return await new Promise<boolean>((resolve) => {
+          store.set({
+            question: {
+              question,
+              settle(yes) {
+                store.set({ question: undefined })
+                add({ kind: "info", text: `${question} ${yes ? "yes" : "no"}` })
+                resolve(yes)
+              },
             },
-          },
+          })
         })
-      }).finally(() => process.stdin.setRawMode(false))
+      } finally {
+        process.stdin.setRawMode(false)
+      }
     },
     async close() {
       app.unmount()

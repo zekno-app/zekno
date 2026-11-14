@@ -27,7 +27,8 @@
  *   So a file signed by the team is used without a question only once it
  *   was used in its folder on this machine, byte for byte (accepted.ts,
  *   `links.json`). The first time, the person is shown what it names and
- *   asked once; where nobody can answer, the command stops;
+ *   asked once, `zekno link` included; where nobody can answer, the command
+ *   stops, and `zekno link` records it only with `--yes`;
  * - the Compose file it names is used only with the app it names (a command
  *   given another `--app` deploys its own folder's compose.yaml);
  * - it is written only when asked, never over an existing one without
@@ -335,6 +336,9 @@ export function findProject(start: string, home = homedir()): ProjectLink | unde
 /** Where zekno.json in `folder` is, as `findProject` and `links.json` name it: by its real path. */
 export const projectFileIn = (folder: string): string => join(real(resolve(folder)), PROJECT_FILE)
 
+/** Whether a project file is in the folder a command runs in, `cwd`, rather than in one above it. */
+export const isHere = (link: Pick<ProjectLink, "folder">, cwd: string): boolean => link.folder === real(resolve(cwd))
+
 /**
  * The Compose file `zekno link -f <file>` names, as zekno.json keeps it:
  * relative to `folder`, where zekno.json is written. It must be a file inside
@@ -425,18 +429,45 @@ export const notSigned = (link: ProjectLink): string =>
 
 /** The same, as the app says it on Home about the folder it was started in, `cwd`. */
 export function notSignedHere(link: ProjectLink, cwd: string): string {
-  const which = link.folder === real(resolve(cwd)) ? "zekno.json here" : shownPath(link.path)
+  const which = isHere(link, cwd) ? "zekno.json here" : shownPath(link.path)
   return `${which} is not signed by your team, so zekno does not use it. It names ${link.app} on ${link.server}.`
 }
 
 /** Said where nobody can answer the question for a file signed by the team and not yet used here (S2). */
 export const notUsedHere = (member: string, link: ProjectLink): string =>
   `${member} linked ${shownPath(link.folder)} to ${link.app} on ${link.server}, and it has not been used in this folder on this machine. ` +
-  "To use it, run `zekno link` there once. To leave it aside, give --app and --server."
+  "To use it, run `zekno link` there once and answer its question, or `zekno link --yes` from a script. To leave it aside, give --app and --server."
 
-/** The question at a terminal the first time a file signed by the team is met here. */
-export const useQuestion = (member: string, link: Pick<ProjectLink, "app" | "server">): string =>
-  `${member} linked this folder to ${link.app} on ${link.server}. Use it here?`
+/** Said by `zekno link` without `--yes` where there is no terminal to ask on. */
+export const noTerminalToUse = (member: string, link: ProjectLink): string =>
+  `There is no terminal to ask on. ${member} linked ${shownPath(link.folder)} to ${link.app} on ${link.server}. Add \`--yes\` to use it here.`
+
+/**
+ * A project file in a folder above the one a command runs in: that folder,
+ * and the Compose file it names, as a sentence shows them. A "yes" deploys
+ * that Compose file, not the one beside the person, so the question says
+ * which. Undefined for a file in the folder the command runs in.
+ */
+export function aboveOf(link: ProjectLink, cwd: string): { folder: string; compose: string } | undefined {
+  if (isHere(link, cwd)) return undefined
+  return { folder: shownPath(link.folder), compose: shownPath(join(link.folder, link.compose)) }
+}
+
+/**
+ * The question at a terminal the first time a file signed by the team is
+ * met here: who linked which folder to what (the folder and its Compose file
+ * named when the file is in a folder above, `aboveOf`), and, when a flag
+ * sends the command to another app or server than the file names (`uses`),
+ * where it goes instead.
+ */
+export function useQuestion(member: string, link: ProjectLink, cwd: string, uses?: { app: string; server: string }): string {
+  const above = aboveOf(link, cwd)
+  const linked = above
+    ? `${member} linked ${above.folder} to ${link.app} on ${link.server}, with ${above.compose}.`
+    : `${member} linked this folder to ${link.app} on ${link.server}.`
+  const elsewhere = uses && (uses.app !== link.app || uses.server !== link.server) ? ` This command uses ${uses.app} on ${uses.server}.` : ""
+  return `${linked}${elsewhere} Use it here?`
+}
 
 /** Said when the question is answered no. */
 export const NOTHING_DONE = "Nothing was done."
@@ -455,14 +486,20 @@ export type ProjectJudge = {
 
 /**
  * The first time a file signed by the team is met in its folder on this
- * machine: what it names is shown and the person is asked once. Yes records
- * it in `links.json`; anything else does nothing. Where nobody can answer,
- * the command stops as for wrong usage, with exit status 2.
+ * machine: what it names is shown and the person is asked once (`question`).
+ * Yes records it in `links.json`; anything else does nothing and stops the
+ * command. Where nobody can answer, the command stops with `refusal`, as for
+ * wrong usage, with exit status 2. `zekno link` asks this too: recording the
+ * file is the same decision.
  */
-async function useOnce(link: ProjectLink, member: string, places: ProjectPlaces & ProjectJudge): Promise<void> {
+export async function useOnce(
+  link: ProjectLink,
+  asking: { question: string; refusal: string },
+  places: Pick<ProjectPlaces, "profile"> & Pick<ProjectJudge, "confirm">
+): Promise<void> {
   let yes: boolean
   try {
-    yes = await places.confirm(useQuestion(member, link), notUsedHere(member, link))
+    yes = await places.confirm(asking.question, asking.refusal)
   } catch (error) {
     if (error instanceof CliError) throw new UsageError(error.message)
     throw error
@@ -482,9 +519,11 @@ async function useOnce(link: ProjectLink, member: string, places: ProjectPlaces 
  * Compose file from a folder nobody in the team made, with the app's
  * secrets. Such a file stops the command (S1). A file signed by the team that
  * was not used here before is asked about once at a terminal, and stops the
- * command where nobody can answer (S2). Judging reads the verified team list
- * from the keychain; every refusal comes before any signer is made and
- * before anything is signed or sent.
+ * command where nobody can answer (S2). The question says where the command
+ * goes when a flag sends it to another app or server than the file names: a
+ * "yes" to the file's names must not send its folder somewhere unsaid.
+ * Judging reads the verified team list from the keychain; every refusal
+ * comes before any signer is made and before anything is signed or sent.
  *
  * Given both `--app` and `--server`, the file is left aside unless it is in
  * use here, and is never asked about; one that cannot be read then counts as
@@ -517,7 +556,12 @@ export async function withProject<T extends Details>(
   }
   const standing = standingOf(link, await places.trust(), places.profile)
   if (standing.kind === "unsigned") throw new UsageError(notSigned(link))
-  if (standing.kind === "new") await useOnce(link, standing.member, places)
+  if (standing.kind === "new") {
+    // Where the command goes: a typed name wins, and is cleaned for the sentence. One the command does not take changes nothing.
+    const uses = { app: wanted.includes("app") ? sanitize(given.app ?? link.app) : link.app, server: sanitize(given.server ?? link.server) }
+    const question = useQuestion(standing.member, link, cwd, uses)
+    await useOnce(link, { question, refusal: notUsedHere(standing.member, link) }, places)
+  }
   const filled: T & FromProject = { ...given }
   if (missing.includes("app")) filled.app = link.app
   if (missing.includes("server")) {

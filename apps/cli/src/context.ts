@@ -33,6 +33,12 @@ export type Deps = {
    * runner-release.json; tests pass their own, with checksums of their files.
    */
   release?: RunnerRelease
+  /**
+   * The verified team this run of a command already opened (`teamOnce`), for
+   * the operation to take instead of reading the keychain again. Undefined:
+   * an operation opens the team itself (`teamOf`), as the app's do.
+   */
+  team?: () => Promise<Team>
 }
 
 /**
@@ -150,6 +156,31 @@ export async function openTeam(deps: Pick<Deps, "home" | "keyStore">): Promise<T
       } finally {
         signer.destroy()
       }
+    },
+  }
+}
+
+/** The verified team an operation works with: the one this run of a command opened already, or opened now. */
+export const teamOf = (deps: Pick<Deps, "home" | "keyStore" | "team">): Promise<Team> => deps.team?.() ?? openTeam(deps)
+
+/**
+ * The verified team for one run of a command, opened at most once, when it
+ * is first needed: judging zekno.json (`trust`) and the operation that
+ * follows (`take`, handed to it as `Deps.team`) read the keychain once
+ * between them. Once the operation has taken it, it is not kept here, so the
+ * team, and the key in it, is held only as long as the operation holds it.
+ */
+export function teamOnce(deps: Pick<Deps, "home" | "keyStore">): { trust(): Promise<TeamTrust>; take(): Promise<Team> } {
+  let opened: Promise<Team> | undefined
+  return {
+    async trust() {
+      opened ??= openTeam(deps)
+      return (await opened).trust
+    },
+    take() {
+      const team = opened ?? openTeam(deps)
+      opened = undefined
+      return team
     },
   }
 }

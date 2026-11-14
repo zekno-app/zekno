@@ -10,15 +10,26 @@ import { assertTrust, memberByKeyId, serverKeyOf, TEAM_ID, type Member, type Tea
 import { APP_NAME, SERVER_ID } from "./secrets"
 
 /**
+ * Whether a path stays inside the folder it is relative to, read as any
+ * system reads it: not absolute, no backslash (a separator elsewhere), and
+ * no `.` or `..` part. A client that resolves it must then not leave the
+ * folder through it, whatever it does with symbolic links.
+ */
+const staysInside = (path: string): boolean =>
+  !path.startsWith("/") && !path.includes("\\") && !path.split("/").some((part) => part === "." || part === "..")
+
+/**
  * The Compose file's path, relative to the linked folder. A person reads it
  * before using the link, so it holds no control, format or line-separator
  * character, which covers bidirectional overrides and zero-width characters.
+ * It never names a file outside the folder (`staysInside`).
  */
 const composePath = z
   .string()
   .min(1)
   .max(LIMITS.linkComposeLength)
   .refine((path) => isWellFormed(path) && !/[\p{C}\u2028\u2029]/u.test(path))
+  .refine(staysInside)
 
 /**
  * What a link says: this team's folder deploys this app to this server from
@@ -101,7 +112,8 @@ export function verifyLink(trust: TeamTrust, envelope: unknown): Result<Verified
   if (!parsed.success) return refuse("malformed", "The link does not match its definition.")
   const link = parsed.data
 
-  // 3. Who signed it, and for whom.
+  // 3. Who signed it, and for whom. Every role there is today may deploy (`ROLES` equals
+  // `DEPLOY_ROLES`), so this refuses nothing yet; it is kept for a role that may not deploy.
   if (!DEPLOY_ROLES.includes(signer.role)) {
     return refuse("role_not_allowed", "The signer's role does not allow deploys.")
   }

@@ -51,16 +51,17 @@ zekno status --json | head -c 300
 zekno deploy < /dev/null     # never asks; succeeds from zekno.json
 ```
 
-In a folder whose `zekno.json` came from elsewhere, such as a cloned repository, nothing uses it
-until this machine accepts it:
+In a folder whose `zekno.json` came from elsewhere, such as a cloned repository, one not signed by
+your team is never used, and one a teammate signed is used once you say yes here:
 
 ```bash
-zekno deploy                 # stops with status 2: "zekno.json in <folder> names <app> on <server>.
-                             # It was not made or accepted on this machine. ..." Nothing is sent.
-zekno                        # Home opens without selecting its app and says the same; d deploys nothing
-zekno link                   # checks it (server connected, Compose file inside the folder) and
-                             # accepts it as it is: "Accepted zekno.json: <app> on <server>, file <compose>."
-zekno deploy                 # now reads it; an edit to zekno.json (or a git pull) needs zekno link again
+zekno deploy                 # not signed by your team: stops with status 2, "zekno.json in <folder> is
+                             # not signed by your team, ..." Nothing is sent.
+zekno deploy < /dev/null     # signed by a teammate, not used here yet: stops with status 2 (S2)
+zekno deploy                 # at a terminal: "Ada linked this folder to <app> on <server>. Use it here?"
+zekno link                   # asks the same; y records it: "Accepted zekno.json: <app> on <server>, file <compose>."
+zekno link --yes < /dev/null # the same from a script
+zekno deploy                 # now reads it; a change to its bytes (a git pull) is asked about again
 ```
 
 ## 3. A real server

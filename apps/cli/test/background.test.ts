@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 
 import { answered, backgroundFrom, detectBackground, isLateAnswer, parseBackgroundAnswer, QUERY } from "../src/ui/background"
+import { discardTypedAhead } from "../src/ui/type-ahead"
 
 const BEL = "\x07"
 const ST = "\x1b\\"
@@ -124,7 +125,18 @@ function terminal(options: { tty?: boolean; outTty?: boolean; raw?: boolean; ans
       return true
     },
   }
-  return { input: input as never, output: output as never, modes, calls, written, listeners: () => input.listenerCount("readable") + input.listenerCount("data") }
+  return {
+    input: input as never,
+    output: output as never,
+    modes,
+    calls,
+    written,
+    listeners: () => input.listenerCount("readable") + input.listenerCount("data"),
+    /** Keys typed: they arrive as a terminal hands them over. */
+    type: arrive,
+    /** What has arrived and not been read. */
+    unread: () => arrived.map((piece) => piece.toString("latin1")),
+  }
 }
 
 const quick = { quietMs: 30, answeringMs: 150 }
@@ -206,5 +218,46 @@ describe("asking the terminal", () => {
     const t = terminal({ rawThrows: true, answer: [osc("rgb:ffff/ffff/ffff"), DA1] })
     expect(await detectBackground(t.input, t.output, quick)).toBe("dark")
     expect(t.listeners()).toBe(0)
+  })
+})
+
+describe("keys typed before a question is on the screen (the signed link's review, K12)", () => {
+  test("a question throws away what was typed before it, and what arrives while it is being drawn; raw mode is put back", async () => {
+    const t = terminal()
+    // Typed while the keychain was asking: it has arrived, and nothing has read it.
+    t.type("y")
+    setTimeout(() => t.type("y"), 10)
+    await discardTypedAhead(t.input, 30)
+    expect(t.unread()).toEqual([])
+    expect(t.modes).toEqual([true, false])
+    expect(t.listeners()).toBe(0)
+    // Never made to flow, never paused: the question drawn next still hears keys.
+    expect(t.calls).toEqual([])
+    // What comes after is left for the question.
+    t.type("n")
+    expect(t.unread()).toEqual(["n"])
+  })
+
+  test("raw mode already on stays on; input that is not a terminal is not touched; one that went away is no error", async () => {
+    const raw = terminal({ raw: true })
+    raw.type("y")
+    await discardTypedAhead(raw.input, 10)
+    expect(raw.modes).toEqual([true, true])
+    expect(raw.unread()).toEqual([])
+    const piped = terminal({ tty: false })
+    piped.type("y")
+    await discardTypedAhead(piped.input, 10)
+    expect(piped.modes).toEqual([])
+    expect(piped.unread()).toEqual(["y"])
+    const gone = terminal({ rawThrows: true })
+    await discardTypedAhead(gone.input, 10)
+    expect(gone.listeners()).toBe(0)
+  })
+
+  test("the app asks the terminal for its background after the keychain: a key typed before is read with the answer and thrown away", async () => {
+    const t = terminal({ answer: [osc("rgb:ffff/ffff/ffff"), DA1] })
+    t.type("y")
+    expect(await detectBackground(t.input, t.output, quick)).toBe("light")
+    expect(t.unread()).toEqual([])
   })
 })

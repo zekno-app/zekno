@@ -54,16 +54,22 @@ async function command(): Promise<number> {
 }
 
 /**
- * The full-screen app. The terminal is asked for its background colour and
- * the profile is verified before anything is drawn; neither reaches a server.
+ * The full-screen app. The profile is verified and the terminal is asked for
+ * its background colour before anything is drawn; neither reaches a server.
+ *
+ * The terminal is asked last, just before the first frame: reading its
+ * answer takes whatever was typed before it, such as a `y` typed while the
+ * keychain was asking, and throws it away with the answer (background.ts).
+ * Such a key never reaches the app, so it can never answer a question the
+ * app opens with ("Use it here?").
  */
 async function app(): Promise<number> {
   const { detectBackground } = await import("./ui/background")
-  const background = await detectBackground()
   let closed: Promise<number> | undefined
   await withoutDev(async () => {
     const [{ loadStart }, { openApp }] = await Promise.all([import("./app/effects"), import("./app/app")])
     const start = await loadStart(deps)
+    const background = await detectBackground()
     closed = openApp(deps, { start, background })
   })
   try {

@@ -8,7 +8,7 @@ import { logs } from "./commands/logs"
 import { secretList, secretRemove, secretSet } from "./commands/secret"
 import { serverAdd, serverList, serverUpdate } from "./commands/server"
 import { status } from "./commands/status"
-import { openTeam, type Deps } from "./context"
+import { teamOnce, type Deps } from "./context"
 import { CliError, UsageError } from "./errors"
 import { withProject } from "./project"
 
@@ -27,7 +27,7 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno rollback [--app <app>] [--server <name>] [--to <number>] [--json]
   zekno status [--server <name>] [--json]
   zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
-  zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force]
+  zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
 
 In a folder linked with \`zekno link\`, --app, --server and -f come from its zekno.json. Flags win over it.`
 
@@ -61,7 +61,10 @@ export function valueAsArgument(name: string | undefined): string {
  * Runs one command and returns the exit status: 0 for success, 1 when the
  * action failed or was refused, 2 for wrong usage.
  */
-export async function run(argv: string[], deps: Deps): Promise<number> {
+export async function run(argv: string[], given: Deps): Promise<number> {
+  // One verified team for the whole command, opened when first needed: judging zekno.json and the operation read the keychain once between them.
+  const team = teamOnce(given)
+  const deps: Deps = { ...given, team: team.take }
   try {
     const { values, positionals } = parseArgs({
       args: argv,
@@ -105,7 +108,7 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
     const project = (wanted: Parameters<typeof withProject>[2]) =>
       withProject(deps.cwd, values, wanted, {
         profile: deps.home,
-        trust: async () => (await openTeam(deps)).trust,
+        trust: team.trust,
         confirm: (question, refusal) => deps.ui.confirm(question, refusal),
       })
     switch (name) {

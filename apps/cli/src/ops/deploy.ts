@@ -2,7 +2,7 @@ import { CoreError, createDeploy, currentSecrets, readSignedDeploy, RunnerReport
 import { resolve } from "node:path"
 
 import { readCompose, type ComposeText } from "../compose-read"
-import { openTeam, reach, type OpDeps, type Team } from "../context"
+import { reach, teamOf, type OpDeps, type Team } from "../context"
 import { CliError, MISSING_APP, UsageError } from "../errors"
 import { findServer, NAME, type History, type Server } from "../profile"
 import type { ProjectLink } from "../project"
@@ -62,7 +62,7 @@ export function checkApp(app: string | undefined): string {
 }
 
 async function locate(deps: OpDeps, where: Where) {
-  const team = await openTeam(deps)
+  const team = await teamOf(deps)
   const server = findServer(team.profile, where.server, where.serverFrom)
   return { team, server, app: checkApp(where.app) }
 }

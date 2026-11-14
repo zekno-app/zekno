@@ -493,8 +493,8 @@ and the runner's and the plumbing's own tests (S1 to S3, S6 to S8, L6, C7 to C10
 ## The signed link (2026-11-14)
 
 Decided by the maintainer on 2026-11-14 (research R17), replacing "accept once on this machine"
-(`2f79ede`) as the rule for when a `zekno.json` is used. Built at the commit that adds this
-section. **An independent review is to follow; its findings will be recorded here.**
+(`2f79ede`) as the rule for when a `zekno.json` is used. Built at `7bba9b6`. An independent
+reviewer read it at `7bba9b6`; the findings, and what was done about each, are in "Review" below.
 
 **What is signed.** A new kind of signed message in packages/core, `zekno.link.v1`, built only
 from the existing pieces: `signEnvelope` signs `zekno-sig-v1\n<kind>\n<length>\n` followed by
@@ -503,8 +503,9 @@ the payload, so the kind is part of every signature. The payload is the UTF-8 of
 the same content always gives the same bytes. `teamId` names the team as a deploy does, without
 the team list's hash, so a link outlives later team lists; `serverId` is the server's id from the
 signed team list; `app` is held to the app-name pattern; `compose` is 1 to 255 characters with no
-control, format or line-separator character. The schema is strict. `createLink` refuses a signer
-who is not a member and a server that is not in the team list.
+control, format or line-separator character, and stays inside its folder: not absolute, no
+backslash, no `.` or `..` part (since the review, K8). The schema is strict. `createLink` refuses a
+signer who is not a member and a server that is not in the team list.
 
 **Who may sign, and when a signature stops counting.** `verifyLink(trust, envelope)` opens the
 envelope as a link only (`openEnvelope` with the link kind; a size past the payload limit is
@@ -520,11 +521,15 @@ the keychain, every later list signed by an admin of the one before) and the sig
 the plain fields: the same app, the same Compose path, and the name the team list gives the
 signed server id. A file signed by the team is used without a question only once it was used in
 its folder on this machine, byte for byte (`links.json`); otherwise a command asks once at a
-terminal and stops with exit status 2 without one, and the app asks once when it opens. A file
-not signed by the team is refused with exit status 2 and never offered. Judging reads the
-keychain (a read only); every refusal and the question come before a connection is opened, a
-signer made, or anything signed or sent. Given both `--app` and `--server`, the file is left
-aside unless it is in use here, and never asked about.
+terminal and stops with exit status 2 without one, `zekno link` asks the same before it records
+the file (with no terminal, only `--yes` records it), and the app asks once when it opens. The
+question names the file's folder and Compose file when it is in a folder above, and both targets
+when a flag sends the command elsewhere; a key typed before it is drawn is thrown away. A file not
+signed by the team is refused with exit status 2 and never offered. Judging reads the keychain (a
+read only, once per command: the command then works with the same verified team); every refusal
+and the question come before a connection is opened, a signer made, or anything signed or sent.
+Given both `--app` and `--server`, the file is left aside unless it is in use here, and never
+asked about.
 
 **Tested.** `packages/core/test/scenarios/link.test.ts`: a member's link verifies and names its
 signer; another team's, a removed member's and one for a server taken off the list do not; a
@@ -539,12 +544,140 @@ terminal the question is asked and `n` leaves the runner never started; with no 
 2 and S2, for `deploy`, `rollback`, `status`, `logs` and `secret set|rm|ls`; the app asks on
 opening and `n` deploys nothing; then each way a file is not signed, the happy paths and a second
 machine. `apps/cli/test/project.test.ts`: `signerOf`, `withProject` and `zekno link` in each state.
+The tests added with the review's fixes are listed under "Where each fix is tested".
 
-**Left for the review**
+### Review (an independent reviewer, at `7bba9b6`)
+
+An independent reviewer (a separate agent that did not write the code) read commit `7bba9b6`, with
+a teammate's signed `zekno.json` in someone else's hands as the main attacker: copied into a
+folder beside another Compose file, put in a folder above, or kept in a pull request that changes
+only the Compose file. The reviewer reproduced each finding against the stand-in runner and
+Docker. Nothing was rated high or critical; one finding was rated medium and three low. The fixes
+were made afterwards, at the commit that adds this record, by an assistant other than the
+reviewer, who reproduced each finding first with a test that fails at `7bba9b6`.
+
+| Id | Rating | Finding | State |
+|----|--------|---------|-------|
+| K1 | Medium | `zekno link` recorded a copied team-signed file without asking. The team's signed `zekno.json` copied beside a hostile Compose file: `zekno link` there said "Accepted zekno.json: api on dev …" with status 0 and no question, and `zekno deploy` then deployed the hostile file as `api` with its secret, unasked. Names equal to the file's (`zekno link --app api --server dev`) recorded the copy the same way. S2 itself told the reader to run `zekno link`. Reproduced. | Fixed: recording such a file is the same decision as the first-use question, so `zekno link` asks it, before anything is recorded, with no names and with names equal to the file's. Only `y` records it; no stops with "Nothing was done." and status 1. With no terminal it stops with status 2: "There is no terminal to ask on. &lt;member&gt; linked &lt;folder&gt; to &lt;app&gt; on &lt;server&gt;. Add `--yes` to use it here." `--yes` records it. A file already in use here is left as it is ("Already in use: …"). S2 now ends "To use it, run `zekno link` there once and answer its question, or `zekno link --yes` from a script. To leave it aside, give --app and --server." |
+| K2 | Low | The question said "this folder" when the file was in a folder above. A signed `zekno.json` and a hostile `compose.yaml` in `~/Downloads`; in a sub-folder with its own harmless `compose.yaml`, `zekno deploy` asked "Ada linked this folder to api on dev. Use it here?", and yes deployed the parent's Compose file. Reproduced. | Fixed: when the file is not in the current folder, the question names its folder and the Compose file a yes deploys: "&lt;member&gt; linked &lt;folder&gt; to &lt;app&gt; on &lt;server&gt;, with &lt;folder&gt;/&lt;compose&gt;. Use it here?", at a terminal, for `zekno link`, and in the title of the app's panel. In the current folder the words are unchanged. |
+| K3 | Low | "Safe to commit, also to a public repository" was not true as worded. A pull request that changes only `compose.yaml`, checked out in a linked folder, keeps the bytes of `zekno.json`, so `zekno deploy` asked nothing and deployed the pull request's Compose file with the app's secrets. Reproduced. | Fixed in the words, wherever the claim was made (the README, the docs page, data-model.md, research R17): the file holds no secret and no key, so committing it gives nothing away; its signature vouches for the names (which app, which server, which Compose path), not for what the Compose file says; whatever is checked out in a linked folder is what `zekno deploy` deploys, so read a branch before deploying it. The line `zekno link` prints after writing now ends "It holds no secret." The behaviour is unchanged: the deploy signs the Compose text it sends, and the first-use check is about where a file is, not what the Compose file beside it says (N5). |
+| K4 | Low | The question could name one server while a typed flag sent the folder elsewhere: `zekno deploy --server prod` in a copy whose file says api on dev asked "Ada linked this folder to api on dev. Use it here?", and yes deployed the folder's Compose file as `api` on prod. Reproduced. | Fixed: when `--app` or `--server` sends the command to another app or server than the file names, the question says both: "&lt;member&gt; linked this folder to &lt;app&gt; on &lt;server&gt;. This command uses &lt;app2&gt; on &lt;server2&gt;. Use it here?" A flag for a detail the command does not take (`--app` with `status`) changes nothing. |
+
+**Notes fixed**
+
+- K8. The core accepted a signed Compose path that leaves the folder (`/etc/compose.yaml`,
+  `../../etc/compose.yaml`, `..\x.yaml`). The CLI was safe only because the signed path must
+  equal the plain field, which the CLI checks. Fixed in the link's schema only: `createLink` and
+  `verifyLink` refuse an absolute path, a backslash, an empty path, and any `.` or `..` part. No
+  other message, limit or test changed; the core's tests are 96, the 95 before and one added.
+- K10. Each command in a linked folder read the keychain twice: once to judge the file, once in
+  the operation. Fixed: one verified team per run of a command (`teamOnce` in context.ts), opened
+  when first needed, used to judge the file and then taken by the operation, which no longer
+  opens its own (`teamOf`). Each command in a linked folder now reads the keychain once, counted
+  in the tests for `deploy`, `deploy --app --server`, `rollback`, `status`, `logs`, `secret
+  set|rm|ls` and `zekno link`. Once the operation has taken the team, nothing else holds it, so
+  `zekno logs` still keeps only the team list while it reads. The app reads the keychain once to
+  open (`loadStart`, before the first frame), once more right after it, when it checks its servers
+  (`checkServers` verifies the profile again to connect to each server), and once for each deploy,
+  which signs and does not keep the key between deploys: two as it opens, three after the first
+  deploy, counted in a pseudo-terminal. That is unchanged. `ROLES` equals `DEPLOY_ROLES`, so
+  `role_not_allowed` cannot happen today; the check stays, with a comment saying so, for a role
+  that may not deploy.
+- K12. Whether a `y` typed before the question is drawn answers it. Checked in a pseudo-terminal
+  (100 by 30, a driver that reads the terminal the whole time, an in-memory key store whose reads
+  can be made slow, as a keychain that asks, a runner on this machine, the stand-in Docker), in the
+  copy, before and after the fix. Before: at a terminal it did. A `y` written as the process
+  started, or while the keychain was read, answered `zekno deploy`'s question, and it deployed
+  with no key pressed at the question. In the app it did not, by chance: a `y` written as the
+  process started was read and thrown away by the background question, and one written while the
+  keychain was read (after the background question) was held by the terminal's input and read
+  together with the next key, which the app took as neither, so the `n` pressed next did not
+  close the question either. Fixed: a question at a terminal (`Ui.confirm`) first throws away what
+  has arrived, in raw mode, so that a key held in line mode is let through and dropped
+  (`discardTypedAhead`, ui/type-ahead.ts). The app asks the terminal for its background after
+  the profile is verified, just before the first frame, and reading the answer takes what was
+  typed before and throws it away. After: a `y` written at either moment no longer answers; the
+  command waits, and `n` stops it with status 1, nothing deployed; in the app the question stays
+  open, and `n` alone closes it. A `y` pressed after the question is drawn answers it, as before.
+
+**Notes left**
+
+- K5. One yes to a read-only command (`zekno status`) also covers later deploys from that folder.
+  That is what "Use it here?" means.
+- K6. Someone who can write the profile folder can drop the latest team list from
+  `profile.json`; a removed member's link then counts again for commands that do not need the
+  server to agree (a runner that is up to date refuses the deploy: "different version of the team
+  list"). No team-list version is pinned in the keychain. This is a limit of the profile, older
+  than the link.
+- K7. A link is bound to its team by the team's id only. The comment in
+  `packages/core/test/scenarios/link.test.ts` that said "even were Mallory a member of both teams,
+  the team id would not match" claimed more than the test shows, and now says what it shows: her
+  link names her team's id, and a team list of ours that counted her key still does not take it.
+- K9. The link verifier does not insist on the canonical payload bytes (extra whitespace,
+  reordered or duplicate keys, `1.0` for `v`), as the deploy and secret verifiers do not. Only a
+  member can produce such a payload.
+- K11. `specs/002-core-library/contracts/api.md` did not list `createLink`, `verifyLink` and
+  `LINK_REFUSALS`. It does now.
+
+**Earlier findings tested again at the commit that adds this record, all still fixed**
+
+P1, with the reviewer's script: the eight commands (`deploy`, `rollback`, `secret set`, `secret
+rm`, `secret ls`, `status`, `logs`, `link`) in a cloned folder whose `zekno.json` is not signed
+each stop with status 2, read the keychain once, make no signer, sign nothing and start no
+runner. P2, P3, P6, P7, F2 and N2: their tests (see "The project file" and "Final review") pass
+unchanged.
+
+**Checked and found to hold** (the reviewer's list)
+
+- Cross-kind, both directions: the kind is compared before verifying and is inside the signed
+  input; every deploy, founding and later team list, secret and removal is refused as a link, as
+  it is and relabelled; a link is refused by every other verifier; the runner never reaches the
+  link verifier.
+- Hostile envelopes return a refusal, never a throw: size is checked before parsing; nesting
+  5,000 deep and a 50 MB payload are handled; padded or non-canonical base64url is refused.
+- Signed and plain fields: every edited field is refused; server names and keys are unique in a
+  team list, so a name cannot stand for another server.
+- `links.json`: another team-signed file put at the same path is asked about again; so are a
+  renamed folder and a hard link elsewhere; another letter case of the folder and a symbolic link
+  to it count as the same folder.
+- The app: only `y` answers the question; Enter, `d` and a paste do nothing; `y` after the file
+  changed is refused; `d` after "no" deploys nothing.
+- Not checked by the reviewer: a real terminal (type-ahead; since checked, see K12), macOS
+  Keychain prompting, Linux, a file owned by another user.
+
+**Where each fix is tested**
+
+| Finding | Test |
+|---------|------|
+| K1 | `apps/cli/test/project-flow.test.tsx`, "`zekno link` there asks the same question before it records anything" and "with no terminal `zekno link` there stops with status 2 and names --yes"; `apps/cli/test/project.test.ts`, "with no names, a zekno.json signed by the team is asked about and recorded as it is". |
+| K2 | `project-flow.test.tsx`, "in a folder above, the question names that folder and its Compose file" and "use this zekno.json here?" (the panel at 80 columns); `project.test.ts`, "a file signed by the team and not used here before is asked about once". |
+| K4 | `project-flow.test.tsx`, "a flag that sends the folder elsewhere than the file names"; `project.test.ts`, "a flag that sends the command elsewhere than the file names". |
+| K8 | `packages/core/test/scenarios/link.test.ts`, "a Compose path that could leave the folder is neither made nor taken". |
+| K10 | `project-flow.test.tsx`, "each command reads the keychain once", "yes at a terminal records it and goes on; … each run reads the keychain once", and, for the app, "reads the keychain once as it opens, and once for its first deploy" (without the servers' check, which that test does not run). |
+| K12 | `apps/cli/test/background.test.ts`, "keys typed before a question is on the screen"; the pseudo-terminal check above. |
+
+The tests named for K1, K2, K4 and K8, and the two command tests for K10, fail at `7bba9b6`; the
+app's count passes there too, unchanged. Also walked through in a
+pseudo-terminal, 29 checks, all passed: in the copy, `zekno link` asks, `n` records nothing and
+`zekno deploy` still asks; `zekno link` and `y` record it and `zekno deploy` asks nothing;
+`zekno link < /dev/null` stops with status 2 naming `--yes`; `zekno link --yes < /dev/null`
+records it; in a sub-folder of the copy, the question at a terminal and the app's panel name the
+folder and its Compose file; `zekno deploy --server prod` in the copy says both targets; in a
+linked folder `deploy`, `status`, `secret ls`, `deploy --app --server` and `link` each read the
+keychain once.
+
+**Left**
 
 - `links.json` is not signed (as before). Someone who can write the profile folder can mark a
   copied file as used; they could equally change the Compose file of a folder already linked.
-- The signature does not cover the Compose file's content, by design (research R17): after a
-  file is used in a folder, the Compose file beside it is deployed as it is, as before (N5).
+- The signature does not cover the Compose file's content, by design (research R17, K3): after a
+  file is used in a folder, the Compose file beside it is deployed as it is (N5).
 - A member can sign a link for any app of the team, also one they never deployed; the first-use
   question shows the app and server, and the deploy itself is signed by whoever runs it.
+- The verified team (and the signing key in it) is now held from the moment the file is judged,
+  which includes the time the question waits for an answer at a terminal, until the operation
+  lets go of it. Before, the team verified to judge the file was let go and the operation read the
+  keychain again.
+- The hidden prompt of `secret set` does not throw away what was typed before it is drawn, as the
+  question now does. Whether such keys end up in the value was not checked; it is outside this
+  review.

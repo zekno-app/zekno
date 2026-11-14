@@ -60,6 +60,36 @@ pass them to `currentSecrets`, show `ignored` to the person deploying, and pass 
 `removals` to `createDeploy`. `ignored` lists each item that failed verification with its
 refusal code, and each name where two different items claim the same version (`conflict`).
 
+## Links
+
+Added for the Zekno terminal app (`specs/004-cli-app`, research R17): a client's project file
+carries one, so a folder's app and server are used only when a member of the team named them.
+
+| Function | Returns |
+|----------|---------|
+| `createLink({ trust, serverId, app, compose, signer })` | signed link envelope (`zekno.link.v1`) |
+| `verifyLink(trust, envelope)` | `Result<VerifiedLink>` (`serverId`, `app`, `compose`, `signer`) |
+
+A link is a member's statement that a folder deploys `app` to one of the team's servers from the
+Compose file at `compose`, relative to the folder. It names the team by id only, not by a team
+list's hash, so it outlives later team lists, and it holds no time, so the same content always
+gives the same bytes. It says nothing about which folder: the client decides that, and must not
+take a link found in a folder as proof that it was made there.
+
+`createLink` throws `CoreError` `not_member` for a signer who is not in the team list,
+`unknown_server` for a server that is not in it, and `invalid_argument` for an app name outside
+the app-name pattern or a Compose path that is not 1 to 255 characters, holds a control, format or
+line-separator character, is absolute, holds a backslash, or has a `.` or `..` part. `verifyLink`
+refuses such a path as `malformed`.
+
+Order of checks in `verifyLink`, each with its own refusal code (`LINK_REFUSALS`): size
+(`too_large`), envelope shape (`malformed`), payload type (`wrong_payload_type`), signer known in
+the team list held now (`unknown_signer`), signature (`bad_signature`), payload shape and version
+(`malformed`, `unsupported_version`), role (`role_not_allowed`; every role there is today may
+deploy, so it refuses nothing yet), team (`wrong_team`), server listed (`unknown_server`). A
+member removed since, or a server taken off the list, makes a link stop counting. A link is never
+taken as any other kind of message, and no other kind is taken as a link.
+
 ## Deploys: runner side
 
 | Function | Returns |

@@ -209,9 +209,19 @@ follow from them or from what the installed tools provide.
   this machine, byte for byte (`links.json`, the record of first use). The first time a file
   signed by the team is met in a folder, zekno shows who linked it and to what, and asks once: a
   command at a terminal and the app when it opens. With no terminal the command stops, and
-  `zekno link` with no names is how to say yes. A file not signed by the team is refused outright
-  and not even offered. `zekno link` and the app's "remember this folder?" sign what they write.
-  This replaces "accept once on this machine" (commit `2f79ede`).
+  `zekno link --yes` is how to say yes from a script. A file not signed by the team is refused
+  outright and not even offered. `zekno link` and the app's "remember this folder?" sign what they
+  write. This replaces "accept once on this machine" (commit `2f79ede`).
+- **After the independent review (at `7bba9b6`)**: `zekno link` with no names asks the same
+  question before it records a file, since recording it is the same decision (K1); the question
+  names the file's folder and Compose file when it is in a folder above (K2), and both targets
+  when a flag sends the command elsewhere (K4); keys typed before the question is drawn are thrown
+  away (K12). What the file is safe for is said exactly (K3): it holds no secret and no key, so
+  committing it gives nothing away, also to a public repository; its signature vouches for the
+  names (which app, which server, which Compose path), not for what the Compose file says.
+  Whatever is checked out in a linked folder, a pull request's branch included, is what
+  `zekno deploy` deploys there, so a branch is read before it is deployed. See security-review.md,
+  "The signed link".
 - **Rationale**: a `zekno.json` travels with a repository, and whoever wrote it picks the app and
   the server. "Accept once" asked the person about a file anyone could have written, and a yes
   given in a hurry to a stranger's repository handed it an app and its secrets. The signature
@@ -221,7 +231,9 @@ follow from them or from what the installed tools provide.
   another folder beside another Compose file, and a signature-only rule would then deploy that
   Compose file as the team's app with the app's secrets. The first-use check closes that: a
   copied file shows "api on prod" where the person did not expect it, once, before anything is
-  done.
+  done. It does not cover a change to the Compose file in a folder already in use (a pull
+  request checked out there keeps the same `zekno.json`): the deploy signs the Compose text it
+  sends, and reading what is checked out is the person's.
 - **Alternatives considered**: signing the folder's path (paths differ between machines and
   clones, so every teammate would need a file of their own); signing the Compose file's hash too
   (every edit of the Compose file would need `zekno link` again, and the deploy already signs the

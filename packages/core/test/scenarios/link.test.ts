@@ -67,7 +67,8 @@ describe("a link: a member's signed statement that a folder deploys one app to o
     })
     const forged = await createLink({ trust: theirTrust, serverId: ours.server.serverId, app: "web", compose: "compose.yaml", signer: theirs.founder.signer })
     expect(code(verifyLink(ours.trust, forged))).toBe("unknown_signer")
-    // Even were Mallory a member of both teams, the team id would not match.
+    // Her link names her team's id: a team list of ours that counted her key would still not take it.
+    // (A link is bound to its team by the team's id only: one she signed for our team, as a member of it, would count.)
     expect(code(verifyLink({ ...ours.trust, members: theirTrust.members }, forged))).toBe("wrong_team")
     // And ours means nothing to her team.
     expect(code(verifyLink(theirTrust, ours.link))).toBe("unknown_signer")
@@ -202,5 +203,35 @@ describe("a link: a member's signed statement that a folder deploys one app to o
       await expect(createLink({ ...base, ...change })).rejects.toMatchObject({ code: "invalid_argument" })
     }
     await expect(createLink({ ...base, trust: { ...trust, teamId: "nope" } as TeamTrust })).rejects.toMatchObject({ code: "invalid_argument" })
+  })
+
+  test("a Compose path that could leave the folder is neither made nor taken: absolute, a backslash, empty, a `.` or `..` part", async () => {
+    const { founder, server, trust, link } = await linked()
+    const base = { trust, serverId: server.serverId, app: "web", signer: founder.signer }
+    const sign = (compose: string) => signEnvelope(PAYLOAD_TYPES.link, bytes(JSON.stringify({ ...decoded(link), compose })), founder.signer)
+    const leaving = [
+      "/etc/compose.yaml",
+      "/",
+      "../../etc/compose.yaml",
+      "..",
+      "deploy/../../compose.yaml",
+      "deploy/..",
+      "..\\x.yaml",
+      "deploy\\compose.yaml",
+      "",
+      ".",
+      "./compose.yaml",
+      "deploy/./compose.yaml",
+      "deploy/.",
+    ]
+    for (const compose of leaving) {
+      await expect(createLink({ ...base, compose })).rejects.toMatchObject({ code: "invalid_argument" })
+      expect({ compose, verified: code(verifyLink(trust, await sign(compose))) }).toEqual({ compose, verified: "malformed" })
+    }
+    // A name that only starts or ends with dots is a name, not a step up or a step in place.
+    for (const compose of ["deploy/compose.yaml", ".compose.yaml", "..compose.yaml", "compose.yaml..", "deploy/.hidden/c.yaml", "a..b/c.yaml"]) {
+      expect({ compose, made: code(verifyLink(trust, await createLink({ ...base, compose }))) }).toEqual({ compose, made: "accepted" })
+      expect({ compose, verified: code(verifyLink(trust, await sign(compose))) }).toEqual({ compose, verified: "accepted" })
+    }
   })
 })

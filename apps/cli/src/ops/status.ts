@@ -1,6 +1,6 @@
 import { RunnerAppStatesSchema, RunnerStatusSchema, type RunnerAppStates, type RunnerStatus, type RunnerVersion } from "@workspace/core"
 
-import { openTeam, reach, type OpDeps, type Team } from "../context"
+import { reach, teamOf, type OpDeps, type Team } from "../context"
 import { CliError, RunnerRefused } from "../errors"
 import { findServer, type Server } from "../profile"
 import { namedUnreachable, withSession, type Session, type SessionMode } from "../session"
@@ -17,7 +17,7 @@ export type Checked = { team: Pick<Team, "trust">; server: Server }
 
 /** Verifies the team and finds one of its servers. `from`: the project file, when the name was read from it. */
 export async function locateServer(deps: OpDeps, name: string | undefined, from?: string): Promise<Located> {
-  const team = await openTeam(deps)
+  const team = await teamOf(deps)
   return { team, server: findServer(team.profile, name, from) }
 }
 

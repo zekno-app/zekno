@@ -179,12 +179,19 @@ export type AddProgress = {
 export type Linked = { server: string; app: string; compose?: string }
 
 /**
+ * A zekno.json in a folder above the one the app was started in: that
+ * folder, and the Compose file the file names, as the question shows them.
+ */
+export type Above = { folder: string; compose: string }
+
+/**
  * A zekno.json signed by the team that has not been used in this folder on
  * this machine: who signed it (cleaned) and what it names, for the question
- * asked when the app opens; and the file as it was judged, its real path and
+ * asked when the app opens, with its folder and Compose file when it is in a
+ * folder above (`above`); and the file as it was judged, its real path and
  * the SHA-256 of its bytes, so that a "yes" records only what was shown.
  */
-export type FirstUse = Linked & { member: string; path: string; sha256: string }
+export type FirstUse = Linked & { member: string; path: string; sha256: string; above?: Above }
 
 /**
  * How the app starts: the profile has been read and verified, or not
@@ -274,9 +281,9 @@ export type Question =
   /**
    * When the app opens in a folder whose zekno.json is signed by the team
    * (`member` signed it) and was not used in this folder on this machine:
-   * use it here?
+   * use it here? `above`: the file is in a folder above, named in the question.
    */
-  | { kind: "use-link"; member: string; server: string; app: string }
+  | { kind: "use-link"; member: string; server: string; app: string; above?: Above }
 
 /**
  * The answers to each question and their keys. The boards give the words for
@@ -316,10 +323,15 @@ export const CHOICES = {
   ],
 } as const satisfies Record<Question["kind"], readonly Choice<string>[]>
 
-/** The words of "use this zekno.json here?", asked when the app opens. */
+/**
+ * The words of "use this zekno.json here?", asked when the app opens. A file
+ * in a folder above is named with its folder and its Compose file: a "yes"
+ * deploys that Compose file, not the one in the folder the app was started in.
+ */
 export function useLinkWords(question: Extract<Question, { kind: "use-link" }>): { title: string; body: string } {
+  const { member, app, server, above } = question
   return {
-    title: `${question.member} linked this folder to ${question.app} on ${question.server}`,
+    title: above ? `${member} linked ${above.folder} to ${app} on ${server}, with ${above.compose}` : `${member} linked this folder to ${app} on ${server}`,
     body: "The link is signed by your team. It has not been used in this folder on this machine. Use it here?",
   }
 }
@@ -526,7 +538,13 @@ export function initialState(start: Start, size: { columns: number; rows: number
   }
   const { team, linked, firstUse } = start
   const notice: Notice | undefined = start.problem === undefined ? undefined : { tone: "error", text: start.problem }
-  const question: Question | undefined = firstUse && { kind: "use-link", member: firstUse.member, server: firstUse.server, app: firstUse.app }
+  const question: Question | undefined = firstUse && {
+    kind: "use-link",
+    member: firstUse.member,
+    server: firstUse.server,
+    app: firstUse.app,
+    ...(firstUse.above ? { above: firstUse.above } : {}),
+  }
   return { ...base, stack: [homeOn(team, linked)], team, linked, notice, ...(question ? { question } : {}) }
 }
 

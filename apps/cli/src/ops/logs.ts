@@ -7,7 +7,7 @@
  */
 import { RunnerReportSchema, RunnerStatusSchema } from "@workspace/core"
 
-import { openTeam, reach, type OpDeps, type Team } from "../context"
+import { reach, teamOf, type OpDeps, type Team } from "../context"
 import { CliError } from "../errors"
 import { findServer, type Server } from "../profile"
 import { ENDED, namedUnreachable, openSession, type Session } from "../session"
@@ -31,7 +31,7 @@ export type LogsPlan = { team: Pick<Team, "trust">; server: Server; app: string 
 
 /** Verifies the team and finds the server; the app's name is checked before anything is sent. */
 export async function prepareLogs(deps: OpDeps, where: Where): Promise<LogsPlan> {
-  const team = await openTeam(deps)
+  const team = await teamOf(deps)
   const server = findServer(team.profile, where.server, where.serverFrom)
   return { team: { trust: team.trust }, server, app: checkApp(where.app) }
 }

@@ -25,7 +25,7 @@ import { prepareSecretSet, removeSecret, setSecret } from "../ops/secret"
 import { addServer, isOutdated, prepareServerAdd, prepareServerUpdate, updateRunner } from "../ops/server"
 import { locateServer, readOver, stateOf, type AppStates, type RunState, type StatusResult } from "../ops/status"
 import { profileStore, type Server } from "../profile"
-import { DEFAULT_COMPOSE, findProject, notSignedHere, shownPath, standingOf, tilde, type ProjectLink, type Standing } from "../project"
+import { aboveOf, DEFAULT_COMPOSE, findProject, notSignedHere, shownPath, standingOf, tilde, type ProjectLink, type Standing } from "../project"
 import { RUNNER_RELEASE } from "../runner-release"
 import { sanitize } from "../sanitize"
 import { openSession, SshUnreachable, type Session, type SessionMode } from "../session"
@@ -199,7 +199,11 @@ export async function loadStart(deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?
     if (!team.profile.servers.some((server) => server.name === link.server)) return { ...verified, problem: notConnected(link) }
     const linked = { server: link.server, app: link.app, compose: sanitize(link.compose) }
     // A copied file would otherwise deploy someone else's folder: the first time here, the person is asked.
-    if (standing.kind === "new") return { ...verified, firstUse: { ...linked, member: standing.member, path: link.path, sha256: link.sha256 } }
+    if (standing.kind === "new") {
+      // A file in a folder above is named with its folder and Compose file: that is what a "yes" deploys.
+      const above = aboveOf(link, deps.cwd)
+      return { ...verified, firstUse: { ...linked, member: standing.member, path: link.path, sha256: link.sha256, ...(above ? { above } : {}) } }
+    }
     return { ...verified, linked }
   } catch (error) {
     const reason = reasonOf(error)
