@@ -48,18 +48,18 @@ flowchart LR
     end
 
     subgraph server["Your server"]
-        agent["<b>Agent</b><br/>Verifies the signature<br/>Decrypts with its own key"]
+        runner["<b>Runner</b><br/>Verifies the signature<br/>Decrypts with its own key"]
         containers["Your containers"]
-        agent --> containers
+        runner --> containers
     end
 
     app -- "ciphertext +<br/>signed manifest" --> cp
-    cp -- "agent pulls,<br/>outbound only" --> agent
+    cp -- "runner pulls,<br/>outbound only" --> runner
 
     style cloud stroke-dasharray: 5 4
 ```
 
-The dashed box is everything an attacker gets by breaching Zekno. If Zekno is unavailable, the desktop app can deploy to the agent directly.
+The dashed box is everything an attacker gets by breaching Zekno. If Zekno is unavailable, the desktop app can deploy to the runner directly.
 
 ### A deploy, step by step
 
@@ -69,24 +69,24 @@ sequenceDiagram
     actor Dev as Developer
     participant App as Desktop app
     participant CP as Control plane
-    participant Agent as Agent
+    participant Runner as Runner
     participant Run as Your containers
 
     Dev->>App: Set secrets, press Deploy
     Note over App: Encrypts secrets<br/>Signs the manifest
     App->>CP: Ciphertext and signed manifest
     Note over CP: Cannot open<br/>or alter either
-    Agent->>CP: Poll for new manifests
-    CP-->>Agent: Ciphertext and signed manifest
-    Note over Agent: Verifies signature<br/>Decrypts secrets
-    Agent->>Run: Start containers
-    Agent-->>CP: Report status
+    Runner->>CP: Poll for new manifests
+    CP-->>Runner: Ciphertext and signed manifest
+    Note over Runner: Verifies signature<br/>Decrypts secrets
+    Runner->>Run: Start containers
+    Runner-->>CP: Report status
     CP-->>App: Show deploy result
 ```
 
 - **On your machine (steps 1–2).** The desktop app encrypts secrets for the server's public key and signs the deploy manifest with the team key.
-- **In the control plane (steps 2–4).** Zekno stores files it cannot open or alter. The agent pulls them over an outbound connection; nothing connects in to your server.
-- **On your server (steps 4–5).** The agent verifies the signature against the team's public keys, then decrypts with a key that never leaves the server.
+- **In the control plane (steps 2–4).** Zekno stores files it cannot open or alter. The runner pulls them over an outbound connection; nothing connects in to your server.
+- **On your server (steps 4–5).** The runner verifies the signature against the team's public keys, then decrypts with a key that never leaves the server.
 
 The mechanism is end-to-end encryption plus digital signatures. Zekno does not use zero-knowledge proofs; the name refers to the service having zero knowledge of your secrets.
 
@@ -98,7 +98,7 @@ The mechanism is end-to-end encryption plus digital signatures. Zekno does not u
 | --- | --- | --- | :---: | :---: |
 | Desktop app | A team member's machine | Team signing key | Yes | Yes |
 | Control plane | Zekno's infrastructure | None | No | No |
-| Agent | Your server | Server decryption key | Yes | No, it only verifies |
+| Runner | Your server | Server decryption key | Yes | No, it only verifies |
 
 ### What a breach of Zekno does not give an attacker
 
@@ -114,7 +114,7 @@ The mechanism is end-to-end encryption plus digital signatures. Zekno does not u
 | --- | --- |
 | A team member's machine is compromised | That machine holds a signing key |
 | One of your servers is compromised | Secrets are plaintext in memory where the app runs |
-| A Zekno app or agent release is tampered with | The client is the trust anchor. Mitigated by public code and signed releases |
+| A Zekno app or runner release is tampered with | The client is the trust anchor. A server installs a runner only when it matches the checksum the CLI holds, recorded after a second build of the same source gave the same file. Runner releases are not signed |
 
 > [!NOTE]
 > The control plane still sees metadata: server addresses, app names, deploy times and team membership.
@@ -126,7 +126,8 @@ Everything that runs on your device or in your browser is public. Everything tha
 | Part | Where | Source |
 | --- | --- | :---: |
 | Core library (encryption, signing, manifest format) | `packages/core` | Open |
-| Server agent | `apps/agent` | Open |
+| Server runner | `apps/runner` | Open |
+| Command-line tool | `apps/cli` | Open |
 | Desktop app | `apps/desktop` | Open |
 | Website (landing pages, docs, signed-in dashboard) | `apps/web` | Open |
 | Control plane (storage and relay, teams, billing) | Hosted by Zekno | Closed |
@@ -139,20 +140,20 @@ These protect the security promise. Changes that break them need a very good rea
 
 1. **Private keys stay in the desktop app's main process.** The UI asks the main process to encrypt or sign over typed RPC and never sees a key.
 2. **Keys are stored in the operating system's keychain**, never in a plain file.
-3. **Nothing in this repository depends on closed code.** The app, the agent and the website reach the control plane only through the public protocol in `packages/core`.
+3. **Nothing in this repository depends on closed code.** The app, the runner and the website reach the control plane only through the public protocol in `packages/core`.
 4. **No secret editing in a browser.** A web page is code served fresh on every visit, so a compromised server could serve a page that steals keys. The website's dashboard is read-only for anything secret.
 5. **No hosted service may hold a signing key.** Builds that deploy run on the customer's server or in their CI.
-6. **Releases and updates are signed with an offline key**, and the app verifies that signature itself before applying an update.
+6. **Releases and updates are signed with an offline key**, and the app verifies that signature itself before applying an update. This is the rule for the planned desktop app. Runner releases are not signed yet: a server installs a runner only when its checksum equals the one the CLI holds, recorded after a second build (see the threat table above).
 7. **No credentials in this repository.** Environment files are ignored by git; only `.env.example` files with placeholder values are committed.
 8. **The Electrobun version is pinned**, and `packages/core` stays free of Electrobun code.
 
 ### Reporting a vulnerability
 
-Please do not open public issues for security problems. Report them privately to the maintainers. A dedicated contact address will be listed here before the first release.
+Please do not open public issues for security problems. Report them privately with GitHub's private vulnerability reporting: the **Report a vulnerability** button on the repository's [Security](https://github.com/zekno-app/zekno/security) tab.
 
 ## Repository
 
-A Turborepo monorepo on Bun workspaces. The security-critical packages are not written yet; the table shows what exists today.
+A Turborepo monorepo on Bun workspaces. The table shows what exists today.
 
 | Path | Purpose | Status |
 | --- | --- | --- |
@@ -160,11 +161,12 @@ A Turborepo monorepo on Bun workspaces. The security-critical packages are not w
 | `packages/ui` | Shared React components | Scaffolded |
 | `packages/eslint-config` | Shared ESLint configuration | Available |
 | `packages/typescript-config` | Shared TypeScript configuration | Available |
-| `packages/core` | Encryption, signing, manifest format, control-plane client and protocol types | Planned |
-| `apps/agent` | Program that runs on your servers | Planned |
+| `packages/core` | Key generation, secret encryption, signed deploys, team membership and protocol types | First version built; unaudited. The control-plane client is not written yet |
+| `apps/cli` | Command-line tool: your key, servers, secrets, deploys, running state and logs. Running `zekno` opens a full-screen terminal app built with Ink; single commands stay for scripts | Second version built: the terminal app, running state and logs read from your server, a project file (`zekno.json`), and installing over SSH the runner release its build carries, checked against a checksum it holds. The first runner release is not recorded yet, so a server still needs a runner installed by hand, or `--runner-file` for development. One developer, deploying directly over SSH. Internal reviews only; unaudited |
+| `apps/runner` | Program that runs on your servers | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything, over one connection per command. Built for Linux on x86-64 and ARM64 with glibc 2.17 or newer. How a release is made and checked: [`apps/runner/RELEASING.md`](apps/runner/RELEASING.md). Internal reviews only; unaudited |
 | `apps/desktop` | Desktop app (Electrobun: React UI + Bun main process) | Planned |
 
-- `packages/core` will contain no framework code. The desktop app and the agent both depend on it, so they encrypt and verify in exactly the same way.
+- `packages/core` contains no framework code. The desktop app and the runner both depend on it, so they encrypt and verify in exactly the same way.
 - `apps/web` is the only website. Its dashboard shows status, deploy history, team and billing. It never handles keys or secret values; those stay in the desktop app.
 
 ### Tech stack
@@ -176,13 +178,14 @@ A Turborepo monorepo on Bun workspaces. The security-critical packages are not w
 | Website | Next.js 16 (App Router), React 19, Tailwind CSS 4 |
 | UI components | shadcn/ui on Base UI |
 | Desktop app (planned) | Electrobun, React, Vite, Tailwind CSS |
-| Agent (planned) | Bun, compiled to a single executable |
+| Command-line tool | Bun, Ink 8 on React 19 for the terminal interface, compiled to a single executable |
+| Runner | Bun, compiled to a single executable |
 
 ## Getting started
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) 1.4.2, the version pinned in `package.json`
+- [Bun](https://bun.sh) 1.4.4, the version pinned in `package.json`
 - [Node.js](https://nodejs.org) 26.13 or later in the 26.x line
 
 ### Install and run
@@ -243,11 +246,17 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 **Foundations**
 
 - [ ] One-day spike: window, keychain access, signed build, verified auto-update (macOS and Windows)
-- [ ] `packages/core`: key generation, secret encryption, manifest signing and verification, protocol types
+- [x] `packages/core`: key generation, secret encryption, manifest signing and verification, protocol types (first version, awaiting external audit)
 
 **Version 1**
 
-- [ ] Agent: pull, verify, decrypt, run Docker Compose
+- [x] Runner: verify, decrypt, run Docker Compose (driven directly over SSH; pulling from the control plane comes with it)
+- [x] CLI: connect a server, set and remove secrets, deploy, roll back, status (direct over SSH)
+- [x] CLI terminal app: Home, an app's deploys and secrets, deploys with stages, first run and adding a server from the app
+- [x] Running state and live logs, read from your server over SSH (CLI and runner)
+- [x] Project file `zekno.json`, signed by a member of your team and asked about once the first time it is used in a folder
+- [x] Installing the runner over SSH from a release, checked against a checksum the CLI holds, and the release workflow
+- [ ] Publish the first runner release (until then a server needs a runner installed by hand)
 - [ ] Desktop app: connect a server, set secrets, deploy, roll back, logs
 - [ ] Website: landing pages and docs, then the signed-in dashboard
 - [ ] Local mock of the control plane for development
@@ -255,7 +264,7 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 
 **Later**
 
-- [ ] CLI for deploys from CI
+- [ ] Deploys from CI with the CLI
 - [ ] Two-person approval for production deploys
 
 ## Contributing

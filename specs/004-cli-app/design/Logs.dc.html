@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live logs</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 960px; height: 600px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px">
+  <div style="display: flex; justify-content: space-between; align-items: baseline">
+    <div style="display: flex; gap: 8px; align-items: baseline">
+      <svg role="img" aria-label="zekno.app" viewBox="0 0 41 5" shape-rendering="crispEdges" style="width: 344px; height: 50px; display: block; flex-shrink: 0"><path fill="#ffffff" d="M0 0h4v1h-4zM3 1h1v1h-1zM1 2h2v1h-2zM0 3h1v1h-1zM0 4h4v1h-4zM6 0h2v1h-2zM5 1h1v1h-1zM8 1h1v1h-1zM5 2h4v1h-4zM5 3h1v1h-1zM6 4h3v1h-3zM10 0h1v1h-1zM13 0h1v1h-1zM10 1h1v1h-1zM12 1h1v1h-1zM10 2h2v1h-2zM10 3h1v1h-1zM12 3h1v1h-1zM10 4h1v1h-1zM13 4h1v1h-1zM15 0h3v1h-3zM15 1h1v4h-1zM18 1h1v4h-1zM21 0h2v1h-2zM20 1h1v3h-1zM23 1h1v3h-1zM21 4h2v1h-2z"></path><path fill="#2383e2" d="M25 4h1v1h-1zM28 0h2v1h-2zM30 1h1v1h-1zM28 2h3v1h-3zM27 3h1v1h-1zM30 3h1v1h-1zM28 4h3v1h-3zM32 0h3v1h-3zM32 1h1v1h-1zM35 1h1v1h-1zM32 2h3v1h-3zM32 3h1v1h-1zM32 4h1v1h-1zM37 0h3v1h-3zM37 1h1v1h-1zM40 1h1v1h-1zM37 2h3v1h-3zM37 3h1v1h-1zM37 4h1v1h-1z"></path></svg>
+      <span style="color: #8b949e">›</span><span style="color: #8b949e">prod</span>
+      <span style="color: #8b949e">›</span><span style="color: #8b949e">demo</span>
+      <span style="color: #8b949e">›</span><span style="color: #ffffff; font-weight: 600">logs</span>
+    </div>
+    <div style="display: flex; gap: 16px"><span style="color: #8b949e">all services</span><span style="color: #3fb950">● following</span></div>
+  </div>
+
+  <div style="flex-grow: 1; box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 10px 14px; display: flex; flex-direction: column; justify-content: flex-end; min-height: 0; overflow: hidden">
+    <div style="display: grid; grid-template-columns: 76px 60px 1fr; column-gap: 12px"><span style="color: #8b949e">21:52:03</span><span style="color: #2383e2">web</span><span>started</span></div>
+    <div style="display: grid; grid-template-columns: 76px 60px 1fr; column-gap: 12px"><span style="color: #8b949e">21:52:03</span><span style="color: #2383e2">web</span><span>listening on :8080</span></div>
+    <div style="display: grid; grid-template-columns: 76px 60px 1fr; column-gap: 12px"><span style="color: #8b949e">21:52:04</span><span style="color: #a371f7">worker</span><span>connected to the queue</span></div>
+    <div style="display: grid; grid-template-columns: 76px 60px 1fr; column-gap: 12px"><span style="color: #8b949e">21:52:09</span><span style="color: #2383e2">web</span><span>GET /healthz 200 2ms</span></div>
+    <div style="display: grid; grid-template-columns: 76px 60px 1fr; column-gap: 12px"><span style="color: #8b949e">21:52:14</span><span style="color: #2383e2">web</span><span>GET / 200 11ms</span></div>
+    <div style="display: grid; grid-template-columns: 76px 60px 1fr; column-gap: 12px"><span style="color: #8b949e">21:52:14</span><span style="color: #a371f7">worker</span><span>job 1841 done in 320ms</span></div>
+    <div style="display: grid; grid-template-columns: 76px 60px 1fr; column-gap: 12px"><span style="color: #8b949e">21:52:19</span><span style="color: #2383e2">web</span><span>GET /healthz 200 1ms</span></div>
+    <div style="display: grid; grid-template-columns: 76px 60px 1fr; column-gap: 12px"><span style="color: #8b949e">21:52:21</span><span style="color: #a371f7">worker</span><span style="color: #f85149">job 1842 failed: connection refused, retry in 5s</span></div>
+    <div style="display: grid; grid-template-columns: 76px 60px 1fr; column-gap: 12px"><span style="color: #8b949e">21:52:26</span><span style="color: #a371f7">worker</span><span>job 1842 done in 280ms</span></div>
+    <div style="display: grid; grid-template-columns: 76px 60px 1fr; column-gap: 12px"><span style="color: #8b949e">21:52:29</span><span style="color: #2383e2">web</span><span>GET /healthz 200 2ms</span></div>
+  </div>
+
+  <div style="color: #8b949e">Read straight from your server over SSH. Nothing passes through Zekno.</div>
+
+  <div style="display: flex; gap: 18px; color: #8b949e; flex-wrap: wrap">
+    <span><span style="color: #d7dde4">f</span> pause following</span>
+    <span><span style="color: #d7dde4">/</span> filter</span>
+    <span><span style="color: #d7dde4">1-9</span> one service</span>
+    <span><span style="color: #d7dde4">↑↓</span> scroll</span>
+    <span><span style="color: #d7dde4">esc</span> back</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":600}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

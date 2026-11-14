@@ -5,8 +5,10 @@ description: What Zekno is, how it keeps your keys on your side, and where the p
 
 <Callout type="warn" title="Pre-alpha">
   Nothing here is ready for production use, and the security design has not
-  been independently audited. The desktop app, the server agent and the core
-  library are not written yet. These docs describe the design they will follow.
+  been independently audited. First versions of the core library, the
+  command-line tool and the server runner are in the repository. The desktop
+  app and the hosted service are not written yet; these docs describe the
+  design they will follow.
 </Callout>
 
 ## What Zekno is
@@ -31,14 +33,14 @@ secrets and no ability to run code on customer servers.
 | --- | --- | --- | --- | --- |
 | Desktop app | A team member's machine | Team signing key | Yes | Yes |
 | Control plane | Zekno's infrastructure | None | No | No |
-| Agent | Your server | Server decryption key | Yes | No, it only verifies |
+| Runner | Your server | Server decryption key | Yes | No, it only verifies |
 
 ## How a deploy works
 
 1. **Encrypt.** The desktop app encrypts each secret for your server's public key before anything leaves your machine.
 2. **Sign.** The app signs the deploy with your team's key.
-3. **Relay.** The control plane stores the sealed, signed packet. It has no key to open it. Your server's agent pulls it over an outbound connection.
-4. **Verify.** The agent checks the signature before doing anything, and refuses a deploy your team did not sign.
+3. **Relay.** The control plane stores the sealed, signed packet. It has no key to open it. Your server's runner pulls it over an outbound connection.
+4. **Verify.** The runner checks the signature before doing anything, and refuses a deploy your team did not sign.
 5. **Run.** The server decrypts with its own key and starts your containers.
 
 ## What it protects against
@@ -55,7 +57,7 @@ secrets and no ability to run code on customer servers.
 | --- | --- |
 | A team member's machine is compromised | That machine holds a signing key |
 | One of your servers is compromised | Secrets are plaintext in memory where the app runs |
-| A Zekno app or agent release is tampered with | The client is the trust anchor. Mitigated by public code and signed releases |
+| A Zekno app or runner release is tampered with | The client is the trust anchor. A server installs a runner only when it matches the checksum the command-line tool holds, recorded after a second build of the same source gave the same file. Runner releases are not signed |
 
 <Callout title="Metadata">
   The control plane still sees metadata: server addresses, app names, deploy
@@ -67,8 +69,9 @@ secrets and no ability to run code on customer servers.
 | Part | Status |
 | --- | --- |
 | Website (`apps/web`) | Landing page and these docs; the signed-in dashboard is planned |
-| Core library (`packages/core`): encryption, signing, manifest format | Planned |
-| Server agent (`apps/agent`) | Planned |
+| Core library (`packages/core`): encryption, signing, team lists, message formats | First version built; internal review only |
+| Command-line tool (`apps/cli`) | Second version built: a full-screen terminal app and single commands for scripts, running state and logs read from your server, and a project file. One developer, deploying directly over SSH. It installs on a server the runner release its build carries, checked against a checksum it holds. The first runner release is not recorded yet. Internal reviews only. See [Command-line tool](/docs/cli) |
+| Server runner (`apps/runner`) | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything. One connection per command. Built for Linux on x86-64 and ARM64 with glibc 2.17 or newer. Internal reviews only. See [Server runner](/docs/runner) |
 | Desktop app (`apps/desktop`) | Planned |
 | Control plane | Hosted by Zekno, closed source |
 
@@ -79,18 +82,18 @@ Zekno sells; the design means you don't have to trust it.
 ## Where to go next
 
 <Cards>
-  <Card title="Source code" href="https://github.com/zekno-app/zekno-monorepo">
+  <Card title="Source code" href="https://github.com/zekno-app/zekno">
     Read the repository and the full security model.
   </Card>
   <Card
     title="Roadmap"
-    href="https://github.com/zekno-app/zekno-monorepo#roadmap"
+    href="https://github.com/zekno-app/zekno#roadmap"
   >
     What is planned for the first version and after.
   </Card>
   <Card
     title="Report a vulnerability"
-    href="https://github.com/zekno-app/zekno-monorepo#reporting-a-vulnerability"
+    href="https://github.com/zekno-app/zekno#reporting-a-vulnerability"
   >
     Security problems are reported privately, never in public issues.
   </Card>

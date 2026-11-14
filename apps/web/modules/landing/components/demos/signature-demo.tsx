@@ -114,7 +114,7 @@ export function SignatureDemo() {
 
           <div className="flex h-full min-w-0 flex-col gap-3 rounded-xl border bg-surface p-3">
             <span className="font-mono text-[0.6875rem] tracking-widest text-muted-foreground uppercase">
-              {copy.agent}
+              {copy.runner}
             </span>
             <div className="flex flex-1 flex-col justify-center gap-3">
               {judged ? (

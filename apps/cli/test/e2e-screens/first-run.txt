@@ -1,0 +1,88 @@
+]11;?[c[?1049h[?25l[?2026h[?25l [2mwelcome[22m                                                                       [2mpre-alpha, unaudited[22m
+
+    ▀▀▀█ ▄▀▀▄ █ ▄▀ █▀▀▄ ▄▀▀▄ [38;5;74m   ▀▀▄ █▀▀▄ █▀▀▄[39m
+    ▄▀▀  █▀▀▀ █▀▄  █  █ █  █ [38;5;74m  ▄▀▀█ █▀▀  █▀▀ [39m
+    ▀▀▀▀  ▀▀▀ ▀  ▀ ▀  ▀  ▀▀  [38;5;74m▀  ▀▀▀ ▀    ▀   [39m
+
+    [1mDeploy to servers you own.[22m
+    [2mSecrets are encrypted and deploys are signed on this machine.[22m
+
+    [1m[38;5;74m1[39m Your key[22m   [2m2 A server[22m   [2m3 First deploy[22m
+
+    [38;5;74m╭─ [39m[1mCreate your signing key[22m [38;5;74m────────────────────────────────────────────╮[39m
+    [38;5;74m│[39m Every deploy and every secret is signed with this key. Your servers  [38;5;74m│[39m
+    [38;5;74m│[39m refuse anything it did not sign.                                     [38;5;74m│[39m
+    [38;5;74m│[39m                                                                      [38;5;74m│[39m
+    [38;5;74m│[39m [38;5;74m?[39m Your name [2m›[22m [7m [27m                                                      [38;5;74m│[39m
+    [38;5;74m│[39m                                                                      [38;5;74m│[39m
+    [38;5;74m│[39m [2mShown to teammates next to what you sign.[22m                            [38;5;74m│[39m
+    [38;5;74m╰──────────────────────────────────────────────────────────────────────╯[39m
+
+    [2mThe key goes into your system keychain. It is never written to a file.[22m
+    [2mIf you lose this machine's keychain, the key cannot be recovered.[22m
+
+
+
+
+
+
+
+ enter [2mcreate the key[22m  esc [2mquit[22m[?2026l[?2026h[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G [2mwelcome[22m                                                                       [2mpre-alpha, unaudited[22m
+
+    ▀▀▀█ ▄▀▀▄ █ ▄▀ █▀▀▄ ▄▀▀▄ [38;5;74m   ▀▀▄ █▀▀▄ █▀▀▄[39m
+    ▄▀▀  █▀▀▀ █▀▄  █  █ █  █ [38;5;74m  ▄▀▀█ █▀▀  █▀▀ [39m
+    ▀▀▀▀  ▀▀▀ ▀  ▀ ▀  ▀  ▀▀  [38;5;74m▀  ▀▀▀ ▀    ▀   [39m
+
+    [1mDeploy to servers you own.[22m
+    [2mSecrets are encrypted and deploys are signed on this machine.[22m
+
+    [1m[38;5;74m1[39m Your key[22m   [2m2 A server[22m   [2m3 First deploy[22m
+
+    [38;5;74m╭─ [39m[1mCreate your signing key[22m [38;5;74m────────────────────────────────────────────╮[39m
+    [38;5;74m│[39m Every deploy and every secret is signed with this key. Your servers  [38;5;74m│[39m
+    [38;5;74m│[39m refuse anything it did not sign.                                     [38;5;74m│[39m
+    [38;5;74m│[39m                                                                      [38;5;74m│[39m
+    [38;5;74m│[39m [38;5;74m?[39m Your name [2m›[22m a[7m [27m                                                     [38;5;74m│[39m
+    [38;5;74m│[39m                                                                      [38;5;74m│[39m
+    [38;5;74m│[39m [2mShown to teammates next to what you sign.[22m                            [38;5;74m│[39m
+    [38;5;74m╰──────────────────────────────────────────────────────────────────────╯[39m
+
+    [2mThe key goes into your system keychain. It is never written to a file.[22m
+    [2mIf you lose this machine's keychain, the key cannot be recovered.[22m
+
+
+
+
+
+
+
+ enter [2mcreate the key[22m  esc [2mquit[22m[?2026l[?2026h[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G [2mwelcome[22m                                                                       [2mpre-alpha, unaudited[22m
+
+    ▀▀▀█ ▄▀▀▄ █ ▄▀ █▀▀▄ ▄▀▀▄ [38;5;74m   ▀▀▄ █▀▀▄ █▀▀▄[39m
+    ▄▀▀  █▀▀▀ █▀▄  █  █ █  █ [38;5;74m  ▄▀▀█ █▀▀  █▀▀ [39m
+    ▀▀▀▀  ▀▀▀ ▀  ▀ ▀  ▀  ▀▀  [38;5;74m▀  ▀▀▀ ▀    ▀   [39m
+
+    [1mDeploy to servers you own.[22m
+    [2mSecrets are encrypted and deploys are signed on this machine.[22m
+
+    [1m[38;5;74m1[39m Your key[22m   [2m2 A server[22m   [2m3 First deploy[22m
+
+    [38;5;74m╭─ [39m[1mCreate your signing key[22m [38;5;74m────────────────────────────────────────────╮[39m
+    [38;5;74m│[39m Every deploy and every secret is signed with this key. Your servers  [38;5;74m│[39m
+    [38;5;74m│[39m refuse anything it did not sign.                                     [38;5;74m│[39m
+    [38;5;74m│[39m                                                                      [38;5;74m│[39m
+    [38;5;74m│[39m [38;5;74m?[39m Your name [2m›[22m ada[7m [27m                                                   [38;5;74m│[39m
+    [38;5;74m│[39m                                                                      [38;5;74m│[39m
+    [38;5;74m│[39m [2mShown to teammates next to what you sign.[22m                            [38;5;74m│[39m
+    [38;5;74m╰──────────────────────────────────────────────────────────────────────╯[39m
+
+    [2mThe key goes into your system keychain. It is never written to a file.[22m
+    [2mIf you lose this machine's keychain, the key cannot be recovered.[22m
+
+
+
+
+
+
+
+ enter [2mcreate the key[22m  esc [2mquit[22m[?2026l

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Status, lists, errors and piped output</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 960px; height: 600px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="color: #8b949e; font-weight: 600">At a terminal</div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #8b949e">$</span> zekno status</div>
+      <div style="display: flex; gap: 10px"><span style="color: #ffffff; font-weight: 600">prod</span><span style="color: #3fb950">● reachable</span><span style="color: #8b949e">team list v2</span></div>
+      <div style="display: grid; grid-template-columns: 110px 100px 1fr; column-gap: 8px; padding-left: 2px">
+        <span>demo</span><span>deploy 5</span><span style="color: #3fb950">● running</span>
+        <span>api</span><span>deploy 12</span><span style="color: #3fb950">● running</span>
+        <span>worker</span><span>deploy 3</span><span style="color: #f85149">● stopped</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #8b949e">$</span> zekno secret ls</div>
+      <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 8px; padding-left: 2px">
+        <span>DATABASE_URL</span><span style="color: #8b949e">version 3</span>
+        <span>SESSION_KEY</span><span style="color: #8b949e">version 1, not deployed yet</span>
+      </div>
+      <div style="color: #8b949e; padding-left: 2px">demo on prod. Values are never shown.</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #8b949e">$</span> zekno secret set API_KEY sk_live_51H</div>
+      <div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">A secret value is never given as an argument.</span></div>
+      <div style="color: #8b949e; padding-left: 17px">It would stay in your shell history. Run zekno secret set API_KEY and type it when asked.</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #8b949e">$</span> zekno deploy</div>
+      <div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">prod could not be reached over SSH.</span></div>
+      <div style="color: #8b949e; padding-left: 17px">Check with: ssh deploy@203.0.113.7 true</div>
+    </div>
+  </div>
+
+  <div style="width: 1px; background: #2a313a"></div>
+
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="color: #8b949e; font-weight: 600">Piped, in scripts and CI: plain and stable</div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #8b949e">$</span> zekno secret ls | cat</div>
+      <div style="display: flex; flex-direction: column">
+        <span>DATABASE_URL&nbsp;&nbsp;&nbsp;&nbsp;version 3</span>
+        <span>SESSION_KEY&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;version 1</span>
+      </div>
+      <div style="color: #8b949e">Cells are separated by tabs. No colour, no symbols.</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #8b949e">$</span> zekno deploy --json</div>
+      <div style="word-break: break-all">{"outcome":"started","app":"demo","sequence":5,"server":"prod"}</div>
+      <div style="color: #8b949e">One JSON object on standard output. Exit status 0.</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #8b949e">$</span> zekno deploy --app demo --server prod &lt; /dev/null</div>
+      <div>Deploy 5 of demo is running on prod with 2 secrets.</div>
+      <div style="color: #8b949e">Never asks a question when there is no terminal. A missing detail is an error that names the flag.</div>
+    </div>
+
+    <div style="flex-grow: 1"></div>
+    <div style="display: grid; grid-template-columns: 60px 1fr; row-gap: 2px; color: #8b949e">
+      <span style="color: #d7dde4">exit 0</span><span>done</span>
+      <span style="color: #d7dde4">exit 1</span><span>refused or failed</span>
+      <span style="color: #d7dde4">exit 2</span><span>typed wrongly</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":600}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

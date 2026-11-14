@@ -5,7 +5,7 @@
  */
 import type { Link } from "@/types/link"
 
-const repoUrl = "https://github.com/zekno-app/zekno-monorepo"
+const repoUrl = "https://github.com/zekno-app/zekno"
 
 /**
  * Addresses that are not decided yet. Fill each one in here and nothing else
