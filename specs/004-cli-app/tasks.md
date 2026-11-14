@@ -103,7 +103,7 @@
 - [X] T060 [P] Update the public docs in apps/web/content/docs/ (a CLI page and a runner page, and the status table of index.mdx) and the repository table and roadmap in README.md
 - [X] T061 Add apps/cli/test/docs.test.ts: every command in the CLI's help and every key in contracts/app.md is named in apps/cli/README.md and the CLI docs page, and nothing named there is missing from the CLI (SC-010)
 - [ ] T062 Walk through every screen in a pseudo-terminal at 100 and at 80 columns, compare each with its canvas board, compile both programs with `bun run compile`, and record the results in specs/004-cli-app/quickstart.md
-- [ ] T063 With the maintainer's go-ahead, run "A real server" from specs/004-cli-app/quickstart.md against the maintainer's server using `--runner-file`, including one deploy timed against feature 003, and record the result
+- [X] T063 With the maintainer's go-ahead, run "A real server" from specs/004-cli-app/quickstart.md against the maintainer's server using `--runner-file`, including one deploy timed against feature 003, and record the result
 - [ ] T064 Run `bun run typecheck`, `bun run lint` and `bun run test` from the repository root and record the totals in specs/004-cli-app/quickstart.md
 
 ## Maintainer steps (not tasks for the implementer)

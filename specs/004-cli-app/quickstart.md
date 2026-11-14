@@ -223,3 +223,46 @@ those, with 28 of the checks, passed too:
 - The terminal's background question: with `detectBackground()` before the app opens, no key
   reached the app in a pseudo-terminal (at commit `bacf938` too). The walkthrough gave the
   background as dark, as User Story 1's did. Reported for the maintainer.
+
+### A real server (2026-11-14)
+
+Run by the assistant with the maintainer's go-ahead, at commit `eb6a65e`, against the
+maintainer's own server: Linux x86-64, root over SSH (an SSH config alias, key in the agent),
+Docker Compose 5.6.0. The server had no runner, no runner folder and no zekno container
+beforehand. The CLI ran from the working tree with a throwaway team; its key was kept in a file
+in a temporary folder instead of the system keychain, so the maintainer's keychain and
+`~/.zekno` were not touched. One SSH connection to this server took about 2.4 to 2.9 seconds.
+
+| Step | Result |
+|------|--------|
+| `zekno server add night --ssh <alias> --runner-file <linux-x64 runner>` | Pass, 18 seconds. The 82 MB file was sent, checked against its SHA-256 on the server and installed as root at `/usr/local/bin/zekno-runner` (mode 755); `/var/lib/zekno` was created with mode 700. Nothing was typed on the server. This is the root install the tests cannot cover. |
+| `zekno secret set GREETING --stdin`, `zekno link`, `zekno deploy` with no flags | Pass. Deploy 1 ran; `printenv GREETING` in the container printed the value; the container publishes no port. |
+| `zekno status`, `zekno logs --tail 3 --no-follow`, `zekno secret ls`, `zekno rollback` | Pass. Status showed `nightdemo deploy 11 running`; logs printed three `time<TAB>service<TAB>text` lines and ended by itself. |
+| The app in a pseudo-terminal, 100 by 30 | Pass. Home showed `● running` 3.6 seconds after opening. Over the next 17 seconds of refreshes there was one SSH process, not one per refresh. `l` showed live log lines after 3.3 seconds (a second SSH process, as designed). `esc`, `q`: exit status 0 and no SSH process left. |
+| A runner from feature 003 put in its place by hand | Pass. `zekno status` still worked, said the runner is from before 0.2.0 and named `zekno server update`, and showed the state as `unknown`. Deploys still worked. |
+| The 0.2.0 runner put back | Pass. It carried on from the state the older runner had written (deploy 22). |
+| `zekno secret rm GREETING`, `zekno deploy` | Pass. The variable was gone from the container. The value was in no file in the runner's folder, the profile folder or the project folder. |
+| Clean-up | The container, its network, the image, both runner files and `/var/lib/zekno` were removed, and checked: nothing named zekno is left on the server. The throwaway key and profile were deleted. |
+
+Time for one deploy of a changed definition (five each; the test container stops at once, so
+Docker's stop timeout is not in these numbers):
+
+| CLI | Runner | Connections | Seconds (five runs) | Mean |
+|-----|--------|-------------|---------------------|------|
+| Feature 003 (`536f24c`) | Feature 003 | 2 | 6.19, 5.76, 5.74, 5.67, 5.59 | 5.8 |
+| This feature | 0.2.0, session | 1 | 3.99, 3.83, 3.77, 3.69, 4.00 | 3.9 |
+| This feature | Feature 003 (no session) | 3 | 8.29, 8.10, 8.14, 8.06, 8.14 | 8.1 |
+
+So a deploy is about 1.9 seconds faster than in feature 003 on this server, a little under one
+connection's time (SC-009). Two things to know:
+
+- Against a runner from before 0.2.0, this CLI is slower than feature 003 was (8.1 against 5.8
+  seconds), because it first tries to open a session and then falls back to one connection per
+  request. That lasts until the runner is updated.
+- `zekno status` takes 3.3 seconds against 2.4 in feature 003. It is still one connection; it
+  now also asks Docker what is running.
+
+Not covered by this run: installing from a published release (none exists yet, so
+`server add` without `--runner-file` and `zekno server update` could not be run against a real
+server), a server reached as a user who is not root, an ARM64 server, and a server that asks for
+a password.
