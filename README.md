@@ -254,7 +254,7 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 - [x] CLI: connect a server, set and remove secrets, deploy, roll back, status (direct over SSH)
 - [x] CLI terminal app: Home, an app's deploys and secrets, deploys with stages, first run and adding a server from the app
 - [x] Running state and live logs, read from your server over SSH (CLI and runner)
-- [x] Project file `zekno.json`, used only once this machine accepted it
+- [x] Project file `zekno.json`, signed by a member of your team and asked about once the first time it is used in a folder
 - [x] Installing the runner over SSH from a release, checked against a checksum the CLI holds, and the release workflow
 - [ ] Publish the first runner release (until then a server needs a runner installed by hand)
 - [ ] Desktop app: connect a server, set secrets, deploy, roll back, logs
