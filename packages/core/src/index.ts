@@ -120,6 +120,13 @@ export {
 } from "./protocol"
 export { LIMITS } from "./limits"
 export {
+  compareRunnerVersions,
+  isDevVersion,
+  parseRunnerVersion,
+  RUNNER_VERSION_PATTERN,
+  type ParsedRunnerVersion,
+} from "./version"
+export {
   CoreError,
   DEPLOY_REFUSALS,
   LINK_REFUSALS,

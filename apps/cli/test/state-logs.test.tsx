@@ -188,7 +188,7 @@ done
   chmodSync(script, 0o755)
   return ["sh", script]
 }
-const VERSION = `${JSON.stringify({ result: { version: "0.2.0", protocol: 2 } })}\n`
+const VERSION = `${JSON.stringify({ result: { version: "0.1.0", protocol: 2 } })}\n`
 const frame = (value: unknown) => `${JSON.stringify(value)}\n`
 const logEvent = (service: string, time: string, line: string) => frame({ event: "log", service, time, line })
 
@@ -757,7 +757,7 @@ describe("logs from the app, against a real runner", () => {
     const m = await deployed("demo")
     const plan = await prepareLogs(m.deps, { app: "demo", server: "dev" })
     const dir = tempDir("silent")
-    const version = JSON.stringify({ result: { version: "0.2.0", protocol: 2 } })
+    const version = JSON.stringify({ result: { version: "0.1.0", protocol: 2 } })
     // One that never answers at all, as SSH still connecting or asking; one that answers its version and never `status`.
     for (const [label, script] of [
       ["nothing", 'echo $$ > "$0"; exec sleep 30'],

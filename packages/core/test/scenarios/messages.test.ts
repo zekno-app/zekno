@@ -129,9 +129,9 @@ describe("User Story 5: one description of every message", () => {
 
   test("session messages: requests, frames, state and logs", async () => {
     const core = await import("../../src/index")
-    expect(parseMessage(core.RunnerVersionSchema, { version: "0.2.0", protocol: core.RUNNER_PROTOCOL }).ok).toBe(true)
-    expect(code(parseMessage(core.RunnerVersionSchema, { version: "0.2", protocol: 2 }))).toBe("malformed")
-    expect(code(parseMessage(core.RunnerVersionSchema, { version: "0.2.0; rm -rf /", protocol: 2 }))).toBe("malformed")
+    expect(parseMessage(core.RunnerVersionSchema, { version: "0.1.0", protocol: core.RUNNER_PROTOCOL }).ok).toBe(true)
+    expect(code(parseMessage(core.RunnerVersionSchema, { version: "0.1", protocol: 2 }))).toBe("malformed")
+    expect(code(parseMessage(core.RunnerVersionSchema, { version: "0.1.0; rm -rf /", protocol: 2 }))).toBe("malformed")
 
     for (const command of core.SESSION_COMMANDS) expect(parseMessage(core.SessionRequestSchema, { command }).ok).toBe(true)
     expect(parseMessage(core.SessionRequestSchema, JSON.stringify({ command: "logs", input: { app: "web", tail: 10 } })).ok).toBe(true)

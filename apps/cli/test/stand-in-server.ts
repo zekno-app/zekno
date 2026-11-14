@@ -2,14 +2,15 @@
  * A stand-in server for the runner's installer, on this machine, in a
  * temporary folder: a home folder, the few tools the script uses, and
  * stand-ins for `uname`, `curl`, `wget`, `docker`, `sha256sum` and `id`
- * placed first on PATH. It never reaches the network and never runs as root:
+ * placed first on PATH, with `df`, `getconf` and `ldd` added when a test
+ * gives their answer. It never reaches the network and never runs as root:
  * `id -u` says 1000, and a download is a file the test prepared.
  *
  * With `sshStandIn`, it also has a stand-in for `ssh` that runs the remote
  * command with `sh -c` in that home folder, as a server would, and can fail
  * in batch mode the way SSH does when it would have to ask a question.
  */
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { RUNNER_MAIN, tempDir } from "../../runner/test/helpers"
@@ -69,7 +70,19 @@ export function realRunner(docker: string): string {
   return `#!/bin/sh\nexec env ZEKNO_DOCKER="${docker}" "${process.execPath}" "${RUNNER_MAIN}" "$@"\n`
 }
 
-/** A runner from before version 0.2.0: it knows neither `version` nor `session`, as feature 003's runner. */
+/**
+ * The real runner, as a release of `version` would be: it answers `version`
+ * with that version, and does everything else as the runner of this
+ * repository does.
+ */
+export function releasedRunner(docker: string, version: string): string {
+  return `#!/bin/sh
+if [ "$1" = version ]; then printf '%s\\n' '{"version":"${version}","protocol":2}'; exit 0; fi
+exec env ZEKNO_DOCKER="${docker}" "${process.execPath}" "${RUNNER_MAIN}" "$@"
+`
+}
+
+/** A runner that does not report its version: it knows neither `version` nor `session`, as feature 003's runner. */
 export function olderRunner(docker: string): string {
   return `#!/bin/sh
 case $1 in
@@ -82,6 +95,100 @@ exec env ZEKNO_DOCKER="${docker}" "${process.execPath}" "${RUNNER_MAIN}" "$@"
 export const sha256 = (bytes: Uint8Array | string): string => new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
 
 export type ScriptRun = { lines: string[]; stderr: string; code: number }
+
+/**
+ * The stand-ins' text. Each finds the server it belongs to from where it was
+ * started (`<root>/stand-ins/<name>`), so the same files serve every server:
+ * they are written once per test run and hard-linked into each server's
+ * folder. A new program is checked by macOS the first time it starts, about
+ * a third of a second each; a hard link to one that already ran is not.
+ */
+const STAND_IN_TEXT: Record<string, string> = {
+  uname: `[ "$1" = -sm ] || exit 1\ncat "$state/uname"\n`,
+  id: `[ "$1" = -u ] && { echo 1000; exit 0; }\necho 'uid=1000(deploy)'\n`,
+  sha256sum: `${realSha256()}\n`,
+  docker: `printf '%s\\n' "$*" >> "$state/docker.log"
+if [ "$1" = compose ] && [ -f "$state/no-compose" ]; then echo "docker: 'compose' is not a docker command." >&2; exit 1; fi
+if [ "$1 $2" = "compose version" ]; then
+  if [ "$3" = --short ]; then echo 2.40.3; else echo 'Docker Compose version v2.40.3'; fi
+  exit 0
+fi
+exit 1
+`,
+  // As curl does: with --proto-redir =https a redirect to http is refused, and without it followed.
+  curl: `all=" $* "
+printf '%s\\n' "$*" >> "$state/curl.log"
+out=
+while [ $# -gt 0 ]; do if [ "$1" = -o ]; then out=$2; shift 2; else shift; fi; done
+case $(cat "$state/fetch") in
+  ok) cat "$state/release.gz" > "$out" ;;
+  fail) echo 'curl: (6) Could not resolve host: github.com' >&2; exit 6 ;;
+  redirect-http)
+    case $all in *" --proto-redir =https "*) echo 'curl: (1) Protocol "http" not supported or disabled in libcurl' >&2; exit 1 ;; esac
+    cat "$state/evil.gz" > "$out" ;;
+esac
+`,
+  // As GNU wget does with -S and --max-redirect=0 (checked against wget 1.25): the headers on standard error, status 8 on a redirect.
+  wget: `out=
+url=
+printf '%s\\n' "$*" >> "$state/wget.log"
+while [ $# -gt 0 ]; do case $1 in -O) out=$2; shift 2 ;; *) url=$1; shift ;; esac; done
+printf '%s\\n' "$url" >> "$state/wget.urls"
+mode=$(cat "$state/fetch")
+case $url in
+  https://github.com/*)
+    [ "$mode" = fail ] && { echo "wget: unable to resolve host address 'github.com'" >&2; exit 4; }
+    : > "$out"
+    if [ "$mode" = redirect-http ]; then next=http://objects.example/zekno-runner.gz; else next=https://objects.example/zekno-runner.gz; fi
+    printf '  HTTP/1.1 302 Found\\r\\n  Location: %s\\r\\n  Content-Length: 0\\r\\n' "$next" >&2
+    exit 8 ;;
+  https://objects.example/*) cat "$state/release.gz" > "$out"; printf '  HTTP/1.1 200 OK\\n' >&2; exit 0 ;;
+  http://*) cat "$state/evil.gz" > "$out"; exit 0 ;;
+esac
+exit 8
+`,
+  // As \`df -Pk <folder>\` does: a header, then one line whose fourth field is the KiB available there.
+  df: `printf '%s\\n' "$*" >> "$state/df.log"
+[ "$1" = -Pk ] || exit 1
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n'
+printf '/dev/vda1 41152736 30000000 %s 75%% /\\n' "$(cat "$state/df")"
+`,
+  // As \`getconf GNU_LIBC_VERSION\` does on a glibc system: \`glibc 2.36\`.
+  getconf: `[ "$1" = GNU_LIBC_VERSION ] || exit 1
+cat "$state/getconf"
+`,
+  // As \`ldd --version\` does: glibc's on standard output, musl's on standard error with status 1.
+  ldd: `[ "$1" = --version ] || exit 1
+if [ -f "$state/ldd.err" ]; then cat "$state/ldd.err" >&2; exit 1; fi
+cat "$state/ldd.out"
+`,
+}
+
+let sharedStandIns: string | undefined
+
+/** The stand-ins, written once for this test run: `name`'s file, to be linked into a server. */
+function standInFile(name: string): string {
+  if (!sharedStandIns) {
+    sharedStandIns = tempDir("stand-ins")
+    for (const [tool, text] of Object.entries(STAND_IN_TEXT)) {
+      write(join(sharedStandIns, tool), `#!/bin/sh\nstate=$(dirname "$0")/../state\n${text}`)
+    }
+  }
+  return join(sharedStandIns, name)
+}
+
+/** Puts the stand-in `name` first on the server's PATH. */
+function placeStandIn(standIns: string, name: string) {
+  const to = join(standIns, name)
+  rmSync(to, { force: true })
+  try {
+    linkSync(standInFile(name), to)
+  } catch {
+    // Another file system: a copy works the same, only its first start is slower.
+    copyFileSync(standInFile(name), to)
+    chmodSync(to, 0o755)
+  }
+}
 
 export function standInServer() {
   const root = tempDir("server")
@@ -98,61 +205,8 @@ export function standInServer() {
   }
   const at = (name: string) => join(state, name)
 
-  write(join(standIns, "uname"), `#!/bin/sh\n[ "$1" = -sm ] || exit 1\ncat "${at("uname")}"\n`)
-  write(join(standIns, "id"), `#!/bin/sh\n[ "$1" = -u ] && { echo 1000; exit 0; }\necho 'uid=1000(deploy)'\n`)
-  write(join(standIns, "sha256sum"), `#!/bin/sh\n${realSha256()}\n`)
-  write(
-    join(standIns, "docker"),
-    `#!/bin/sh
-printf '%s\\n' "$*" >> "${at("docker.log")}"
-if [ "$1" = compose ] && [ -f "${at("no-compose")}" ]; then echo "docker: 'compose' is not a docker command." >&2; exit 1; fi
-if [ "$1 $2" = "compose version" ]; then
-  if [ "$3" = --short ]; then echo 2.40.3; else echo 'Docker Compose version v2.40.3'; fi
-  exit 0
-fi
-exit 1
-`
-  )
-  // As curl does: with --proto-redir =https a redirect to http is refused, and without it followed.
-  write(
-    join(standIns, "curl"),
-    `#!/bin/sh
-all=" $* "
-printf '%s\\n' "$*" >> "${at("curl.log")}"
-out=
-while [ $# -gt 0 ]; do if [ "$1" = -o ]; then out=$2; shift 2; else shift; fi; done
-case $(cat "${at("fetch")}") in
-  ok) cat "${at("release.gz")}" > "$out" ;;
-  fail) echo 'curl: (6) Could not resolve host: github.com' >&2; exit 6 ;;
-  redirect-http)
-    case $all in *" --proto-redir =https "*) echo 'curl: (1) Protocol "http" not supported or disabled in libcurl' >&2; exit 1 ;; esac
-    cat "${at("evil.gz")}" > "$out" ;;
-esac
-`
-  )
-  // As GNU wget does with -S and --max-redirect=0 (checked against wget 1.25): the headers on standard error, status 8 on a redirect.
-  write(
-    join(standIns, "wget"),
-    `#!/bin/sh
-out=
-url=
-printf '%s\\n' "$*" >> "${at("wget.log")}"
-while [ $# -gt 0 ]; do case $1 in -O) out=$2; shift 2 ;; *) url=$1; shift ;; esac; done
-printf '%s\\n' "$url" >> "${at("wget.urls")}"
-mode=$(cat "${at("fetch")}")
-case $url in
-  https://github.com/*)
-    [ "$mode" = fail ] && { echo "wget: unable to resolve host address 'github.com'" >&2; exit 4; }
-    : > "$out"
-    if [ "$mode" = redirect-http ]; then next=http://objects.example/zekno-runner.gz; else next=https://objects.example/zekno-runner.gz; fi
-    printf '  HTTP/1.1 302 Found\\r\\n  Location: %s\\r\\n  Content-Length: 0\\r\\n' "$next" >&2
-    exit 8 ;;
-  https://objects.example/*) cat "${at("release.gz")}" > "$out"; printf '  HTTP/1.1 200 OK\\n' >&2; exit 0 ;;
-  http://*) cat "${at("evil.gz")}" > "$out"; exit 0 ;;
-esac
-exit 8
-`
-  )
+  // `df`, `getconf` and `ldd` are off: a server without them, until a test gives an answer.
+  for (const name of ["uname", "id", "sha256sum", "docker", "curl", "wget"]) placeStandIn(standIns, name)
   write(at("uname"), "Linux x86_64\n", 0o644)
   write(at("fetch"), "ok\n", 0o644)
   writeFileSync(at("evil.gz"), Bun.gzipSync(new TextEncoder().encode(fakeRunner("6.6.6"))))
@@ -174,6 +228,26 @@ exit 8
       writeFileSync(at("release.gz"), Bun.gzipSync(new TextEncoder().encode(content)))
       return sha256(content)
     },
+    /** The file a download yields, as it is: for a `.gz` the test made itself. */
+    releaseGz(bytes: Uint8Array) {
+      writeFileSync(at("release.gz"), bytes)
+    },
+    /** `df -Pk` answers with this many KiB available. */
+    df(kib: number | string) {
+      writeFileSync(at("df"), `${kib}`)
+      placeStandIn(standIns, "df")
+    },
+    /** `getconf GNU_LIBC_VERSION` prints this line. */
+    getconf(line: string) {
+      writeFileSync(at("getconf"), `${line}\n`)
+      placeStandIn(standIns, "getconf")
+    },
+    /** `ldd --version` prints this: on standard error with status 1, as musl's does, or on standard output, as glibc's does. */
+    ldd(text: string, stream: "stderr" | "stdout" = "stderr") {
+      rmSync(at("ldd.err"), { force: true })
+      writeFileSync(at(stream === "stderr" ? "ldd.err" : "ldd.out"), `${text}\n`)
+      placeStandIn(standIns, "ldd")
+    },
     /** `ok`, `fail` or `redirect-http`. */
     fetch(mode: "ok" | "fail" | "redirect-http") {
       writeFileSync(at("fetch"), `${mode}\n`)
@@ -193,7 +267,7 @@ exit 8
       write(server.runnerPath, content)
     },
     /** Each call of a stand-in, its arguments on one line. */
-    calls: (tool: "curl" | "wget" | "docker") => lines(`${tool}.log`),
+    calls: (tool: "curl" | "wget" | "docker" | "df") => lines(`${tool}.log`),
     wgetUrls: () => lines("wget.urls"),
     /** Anything the installer left behind: its temporary folders, and anything in TMPDIR. */
     leftovers(): string[] {

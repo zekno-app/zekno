@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.1.0-dev.1",
   "files": {
     "linux-x64": { "sha256": null },
     "linux-arm64": { "sha256": null }

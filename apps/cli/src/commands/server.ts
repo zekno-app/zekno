@@ -2,9 +2,9 @@ import { remoteThroughUi, type Deps } from "../context"
 import { addServer, listServers, prepareServerAdd, prepareServerUpdate, updateRunner } from "../ops/server"
 import { RUNNER_RELEASE } from "../runner-release"
 
-/** What `server update` says when the runner on a server is older than this zekno. */
+/** What `server add` and `status` say when the runner on a server is older than this zekno. */
 export const outdatedWarning = (server: string, version: string | undefined, carried: string): string =>
-  `The runner on ${server} is ${version === undefined ? "from before version 0.2.0" : `version ${version}`}, older than this zekno's ${carried}. ` +
+  `The runner on ${server} ${version === undefined ? "does not report its version, so it is" : `is version ${version},`} older than this zekno's ${carried}. ` +
   `Deploys still work. Running state and logs need the newer runner: run \`zekno server update ${server}\`.`
 
 /**

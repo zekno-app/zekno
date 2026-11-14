@@ -108,8 +108,8 @@ runners built on 2026-11-13 in `apps/runner/dist/` (Bun 1.4.2), read with `file`
   so this is hardening, not a hole. **Decision (open to the maintainer's veto, Q5)**: build with
   `--no-compile-autoload-dotenv --no-compile-autoload-bunfig`, both listed by `bun build --help`.
   `BUN_OPTIONS` cannot be turned off by a flag; it comes from the server's own environment. The
-  same applies to the compiled CLI (`apps/cli/build.ts`) in project folders, which is outside this
-  feature; it is reported for the review.
+  same applies to the compiled CLI (`apps/cli/build.ts`) in project folders; it is turned off there
+  too (R16).
 - **Cross-compiling**: `--compile-executable-path` is described as "Path to a Bun executable to use
   for cross-compilation instead of downloading". **Not confirmed**: where Bun downloads the target's
   runtime from; the installed docs do not say.
@@ -332,6 +332,39 @@ releases" (docs.github.com, supply chain security).
   recorded in quickstart.md. The agent end-to-end tests (`bun run test:e2e`) stay as they are unless
   a screen they read changes wording; refreshing their replay cache costs the maintainer a little
   and is one task near the end, with the maintainer's go-ahead.
+
+## R16. A compiled program reads its working folder's `.env` and `bunfig.toml` (found 2026-11-14)
+
+Sources: Bun's installed docs, `docs/bundler/executables.mdx`, "Automatic config loading"; the types in
+`node_modules/.bun/bun-types@1.4.4/node_modules/bun-types/bun.d.ts`, `CompileBuildOptions`; `bun build --help`
+on Bun 1.4.4. Reproduced on this machine (macOS, Bun 1.4.4).
+
+- **What happens**: a program built with `bun build --compile` (or `Bun.build` with `compile`) loads
+  `.env` into its environment and reads `bunfig.toml`, including its `preload` scripts, from the
+  folder it is started in, unless it was built not to. In a folder holding `bunfig.toml` with
+  `preload = ["./evil.ts"]` and a `.env`, the runner and the CLI as built at `2d6f155` ran `evil.ts`
+  and took the variables from `.env` (`ZEKNO_RUNNER_HOME` for the runner, `ZEKNO_HOME` for the
+  CLI). Built with the autoloads off, neither did.
+- **Why it matters**: the runner starts in the login user's home folder over SSH (R3). The CLI is
+  started inside project folders, which may be cloned from strangers: such a folder could run code
+  in `zekno`, or point it at a profile of its own, before anything is asked.
+- **Decision**: both programs are built with the autoloads off. The runner's three compile scripts
+  pass `--no-compile-autoload-dotenv --no-compile-autoload-bunfig` (T002, Q5 as recommended).
+  `apps/cli/build.ts` passes `autoloadDotenv: false` and `autoloadBunfig: false` to `Bun.build`, the
+  JavaScript API's names for the same two flags. `tsconfig.json` and `package.json` are not read at
+  run time by default (`--compile-autoload-tsconfig` and `--compile-autoload-package-json` are off
+  unless given); the runner's scripts give neither, and `build.ts` sets `autoloadTsconfig: false` and
+  `autoloadPackageJson: false` so it stays so.
+- **Tested**: `apps/runner/test/compiled.test.ts` and `apps/cli/test/compiled.test.ts` compile each
+  program once into a temporary folder and start it in a folder holding such a `.env` and
+  `bunfig.toml`: the preload's marker is never written, `version` and `--help` answer as usual, and
+  the folder `.env` names is not used. Each test also runs the program from source in the same
+  folder, where Bun does read both, so the folder is one Bun would act on. With the flags taken
+  out, three of each file's four tests fail.
+- **Not changed**: a program run from source (`bun apps/cli/src/main.ts`, `bun apps/runner/src/main.ts`)
+  reads `.env` and `bunfig.toml` from the folder it is started in, preloads included. That is Bun's
+  own behaviour for a development checkout. `BUN_OPTIONS` in the environment is read by a compiled
+  program too and cannot be turned off; it comes from the user's own environment.
 
 ## Open questions for the maintainer
 

@@ -235,7 +235,7 @@ export const linkedElsewhere = (link: Pick<ProjectLink, "app" | "server">): stri
 
 /** What the add-server screen says beside a runner that was already on the server. */
 export function foundDetail(version: string | undefined, carried: string): string {
-  if (version === undefined) return "from before 0.2.0, out of date"
+  if (version === undefined) return "no version reported, out of date"
   return version === carried ? `version ${version}` : `version ${version}${compareOlder(version, carried) ? ", out of date" : ""}`
 }
 

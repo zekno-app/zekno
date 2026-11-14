@@ -1,3 +1,4 @@
+import { RUNNER_VERSION_PATTERN } from "@workspace/core"
 import { z } from "zod"
 
 import release from "./runner-release.json"
@@ -10,7 +11,7 @@ import release from "./runner-release.json"
  * release has been published for this version yet.
  */
 const ReleaseSchema = z.strictObject({
-  version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+$/),
+  version: z.string().regex(RUNNER_VERSION_PATTERN),
   files: z.strictObject({
     "linux-x64": z.strictObject({ sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable() }),
     "linux-arm64": z.strictObject({ sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable() }),

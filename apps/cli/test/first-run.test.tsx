@@ -16,11 +16,12 @@ import { initialState, top, update, type AppEvent, type State, type TeamView } f
 import { openTeam, type OpDeps } from "../src/context"
 import { NO_RELEASE, RUNNER_PATHS } from "../src/install"
 import { compareVersions, isOutdated } from "../src/ops/server"
-import type { RunnerRelease } from "../src/runner-release"
+import { RUNNER_RELEASE, type RunnerRelease } from "../src/runner-release"
+import runnerPackage from "../../runner/package.json"
 import { plainUi } from "../src/ui/plain"
 import { yesOrNo } from "../src/ui/ink"
 import { COMPOSE_V1, filesUnder, machine } from "./helpers"
-import { fakeRunner, olderRunner, realRunner, sha256, sshStandIn, standInServer, withSsh, type StandInServer } from "./stand-in-server"
+import { fakeRunner, olderRunner, realRunner, releasedRunner, sha256, sshStandIn, standInServer, withSsh, type StandInServer } from "./stand-in-server"
 
 type Machine = ReturnType<typeof machine>
 
@@ -46,9 +47,15 @@ function fits(screen: string, columns: number, rows: number) {
   for (const line of lines) expect([...line].length).toBeLessThanOrEqual(columns)
 }
 
+/**
+ * The version the repository's runner reports. A stand-in release made from that runner carries it,
+ * so these tests hold whatever version runner-release.json names.
+ */
+const OWN = runnerPackage.version
+
 /** A release of the runner whose x64 file is `content`, as a test's stand-in server serves it. */
 function releaseOf(server: StandInServer, content: string): RunnerRelease {
-  return { version: "0.2.0", files: { "linux-x64": { sha256: server.release(content) }, "linux-arm64": { sha256: null } } }
+  return { version: OWN, files: { "linux-x64": { sha256: server.release(content) }, "linux-arm64": { sha256: null } } }
 }
 
 /** The effects of every app a test opened: closed after each test, so no runner a test reached is left running. */
@@ -235,10 +242,10 @@ describe("adding a server over SSH (board 'Add a server')", () => {
       expect(steps.set_up?.state).toBe("done")
       expect(steps.added?.state).toBe("done")
       // The installer's connection became the session: one SSH connection in all.
-      expect(ssh.calls()).toEqual([`-- deploy@203.0.113.7 sh -s -- add 0.2.0 release x64 ${m.deps.release!.files["linux-x64"].sha256}`])
+      expect(ssh.calls()).toEqual([`-- deploy@203.0.113.7 sh -s -- add ${OWN} release x64 ${m.deps.release!.files["linux-x64"].sha256}`])
       expect(profileServers(m)[0]?.target).toEqual({ kind: "ssh", destination: "deploy@203.0.113.7", runnerPath: RUNNER_PATHS.user })
       expect(server.mode(server.runnerPath)).toBe(0o755)
-      expect(app.state.team?.servers[0]).toMatchObject({ name: "prod", reachable: true, runner: { version: "0.2.0", outdated: false } })
+      expect(app.state.team?.servers[0]).toMatchObject({ name: "prod", reachable: true, runner: { version: OWN, outdated: false } })
 
       // The board, drawn as it was while the runner was being set up.
       const settingUp = seen.find((state) => state.adding?.steps.runner && !state.adding.steps.set_up)!
@@ -309,7 +316,7 @@ describe("adding a server over SSH (board 'Add a server')", () => {
       await added(app, "deploy@203.0.113.7", "prod")
       expect(app.failures).toEqual([])
       expect(top(app.state).name).toBe("home")
-      expect(app.state.adding?.steps.runner).toEqual({ state: "done", detail: "version 0.2.0", found: true })
+      expect(app.state.adding?.steps.runner).toEqual({ state: "done", detail: `version ${OWN}`, found: true })
       expect(app.state.adding?.steps.set_up).toEqual({ state: "done", detail: "carried on from an earlier attempt" })
       expect(server.calls("curl")).toEqual([])
       expect(profileServers(m).map((entry) => entry.name)).toEqual(["prod"])
@@ -349,7 +356,7 @@ describe("adding a server over SSH (board 'Add a server')", () => {
       await added(app, "deploy@203.0.113.7", "prod")
       expect(app.failures).toEqual([])
       expect(top(app.state).name).toBe("home")
-      expect(app.state.adding?.steps.runner).toEqual({ state: "done", detail: "from before 0.2.0, out of date", found: true })
+      expect(app.state.adding?.steps.runner).toEqual({ state: "done", detail: "no version reported, out of date", found: true })
       expect(app.state.notice?.tone).toBe("warning")
       expect(app.state.notice?.text).toContain("Its runner is older than this zekno: deploys work, and u updates it.")
       // Nothing was downloaded and the runner is as it was.
@@ -366,8 +373,9 @@ describe("adding a server over SSH (board 'Add a server')", () => {
       app.type("u")
       const asked = app.draw()
       expect(asked).toContain("╭─ The runner on prod is out of date ─")
-      expect(asked).toMatch(/on prod +from before 0\.2\.0/)
-      expect(asked).toMatch(/this zekno +0\.2\.0/)
+      expect(asked).toMatch(/on prod +no version reported/)
+      // The question names the version this build of zekno carries.
+      expect(asked).toContain(`this zekno    ${RUNNER_RELEASE.version}`)
       expect(words(asked)).toContain("Deploys still work. Running state and logs need the newer runner.")
       expect(words(asked)).toContain("Updating downloads the runner on prod and checks it before it replaces the old one. Your apps keep running.")
       expect(lastLine(asked)).toBe("u update now  esc later")
@@ -438,7 +446,7 @@ describe("SSH questions inside the app (research R10)", () => {
       expect(app.failures).toEqual([])
       expect(top(app.state).name).toBe("home")
       // Asked once in batch mode, which failed; then once without, which went on to the session.
-      const install = `deploy@203.0.113.7 sh -s -- add 0.2.0 release x64 ${m.deps.release!.files["linux-x64"].sha256}`
+      const install = `deploy@203.0.113.7 sh -s -- add ${OWN} release x64 ${m.deps.release!.files["linux-x64"].sha256}`
       expect(ssh.calls()).toEqual([`-o BatchMode=yes -- ${install}`, `-- ${install}`])
       expect(timeline).toEqual([`suspend ${handOverNote("deploy@203.0.113.7")}`, "resume", "connected"])
 
@@ -585,7 +593,7 @@ describe("SSH questions inside the app (research R10)", () => {
       const app = await named(m, noting(suspended))
       await added(app, "deploy@203.0.113.7", "prod")
       expect(top(app.state).name).toBe("home")
-      const install = `deploy@203.0.113.7 sh -s -- add 0.2.0 release x64 ${m.deps.release!.files["linux-x64"].sha256}`
+      const install = `deploy@203.0.113.7 sh -s -- add ${OWN} release x64 ${m.deps.release!.files["linux-x64"].sha256}`
       expect(ssh.calls()).toEqual([`-o BatchMode=yes -- ${install}`, `-- ${install}`])
       expect(suspended).toHaveLength(1)
       // Read over the session it was added over, which checked it is the server that was added, on this team.
@@ -640,7 +648,7 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
     await withSsh(ssh, async () => {
       expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")).toBe(0)
     })
-    expect(m.out).toContain(`Installed the runner 0.2.0 at ${RUNNER_PATHS.user}. It matched the checksum this zekno holds.`)
+    expect(m.out).toContain(`Installed the runner ${OWN} at ${RUNNER_PATHS.user}. It matched the checksum this zekno holds.`)
     expect(m.out).toContain('Connected "prod" and added it to the team list.')
     expect(m.err).toEqual([])
     expect(ssh.calls()).toHaveLength(1)
@@ -651,7 +659,7 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
     expect(await m.zekno("init", "--name", "Ada")).toBe(0)
     const server = standInServer()
     server.release(realRunner(m.docker.path))
-    m.deps.release = { version: "0.2.0", files: { "linux-x64": { sha256: null }, "linux-arm64": { sha256: null } } }
+    m.deps.release = { version: RUNNER_RELEASE.version, files: { "linux-x64": { sha256: null }, "linux-arm64": { sha256: null } } }
     await withSsh(sshStandIn(server), async () => {
       expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")).toBe(1)
     })
@@ -667,14 +675,16 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
     const server = standInServer()
     const file = join(m.project, "zekno-runner-linux-x64")
     await Bun.write(file, realRunner(m.docker.path))
+    // The version the file sent answers with; no checksum is needed for it.
+    m.deps.release = { version: OWN, files: { "linux-x64": { sha256: null }, "linux-arm64": { sha256: null } } }
     const ssh = sshStandIn(server)
     await withSsh(ssh, async () => {
       expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test", "--runner-file", file)).toBe(0)
     })
-    expect(m.out).toContain(`Installed the runner 0.2.0 at ${RUNNER_PATHS.user}. It matched the file this zekno sent.`)
+    expect(m.out).toContain(`Installed the runner ${OWN} at ${RUNNER_PATHS.user}. It matched the file this zekno sent.`)
     expect(readFileSync(server.runnerPath, "utf8")).toBe(realRunner(m.docker.path))
     // The file went on the installer's connection; the session needed a second.
-    expect(ssh.calls()).toEqual([`-- deploy@example.test sh -s -- add 0.2.0 file ${sha256(realRunner(m.docker.path))}`, `-- deploy@example.test ${RUNNER_PATHS.user} session`])
+    expect(ssh.calls()).toEqual([`-- deploy@example.test sh -s -- add ${OWN} file ${sha256(realRunner(m.docker.path))}`, `-- deploy@example.test ${RUNNER_PATHS.user} session`])
     expect(server.calls("curl")).toEqual([])
     // --runner-file goes with --ssh only, and not with --runner-path.
     expect(await m.zekno("server", "add", "x", "--local", "--runner-file", file)).toBe(2)
@@ -695,10 +705,10 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
       expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")).toBe(0)
       expect(m.out).toContain(`Using the runner already at ${RUNNER_PATHS.user}.`)
       expect(m.lastErr()).toBe(
-        "The runner on prod is from before version 0.2.0, older than this zekno's 0.2.0. Deploys still work. Running state and logs need the newer runner: run `zekno server update prod`."
+        `The runner on prod does not report its version, so it is older than this zekno's ${OWN}. Deploys still work. Running state and logs need the newer runner: run \`zekno server update prod\`.`
       )
       expect(await m.zekno("status", "--server", "prod")).toBe(0)
-      expect(m.lastErr()).toContain("The runner on prod is from before version 0.2.0")
+      expect(m.lastErr()).toContain("The runner on prod does not report its version")
 
       // No terminal: it never asks, and names --yes.
       expect(await m.zekno("server", "update", "prod")).toBe(1)
@@ -708,19 +718,19 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
       const plain = m.deps.ui
       m.deps.ui = { ...plain, confirm: async (question) => (questions.push(question), false) }
       expect(await m.zekno("server", "update", "prod")).toBe(0)
-      expect(questions).toEqual(["Replace the runner on prod with version 0.2.0? The server downloads it and checks it before it replaces the old one."])
+      expect(questions).toEqual([`Replace the runner on prod with version ${OWN}? The server downloads it and checks it before it replaces the old one.`])
       expect(m.lastOut()).toBe("Nothing was changed.")
       expect(readFileSync(server.runnerPath, "utf8")).toBe(older)
       expect(server.calls("curl")).toEqual([])
       // Yes, at a terminal.
       m.deps.ui = { ...plain, confirm: async () => true }
       expect(await m.zekno("server", "update", "prod")).toBe(0)
-      expect(m.lastOut()).toBe("Updated the runner on prod to 0.2.0. It matched the checksum this zekno holds.")
+      expect(m.lastOut()).toBe(`Updated the runner on prod to ${OWN}. It matched the checksum this zekno holds.`)
       expect(readFileSync(server.runnerPath, "utf8")).toBe(realRunner(m.docker.path))
       m.deps.ui = plain
       // --yes without a terminal; already up to date, nothing is downloaded again.
       expect(await m.zekno("server", "update", "prod", "--yes")).toBe(0)
-      expect(m.lastOut()).toBe("The runner on prod already has version 0.2.0. Nothing was changed.")
+      expect(m.lastOut()).toBe(`The runner on prod already has version ${OWN}. Nothing was changed.`)
       expect(server.calls("curl")).toHaveLength(1)
       // And it answers as the same server, now with sessions.
       expect(await m.zekno("status", "--server", "prod")).toBe(0)
@@ -787,10 +797,10 @@ describe("what the screens say", () => {
       "pending Set the runner up for your team",
       "pending Add prod to the signed team list",
     ])
-    expect(rows({ connect: { state: "done" }, docker: { state: "done" }, runner: { state: "done", detail: "version 0.2.0", found: true }, set_up: { state: "failed" } }, false)).toEqual([
+    expect(rows({ connect: { state: "done" }, docker: { state: "done" }, runner: { state: "done", detail: "version 0.1.0", found: true }, set_up: { state: "failed" } }, false)).toEqual([
       "done Connected over SSH",
       "done Docker with Compose found",
-      "done Runner found (version 0.2.0)",
+      "done Runner found (version 0.1.0)",
       "failed Set the runner up for your team",
       "pending Add prod to the signed team list",
     ])
@@ -801,10 +811,13 @@ describe("what the screens say", () => {
     ])
     expect(megabytes(27_400_000)).toBe("27 MB")
     expect(megabytes(10)).toBe("1 MB")
-    expect(foundDetail("0.2.0", "0.2.0")).toBe("version 0.2.0")
-    expect(foundDetail("0.1.0", "0.2.0")).toBe("version 0.1.0, out of date")
-    expect(foundDetail("0.3.0", "0.2.0")).toBe("version 0.3.0")
-    expect(foundDetail(undefined, "0.2.0")).toBe("from before 0.2.0, out of date")
+    expect(foundDetail("0.1.0", "0.1.0")).toBe("version 0.1.0")
+    expect(foundDetail("0.1.0-dev.1", "0.1.0-dev.1")).toBe("version 0.1.0-dev.1")
+    expect(foundDetail("0.0.9", "0.1.0")).toBe("version 0.0.9, out of date")
+    expect(foundDetail("0.1.0-dev.2", "0.1.0")).toBe("version 0.1.0-dev.2, out of date")
+    expect(foundDetail("0.1.1", "0.1.0")).toBe("version 0.1.1")
+    expect(foundDetail("0.1.0", "0.1.0-dev.10")).toBe("version 0.1.0")
+    expect(foundDetail(undefined, "0.1.0")).toBe("no version reported, out of date")
   })
 
   test("only the add's own failure marks where it stopped; another effect's failure leaves it running", () => {
@@ -815,13 +828,18 @@ describe("what the screens say", () => {
   })
 
   test("a runner is out of date when it has no sessions or an older version", () => {
-    expect(compareVersions("0.1.0", "0.2.0")).toBeLessThan(0)
-    expect(compareVersions("0.10.0", "0.9.9")).toBeGreaterThan(0)
-    expect(compareVersions("1.2.3", "1.2.3")).toBe(0)
-    expect(isOutdated("one-shot", undefined, "0.2.0")).toBe(true)
-    expect(isOutdated("session", { version: "0.1.9", protocol: 2 }, "0.2.0")).toBe(true)
-    expect(isOutdated("session", { version: "0.2.0", protocol: 2 }, "0.2.0")).toBe(false)
-    expect(isOutdated("session", { version: "1.0.0", protocol: 3 }, "0.2.0")).toBe(false)
+    expect(compareVersions("0.1.0", "0.1.1")).toBeLessThan(0)
+    expect(compareVersions("0.10.0", "0.1.1")).toBeGreaterThan(0)
+    expect(compareVersions("0.1.0-dev.2", "0.1.0-dev.10")).toBeLessThan(0)
+    expect(compareVersions("0.1.0-dev.10", "0.1.0")).toBeLessThan(0)
+    expect(compareVersions("1.0.0-dev.1", "0.10.0")).toBeGreaterThan(0)
+    expect(compareVersions("0.1.0-dev.1", "0.1.0-dev.1")).toBe(0)
+    expect(isOutdated("one-shot", undefined, "0.1.0")).toBe(true)
+    expect(isOutdated("session", { version: "0.0.9", protocol: 2 }, "0.1.0")).toBe(true)
+    expect(isOutdated("session", { version: "0.1.0-dev.1", protocol: 2 }, "0.1.0")).toBe(true)
+    expect(isOutdated("session", { version: "0.1.0", protocol: 2 }, "0.1.0")).toBe(false)
+    expect(isOutdated("session", { version: "0.1.0", protocol: 2 }, "0.1.0-dev.2")).toBe(false)
+    expect(isOutdated("session", { version: "1.0.0", protocol: 3 }, "0.1.0")).toBe(false)
   })
 
   test("Home: `! runner 0.1.0` beside a server that is out of date, and `u` in the hints only then", () => {
@@ -830,7 +848,7 @@ describe("what the screens say", () => {
       version: 2,
       servers: [
         { name: "prod", destination: "deploy@203.0.113.7", reachable: true, runner: { version: "0.1.0", outdated: true }, apps: [] },
-        { name: "staging", destination: "staging-box", reachable: true, runner: { version: "0.2.0", outdated: false }, apps: [] },
+        { name: "staging", destination: "staging-box", reachable: true, runner: { version: "0.1.1", outdated: false }, apps: [] },
       ],
     }
     const home = initialState({ kind: "team", team }, SIZE)
@@ -909,4 +927,68 @@ describe("what the screens say", () => {
     expect(lastLine(draw(down))).toStartWith("↑↓ move  ←→ pane  enter open  ")
     expect(update(down, key({ kind: "enter" })).effects).toEqual([])
   })
+})
+
+// ---------------------------------------------------------------------------
+// Installing a dev release (specs/005-runner-release, User Story 1)
+
+describe("a release with a dev version, as a zekno built from dev carries it", () => {
+  /** What a zekno built from dev holds: the dev version, and the stand-in release's checksum for x64. */
+  function devRelease(server: StandInServer, docker: string): RunnerRelease {
+    return { version: "0.1.0-dev.1", files: { "linux-x64": { sha256: server.release(releasedRunner(docker, "0.1.0-dev.1")) }, "linux-arm64": { sha256: null } } }
+  }
+
+  test("zekno server add installs it over one connection, says so, and the server is in the team list", async () => {
+    const m = machine()
+    expect(await m.zekno("init", "--name", "Ada")).toBe(0)
+    const server = standInServer()
+    m.deps.release = devRelease(server, m.docker.path)
+    const ssh = sshStandIn(server)
+    await withSsh(ssh, async () => {
+      expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")).toBe(0)
+    })
+    const sha = m.deps.release.files["linux-x64"].sha256
+    expect(ssh.calls()).toEqual([`-- deploy@example.test sh -s -- add 0.1.0-dev.1 release x64 ${sha}`])
+    expect(m.out).toContain("Installed the runner 0.1.0-dev.1 at ~/.local/bin/zekno-runner. It matched the checksum this zekno holds.")
+    expect(readFileSync(server.runnerPath, "utf8")).toBe(releasedRunner(m.docker.path, "0.1.0-dev.1"))
+    expect(profileServers(m).map((entry) => entry.name)).toEqual(["prod"])
+    const team = await openTeam(m.deps)
+    expect(team.trust.servers.map((entry) => entry.name)).toEqual(["prod"])
+  }, 60_000)
+
+  test("the same from the app's add-server screen", async () => {
+    const m = machine()
+    const server = standInServer()
+    m.deps.release = devRelease(server, m.docker.path)
+    const ssh = sshStandIn(server)
+    await withSsh(ssh, async () => {
+      const app = await named(m)
+      await added(app, "deploy@example.test", "prod")
+      expect(app.failures).toEqual([])
+      expect(top(app.state).name).toBe("home")
+      const sha = m.deps.release!.files["linux-x64"].sha256
+      expect(ssh.calls()).toEqual([`-- deploy@example.test sh -s -- add 0.1.0-dev.1 release x64 ${sha}`])
+      expect(app.state.adding?.steps.runner).toEqual({ state: "done", detail: `${megabytes(releasedRunner(m.docker.path, "0.1.0-dev.1").length)}, checksum verified` })
+      expect(app.state.team?.servers.map((entry) => entry.name)).toEqual(["prod"])
+    })
+    expect(profileServers(m).map((entry) => entry.name)).toEqual(["prod"])
+  }, 60_000)
+
+  test("with no checksum for it, it says it has no published runner, and changes nothing (FR-007)", async () => {
+    const m = machine()
+    expect(await m.zekno("init", "--name", "Ada")).toBe(0)
+    const server = standInServer()
+    server.release(releasedRunner(m.docker.path, "0.1.0-dev.1"))
+    m.deps.release = { version: "0.1.0-dev.1", files: { "linux-x64": { sha256: null }, "linux-arm64": { sha256: null } } }
+    const profile = readFileSync(join(m.home, "profile.json"), "utf8")
+    const ssh = sshStandIn(server)
+    await withSsh(ssh, async () => {
+      expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")).toBe(1)
+    })
+    expect(m.lastErr()).toBe(NO_RELEASE)
+    expect(ssh.calls()).toEqual(["-- deploy@example.test sh -s -- add 0.1.0-dev.1 release"])
+    expect(readFileSync(join(m.home, "profile.json"), "utf8")).toBe(profile)
+    expect(existsSync(server.runnerPath)).toBe(false)
+    expect(server.calls("curl")).toEqual([])
+  }, 60_000)
 })

@@ -1,10 +1,17 @@
-# Publishes a runner release (specs/004-cli-app/contracts/commands.md, "The release workflow").
+# Publishes a runner release (specs/005-runner-release/contracts/release.md, "The workflow").
+# How to cut one, from start to end: apps/runner/RELEASING.md.
 #
-# Runs only when a tag `runner-v<version>` is pushed. Builds zekno-runner for Linux on x86-64 and
-# ARM64, compresses each with gzip, writes SHA256SUMS for the unpacked binaries, and attaches
-# them to a GitHub Release. It uses no secret beyond the token GitHub gives every workflow.
-# Recording the checksums in apps/cli/src/runner-release.json is a separate commit, made by a
-# person who has checked them.
+# Runs only when a tag `runner-v<version>` is pushed. A dev version (`runner-v0.1.0-dev.1`) must
+# be on `dev` and is published as a pre-release, never as the latest release. A prod version
+# (`runner-v0.1.0`) must be on `main` and waits for the maintainer's approval in the `prod`
+# environment before anything is built or published. Every check is in
+# apps/runner/scripts/release.ts, which is tested; this file only runs it.
+#
+# The release holds the runner for Linux on x86-64 and ARM64 (gzip), SHA256SUMS of the unpacked
+# binaries and RELEASE-NOTES.md. It uses no secret beyond the token GitHub gives every workflow,
+# and that token only in the step that publishes. Recording the checksums in
+# apps/cli/src/runner-release.json is not done here: only the maintainer's second build writes
+# them, after it built the same files on another machine.
 name: runner release
 
 on:
@@ -12,7 +19,7 @@ on:
     tags:
       - "runner-v*"
 
-# Nothing by default; the one job below asks for what it needs.
+# Nothing by default; each job asks for what it needs.
 permissions: {}
 
 concurrency:
@@ -20,43 +27,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  # Which environment, and whether this commit may be released at all. Reads only.
+  check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      environment: ${{ steps.check.outputs.environment }}
+      version: ${{ steps.check.outputs.version }}
+      commit: ${{ steps.check.outputs.commit }}
+      bun: ${{ steps.check.outputs.bun }}
     steps:
-      # The tag name reaches the shell only through an environment variable, and is checked
-      # against its pattern before anything uses it.
-      - name: Check the tag
-        id: tag
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$TAG" =~ ^runner-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "The tag is not of the form runner-v<major>.<minor>.<patch>." >&2
-            exit 1
-          fi
-          echo "version=${TAG#runner-v}" >> "$GITHUB_OUTPUT"
-
       # Actions are pinned to a full commit, so a moved tag cannot change what builds the runner.
       # To update one, read the new release, then change the commit and the version beside it.
+      # Every branch is fetched: the check needs to see origin/dev and origin/main.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          fetch-depth: 0
           persist-credentials: false
 
-      - name: Check the version and read the Bun version
-        id: versions
-        env:
-          VERSION: ${{ steps.tag.outputs.version }}
+      - name: Read the Bun version
+        id: pin
         run: |
           set -euo pipefail
-          runner=$(jq -r .version apps/runner/package.json)
-          if [ "$runner" != "$VERSION" ]; then
-            echo "The tag says $VERSION, but apps/runner/package.json says $runner." >&2
-            exit 1
-          fi
           manager=$(jq -r .packageManager package.json)
           if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "The root package.json does not pin a Bun version." >&2
@@ -66,7 +60,34 @@ jobs:
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: ${{ steps.versions.outputs.bun }}
+          bun-version: ${{ steps.pin.outputs.bun }}
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # The tag reaches the shell only through an environment variable. The script prints its
+      # four lines only once every check passed, each held to its pattern.
+      - name: Check the tag, the branch and the versions
+        id: check
+        env:
+          TAG: ${{ github.ref_name }}
+        run: bun apps/runner/scripts/release.ts check --tag "$TAG" >> "$GITHUB_OUTPUT"
+
+  release-dev:
+    needs: check
+    if: needs.check.outputs.environment == 'dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ needs.check.outputs.bun }}
 
       - name: Install
         run: bun install --frozen-lockfile
@@ -78,25 +99,81 @@ jobs:
           bun run compile:linux-x64
           bun run compile:linux-arm64
 
-      - name: Compress, and write SHA256SUMS of the unpacked binaries
+      - name: Check the runner and write the release's files
+        env:
+          TAG: ${{ github.ref_name }}
+          COMMIT: ${{ needs.check.outputs.commit }}
+          BUN: ${{ needs.check.outputs.bun }}
+        run: bun apps/runner/scripts/release.ts files --tag "$TAG" --commit "$COMMIT" --bun "$BUN"
+
+      - name: Publish the pre-release
         working-directory: apps/runner/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           set -euo pipefail
-          sha256sum zekno-runner-linux-x64 zekno-runner-linux-arm64 > SHA256SUMS
-          gzip -9 -n -k zekno-runner-linux-x64 zekno-runner-linux-arm64
-          cat SHA256SUMS
+          gh --version
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "A release for $TAG already exists. A version is released once." >&2
+            exit 1
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "zekno-runner $VERSION" --notes-file RELEASE-NOTES.md \
+            --prerelease --latest=false \
+            zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz SHA256SUMS RELEASE-NOTES.md
+
+  # Waits for the maintainer's approval in the `prod` environment before its first step. That
+  # environment must exist, with its reviewer, before any prod tag is pushed: a workflow that
+  # names a missing environment creates it without protection (apps/runner/RELEASING.md).
+  release-prod:
+    needs: check
+    if: needs.check.outputs.environment == 'prod'
+    environment: prod
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ needs.check.outputs.bun }}
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build for Linux on x86-64 and ARM64
+        working-directory: apps/runner
+        run: |
+          set -euo pipefail
+          bun run compile:linux-x64
+          bun run compile:linux-arm64
+
+      - name: Check the runner and write the release's files
+        env:
+          TAG: ${{ github.ref_name }}
+          COMMIT: ${{ needs.check.outputs.commit }}
+          BUN: ${{ needs.check.outputs.bun }}
+        run: bun apps/runner/scripts/release.ts files --tag "$TAG" --commit "$COMMIT" --bun "$BUN"
 
       - name: Publish the release
         working-directory: apps/runner/dist
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-          VERSION: ${{ steps.tag.outputs.version }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           set -euo pipefail
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --title "zekno-runner $VERSION" \
-            --notes "zekno-runner $VERSION for Linux on x86-64 and ARM64. SHA256SUMS holds the SHA-256 of each unpacked binary. Unaudited." \
-            zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz SHA256SUMS
+          gh --version
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "A release for $TAG already exists. A version is released once." >&2
+            exit 1
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "zekno-runner $VERSION" --notes-file RELEASE-NOTES.md \
+            zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz SHA256SUMS RELEASE-NOTES.md

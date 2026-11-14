@@ -244,7 +244,7 @@ describe("zekno deploy at a terminal (board 'zekno deploy: success and failure')
     m.docker.failWith(0)
     const status = (await runner(m.runnerHome, m.docker.path, "status")).json
     const frame = (value: unknown) => `printf '%s\\n' '${JSON.stringify({ result: value })}'`
-    m.deps.localRunner = ["sh", "-c", `read -r l; ${frame({ version: "0.2.0", protocol: 2 })}; read -r l; ${frame(status)}; read -r l; exit 1`]
+    m.deps.localRunner = ["sh", "-c", `read -r l; ${frame({ version: "0.1.0", protocol: 2 })}; read -r l; ${frame(status)}; read -r l; exit 1`]
     const dropped = await atTerminal(m, 100, "deploy", ...where)
     expect(dropped.code).toBe(1)
     const end = linesOf(dropped.text)

@@ -21,6 +21,7 @@
  *   (runner-release.json), or, with `--runner-file`, from the file this CLI
  *   sends. Never from the download.
  */
+import { RUNNER_VERSION_PATTERN } from "@workspace/core"
 import { statSync } from "node:fs"
 
 import { CliError } from "./errors"
@@ -28,7 +29,8 @@ import { RUNNER_RELEASE, type RunnerArch } from "./runner-release"
 import { sanitize } from "./sanitize"
 import { RUNNER_PATH, type RunnerProcess, type Transport } from "./transport"
 
-export const VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/
+/** A runner version: the one grammar of packages/core (contracts/release.md, "Versions and tags"). */
+export const VERSION_PATTERN = RUNNER_VERSION_PATTERN
 export const ARCH_PATTERN = /^(x64|arm64)$/
 export const SHA256_PATTERN = /^[0-9a-f]{64}$/
 
@@ -68,10 +70,25 @@ trap 'exit 1' HUP INT TERM
 
 say connected
 
+is_count() {
+  case $1 in ''|0*|*[!0-9]*) return 1 ;; esac
+  [ "$(expr "x$1" : '.*')" -le 10 ]
+}
+is_number() {
+  [ "$1" = 0 ] || is_count "$1"
+}
 is_version() {
-  case $1 in ''|*[!0-9.]*|.*|*.|*..*) return 1 ;; esac
-  case $1 in *.*.*.*) return 1 ;; *.*.*) return 0 ;; esac
-  return 1
+  case $1 in ''|*[!0-9.dev-]*) return 1 ;; esac
+  core=$(printf '%s' "$1" | cut -d - -f 1)
+  case $1 in
+    "$core") ;;
+    "$core-dev."*) is_count "$(printf '%s' "$1" | cut -d - -f 2- | cut -c 5-)" || return 1 ;;
+    *) return 1 ;;
+  esac
+  case $core in *[!0-9.]*|*.*.*.*) return 1 ;; *.*.*) ;; *) return 1 ;; esac
+  is_number "$(printf '%s' "$core" | cut -d . -f 1)" &&
+    is_number "$(printf '%s' "$core" | cut -d . -f 2)" &&
+    is_number "$(printf '%s' "$core" | cut -d . -f 3)"
 }
 is_sha() {
   case $1 in ''|*[!0-9a-f]*) return 1 ;; esac
@@ -83,12 +100,17 @@ is_path() {
 }
 is_newer() {
   for part in 1 2 3; do
-    ours=$(printf '%s' "$2" | cut -d . -f "$part")
-    theirs=$(printf '%s' "$1" | cut -d . -f "$part")
-    if [ "$theirs" -gt "$ours" ] 2>/dev/null; then return 0; fi
-    if [ "$theirs" -lt "$ours" ] 2>/dev/null; then return 1; fi
+    ours=$(printf '%s' "$2" | cut -d - -f 1 | cut -d . -f "$part")
+    theirs=$(printf '%s' "$1" | cut -d - -f 1 | cut -d . -f "$part")
+    if [ "$theirs" -gt "$ours" ]; then return 0; fi
+    if [ "$theirs" -lt "$ours" ]; then return 1; fi
   done
-  return 1
+  ours=
+  theirs=
+  case $2 in *-*) ours=$(printf '%s' "$2" | cut -d . -f 4) ;; esac
+  case $1 in *-*) theirs=$(printf '%s' "$1" | cut -d . -f 4) ;; esac
+  if [ -z "$theirs" ]; then [ -n "$ours" ]; return; fi
+  [ -n "$ours" ] && [ "$theirs" -gt "$ours" ]
 }
 pick() {
   want=$1
@@ -98,6 +120,13 @@ pick() {
     shift 2
   done
   return 1
+}
+lost() {
+  if command -v df >/dev/null 2>&1; then
+    free=$(df -Pk "$dir" </dev/null 2>/dev/null | tail -n 1 | tr -s ' ' | cut -d ' ' -f 4) || free=
+    case $free in ''|*[!0-9]*) ;; *) if [ "$free" -lt 262144 ] 2>/dev/null; then fail space; fi ;; esac
+  fi
+  fail download
 }
 fetch() {
   if command -v curl >/dev/null 2>&1; then
@@ -196,8 +225,8 @@ fi
 found=none
 if [ -n "$runner" ]; then
   answer=$("$runner" version </dev/null 2>/dev/null | head -n 1 | cut -c 1-200) || answer=
-  found=$(printf '%s\n' "$answer" | sed -n 's/^{"version":"\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)",.*$/\1/p')
-  [ -n "$found" ] || found=unknown
+  found=$(printf '%s\n' "$answer" | sed -n 's/^{"version":"\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\(-dev\.[0-9][0-9]*\)\{0,1\}\)",.*$/\1/p')
+  is_version "$found" || found=unknown
   say "runner found $where $found"
 else
   say "runner none"
@@ -225,30 +254,34 @@ if [ "$install" = yes ]; then
   esac
   say "platform ok $arch"
   if [ "$source" = release ]; then expected=$(pick "$arch" "$@") || fail release; fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    hasher=sha256sum
+  elif command -v shasum >/dev/null 2>&1; then
+    hasher=shasum
+  else
+    fail tools
+  fi
   dir=$(dirname "$dest")
   mkdir -p "$dir" || fail install
   [ ! -d "$dest" ] || fail install
   tmp=$(mktemp -d "$dir/.zekno-install.XXXXXX") || fail install
   if [ "$source" = file ]; then
     say ready
-    head -c 268435457 > "$tmp/zekno-runner" || fail download
+    head -c 268435457 > "$tmp/zekno-runner" || lost
   else
     url=https://github.com/zekno-app/zekno/releases/download/runner-v$version/zekno-runner-linux-$arch.gz
-    fetch "$url" "$tmp/zekno-runner.gz" || fail download
-    gzip -t "$tmp/zekno-runner.gz" </dev/null >&2 || fail download
-    gzip -dc "$tmp/zekno-runner.gz" </dev/null | head -c 268435457 > "$tmp/zekno-runner" || fail download
+    fetch "$url" "$tmp/zekno-runner.gz" || lost
+    gzip -t "$tmp/zekno-runner.gz" </dev/null >&2 || lost
+    gzip -dc "$tmp/zekno-runner.gz" </dev/null | head -c 268435457 > "$tmp/zekno-runner" || lost
     rm -f "$tmp/zekno-runner.gz"
   fi
   size=$(wc -c < "$tmp/zekno-runner" | tr -d ' ')
   [ "$size" -gt 0 ] && [ "$size" -le 268435456 ] || fail download
   say "download ok $size"
-  if command -v sha256sum >/dev/null 2>&1; then
+  if [ "$hasher" = sha256sum ]; then
     actual=$(sha256sum "$tmp/zekno-runner" </dev/null | cut -d ' ' -f 1)
-  elif command -v shasum >/dev/null 2>&1; then
-    actual=$(shasum -a 256 "$tmp/zekno-runner" </dev/null | cut -d ' ' -f 1)
   else
-    rm -f "$tmp/zekno-runner"
-    fail tools
+    actual=$(shasum -a 256 "$tmp/zekno-runner" </dev/null | cut -d ' ' -f 1)
   fi
   if [ "$actual" != "$expected" ]; then
     rm -f "$tmp/zekno-runner"
@@ -388,6 +421,7 @@ export type InstallFailure =
   | "release"
   | "download"
   | "tools"
+  | "space"
   | "checksum"
   | "install"
   | "version"
@@ -398,7 +432,7 @@ export type InstallEvent =
   | { kind: "connected" }
   /** Docker with Compose was found. `version` is Compose's, when it fits a version's shape. */
   | { kind: "docker"; version?: string }
-  /** A runner is already there. `version` is undefined when it does not say (a runner from before 0.2.0). */
+  /** A runner is already there. `version` is undefined for a runner that does not report its version. */
   | { kind: "runner"; place: RunnerPlace; version?: string }
   | { kind: "no-runner" }
   | { kind: "platform"; arch: RunnerArch }
@@ -424,6 +458,7 @@ const FAILURES: readonly string[] = [
   "release",
   "download",
   "tools",
+  "space",
   "checksum",
   "install",
   "version",
@@ -432,6 +467,11 @@ const FAILURES: readonly string[] = [
 
 /** The script's lines are short. Anything longer is not one of them. */
 export const INSTALL_LINE_LIMIT = 256
+
+/** `runner found <place> <version|unknown>`, the version held to the same grammar as everywhere else. */
+const RUNNER_FOUND = new RegExp(
+  `^runner found (system|user|path|target) (${RUNNER_VERSION_PATTERN.source.replace(/^\^/, "").replace(/\$$/, "")}|unknown)$`
+)
 
 /** Reads one line the script printed, or undefined when it is not one of its lines. */
 export function parseInstallLine(line: string): InstallEvent | undefined {
@@ -451,7 +491,7 @@ export function parseInstallLine(line: string): InstallEvent | undefined {
     const shape = /^v?([0-9]+(\.[0-9]+){1,3})$/.exec(match[1]!)
     return shape ? { kind: "docker", version: shape[1] } : { kind: "docker" }
   }
-  match = /^runner found (system|user|path|target) ([0-9]+\.[0-9]+\.[0-9]+|unknown)$/.exec(line)
+  match = RUNNER_FOUND.exec(line)
   if (match) {
     const version = match[2] === "unknown" ? undefined : match[2]
     return { kind: "runner", place: match[1] as RunnerPlace, ...(version ? { version } : {}) }
@@ -535,7 +575,13 @@ export const INSTALL_UNEXPECTED = "The installer on the server did not answer as
 export const NO_RELEASE =
   "This build of zekno has no published runner to install. For development, add `--runner-file <path>`. Or install the runner by hand as the runner's README describes (apps/runner/README.md), then add the server with `--runner-path <path>`."
 
-/** The sentence for each way the install can stop (contracts/commands.md, "Installing the runner over SSH"). */
+/** The last sentence of a failed update: the old runner was not touched. */
+const STILL_THERE = "The runner that was there is still in place."
+
+/**
+ * The sentence for each way the install can stop (specs/004-cli-app/contracts/commands.md,
+ * "Installing the runner over SSH"; `tools` and `space` from specs/005-runner-release/contracts/versions.md).
+ */
 export function installFailure(reason: InstallFailure, request: InstallRequest, where: { destination: string; server?: string }): string {
   const file = request.source.kind === "file"
   switch (reason) {
@@ -554,7 +600,9 @@ export function installFailure(reason: InstallFailure, request: InstallRequest, 
         ? "The runner file did not arrive whole on the server. Nothing was installed."
         : "The server could not download the runner. It needs curl or wget, gzip, and to reach github.com over HTTPS."
     case "tools":
-      return "The server has neither sha256sum nor shasum to check the runner with, so nothing was installed."
+      return `The server has neither sha256sum nor shasum to check the runner with, so nothing was downloaded or installed.${request.mode === "update" ? ` ${STILL_THERE}` : ""}`
+    case "space":
+      return `The server ran out of disk space for the runner. It needs at least 256 MiB free in /usr/local/bin as root, or in ~/.local/bin for another user. ${request.mode === "update" ? STILL_THERE : "Nothing was installed."}`
     case "checksum":
       return file
         ? "The runner file that arrived did not match the one sent. It was deleted and nothing was installed."

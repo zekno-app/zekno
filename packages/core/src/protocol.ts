@@ -15,6 +15,7 @@ import {
 import { isoTime, TEAM_ID } from "./roster"
 import { SecretRecordSchema } from "./secret-record"
 import { APP_NAME, SealedSecretSchema, SERVER_ID } from "./secrets"
+import { RUNNER_VERSION_PATTERN } from "./version"
 
 /**
  * Every message exchanged with the control plane. This file is the public
@@ -194,7 +195,7 @@ export const RUNNER_PROTOCOL = 2
 
 /** Runner to CLI: which runner this is. */
 export const RunnerVersionSchema = z.strictObject({
-  version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+$/),
+  version: z.string().regex(RUNNER_VERSION_PATTERN),
   protocol: z.number().int().min(1).max(1_000_000),
 })
 export type RunnerVersion = z.infer<typeof RunnerVersionSchema>

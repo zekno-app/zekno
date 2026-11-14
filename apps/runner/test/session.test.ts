@@ -7,6 +7,7 @@ import {
   parseMessage,
   proposeRoster,
   RUNNER_PROTOCOL,
+  RUNNER_VERSION_PATTERN,
   RunnerReportSchema,
   RunnerStatusSchema,
   RunnerVersionSchema,
@@ -60,7 +61,8 @@ describe("zekno-runner version", () => {
     const home = tempDir("runner")
     const docker = fakeDocker()
     const expected = { version: pkg.version, protocol: RUNNER_PROTOCOL }
-    expect(pkg.version).toBe("0.2.0")
+    // The version it reports is its package's, in the one grammar every release is checked against.
+    expect(pkg.version).toMatch(RUNNER_VERSION_PATTERN)
 
     const once = await runner(home, docker.path, "version")
     expect(once.code).toBe(0)

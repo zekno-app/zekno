@@ -21,7 +21,7 @@ Docker Compose. Having SSH access is not enough to make it run something: the si
 | `zekno-runner sync` | newer team lists | `ok` or a refusal |
 | `zekno-runner apply` | newer team lists and one deploy | `started`, `start_failed` or a refusal |
 | `zekno-runner status` | nothing | versions and deploy numbers, never values |
-| `zekno-runner version` | nothing | its version and protocol, such as `{"version":"0.2.0","protocol":2}` |
+| `zekno-runner version` | nothing | its version and protocol, such as `{"version":"0.1.0","protocol":2}` |
 | `zekno-runner session` | one request per line, until its input closes | one frame per line |
 
 Each command but `session` prints one JSON line on standard output. `setup`, `sync` and `apply`
@@ -94,8 +94,8 @@ CLI    closes its side
 | `setup`, `sync`, `apply`, `status`, `version` | done | refused, or the app did not start | wrong usage |
 | `session` | its input closed, or its reader went away | three unreadable lines in a row, a client far ahead, or an unexpected error | wrong usage |
 
-A CLI that gets status 2 for `session` knows it reached a runner from before sessions (before
-0.2.0), and uses the one-shot commands instead.
+A CLI that gets status 2 for `session` knows it reached a runner from before sessions, one that
+does not report its version, and uses the one-shot commands instead.
 
 ## Its folder
 

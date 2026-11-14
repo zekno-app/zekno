@@ -122,3 +122,31 @@ the record says they were not, and points to section 5.
 ## Results
 
 Filled in by tasks T017, T028, T029, T039 and, after the maintainer's steps, T040 to T042.
+
+### The second build's own build, twice (T017, 2026-11-14)
+
+`ZEKNO_REAL_BUILD=1 bun test apps/runner/test/second-build.test.ts`, on this machine (macOS 27.0.1,
+Apple silicon, `darwin arm64`), Bun 1.4.4. It ran `realBuild` of `apps/runner/scripts/second-build.ts`
+twice, each in its own new temporary folder: `git archive` of the commit unpacked by `tar`,
+`bun install --frozen-lockfile`, then `bun run compile:linux-x64` and `bun run compile:linux-arm64`
+in `apps/runner`.
+
+The commit built was `29ae797`, a commit object made from the working tree at the end of tasks
+T001 to T020 (with `ZEKNO_REAL_BUILD_COMMIT`), on no branch. Its tree differs from the commit that
+records these results only in files no build of the runner reads: `specs/005-runner-release/`, the
+wrapping of three sentences in `apps/cli/README.md` and the docs pages, and two test files of
+`apps/runner/test/`. `apps/runner/src`, `apps/runner/package.json`, `packages/core`, the root
+`package.json` and `bun.lock` are the same.
+
+| Build | `zekno-runner-linux-x64` SHA-256 | `zekno-runner-linux-arm64` SHA-256 | Took |
+|-------|----------------------------------|------------------------------------|------|
+| first | `fb68d252cb89956750c558123449954ff07f043b893a81efef3517aeb94463f6` | `5829b647353f7b71d5f99be61dbba0c9f946cbd0f1c773656cdc7ef9692c51b5` | 1.8 s |
+| second | `fb68d252cb89956750c558123449954ff07f043b893a81efef3517aeb94463f6` | `5829b647353f7b71d5f99be61dbba0c9f946cbd0f1c773656cdc7ef9692c51b5` | 1.2 s |
+
+- Identical, byte for byte, for both binaries.
+- Sizes: `zekno-runner-linux-x64` 109,824,176 bytes, `zekno-runner-linux-arm64` 109,890,552 bytes,
+  the same in both builds.
+- The packages and Bun's Linux runtimes were already in Bun's cache on this machine, and the times
+  are of builds that found them there. A build that has to download them was not timed.
+- This shows two builds on one machine agree. Whether GitHub's Linux build agrees with a macOS
+  build is known only at maintainer step 4 (plan.md, "If GitHub's build differs").

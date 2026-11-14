@@ -86,8 +86,8 @@ export type ServerRow = {
   asks?: boolean
   /**
    * The runner's version, and whether it is older than the one this CLI
-   * carries. `version` is undefined for a runner from before 0.2.0, which
-   * does not say.
+   * carries. `version` is undefined for a runner that does not report its
+   * version.
    */
   runner?: { version?: string; outdated: boolean }
   apps: AppRow[]

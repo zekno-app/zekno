@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import { chmodSync, existsSync, readFileSync, truncateSync, writeFileSync } from "node:fs"
+import { compareRunnerVersions } from "@workspace/core"
+import { chmodSync, existsSync, mkdirSync, readFileSync, truncateSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
+import { ORDERED_VERSIONS, REFUSED_VERSIONS } from "../../../packages/core/test/fixtures/versions"
 import { tempDir } from "../../runner/test/helpers"
 import {
   followsOrder,
   INSTALL_SCRIPT,
   INSTALL_UNEXPECTED,
+  installFailure,
   installWords,
   NO_RELEASE,
   parseInstallLine,
@@ -21,13 +24,47 @@ import {
 } from "../src/install"
 import { releaseUrl, RUNNER_RELEASE } from "../src/runner-release"
 import { connect, type RunnerProcess, type Transport } from "../src/transport"
-import { fakeRunner, sha256, sshStandIn, standInServer, withSsh } from "./stand-in-server"
+import { fakeRunner, sha256, sshStandIn, standInServer, withSsh, type StandInServer } from "./stand-in-server"
 
 const VERSION = RUNNER_RELEASE.version
 const OTHER = "0".repeat(64)
+/** Older than any version this CLI can carry. */
+const OLDER = "0.0.9"
 
 /** The shells the script is run with: this machine's `sh`, and `dash` where there is one (Debian's and Ubuntu's `sh`). */
 const SHELLS = ["/bin/sh", ...(existsSync("/bin/dash") ? ["/bin/dash"] : [])]
+
+/** A runner that reports `version`, in a folder of its own on `server`: its path. */
+function runnerAt(server: StandInServer, version: string): string {
+  const dir = join(server.home, "runners", version)
+  const path = join(dir, "zekno-runner")
+  if (!existsSync(path)) {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(path, fakeRunner(version))
+    chmodSync(path, 0o755)
+  }
+  return path
+}
+
+/**
+ * A small .gz that unpacks to 257 MiB of zeros: one member of 1 MiB, 257
+ * times over, which gzip reads as one stream. Made once, on first use.
+ */
+let oversized: Uint8Array | undefined
+const OVERSIZED_GZ = (): Uint8Array => {
+  if (!oversized) {
+    const member = Bun.gzipSync(new Uint8Array(1024 * 1024))
+    oversized = new Uint8Array(Buffer.concat(Array.from({ length: 257 }, () => member)))
+  }
+  return oversized
+}
+
+/** Runs `work` on each item, a few at a time, and gives the results in order. */
+async function inBatches<T, R>(items: readonly T[], work: (item: T) => Promise<R>, size = 16): Promise<R[]> {
+  const results: R[] = []
+  for (let at = 0; at < items.length; at += size) results.push(...(await Promise.all(items.slice(at, at + size).map(work))))
+  return results
+}
 
 /** What a fresh install says, step by step. */
 const freshInstall = (bytes: number, place = "user") => [
@@ -90,7 +127,7 @@ describe("the script, run with sh against stand-ins", () => {
 
       test("an older runner, or one that does not say its version, is used as it is: never updated unasked", async () => {
         for (const [version, said] of [
-          ["0.1.0", "0.1.0"],
+          [OLDER, OLDER],
           [undefined, "unknown"],
         ] as const) {
           const server = standInServer()
@@ -185,11 +222,74 @@ describe("the script, run with sh against stand-ins", () => {
         expect(server.calls("wget")[0]).toContain("--max-redirect=0")
       })
 
-      test("neither sha256sum nor shasum: nothing is installed", async () => {
+      test("neither sha256sum nor shasum: it stops before anything is downloaded or read, and nothing is installed", async () => {
         const server = standInServer()
         server.remove("sha256sum")
-        const run = await server.run(["add", VERSION, "release", "x64", server.release(fakeRunner(VERSION))], { shell })
-        expect(run.lines.at(-1)).toBe("fail tools")
+        const sha = server.release(fakeRunner(VERSION))
+        const run = await server.run(["add", VERSION, "release", "x64", sha], { shell })
+        expect(run.lines).toEqual(["connected", "docker ok 2.40.3", "runner none", "platform ok x64", "fail tools"])
+        expect(server.calls("curl")).toEqual([])
+        expect(existsSync(server.runnerPath)).toBe(false)
+        expect(server.leftovers()).toEqual([])
+        // The runner file is never asked for: the script stops before `ready`.
+        const bytes = new TextEncoder().encode(fakeRunner(VERSION))
+        const file = await server.run(["add", VERSION, "file", sha256(bytes)], { shell, file: bytes })
+        expect(file.lines.at(-1)).toBe("fail tools")
+        expect(file.lines).not.toContain("ready")
+        // An update leaves the runner that was there.
+        const working = fakeRunner(OLDER)
+        server.installed(working)
+        const update = await server.run(["update", VERSION, server.runnerPath, "release", "x64", sha], { shell })
+        expect(update.lines.at(-1)).toBe("fail tools")
+        expect(readFileSync(server.runnerPath, "utf8")).toBe(working)
+        expect(server.calls("curl")).toEqual([])
+      })
+
+      test("a download that fails: with little room left it says space, otherwise download", async () => {
+        const full = standInServer()
+        full.fetch("fail")
+        full.df(1000)
+        const sha = full.release(fakeRunner(VERSION))
+        const run = await full.run(["add", VERSION, "release", "x64", sha], { shell })
+        expect(run.lines.at(-1)).toBe("fail space")
+        expect(full.calls("df")).toEqual([`-Pk ${join(full.home, ".local", "bin")}`])
+        expect(existsSync(full.runnerPath)).toBe(false)
+        expect(full.leftovers()).toEqual([])
+
+        const roomy = standInServer()
+        roomy.fetch("fail")
+        roomy.df(10_000_000)
+        expect((await roomy.run(["add", VERSION, "release", "x64", roomy.release(fakeRunner(VERSION))], { shell })).lines.at(-1)).toBe("fail download")
+        expect(roomy.leftovers()).toEqual([])
+
+        // An answer of another shape is no answer: it says download.
+        const odd = standInServer()
+        odd.fetch("fail")
+        odd.df("-")
+        expect((await odd.run(["add", VERSION, "release", "x64", odd.release(fakeRunner(VERSION))], { shell })).lines.at(-1)).toBe("fail download")
+      })
+
+      test("a runner one byte different from the published one is never installed, and nothing is left (SC-002)", async () => {
+        const server = standInServer()
+        const published = fakeRunner(VERSION)
+        const at = published.indexOf("session")
+        const changed = `${published.slice(0, at)}${String.fromCharCode(published.charCodeAt(at) ^ 1)}${published.slice(at + 1)}`
+        expect(changed).not.toBe(published)
+        expect(changed.length).toBe(published.length)
+        server.release(changed)
+        const run = await server.run(["add", VERSION, "release", "x64", sha256(published)], { shell })
+        expect(run.lines.slice(-2)).toEqual([`download ok ${published.length}`, "fail checksum"])
+        expect(existsSync(server.runnerPath)).toBe(false)
+        expect(existsSync(server.folder)).toBe(false)
+        expect(server.leftovers()).toEqual([])
+      })
+
+      test("a .gz that unpacks to more than 256 MiB is cut there and refused, and nothing is left", async () => {
+        const server = standInServer()
+        server.releaseGz(OVERSIZED_GZ())
+        const run = await server.run(["add", VERSION, "release", "x64", sha256("anything")], { shell })
+        expect(run.lines.at(-1)).toBe("fail download")
+        expect(run.lines).not.toContain("checksum ok")
         expect(existsSync(server.runnerPath)).toBe(false)
         expect(server.leftovers()).toEqual([])
       })
@@ -237,7 +337,7 @@ describe("the script, run with sh against stand-ins", () => {
 
       test("update: a new runner that cannot run here leaves the working one in place", async () => {
         const server = standInServer()
-        const working = fakeRunner("0.1.0")
+        const working = fakeRunner(OLDER)
         server.installed(working)
         const broken = "#!/bin/sh\nexit 1\n"
         const run = await server.run(["update", VERSION, server.runnerPath, "release", "x64", server.release(broken)], { shell })
@@ -247,11 +347,12 @@ describe("the script, run with sh against stand-ins", () => {
       })
 
       test("update: a runner newer than the one carried is never replaced", async () => {
-        for (const newer of ["0.9.0", "1.0.0", `${VERSION.split(".").slice(0, 2).join(".")}.${Number(VERSION.split(".")[2]) + 1}`, "0.10.0"]) {
+        const carried = "0.1.0"
+        for (const newer of ["0.9.0", "1.0.0", "0.1.1", "0.1.1-dev.1", "0.10.0"]) {
           const server = standInServer()
           const there = fakeRunner(newer)
           server.installed(there)
-          const run = await server.run(["update", VERSION, server.runnerPath, "release", "x64", server.release(fakeRunner(VERSION))], { shell })
+          const run = await server.run(["update", carried, server.runnerPath, "release", "x64", server.release(fakeRunner(carried))], { shell })
           expect({ newer, lines: run.lines }).toEqual({ newer, lines: ["connected", "docker ok 2.40.3", `runner found target ${newer}`, "fail newer"] })
           expect(readFileSync(server.runnerPath, "utf8")).toBe(there)
           expect(server.calls("curl")).toEqual([])
@@ -277,14 +378,14 @@ describe("the script, run with sh against stand-ins", () => {
 
       test("update: an older runner is replaced in place; one at this version is left; a missing one is said", async () => {
         const server = standInServer()
-        server.installed(fakeRunner("0.1.0"))
+        server.installed(fakeRunner(OLDER))
         const runner = fakeRunner(VERSION)
         const sha = server.release(runner)
         const run = await server.run(["update", VERSION, server.runnerPath, "release", "x64", sha], { shell })
         expect(run.lines).toEqual([
           "connected",
           "docker ok 2.40.3",
-          "runner found target 0.1.0",
+          `runner found target ${OLDER}`,
           "platform ok x64",
           `download ok ${runner.length}`,
           "checksum ok",
@@ -306,7 +407,7 @@ describe("the script, run with sh against stand-ins", () => {
 
       test("update through `~/`, as the profile keeps a runner the installer put in a home folder", async () => {
         const server = standInServer()
-        server.installed(fakeRunner("0.1.0"))
+        server.installed(fakeRunner(OLDER))
         const runner = fakeRunner(VERSION)
         const run = await server.run(["update", VERSION, RUNNER_PATHS.user, "release", "x64", server.release(runner)], { shell })
         expect(run.lines.at(-1)).toBe("done target")
@@ -317,8 +418,8 @@ describe("the script, run with sh against stand-ins", () => {
         const server = standInServer()
         const sha = server.release(fakeRunner(VERSION))
         for (const words of [
-          ["add", "0.2", "release"],
-          ["add", "0.2.0.1", "release"],
+          ["add", "0.1", "release"],
+          ["add", "0.1.0.1", "release"],
           ["add", "1..2", "release"],
           ["add", VERSION, "release", "x86", sha],
           ["add", VERSION, "release", "x64", sha.toUpperCase()],
@@ -332,6 +433,72 @@ describe("the script, run with sh against stand-ins", () => {
           expect({ words, lines: run.lines }).toEqual({ words, lines: ["connected", "fail usage"] })
         }
         expect(server.calls("docker")).toEqual([])
+      })
+
+      test("the version word: every form the grammar refuses stops at once, and a dev version is taken", async () => {
+        const server = standInServer()
+        const runs = await Promise.all(REFUSED_VERSIONS.map((version) => server.run(["add", version, "release"], { shell })))
+        for (const [at, run] of runs.entries()) {
+          const version = REFUSED_VERSIONS[at]
+          expect({ version, lines: run.lines }).toEqual({ version, lines: ["connected", "fail usage"] })
+        }
+        expect(server.calls("docker")).toEqual([])
+        const dev = await server.run(["add", "0.1.0-dev.1", "release"], { shell })
+        expect(dev.lines).toEqual(["connected", "docker ok 2.40.3", "runner none", "platform ok x64", "fail release"])
+      })
+
+      test("the script's order of versions is the TypeScript one: an update stops with newer exactly when the runner there is newer", async () => {
+        // One server, one runner per version, each in its own folder. No checksum is carried, so an
+        // update that goes ahead stops at `fail release`, before anything is downloaded. The runner's
+        // folder exists already, so the runs that get that far do not race to make it.
+        const server = standInServer()
+        mkdirSync(server.folder, { recursive: true, mode: 0o700 })
+        const pairs = ORDERED_VERSIONS.flatMap((there) => ORDERED_VERSIONS.map((carried) => ({ there, carried, path: runnerAt(server, there) })))
+        const runs = await inBatches(pairs, ({ there, carried, path }) => server.run(["update", carried, path, "release"], { shell }))
+        for (const [at, run] of runs.entries()) {
+          const { there, carried } = pairs[at]!
+          const newer = compareRunnerVersions(there, carried) > 0
+          expect({ there, carried, found: run.lines[2], last: run.lines.at(-1) }).toEqual({
+            there,
+            carried,
+            found: `runner found target ${there}`,
+            last: newer ? "fail newer" : there === carried ? "done target" : "fail release",
+          })
+        }
+        expect(pairs.filter(({ there, carried }) => compareRunnerVersions(there, carried) > 0)).toHaveLength(55)
+        expect(server.calls("curl")).toEqual([])
+      })
+
+      test("a runner's own version is read with the same grammar: anything else is unknown", async () => {
+        const server = standInServer()
+        const cases = [
+          ["0.1.0-dev.1", "0.1.0-dev.1"],
+          ["0.1.0-dev.0", "unknown"],
+          ["1.2", "unknown"],
+          ["0.1.0-dev.01", "unknown"],
+          ["01.1.0", "unknown"],
+          ["0.1.0-rc.1", "unknown"],
+        ] as const
+        const runs = await Promise.all(cases.map(([reports]) => server.run(["update", "0.1.0", runnerAt(server, reports), "release"], { shell })))
+        for (const [at, run] of runs.entries()) {
+          const [reports, found] = cases[at]!
+          expect({ reports, line: run.lines[2] }).toEqual({ reports, line: `runner found target ${found}` })
+        }
+      })
+
+      test("a prod version replaces the dev version before it; a dev version never replaces the prod one after it", async () => {
+        const server = standInServer()
+        server.installed(fakeRunner("0.1.0-dev.1"))
+        const prod = fakeRunner("0.1.0")
+        const run = await server.run(["update", "0.1.0", server.runnerPath, "release", "x64", server.release(prod)], { shell })
+        expect(run.lines.slice(2, 4)).toEqual(["runner found target 0.1.0-dev.1", "platform ok x64"])
+        expect(run.lines.at(-1)).toBe("done target")
+        expect(readFileSync(server.runnerPath, "utf8")).toBe(prod)
+
+        const back = await server.run(["update", "0.1.0-dev.2", server.runnerPath, "release", "x64", server.release(fakeRunner("0.1.0-dev.2"))], { shell })
+        expect(back.lines).toEqual(["connected", "docker ok 2.40.3", "runner found target 0.1.0", "fail newer"])
+        expect(readFileSync(server.runnerPath, "utf8")).toBe(prod)
+        expect(server.calls("curl")).toHaveLength(1)
       })
     })
   }
@@ -380,8 +547,14 @@ describe("what is placed into the script", () => {
     }
   })
 
+  test("a dev version is placed as a word, as a prod version is", () => {
+    for (const version of ["0.1.0-dev.1", "0.1.0", "1.0.0-dev.999999999"]) {
+      expect(installWords({ mode: "add", version, source: { kind: "release", files: [{ arch: "x64", sha256: SHA }] } })).toEqual(["add", version, "release", "x64", SHA])
+    }
+  })
+
   test("each of the four values that does not fit its pattern throws before anything is placed", () => {
-    const versions = [...HOSTILE, "1.2", "1.2.3.4", "v1.2.3", "1.2.3-rc1", "01.2.3x"]
+    const versions = [...HOSTILE, ...REFUSED_VERSIONS, "1.2", "1.2.3.4", "v1.2.3", "1.2.3-rc1", "01.2.3x"]
     for (const version of versions) {
       expect(() => installWords({ mode: "add", version, source: { kind: "release", files: [] } })).toThrow("The version for the installer is not valid")
     }
@@ -430,7 +603,18 @@ describe("what is placed into the script", () => {
     expect(connect({ kind: "local", home: tempDir("runner") }, []).script).toBeUndefined()
   })
 
-  test("the release files are those with a published checksum, and today there are none", () => {
+  test("the transport's own check lets a dev version through as it is", async () => {
+    const ssh = sshStandIn(standInServer())
+    await withSsh(ssh, async () => {
+      const transport = connect({ kind: "ssh", destination: "deploy@example.test", runnerPath: "zekno-runner" }, [], { errorLines: () => {} })
+      const child = transport.script!(["add", "0.1.0-dev.1", "release"])
+      child.end()
+      await child.exited
+    })
+    expect(ssh.calls()).toEqual(["-- deploy@example.test sh -s -- add 0.1.0-dev.1 release"])
+  })
+
+  test("the release files are those with a published checksum, and none without one", () => {
     expect(releaseFiles()).toEqual(
       (["x64", "arm64"] as const).flatMap((arch) => {
         const sha = RUNNER_RELEASE.files[`linux-${arch}`].sha256
@@ -461,6 +645,29 @@ describe("what is placed into the script", () => {
 // ---------------------------------------------------------------------------
 // What it prints, read
 
+describe("what a person is told when the install stops", () => {
+  const add: InstallRequest = { mode: "add", version: VERSION, source: { kind: "release", files: [] } }
+  const update: InstallRequest = { mode: "update", version: VERSION, runnerPath: "~/.local/bin/zekno-runner", source: { kind: "release", files: [] } }
+  const where = { destination: "deploy@example.test", server: "prod" }
+
+  test("no checksum tool, and no room: the sentences of contracts/versions.md, and what is left in an update", () => {
+    expect(installFailure("tools", add, where)).toBe(
+      "The server has neither sha256sum nor shasum to check the runner with, so nothing was downloaded or installed."
+    )
+    expect(installFailure("tools", update, where)).toBe(
+      "The server has neither sha256sum nor shasum to check the runner with, so nothing was downloaded or installed. The runner that was there is still in place."
+    )
+    expect(installFailure("space", add, where)).toBe(
+      "The server ran out of disk space for the runner. It needs at least 256 MiB free in /usr/local/bin as root, or in ~/.local/bin for another user. Nothing was installed."
+    )
+    expect(installFailure("space", update, where)).toBe(
+      "The server ran out of disk space for the runner. It needs at least 256 MiB free in /usr/local/bin as root, or in ~/.local/bin for another user. The runner that was there is still in place."
+    )
+    expect(parseInstallLine("fail space")).toEqual({ kind: "fail", reason: "space" })
+    expect(parseInstallLine("fail tools")).toEqual({ kind: "fail", reason: "tools" })
+  })
+})
+
 describe("what the script prints is read strictly", () => {
   test("each of its lines, and nothing else", () => {
     expect(parseInstallLine("connected")).toEqual({ kind: "connected" })
@@ -469,6 +676,7 @@ describe("what the script prints is read strictly", () => {
     expect(parseInstallLine("docker ok unknown")).toEqual({ kind: "docker" })
     expect(parseInstallLine("runner found user 0.1.0")).toEqual({ kind: "runner", place: "user", version: "0.1.0" })
     expect(parseInstallLine("runner found path unknown")).toEqual({ kind: "runner", place: "path" })
+    expect(parseInstallLine("runner found user 0.1.0-dev.1")).toEqual({ kind: "runner", place: "user", version: "0.1.0-dev.1" })
     expect(parseInstallLine("download ok 27000000")).toEqual({ kind: "download", bytes: 27_000_000 })
     expect(parseInstallLine("done system")).toEqual({ kind: "done", place: "system" })
     expect(parseInstallLine("fail checksum")).toEqual({ kind: "fail", reason: "checksum" })
@@ -480,6 +688,10 @@ describe("what the script prints is read strictly", () => {
       "docker ok \u001b[2J",
       "runner found /usr/bin 0.1.0",
       "runner found user 0.1",
+      "runner found user 0.1.0-dev.0",
+      "runner found user 01.1.0",
+      "runner found user 0.1.0-rc.1",
+      "runner found user 0.1.0 ",
       "download ok 0",
       "download ok -1",
       "done /tmp/x",

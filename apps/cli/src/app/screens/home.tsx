@@ -539,7 +539,7 @@ function UpdateQuestion({ server, columns }: { server: ServerRow; columns: numbe
             <Box width={14} flexShrink={0}>
               <Text dimColor>on {server.name}</Text>
             </Box>
-            <Text>{server.runner?.version ?? "from before 0.2.0"}</Text>
+            <Text>{server.runner?.version ?? "no version reported"}</Text>
           </Box>
           <Box>
             <Box width={14} flexShrink={0}>

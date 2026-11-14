@@ -1,4 +1,5 @@
 import {
+  compareRunnerVersions,
   CoreError,
   proposeRoster,
   RunnerReportSchema,
@@ -88,15 +89,9 @@ export type AddSessionOptions = {
 
 const release = (deps: Pick<OpDeps, "release">): RunnerRelease => deps.release ?? RUNNER_RELEASE
 
-/** Compares two versions of the form 1.2.3: negative when `a` is older. */
+/** Compares two runner versions: negative when `a` is older (packages/core, `compareRunnerVersions`). */
 export function compareVersions(a: string, b: string): number {
-  const parts = (version: string) => version.split(".").map(Number)
-  const [x, y] = [parts(a), parts(b)]
-  for (let at = 0; at < 3; at++) {
-    const difference = (x[at] ?? 0) - (y[at] ?? 0)
-    if (difference !== 0) return difference
-  }
-  return 0
+  return compareRunnerVersions(a, b)
 }
 
 /**

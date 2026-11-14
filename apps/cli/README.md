@@ -137,8 +137,8 @@ keys type into it.
 - Deploys, rollbacks, secrets and logs use connections of their own, never the kept session.
 - After a server is added from the app, the session it was added over is kept, so SSH does not
   ask a second time.
-- A runner older than 0.2.0 has no sessions. It is read when the app starts and after `u`, never
-  in the background.
+- A runner that does not report its version has no sessions. It is read when the app starts and
+  after `u`, never in the background.
 - Every kept session is closed when the app closes, on `q`, an error or a signal.
 - If SSH has to ask for a password or a host key, the app first tries SSH's batch mode, then
   hands the terminal over so you can answer on the normal screen, and takes it back once the
@@ -331,8 +331,8 @@ Prints an app's logs, read straight from its server. `--tail <n>` is how many ea
 Docker sends first: 0 to 1000, 200 by default. It follows until interrupted, or until Docker's
 log command or the connection ends. `--no-follow` prints the lines Docker has and ends. Ctrl-C,
 or a reader that closes the pipe (`zekno logs | head -1`), stops the reading on the server and
-ends the command quietly with status 0. It needs runner 0.2.0 or later, and an app the server has
-a deploy of. Nothing is written to disk.
+ends the command quietly with status 0. It needs a runner that reports its version, as every
+released runner does, and an app the server has a deploy of. Nothing is written to disk.
 
 ```bash
 zekno logs --app api --server prod --tail 50 --no-follow

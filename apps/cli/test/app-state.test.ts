@@ -33,7 +33,7 @@ const TEAM: TeamView = {
         { name: "api", deploy: 12, state: "running" },
       ],
     },
-    { name: "staging", destination: "staging-box", runner: { version: "0.2.0", outdated: false }, apps: [] },
+    { name: "staging", destination: "staging-box", runner: { version: "0.1.1", outdated: false }, apps: [] },
   ],
 }
 

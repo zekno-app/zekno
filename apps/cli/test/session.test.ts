@@ -16,10 +16,12 @@ import { RunnerRefused } from "../src/errors"
 import { prepareDeploy, sendDeploy } from "../src/ops/deploy"
 import { ENDED, openSession, TOO_LARGE, TOO_OLD, UNEXPECTED } from "../src/session"
 import { connect, LOCAL_FIRST_ANSWER_MS, type Target, type Transport } from "../src/transport"
+import runnerPackage from "../../runner/package.json"
 import { COMPOSE_V1, COMPOSE_V2, machine, ready } from "./helpers"
 
 const where = ["--app", "web", "--server", "dev"]
-const VERSION = { version: "0.2.0", protocol: 2 }
+/** What the repository's runner answers to `version`; the scripted runners below answer the same. */
+const VERSION = { version: runnerPackage.version, protocol: 2 }
 
 /**
  * A runner command that notes its process id and command word in `log`
@@ -138,7 +140,7 @@ describe("what the runner sends is checked", () => {
       // An event that does not belong to this request.
       say({ event: "log", service: "web", time: "2026-11-13T16:56:04Z", line: "x" }),
       // A result that is not the message asked for.
-      say({ result: { version: "0.2.0" } }),
+      say({ result: { version: "0.1.0" } }),
     ]) {
       const s = await openSession(connect(local(), scripted(say({ result: VERSION }), answer)))
       expect(s.mode).toBe("session")

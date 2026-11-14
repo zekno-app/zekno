@@ -1,0 +1,50 @@
+# Fails when `main` carries a development version (specs/005-runner-release/contracts/release.md,
+# ".github/workflows/main-versions.yml"). A CLI built from `main` must install a prod release
+# only, so apps/runner/package.json and apps/cli/src/runner-release.json hold plain versions
+# there. Before merging `dev` into `main`, the prod versions are committed on `dev`
+# (apps/runner/RELEASING.md).
+name: main versions
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# Nothing by default; the one job reads only.
+permissions: {}
+
+jobs:
+  check-main:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # Pinned to the same full commits as the release workflow.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.pin.outputs.bun }}
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Check that main holds prod versions only
+        run: bun apps/runner/scripts/release.ts check-main
