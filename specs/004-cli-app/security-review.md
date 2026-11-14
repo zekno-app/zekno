@@ -108,7 +108,7 @@ informational note were fixed.
 | # | Severity | Finding | Fix |
 |---|----------|---------|-----|
 | C7 | Low | **Server output could grow the CLI's memory without limit when its standard error is a slow pipe.** Two paths: what a runner or SSH writes on standard error, passed on without waiting (at feature 003 standard error was inherited, so SSH itself had to wait), and Docker's progress lines during a deploy, written from the session's event callback. Bun's `process.stderr.write` returns `false` but keeps the text, and `writableLength` stays 0, so a size check cannot see it. Measured by the reviewer with standard error going into a FIFO nobody reads: 2 GB and rising. | A runner's standard error is passed on one line at a time, and the next is read only once standard error has taken the last one (`drain`). The pipe then fills and the runner, or SSH, has to wait, as at feature 003. Docker's lines during a deploy go through a hold of at most 500 lines (research R5): while standard error is backed up, the oldest held line is dropped and counted, and the count is reported ("Left out N lines of Docker's output ...") before the next line drawn. Once the deploy has its answer, its last lines get at most one second. The interface at a terminal lets go of lines it has drawn, where it used to keep every one. In the tests (up to 400 MB sent, standard error into a FIFO nobody reads) the CLI peaked at about 62 MiB with the runner held back, and at about 67 MiB for a deploy's lines, which finished on its own. With the fixes taken out, each passed the tests' bound of 200 MiB within half a second. |
-| C8 | Low | **Server text reached the terminal unmarked.** A lying server could print lines that look exactly like zekno's own, such as a fake "Server code: ..." line or an instruction to run a command. | In single commands, every line from a runner's, Docker's or SSH's standard error, and every progress line of a deploy, is drawn through the interface's new `remote` method after a fixed mark, `remote:`, as git marks what the other side said. Plain output writes `remote: <line>` on standard error. None of zekno's own messages on standard error start with the mark, and it stays the same for scripts. At a terminal the line is dim after the same mark, and a line wider than the terminal goes on under its own text, never at the left edge where zekno's own lines start. The full-screen app already keeps these lines off the terminal and is unchanged. |
+| C8 | Low | **Server text reached the terminal unmarked.** A lying server could print lines that look exactly like zekno's own, such as a fake "Server code: ..." line or an instruction to run a command. | In single commands, every line from a runner's, Docker's or SSH's standard error, and every progress line of a deploy, is drawn through the interface's new `remote` method after a fixed mark, `remote:`, as git marks what the other side said. Plain output writes `remote: <line>` on standard error. None of zekno's own messages on standard error start with the mark, and it stays the same for scripts. At a terminal the line is dim after the same mark, and a line wider than the terminal goes on under its own text, never at the left edge where zekno's own lines start. The full-screen app already keeps these lines off the terminal and is unchanged. Later change: the terminal deploy view of `zekno deploy` and `zekno rollback` shows Docker's lines without the mark, as its approved board does. See F1 in the final review below. |
 | C9 | Low | **`profile.json` accepted any string as an SSH destination, runner path and member name** (older than this feature). The first two were checked only on connect, so attacker B could put escape sequences there and `zekno server ls` printed them raw. | The profile's schema holds the destination and the runner path to the patterns `server add` checks (`SSH_DESTINATION`, `RUNNER_PATH`), and the member name to the core library's rule for a name in a team list: no control, format, unassigned or private-use character, no line or paragraph separator, no space at either end, at most 64 characters. A changed value makes the profile damaged when it is read. |
 | C10 | Informational | **Text cleaning kept characters that are drawn as nothing or as blanks**: Hangul fillers, the combining grapheme joiner, Mongolian and other variation selectors, and unassigned default-ignorable code points. | `sanitize` also removes every `Default_Ignorable_Code_Point`, except U+FE0E and U+FE0F, which choose between an emoji's text and emoji form, so emoji keep their form. |
 
@@ -405,3 +405,88 @@ each time and left no process.
 - At 80 columns, the set-a-secret header cuts "set a secret" short once the count has two digits
   ("33 of 64"). Seen while checking P8; not changed.
 - User Story 4, scenario 5 (see the notes).
+
+## Final review of the whole feature (reviewed 2026-11-14, T058)
+
+An independent reviewer read the feature at `eb6a65e`, with the most care on what no one but
+its author had read: the fixes for the earlier reviews (`6fc818f`, `2f79ede`) and the last
+phase (`6482285`). Nothing was rated high or critical. Four low findings and five notes.
+
+| Id | Rating | Finding | State |
+|----|--------|---------|-------|
+| F1 | Low | At a terminal, `zekno deploy` and `zekno rollback` draw Docker's lines with no `remote:` mark: the latest line, dim, under the stage row, and on a failed start the lines in the "Docker said" panel. A lying server can print a line that reads like zekno's own result. C8 above, the README and the docs said every such line carries the mark. | Not changed. The approved board ("zekno deploy: success and failure") shows these lines without a mark, and the result line that follows is zekno's own. The record, the README and the docs now say what the screen does. Whether to add the mark is the maintainer's decision. Plain output is as C8 says. |
+| F2 | Low | `zekno link --app <name>` in a sub-folder took the server from a `zekno.json` above that this machine never accepted, wrote a new file with it and accepted that. The same with `--server` and the app. Reproduced. | Fixed in `ccffd32`: a missing name is filled only from an accepted file. Otherwise the command stops with exit status 2 before writing anything. |
+| F3 | Low | `zekno secret set` asked for the value before it checked the name. `zekno secret set DB_PASSWORD=hunter2` at a terminal repeated what was typed in the prompt. Reproduced. | Fixed in `ccffd32`: the name is checked before any prompt, and the refusal states the rule without repeating what was typed. |
+| F4 | Low | The read made when the app starts, and after `u`, had no time limit, so a server that stalled just then stayed "not asked" and was never retried. Reproduced. | Fixed in `ccffd32`: the 20-second limit starts as soon as the session is open. Only connecting, where SSH may be asking for a password, has none. |
+
+One more from the walkthrough of every screen, the same day:
+
+| Id | Rating | Finding | State |
+|----|--------|---------|-------|
+| W1 | Low | At a terminal, a `remote:` line holding a word longer than the room left (a path) was wrapped by the terminal, so its rest started at the left edge, where zekno's own lines start. C8 said that could not happen. `zekno logs` at a terminal had the same flaw. | Fixed in `ccffd32`: zekno breaks such a line itself, and every continuation stays under the text after the mark. |
+
+**Notes, not fixed unless it says so**
+
+- N1. What a mistyped `secret set` can show. `secret set NAME VALUE` is refused and prints the
+  name only. With the two swapped, the value is printed as if it were the name, when it fits the
+  name pattern. `secret set <token>` with no name stores the token as a secret's *name* when it
+  fits the pattern (`sk_live_…` does): it is signed, sent to the runner and listed by `status`.
+  No pattern can tell such a token from a name.
+- N2. A `zekno.json` above that could not be read (a link, another user's file, bad JSON)
+  stopped `deploy --app X --server Y`. Fixed in `ccffd32`: given both names, such a file counts
+  as none.
+- N3. The runner drops progress frames past 8 MiB waiting to be sent, and does not say so. On a
+  failed start with very long Docker output, the last lines can be missing. The result is never
+  dropped. Reasoned, not reproduced.
+- N4. A line a server writes on standard error is not cut at the documented length when it
+  arrives whole in one read. It is bounded at about 64 KiB.
+- N5. What accepting a `zekno.json` covers: its path and its bytes, nothing else. The Compose
+  file beside it can change afterwards (an edit, a `git pull`, a checked-out branch) and is
+  deployed as it is. That is "the developer deploys what is in their folder", but a pull request
+  branch of one's own repository carries the same accepted `zekno.json` with another Compose
+  file. `zekno link` with no names, in a sub-folder, accepts the file above and prints its app
+  and server after accepting. Nothing warns that the app it names already exists on that server.
+
+**Earlier findings tested again at `eb6a65e`, all still fixed**
+
+P1, P2, P5, P6 (a second process swapped a folder on the way to the Compose file through
+230,000 reads: content from outside was read 0 times), P7, L1, L3, L4, the file-name case note,
+and the runner's and the plumbing's own tests (S1 to S3, S6 to S8, L6, C7 to C10).
+
+**Checked and found to hold**
+
+- Nothing read over a kept session decides an action. The deploy number comes from `status` on
+  the deploy's own connection; the rollback target and the secrets come from this machine.
+  Deploys, rollbacks and logs open their own connection and check identity on it.
+- Identity is checked on every `status` over a kept session.
+- An answer to one request is never taken as the answer to another: a read that times out
+  closes the session, only the kind of event the request allows is accepted, and anything else
+  ends the session. A lying server gains nothing from a session that lasts for hours.
+- Frame limits hold for a line split across reads and for a last line with no line feed.
+- Processes are reaped: sixteen runs across eight states of a kept session and of logs, closed
+  normally and at once, left no SSH, runner or Docker process.
+- A deploy that ran cannot be reported as "could not be reached": that is said only when
+  nothing but `version` had been sent.
+- The alias guard before the YAML parser: no text under 256 KiB with 200 aliases or fewer was
+  found that costs more than 406 MB or 0.3 seconds.
+- Plain output of every command, with hostile Docker and runner text: no escape or control byte
+  on either stream, zekno's own lines plain ASCII, the typed secret value nowhere.
+- The missing-values question: only `y` deploys.
+
+**Not checked by any review of this feature**
+
+- Real SSH, real Docker and Linux by a reviewer. One real server was used in the run recorded in
+  quickstart.md: Linux x86-64, root, key in the agent.
+- A session held for hours.
+- A server reached with a password, as a user who is not root, or on ARM64.
+- Installing from a published release: none exists yet.
+
+**Open, for the maintainer**
+
+- S4: anyone who can start the runner on the server can read `state` and `logs` of every app,
+  with no team signature. Accept it, or require signed requests.
+- F1: mark Docker's lines in the terminal deploy view, or keep the board as it is.
+- N1 and N5 above.
+- From the installer review: restrict who can push `runner-v*` tags, and compare the release's
+  checksums with a build made elsewhere before recording them.
+- An external audit is still required before anything here is relied on.

@@ -461,3 +461,33 @@ T064, from the repository root at `ac1db21` (no source change since `eb6a65e`), 
 - `bun run lint`: passed in the 2 packages that have a lint script (ui, web), no warning.
 - `bun run test`: 750 tests, all passed, none failed: core 88 (12 files), runner 80 (5 files),
   cli 554 (25 files), web 28 (3 files).
+
+### After the walkthrough (2026-11-14)
+
+The walkthrough ran on `eb6a65e`. Commit `ccffd32` then fixed these of its differences, each
+with a test, and checked them again in a pseudo-terminal (27 of 27 checks):
+
+- D1: Home at 100 columns shows the server's address whole.
+- D2: the names in "This folder is linked to demo on prod by zekno.json." are in the text colour.
+- D5: the add-server screen stays open when it finishes, with the server code in its panel
+  above its sentence, until enter.
+- D7: `zekno status` leaves no "Asking" line, and lists apps in Home's order.
+- D8: a long `remote:` line never reaches the left edge.
+- D9: with standard input not a terminal, a command prints plain lines.
+- The failure sentence on standard error has no colour in plain mode.
+
+Left for the maintainer, each a question of design:
+
+- D3: the Logs board draws a failed line in red. The app draws every log line alike; Docker
+  does not say which lines are errors.
+- D4: the outdated-runner mark is on its own row under the server's name, not beside it.
+- D6: the profile error screen says "The team list…", the error's own sentence; the board says
+  "A team list…".
+- Wrapped lines that begin with a space, the service column of `zekno logs` that widens when a
+  longer name appears, and that `r` on Home goes back to the deploy before the latest even when
+  that one did not start.
+- After adding a server that needs a password, Home shows it as not reached until the app is
+  opened again, because the app never asks for a password in the background.
+
+Checks at the end, at `ccffd32`, run without the cache: typecheck 5 of 5, lint passes, tests
+core 88, runner 80, cli 565, web 28, none failing.
