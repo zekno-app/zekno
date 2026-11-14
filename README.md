@@ -162,7 +162,7 @@ A Turborepo monorepo on Bun workspaces. The table shows what exists today.
 | `packages/eslint-config` | Shared ESLint configuration | Available |
 | `packages/typescript-config` | Shared TypeScript configuration | Available |
 | `packages/core` | Key generation, secret encryption, signed deploys, team membership and protocol types | First version built; unaudited. The control-plane client is not written yet |
-| `apps/cli` | Command-line tool: your key, servers, secrets, deploys, running state and logs. Running `zekno` opens a full-screen terminal app built with Ink; single commands stay for scripts | Second version built: the terminal app, running state and logs read from your server, a project file (`zekno.json`), and installing over SSH the runner release its build carries, checked against a checksum it holds. The first runner release is not recorded yet, so a server still needs a runner installed by hand, or `--runner-file` for development. One developer, deploying directly over SSH. Internal reviews only; unaudited |
+| `apps/cli` | Command-line tool: your key, servers, secrets, deploys, running state and logs. Running `zekno` opens a full-screen terminal app built with Ink; single commands stay for scripts | Second version built: the terminal app, running state and logs read from your server, a project file (`zekno.json`), and installing over SSH the runner release its build carries, checked against a checksum it holds. The first runner release, 0.1.0, is published and recorded, so `zekno server add` installs the runner on a server by itself. One developer, deploying directly over SSH. Internal reviews only; unaudited |
 | `apps/runner` | Program that runs on your servers | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything, over one connection per command. Built for Linux on x86-64 and ARM64 with glibc 2.17 or newer. How a release is made and checked: [`apps/runner/RELEASING.md`](apps/runner/RELEASING.md). Internal reviews only; unaudited |
 | `apps/desktop` | Desktop app (Electrobun: React UI + Bun main process) | Planned |
 
@@ -256,7 +256,7 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 - [x] Running state and live logs, read from your server over SSH (CLI and runner)
 - [x] Project file `zekno.json`, signed by a member of your team and asked about once the first time it is used in a folder
 - [x] Installing the runner over SSH from a release, checked against a checksum the CLI holds, and the release workflow
-- [ ] Publish the first runner release (until then a server needs a runner installed by hand)
+- [x] Publish the first runner release: 0.1.0, confirmed by a second build and proven on a real server
 - [ ] Desktop app: connect a server, set secrets, deploy, roll back, logs
 - [ ] Website: landing pages and docs, then the signed-in dashboard
 - [ ] Local mock of the control plane for development

@@ -160,9 +160,9 @@ release, such as `0.1.0`; one built from `dev` installs a development release, s
 | root | `/usr/local/bin/zekno-runner` | `/var/lib/zekno` |
 | any other user | `~/.local/bin/zekno-runner` | `~/.local/state/zekno` |
 
-**The first runner release is not recorded yet.** `apps/cli/src/runner-release.json` on this
-branch holds no checksums, so a zekno built from it has no published runner to install. Install
-the runner by hand, or use `--runner-file` for development.
+**The first runner release is 0.1.0.** `apps/cli/src/runner-release.json` holds its checksums, so
+a zekno built from this branch installs it by itself. Installing by hand, below, and
+`--runner-file` remain for development and for servers that cannot reach GitHub.
 
 ### By hand
 

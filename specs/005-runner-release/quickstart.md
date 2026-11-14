@@ -337,3 +337,45 @@ checksums the local double builds gave before the release (T017).
 The checksums were recorded on `dev` in commit `da5586f`, and the record was added to the
 release's notes. With the checksums in place: core 102, runner 147 (1 skipped), CLI 663, web 28
 tests pass.
+
+### The proof on a real server (T041, 2026-11-14)
+
+Run by the assistant with the maintainer's go-ahead, against the maintainer's own server: Linux
+x86-64 with glibc 2.43 and a processor that has SSE4.2, reached as root over SSH. The server had
+no runner, no runner folder and no zekno container beforehand. The CLI ran from the working tree
+with a throwaway team; its key was kept in a file in a temporary folder, so the maintainer's
+keychain and `~/.zekno` were not touched.
+
+| Step | Result |
+|------|--------|
+| `zekno server add night --ssh <alias>` with the CLI on `dev`, no `--runner-file` | Pass, 7.9 seconds (SC-001 asks for under two minutes). The server downloaded `0.1.0-dev.1` from the release and installed it at `/usr/local/bin/zekno-runner`, mode 755, with `/var/lib/zekno` mode 700. Its SHA-256 on the server was `fb68d252…63f6`, the recorded one. Nothing was typed on the server (FR-001). |
+| `zekno secret set`, `zekno link`, `zekno deploy` | Pass, 5.4 seconds for the first deploy. The container had the value and published no port. |
+| An older runner (0.0.9, built from the same source) put in place by hand, then `zekno status` | Pass. It said the runner is version 0.0.9, older than this zekno's 0.1.0-dev.1, and named `zekno server update`. |
+| `zekno server update night` with no terminal and no `--yes` | Pass. It stopped and named `--yes` (FR-020). |
+| `zekno server update night --yes` | Pass, 5.6 seconds. The runner answered 0.1.0-dev.1 with the recorded checksum. The container's id and start time were the same before and after (SC-005), and the runner's folder kept its files (FR-019). |
+| After the prod release, with the CLI on `main`: `zekno status`, then `zekno server update night --yes` | Pass, 6.1 seconds. Status said 0.1.0-dev.1 is a development release, older than 0.1.0. The update put 0.1.0 in place with checksum `ac54f00b…ccf2`, the recorded one. Same container id and start time again. A deploy after it worked. |
+| Clean-up | The container, its network, the image, the runner and `/var/lib/zekno` were removed and checked: nothing named zekno is left. The throwaway key and profile were deleted. The secret's value was in no local file. |
+
+Not tried: ARM64, a user who is not root, a server that asks for a password, a server below the
+supported line (an old processor or glibc; the containers of T029 stand in for glibc only), and
+SC-006 (a push by an account without the right: there is no second account).
+
+### The first prod release, `runner-v0.1.0` (T042, 2026-11-14)
+
+- The prod versions were committed on `dev` (`9d214a6`), `dev` was merged into `main`
+  (`e4f5029`), `release.ts check-main` passed, and `main` was pushed. The workflow `main versions`
+  passed on it.
+- The tag was pushed at `e4f502966f25756fcafa9eec6356ea59b5e52ced`. Run:
+  https://github.com/zekno-app/zekno/actions/runs/43622133935. `check` and `build-prod` passed and
+  `publish-prod` waited in the `prod` environment. Before the approval no release existed. It was
+  approved for the maintainer, at their request, and published:
+  https://github.com/zekno-app/zekno/releases/tag/runner-v0.1.0 (a normal release, not a
+  pre-release).
+- The second build on the maintainer's machine matched, exit status 0:
+  `zekno-runner-linux-x64` `ac54f00b9f4225795ff67f2f7716218beee4388371abe097da79f0457f66ccf2`,
+  `zekno-runner-linux-arm64` `6a95ef24030c7ee600271e85021405fcd4f08dd077f6124ba9734d0886c4fb4b`.
+  The checksums were recorded on `main` (`54f6dc3`) and the record added to the release's notes.
+- `main` was then merged back into `dev`, so a zekno built from either branch installs 0.1.0.
+- One test timed out once in a full run while the prod versions were being checked (the version
+  order test, 121 runs of the installer script, at the default five seconds). It passes alone
+  every time and now has a 30-second limit.

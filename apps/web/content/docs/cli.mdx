@@ -31,10 +31,10 @@ does is also a single command, for scripts.
   installs a prod release, such as `0.1.0`; one built from `dev` installs a
   development release, such as `0.1.0-dev.1`. See
   [Installing the runner](#installing-the-runner).
-- **The first runner release is not recorded yet.** A `zekno` built from the
-  repository today holds no checksums, so it has no published runner to
-  install: a server needs a runner already on it, or `--runner-file` for
-  development.
+- **The first runner release is 0.1.0.** A `zekno` built from `main` holds its
+  checksums and installs it on a server by itself. Between a release being
+  started and its second build, a `zekno` built from that branch holds no
+  checksums and says it has no published runner to install.
 - **Docker's messages are shown as they are.** An error from Docker can repeat
   a value that was filled in from a secret.
 - Made for macOS and Linux with a system keychain. Windows is not tested.
