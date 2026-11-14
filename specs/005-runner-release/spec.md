@@ -6,7 +6,20 @@
 
 **Status**: Draft
 
-**Input**: User description: "Runner releases, first version. Today nobody but the maintainer can use Zekno, because no runner release exists: `zekno server add` can only install a runner from a published release whose checksum the CLI holds, and none is published, so adding a server needs the development option `--runner-file` or a runner copied by hand. Feature 004 built the pieces (the installer over SSH that verifies a checksum before installing, `zekno server update`, and a release workflow for the tag `runner-v<version>`); none of it has ever run for real. Deliver: adding a server installs the published runner by itself; updating an older runner; a release is installed only if it is exactly what the maintainers published, confirmed by a second independent build; the runner starts on ordinary Linux servers; a short written release procedure; the first release, 0.2.0, published, recorded and proven on a real server; the rule between CLI and runner versions; docs that say how it really works."
+**Input**: User description: "Runner releases, first version. Today nobody but the maintainer can use Zekno, because no runner release exists: `zekno server add` can only install a runner from a published release whose checksum the CLI holds, and none is published, so adding a server needs the development option `--runner-file` or a runner copied by hand. Feature 004 built the pieces (the installer over SSH that verifies a checksum before installing, `zekno server update`, and a release workflow for the tag `runner-v<version>`); none of it has ever run for real. Deliver: adding a server installs the published runner by itself; updating an older runner; a release is installed only if it is exactly what the maintainers published, confirmed by a second independent build; the runner starts on ordinary Linux servers; a short written release procedure; the first release, 0.1.0, published, recorded and proven on a real server; the rule between CLI and runner versions; docs that say how it really works."
+
+## Clarifications
+
+### Session 2026-11-14
+
+- Q: Where does the second build run? → A: On the maintainer's own machine, with one command that rebuilds the tagged commit and compares it with the published files. Chosen over a second build service.
+- Q: Which processors must the x86-64 runner start on? → A: Also those without the newer instruction sets: the build tool's "baseline" build. The runner mostly waits on Docker and the network, so the speed cost does not matter.
+- Q: Which Linux systems? → A: Those with the standard system library (Debian, Ubuntu, RHEL and similar). Alpine hosts are not supported in the first release, and the notes say so.
+- Q: Is a signed statement of how a build was made published with it? → A: Not in the first release. The checksum the CLI holds, confirmed by the second build, is the trust.
+- Q: Who may start a release? → A: Only the maintainer, enforced by a rule on the repository for the release tags.
+- Q: Are releases made from one branch? → A: No, from two, as two environments. A **dev** release is cut from the `dev` branch, carries a version such as `0.1.0-dev.1`, and is marked as a pre-release; it is for proving a runner on a real server. A **prod** release is cut from `main`, carries a plain version such as `0.1.0`, and waits for the maintainer's approval before it is published. A CLI built from `dev` installs the dev release it carries; a CLI built from `main` installs the prod release. A user never chooses an environment.
+- Q: Does the second build apply to dev releases? → A: Yes. One rule for both.
+- Q: What is the first version? → A: 0.1.0. Nothing was ever released, so the number 0.2.0 that feature 004 used inside the repository is dropped. The first dev release is `0.1.0-dev.1`, the first prod release `0.1.0`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -49,7 +62,7 @@ A maintainer cuts a release. Before any user's CLI will accept it, a second buil
 
 ### User Story 3 - Cut a release by following a short written procedure (Priority: P2)
 
-A maintainer who has never made a release reads one page and makes one: which commits may be released, how the version is chosen, the one action that starts the build, how the second build is made and compared, how the checksums get into the CLI, what the release notes say, and how a bad release is withdrawn. The first release, runner 0.2.0, is made this way.
+A maintainer who has never made a release reads one page and makes one: which commits may be released, how the version is chosen, the one action that starts the build, how the second build is made and compared, how the checksums get into the CLI, what the release notes say, and how a bad release is withdrawn. The first release, runner 0.1.0, is made this way.
 
 **Why this priority**: a release made from memory is where mistakes and shortcuts happen. The first release is also the proof that the procedure works.
 
@@ -57,10 +70,12 @@ A maintainer who has never made a release reads one page and makes one: which co
 
 **Acceptance Scenarios**:
 
-1. **Given** the procedure page, **When** a maintainer follows it for 0.2.0, **Then** a release exists with the runner for x86-64 and ARM64, its notes, and the record of the second build.
+1. **Given** the procedure page, **When** a maintainer follows it for 0.1.0, first as a dev release and then as a prod release, **Then** each release exists with the runner for x86-64 and ARM64, its notes, and the record of the second build.
 2. **Given** a version that does not match what the runner says about itself, **When** a release is started, **Then** it stops before anything is published.
 3. **Given** a release that turns out to be bad, **When** the maintainer follows the withdrawal steps, **Then** no CLI installs it any more, and the page says what happens to servers that already have it.
-4. **Given** a commit that is not on the branch releases are made from, **When** a release is started from it, **Then** it is refused.
+4. **Given** a commit that is not on the branch its kind of release is made from (`dev` for a dev release, `main` for a prod release), **When** a release is started from it, **Then** it is refused.
+5. **Given** a prod release was started, **When** the maintainer has not approved it, **Then** nothing is published.
+6. **Given** a dev release, **When** it is published, **Then** it is marked as a pre-release and is never shown as the latest release.
 
 ---
 
@@ -143,7 +158,9 @@ A newcomer reads the README or the docs and follows them from nothing to a runni
 
 - **FR-008**: A release's checksums MUST be recorded in the CLI only after a second build of the same source, made independently of the first, produced the same files.
 - **FR-009**: The comparison MUST fail when any file differs, MUST say which, and MUST leave a record of its result with the release.
-- **FR-010**: Starting a release MUST be limited to named maintainers, and MUST be possible only from commits on the branch releases are made from.
+- **FR-010**: Starting a release MUST be limited to named maintainers. A dev release MUST be possible only from commits on `dev`, and a prod release only from commits on `main`.
+- **FR-010a**: A prod release MUST wait for the maintainer's approval before anything is published. A dev release MUST be marked as a pre-release.
+- **FR-010b**: A version MUST be either three numbers (a prod release) or three numbers followed by `-dev.` and a number (a dev release), and nothing else. A dev version MUST count as older than the plain version with the same three numbers.
 - **FR-011**: A release MUST stop before publishing when the version asked for differs from the version the runner reports.
 - **FR-012**: A published release's files MUST NOT be replaceable without that being caught by FR-004.
 - **FR-013**: The release MUST state, in its notes and in a file beside the runner, the checksum of each file, the commit it was built from, and what the runner is built for.
@@ -152,7 +169,8 @@ A newcomer reads the README or the docs and follows them from nothing to a runni
 
 - **FR-014**: There MUST be one page that takes a maintainer through a release from start to end, including the second build, recording the checksums, the notes, and withdrawing a release.
 - **FR-015**: Withdrawing a release MUST make every CLI that learns of it stop installing that release, and the page MUST say what to do about servers that already run it.
-- **FR-016**: The first release, runner 0.2.0, MUST be made by following that page, and its checksums recorded in the CLI.
+- **FR-016**: The first release, runner 0.1.0, MUST be made by following that page, as `0.1.0-dev.1` from `dev` and then as `0.1.0` from `main`, and each one's checksums recorded in the CLI on its branch.
+- **FR-016a**: The version 0.2.0 that feature 004 used inside the repository MUST be replaced by 0.1.0 everywhere: nothing was released under it.
 
 **Versions**
 
@@ -176,7 +194,8 @@ A newcomer reads the README or the docs and follows them from nothing to a runni
 
 ### Key Entities
 
-- **Release**: one version of the runner as published: its version, the commit it was built from, a file per kind of server, the checksum of each, its notes, and the record of the second build.
+- **Environment**: dev or prod. It decides the branch a release is cut from, the shape of its version, whether it waits for approval, and whether it is marked as a pre-release.
+- **Release**: one version of the runner as published: its environment, its version, the commit it was built from, a file per kind of server, the checksum of each, its notes, and the record of the second build.
 - **Expected checksums**: what one build of the CLI holds for the one runner version it installs: a checksum per kind of server, or nothing before a release is recorded.
 - **Second build record**: who or what made the second build, from which commit, and whether each file matched.
 - **Release procedure**: the page a maintainer follows.
