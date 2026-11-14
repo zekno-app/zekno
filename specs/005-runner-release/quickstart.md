@@ -271,3 +271,10 @@ of T043 included), each without Turbo's cache (`--force`):
   `apps/runner/test/compiled.test.ts`), which passed above.
 - T038 (the agent end-to-end tests) is not part of this record: it is left to the orchestrator,
   because refreshing their replay cache can cost the maintainer money.
+
+### The agent end-to-end tests (T038, 2026-11-14)
+
+Run once at `4da7369` with `bun run test:e2e` in `apps/cli`: 11 of 11 passed, all 12 recorded
+goals replayed from the cache, no model call. None of the screens those tests read changed in
+this feature: the new wording for older and newer runners shows only for a server whose runner
+differs from the one zekno carries, which no end-to-end test sets up.
