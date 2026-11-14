@@ -125,7 +125,7 @@ keys type into it.
   30 seconds, in SSH's batch mode only: it never asks for a password and never takes over the
   terminal.
 - Where SSH would have had to ask (a password, a key passphrase, a host key) and was not
-  answered, the server is marked `!` instead of its dot, with "SSH needs an answer" under its
+  answered, the server is marked `!` instead of its dot, with "needs an answer" under its
   name, and its apps' state is unknown. It is not tried in the background again until you
   connect to it on purpose: `enter` on it in the servers pane (the hints say `enter connect`),
   or start the app, deploy, roll back, open logs, update or add. A server that refuses the

@@ -76,7 +76,7 @@ keys type into it.
   closes, on `q`, an error or a signal.
 - **SSH needs an answer**: where SSH would have had to ask (a password, a key passphrase, a host
   key) and was not answered, in batch mode or at the question on the terminal handed over, the
-  server is marked `!` in the warning colour where its dot is, with "SSH needs an answer" on the
+  server is marked `!` in the warning colour where its dot is, with "needs an answer" on the
   line under its name (cut at a word where the pane is too narrow), and its apps' state is
   unknown. Where a server's problem is shown it says "SSH needs an answer to reach
   &lt;destination&gt;. Press enter on &lt;server&gt; to connect. zekno never asks in the

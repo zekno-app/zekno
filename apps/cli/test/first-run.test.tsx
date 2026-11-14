@@ -507,7 +507,7 @@ describe("SSH questions inside the app (research R10)", () => {
       expect(prod()).toMatchObject({ reachable: false, asks: true, problem: needsAnswer("deploy@203.0.113.7", "prod") })
       let screen = app.draw()
       expect(screen).toMatch(/❯ prod +! │/)
-      expect(screen).toMatch(/│ {3}SSH needs an +│/)
+      expect(screen).toMatch(/│ {3}needs an answer +│/)
       expect(lastLine(screen)).toStartWith("↑↓ move  ←→ pane  enter connect  ")
 
       // In the background it is not connected to, however many ticks pass.
@@ -537,7 +537,7 @@ describe("SSH questions inside the app (research R10)", () => {
       expect(prod().problem).toBeUndefined()
       screen = app.draw()
       expect(screen).toMatch(/❯ prod +● │/)
-      expect(screen).not.toContain("SSH needs an")
+      expect(screen).not.toContain("needs an answer")
       expect(lastLine(screen)).toStartWith("↑↓ move  ←→ pane  enter open  ")
 
       // The session is kept: ticks read over it, and ssh, with the runner behind it, is not started again.
@@ -563,7 +563,7 @@ describe("SSH questions inside the app (research R10)", () => {
       expect(suspended).toEqual([])
       const screen = app.draw()
       expect(screen).toMatch(/❯ prod +✖ │/)
-      expect(screen).not.toContain("SSH needs an")
+      expect(screen).not.toContain("needs an answer")
       expect(lastLine(screen)).toStartWith("↑↓ move  ←→ pane  enter open  ")
       // enter moves to its apps, as on any server: it does not connect.
       const made = ssh.calls().length
@@ -878,8 +878,8 @@ describe("what the screens say", () => {
       expect(screen).not.toContain("runner 0.1.0")
       // The line under the name, cut at a word where the pane is too narrow for all of it: 18 columns at 100, 16 at 80.
       expect(wordsThatFit("SSH needs an answer", 18)).toBe("SSH needs an")
-      expect(screen).toMatch(/│ {3}SSH needs an +│/)
-      expect(screen).not.toMatch(/│ {3}SSH needs an ?(a|…)/)
+      expect(screen).toMatch(/│ {3}needs an answer +│/)
+      expect(screen).not.toMatch(/│ {3}needs an ?…/)
       expect(screen).toMatch(/❯ web +7 +● unknown/)
       expect(words(screen)).toContain(`! staging could not be reached. Numbers are from this machine's history. ${sentence}`)
       // The key hints, on two lines at 80 columns.
@@ -900,12 +900,12 @@ describe("what the screens say", () => {
     const reached = update(onStaging, { type: "server-reached", server: "staging", reachable: true }).state
     expect(reached.team?.servers[1]?.asks).toBeUndefined()
     expect(draw(reached)).toMatch(/❯ staging +●/)
-    expect(draw(reached)).not.toContain("SSH needs an")
+    expect(draw(reached)).not.toContain("needs an answer")
     // A server that is simply down is not reached, with ✖, and asks nothing.
     const down = update(onStaging, { type: "server-reached", server: "staging", reachable: false, problem: "staging-box could not be reached over SSH." }).state
     expect(down.team?.servers[1]?.asks).toBeUndefined()
     expect(draw(down)).toMatch(/❯ staging +✖/)
-    expect(draw(down)).not.toContain("SSH needs an")
+    expect(draw(down)).not.toContain("needs an answer")
     expect(lastLine(draw(down))).toStartWith("↑↓ move  ←→ pane  enter open  ")
     expect(update(down, key({ kind: "enter" })).effects).toEqual([])
   })

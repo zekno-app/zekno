@@ -63,7 +63,8 @@ export const OUTCOME_WORDS = { started: "started", start_failed: "did not start"
 export const runnerWords = (version: string | undefined): string => (version === undefined ? "old runner" : `runner ${version}`)
 
 /** The line under a server's name while SSH needs an answer to reach it (`ServerRow.asks`). */
-export const ASKS_LINE = "SSH needs an answer"
+/** Short enough to stand whole under a server's name at 80 columns, where 16 are free. */
+export const ASKS_LINE = "needs an answer"
 
 /** SSH needs an answer to reach it: not reached, and read again only once the person connects to it on purpose. */
 export const needsAnswerHere = (server: ServerRow | undefined): boolean => server?.reachable === false && server.asks === true
@@ -74,9 +75,8 @@ export const needsAnswerHere = (server: ServerRow | undefined): boolean => serve
  * below. A server whose runner is older than this zekno shows `! runner
  * 0.1.0` until it is updated, as on the board "Two questions the app asks":
  * on a line of its own under the name, because the servers pane is narrower
- * than the board's. A server where SSH needs an answer has `SSH needs an
- * answer` on that line instead, cut at a word where the pane is too narrow
- * for it; its runner cannot be known then. Below 100 columns the address is
+ * than the board's. A server where SSH needs an answer has `needs an answer`
+ * on that line instead; its runner cannot be known then. Below 100 columns the address is
  * left out, as on the board "Home at 80 columns".
  */
 function ServerItem({ server, selected, narrow }: { server: ServerRow; selected: boolean; narrow: boolean }) {
