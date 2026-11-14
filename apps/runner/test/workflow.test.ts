@@ -6,8 +6,12 @@
  * do, and how values reach a shell.
  */
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+
+import { ORDERED_VERSIONS, REFUSED_VERSIONS } from "../../../packages/core/test/fixtures/versions"
+import { parseTag } from "../scripts/release-lib"
+import { tempDir } from "./helpers"
 
 type Step = { name?: string; uses?: string; run?: string; with?: Record<string, unknown>; env?: Record<string, string>; id?: string; "working-directory"?: string }
 type Job = {
@@ -54,14 +58,37 @@ describe("both workflows", () => {
       expect([...pins].sort()).toEqual(["actions/checkout@11d5960a326750d5838078e36cf38b85af677262", "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6"])
       // Every checkout is followed by a frozen install before any script of the repository runs.
       for (const job of Object.values(workflow.jobs)) {
-        const install = job.steps.findIndex((step) => step.run?.trim() === "bun install --frozen-lockfile")
+        const install = job.steps.findIndex((step) => step.run?.trim() === "bun install --frozen-lockfile --ignore-scripts")
         const script = job.steps.findIndex((step) => step.run?.includes("apps/runner/scripts/release.ts"))
         expect(install).toBeGreaterThan(-1)
         expect(script).toBeGreaterThan(install)
       }
     })
+
+    test(`${name}: every install runs no package's scripts, so the second build installs the same way (security review RV1)`, () => {
+      const installs = steps(workflow).filter((step) => /\bbun (install|i|add|ci)\b/.test(step.run ?? ""))
+      expect(installs.length).toBe(Object.keys(workflow.jobs).length)
+      for (const step of installs) expect(step.run!.trim()).toBe("bun install --frozen-lockfile --ignore-scripts")
+      expect(text.match(/bun install/g)).toHaveLength(installs.length)
+    })
   }
 })
+
+/** Runs a step's script as GitHub runs it on Linux (`bash --noprofile --norc -eo pipefail`), with the step's own environment. */
+function runStep(step: Step, env: Record<string, string>): { code: number; output: string; stderr: string } {
+  const dir = tempDir("step")
+  const script = join(dir, "step.sh")
+  const output = join(dir, "output")
+  writeFileSync(script, step.run!)
+  writeFileSync(output, "")
+  const stepEnv = Object.fromEntries(Object.entries(step.env ?? {}).filter(([, value]) => !value.includes("${{")))
+  const result = Bun.spawnSync(["bash", "--noprofile", "--norc", "-eo", "pipefail", script], {
+    env: { PATH: "/usr/bin:/bin", ...stepEnv, ...env, GITHUB_OUTPUT: output },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  return { code: result.exitCode, output: readFileSync(output, "utf8"), stderr: result.stderr.toString() }
+}
 
 describe("runner-release.yml", () => {
   const { workflow, text } = release
@@ -128,17 +155,78 @@ describe("runner-release.yml", () => {
       expect(all).toContain("--notes-file RELEASE-NOTES.md")
       expect(all).toContain("zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz SHA256SUMS RELEASE-NOTES.md")
       expect(all.includes("--prerelease --latest=false")).toBe(name === "release-dev")
-      const setup = job.steps.find((step) => step.uses?.startsWith("oven-sh/setup-bun@"))!
-      expect(setup.with).toEqual({ "bun-version": "${{ needs.check.outputs.bun }}" })
+      // The Bun the job sets up is read from the commit in the job itself, as `check` reads it.
+      const pin = job.steps.findIndex((step) => step.id === "pin")
+      const setup = job.steps.findIndex((step) => step.uses?.startsWith("oven-sh/setup-bun@"))
+      expect(pin).toBeGreaterThan(-1)
+      expect(setup).toBeGreaterThan(pin)
+      expect(job.steps[pin]!.run).toBe(jobs["check"]!.steps.find((step) => step.id === "pin")!.run)
+      expect(job.steps[setup]!.with).toEqual({ "bun-version": "${{ steps.pin.outputs.bun }}" })
     }
     expect(text.match(/--prerelease/g)).toHaveLength(1)
   })
 
-  test("the token is given to the publishing step alone", () => {
+  test("each release job's first step works out from the tag itself that it is of its kind, before anything is checked out, set up or installed (security review RV1)", () => {
+    for (const [name, environment, refusal] of [
+      ["release-dev", "dev", "This tag is not runner-v<x.y.z>-dev.<n>. This job publishes development releases only.\n"],
+      ["release-prod", "prod", "This tag is not runner-v<x.y.z>. This job publishes prod releases only.\n"],
+    ] as const) {
+      const first = jobs[name]!.steps[0]!
+      expect(first.uses).toBeUndefined()
+      expect(first.id).toBe("tag")
+      // The tag comes from GitHub, never from the `check` job; bash compares it in the C locale.
+      expect(first.env).toEqual({ TAG: "${{ github.ref_name }}", LC_ALL: "C" })
+      // The same grammar as the scripts: every tag the tests know, valid and refused, and some hostile ones.
+      const tags = [
+        ...ORDERED_VERSIONS.map((version) => `runner-v${version}`),
+        ...REFUSED_VERSIONS.map((version) => `runner-v${version}`),
+        "runner-v",
+        "runner-0.1.0",
+        "xrunner-v0.1.0",
+        "runner-v0.1.0-dev.1\nrunner-v0.1.0",
+        "runner-v0.1.0\n",
+        "runner-v٣.1.0",
+        "runner-v0.1.0-dev.١",
+        "runner-v１.0.0",
+      ]
+      for (const tag of tags) {
+        const parsed = parseTag(tag)
+        const run = runStep(first, { TAG: tag })
+        const passes = parsed?.environment === environment
+        // A refusal is one fixed sentence: it never repeats the tag.
+        expect({ name, tag, code: run.code, output: run.output, stderr: run.stderr }).toEqual({
+          name,
+          tag,
+          code: passes ? 0 : 1,
+          output: passes ? `version=${parsed!.version}\n` : "",
+          stderr: passes ? "" : refusal,
+        })
+      }
+      // Nothing from the repository comes before it.
+      expect(jobs[name]!.steps.findIndex((step) => step.uses?.startsWith("actions/checkout@"))).toBe(1)
+    }
+  })
+
+  test("the release jobs take from `check` only the commit, which `files` checks against the checkout; the version and the Bun version are their own", () => {
+    for (const name of ["release-dev", "release-prod"]) {
+      const job = jobs[name]!
+      const used = new Set(job.steps.flatMap((step) => [...JSON.stringify(step).matchAll(/needs\.check\.outputs\.([a-z]+)/g)].map(([, output]) => output)))
+      expect([...used]).toEqual(["commit"])
+      const files = job.steps.find((step) => step.run?.includes("release.ts files"))!
+      expect(files.env).toEqual({ TAG: "${{ github.ref_name }}", COMMIT: "${{ needs.check.outputs.commit }}", BUN: "${{ steps.pin.outputs.bun }}" })
+      const publish = job.steps.find((step) => step.run?.includes("gh release create"))!
+      expect(publish.env).toEqual({ GH_TOKEN: "${{ github.token }}", TAG: "${{ github.ref_name }}", VERSION: "${{ steps.tag.outputs.version }}" })
+    }
+  })
+
+  test("the token is named only in the publishing step's environment; actions/checkout gets it by default, to read, and keeps none of it", () => {
     for (const job of Object.values(jobs)) {
       for (const step of job.steps) {
         const holds = Object.values(step.env ?? {}).some((value) => value.includes("github.token"))
         expect({ step: step.name, holds }).toEqual({ step: step.name, holds: (step.run ?? "").includes("gh release create") })
+        // No step is handed the token as an input; checkout's own default is the one it reads with.
+        expect(Object.keys(step.with ?? {})).not.toContain("token")
+        if (step.uses?.startsWith("actions/checkout@")) expect(step.with?.["persist-credentials"]).toBe(false)
       }
     }
     expect(text.match(/github\.token/g)).toHaveLength(2)

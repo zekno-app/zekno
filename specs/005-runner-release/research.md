@@ -192,8 +192,9 @@ Sources: "Deployments and environments" (docs.github.com/en/actions/reference/wo
   on the `check` job's output. A job that names a protected environment waits for its rules
   before it proceeds, so the prod build and publication happen only after approval (FR-010a).
 - **Alternatives considered**: building in a job without write rights and publishing after approval
-  in another (needs the artifact actions, which are not in the repository); a `dev` environment
-  (not decided, and a dev release has no rule to hold).
+  in another (needs the artifact actions, which are not in the repository; since the security
+  review, open question Q11); a `dev` environment (not decided, and a dev release has no rule to
+  hold).
 
 ## R7. Which branch holds the tagged commit
 
@@ -247,7 +248,9 @@ releases" (docs.github.com, supply chain security).
   `compile:linux-x64` and `compile:linux-arm64` scripts (so the output names, which the binary
   embeds as `/$bunfs/root/<name>`, are the workflow's); downloads the release's four files from
   the same address servers use; and compares each binary's SHA-256 three ways. Details in
-  contracts/second-build.md.
+  contracts/second-build.md. Since the security review (RV2, RV7): it builds only a commit that is
+  on the release's branch as the maintainer's checkout has it, installs with `--ignore-scripts`,
+  and gives the build a short list of variables and an empty runtime cache of its own.
 - **What it writes**: only on a full match, `apps/cli/src/runner-release.json`. It prints the record
   and the commands to commit and to add the record to the release notes. It never commits, pushes
   or edits the release.
@@ -271,7 +274,9 @@ releases" (docs.github.com, supply chain security).
   release workflow, so a test alone would only run when someone runs the tests on `main`.
 - **Alternatives considered**: a branch-aware unit test (it cannot know the branch reliably on a
   detached checkout); a required status check on `main` (a setting, and it changes how `main` is
-  pushed; not proposed).
+  pushed; not proposed at first). The security review (RV5) found that the workflow alone only
+  reports, so RELEASING.md part 1 now makes `check-main` required on `main`, with the admins
+  allowed past it.
 
 ## R11. Withdrawing a release **(maintainer: the smallest procedure)**
 
@@ -383,3 +388,58 @@ changes only the tasks named.
 | Q8 | Who else holds the admin role on `zekno-app/zekno` (organization owners included)? Is there a second GitHub account with write access to try pushing a `runner-v*` tag for SC-006? | Make the maintainer the only admin. For SC-006, invite a throwaway account with Write role, try `git push origin runner-v0.0.1-dev.1` from it, record the refusal, remove it. Without one, record SC-006 as not tried. | Step 1, T041 |
 | Q9 | FR-016a says "everywhere". Change the records in `specs/004-cli-app/` too? | No. They record what was run, with the number used then. | T008 |
 | Q10 | README promises "A dedicated contact address will be listed here before the first release." The runner release is a first release. Supply an address, or turn on GitHub's private vulnerability reporting and point to it? | Turn on private vulnerability reporting (a repository setting) and say so in the README before step 3. | T035 |
+| Q11 | Split each release job in two (security-review.md, RV1)? A build job with `contents: read` that checks the tag, builds, runs `release.ts files` and hands the four files on as an artifact of the run; then a publish job with `contents: write` that checks out nothing, installs nothing, takes the four files and runs only `gh`. Today the install, the build and the built runner run in the same job as the token that can write, and GitHub carries `GITHUB_PATH` and `GITHUB_ENV` from each step to the next, so code that runs during the build could put its own `gh` in front of the publishing step and get the token. It needs two more pinned actions, `actions/upload-artifact` and `actions/download-artifact`, which are not in the repository (R6 left them out for that reason). | Yes, before the first release. Details below. | The workflow, `apps/runner/test/workflow.test.ts`, contracts/release.md, RELEASING.md parts 1 and 6 |
+| Q12 | Check Bun's runtimes for Linux, which both builds download and embed, against checksums Bun publishes? | None yet: first find out what is not known below. A check would add a source of truth (Bun's own release checksums and the key that signs them) that the decisions did not name. | `apps/runner/scripts/second-build.ts`, the workflow, RELEASING.md part 7 |
+
+### Q11 in more detail
+
+- The build job keeps today's first step (the tag must be of the job's kind), `persist-credentials:
+  false`, the Bun pin read from the commit, `--ignore-scripts`, the build and `release.ts files`, all
+  with `contents: read`. For prod it also keeps `environment: prod`, so nothing is built before the
+  approval.
+- The publish job `needs` the build job and holds `contents: write`. Its steps: download the four
+  files of this run, then the existing `gh release view` guard and `gh release create`. No
+  checkout, no setup of Bun, no install, nothing of the repository runs in it. `gh` is the one on
+  GitHub's machine.
+- What it does not change: the build job can still hand over whatever it built. That is caught as
+  now: no zekno installs a release before the second build matched it.
+- Both new actions are pinned to full commits, as the two in use are, and `workflow.test.ts` gains
+  their pins and a check that the publish job has no `run:` step but the publishing one.
+
+### Q12 in more detail
+
+Known, from this repository's work on 2026-11-14:
+
+- `bun build --compile --target=bun-linux-<arch>` takes the runtime it embeds from Bun's install
+  cache folder (`BUN_INSTALL_CACHE_DIR`, by default `~/.bun/install/cache`), where Bun 1.4.4 names
+  them `bun-linux-x64-baseline-v1.4.4` and `bun-linux-aarch64-v1.4.4`, and embeds a copy found there
+  as it is: a copy with one string changed was embedded with the change (the review, and again
+  without the network while fixing it).
+- With an empty cache folder and no network, the compile stops with
+  `Failed to download 'bun-linux-aarch64-v1.4.4': DNSResolveFailed`: it downloads, and does not
+  fall back to another folder.
+- The Bun 1.4.4 binary holds the pieces of an npm registry address (`https://registry.npmjs.org`,
+  `/@oven/bun-`, `/-/bun-`) and the variable `BUN_COMPILE_TARGET_TARBALL_URL`, read with `strings`.
+  So the runtime most likely comes from the npm package `@oven/bun-<target>`, and that variable can
+  point the download elsewhere. Bun's installed documentation does not say where it comes from
+  (R3).
+- The second build now downloads both runtimes afresh, into an empty folder of its own, and gives
+  the build no `BUN_COMPILE_TARGET_TARBALL_URL` (contracts/second-build.md, "The build"). The
+  workflow downloads them on GitHub's machine, where no cache holds them.
+- The runtimes the second build's real build downloaded afresh on 2026-11-14, twice, were the same
+  bytes each time and the same as the copies cached on this machine earlier that day
+  (quickstart.md, "The same, again, after the security review's fixes"). That says the copies were
+  not changed on this machine since; it says nothing about the source.
+
+Not known:
+
+- Whether Bun checks a runtime it downloads against anything: an integrity value from the
+  registry, a checksum, a signature. Nothing in the installed documentation says so.
+- Which checksums Bun publishes, and for what. Not checked here: no network was used for it.
+- Whether the binary inside the npm package is byte for byte the one in Bun's own release
+  archives, so that checksums published for those would apply to it.
+- Where GitHub's build downloads its runtimes from. Presumably the same place; not seen.
+
+Until this is answered, a runtime changed on one side only makes the two builds differ, and
+nothing is recorded. A runtime changed at its source would be in both builds, and they would still
+match.

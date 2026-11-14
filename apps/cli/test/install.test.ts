@@ -19,6 +19,7 @@ import {
   RUNNER_PATHS,
   runInstaller,
   unreachable,
+  VERSION_PATTERN,
   type InstallEvent,
   type InstallRequest,
 } from "../src/install"
@@ -447,6 +448,20 @@ describe("the script, run with sh against stand-ins", () => {
         expect(dev.lines).toEqual(["connected", "docker ok 2.40.3", "runner none", "platform ok x64", "fail release"])
       })
 
+      test("in a UTF-8 locale, digits of other scripts are not version digits, as in JavaScript (security review RV8)", async () => {
+        const server = standInServer()
+        // Arabic-Indic, Devanagari and full-width digits, where a version's digits go.
+        const hostile = ["٣.2.3", "1.2.3-dev.١", "١.٢.٣", "१.2.3", "１.2.3", "0.1.0-dev.٣"]
+        for (const version of hostile) expect({ version, js: VERSION_PATTERN.test(version) }).toEqual({ version, js: false })
+        for (const locale of ["en_US.UTF-8", "C.UTF-8"]) {
+          const runs = await Promise.all(hostile.map((version) => server.run(["add", version, "release"], { shell, env: { LANG: locale, LC_ALL: locale } })))
+          for (const [at, run] of runs.entries()) {
+            expect({ locale, version: hostile[at], lines: run.lines }).toEqual({ locale, version: hostile[at], lines: ["connected", "fail usage"] })
+          }
+        }
+        expect(server.calls("docker")).toEqual([])
+      })
+
       test("the script's order of versions is the TypeScript one: an update stops with newer exactly when the runner there is newer", async () => {
         // One server, one runner per version, each in its own folder. No checksum is carried, so an
         // update that goes ahead stops at `fail release`, before anything is downloaded. The runner's
@@ -646,6 +661,12 @@ describe("the script, run with sh against stand-ins", () => {
     // The address it downloads from is the one this CLI names, with nothing but the version and the architecture varying.
     expect(text).toContain("url=https://github.com/zekno-app/zekno/releases/download/runner-v$version/zekno-runner-linux-$arch.gz")
     expect(releaseUrl("1.2.3", "arm64")).toBe("https://github.com/zekno-app/zekno/releases/download/runner-v1.2.3/zekno-runner-linux-arm64.gz")
+  })
+
+  test("before anything else it works in the C locale, whatever locale SSH hands it (security review RV8)", () => {
+    // In a UTF-8 locale, bash 4.2's `[0-9]` also matched digits of other scripts, so `is_version`
+    // took a version JavaScript refuses. Exported, so `expr` and `sed` read bytes too.
+    expect(INSTALL_SCRIPT.startsWith("{\nset -eu\nLC_ALL=C\nexport LC_ALL\n")).toBe(true)
   })
 })
 

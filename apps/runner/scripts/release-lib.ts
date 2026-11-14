@@ -132,6 +132,8 @@ export type RecordInput = {
   tag: string
   environment: Environment
   commit: string
+  /** The commit's one-line subject, as git gives it. */
+  subject: string
   bun: string
   os: string
   arch: string
@@ -145,7 +147,12 @@ export type RecordInput = {
 /** True when a binary's three checksums are the same. */
 export const rowMatches = (row: RecordRow): boolean => row.built === row.downloaded && row.downloaded === row.sums
 
-/** "The record" of contracts/second-build.md, ending with a line feed. */
+/**
+ * "The record" of contracts/second-build.md, ending with a line feed. It
+ * names the commit and its subject, so the maintainer can see it is the
+ * commit they tagged; the subject is cleaned to printable ASCII and cut to
+ * 100 characters.
+ */
 export function recordText(input: RecordInput): string {
   const matched = input.rows.every(rowMatches)
   const name = input.by.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, "").trim().slice(0, 80)
@@ -153,7 +160,7 @@ export function recordText(input: RecordInput): string {
   return [
     `Second build of ${input.tag} (${input.environment}): ${matched ? "matched" : "did not match"}.`,
     "",
-    `Commit ${input.commit}, built from \`git archive\` with Bun ${input.bun} on ${input.os} ${input.arch}${by}, ${input.date}.`,
+    `Commit ${input.commit}, "${cleaned(input.subject, 100)}", built from \`git archive\` with Bun ${input.bun} on ${input.os} ${input.arch}${by}, ${input.date}.`,
     "",
     "| File | This build | Downloaded | SHA256SUMS | Result |",
     "|------|------------|------------|------------|--------|",

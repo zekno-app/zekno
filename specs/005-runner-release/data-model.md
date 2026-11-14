@@ -103,8 +103,9 @@ next tag must say. It is `0.1.0-dev.1` on `dev` when this feature is merged, and
 maintainer step 6.
 
 The second build refuses to record: a dev version anywhere but on `dev`; a prod version anywhere but
-on `main`; a version older than one already recorded with checksums; the same version with other
-checksums than those recorded.
+on `main`; a tagged commit that is not on that branch as the maintainer's checkout has it; a
+version older than one already recorded with checksums; the same version with other checksums than
+those recorded.
 
 ## Second build record
 
@@ -114,7 +115,7 @@ maintainer (contracts/second-build.md, "The record").
 | Field | Content |
 |-------|---------|
 | release | the tag and its environment |
-| commit | the commit built, equal locally, on GitHub, and in the release notes |
+| commit | the commit built, equal locally, on GitHub, and in the release notes, and on the release's branch locally; with its one-line subject, cleaned to printable ASCII and cut to 100 characters, for the maintainer to compare with the commit they tagged |
 | made by | `git config user.name`, the operating system and processor, the Bun version, the date |
 | per file | the SHA-256 of the own build, of the downloaded and unpacked file, and the line of `SHA256SUMS`; `match` or `differs` |
 | result | `matched` (checksums recorded) or `did not match` (nothing recorded) |

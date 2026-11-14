@@ -50,7 +50,10 @@ Run from the checkout, zekno reads `.env` and `bunfig.toml` from the folder you 
 because that is how Bun runs a script, and a `bunfig.toml` can make it load other code first. The
 runner it starts from `apps/runner` for `--local` does the same. So run it from source only inside
 folders you trust, and use the compiled `zekno` anywhere else: it is built with both turned off,
-and `test/compiled.test.ts` checks that it reads neither.
+and `test/compiled.test.ts` checks that it reads neither. Like any program built with Bun, the
+compiled `zekno` still obeys three of Bun's own variables: `BUN_OPTIONS` (for example
+`--preload <file>`, which runs that file first), `BUN_BE_BUN=1` (it then acts as Bun itself) and
+`BUN_INSPECT` (it opens a debugger). Whoever can set them already controls your account.
 
 From a checkout, `zekno server add --local` starts the runner from `apps/runner` next door. The
 compiled `zekno` starts `zekno-runner` from your `PATH` instead.

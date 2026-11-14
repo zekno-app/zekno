@@ -283,13 +283,15 @@ export function standInServer() {
      * and the script on standard input. After `ready` it sends `file`; after
      * `done` it sends `afterDone`; then it closes the script's input. An
      * update's input is closed right after the script, as the CLI does.
+     * `env` adds to or replaces the server's variables, such as a locale
+     * SSH passed on.
      */
-    async run(words: readonly string[], options: { shell?: string; file?: Uint8Array; afterDone?: string } = {}): Promise<ScriptRun> {
+    async run(words: readonly string[], options: { shell?: string; file?: Uint8Array; afterDone?: string; env?: Record<string, string> } = {}): Promise<ScriptRun> {
       const child = Bun.spawn([options.shell ?? "/bin/sh", "-s", "--", ...words], {
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
-        env: env(),
+        env: { ...env(), ...options.env },
         cwd: home,
       })
       child.stdin.write(INSTALL_SCRIPT)

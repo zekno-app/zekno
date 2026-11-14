@@ -69,9 +69,17 @@ export const RUNNER_FILE_LIMIT = 256 * 1024 * 1024
  * error, which the CLI cleans as all of it.
  * Written with no `${` and no backquote, so the template below cannot
  * interpolate anything.
+ *
+ * It sets the C locale first, and exports it, whatever locale SSH passed on:
+ * in a UTF-8 locale bash 4.2's `[0-9]` also matched digits of other scripts,
+ * so `is_version` took versions JavaScript refuses (specs/005-runner-release/
+ * security-review.md, RV8), and `expr` and `sed` read characters there
+ * rather than bytes.
  */
 export const INSTALL_SCRIPT = String.raw`{
 set -eu
+LC_ALL=C
+export LC_ALL
 umask 077
 say() { printf '%s\n' "$*"; }
 fail() { say "fail $1"; exit 1; }

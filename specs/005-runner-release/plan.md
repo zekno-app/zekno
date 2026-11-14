@@ -175,7 +175,7 @@ Each needs the maintainer's go-ahead at the time. The tasks named must be done f
 
 | # | Step | Needs first |
 |---|------|-------------|
-| 1 | Create the tag ruleset for `runner-v*` (restrict creations, updates and deletions; block force pushes; bypass: Repository admin only). Check who holds the admin role (research R5). Try a tag push from an account without the right if one is available (SC-006, open question Q8). | RELEASING.md (T030) to follow |
+| 1 | Create the tag ruleset for `runner-v*` (restrict creations, updates and deletions; block force pushes; bypass: Repository admin only), and the rules for `dev` and `main` (restrict deletions, block force pushes, `check-main` required on `main`; security-review.md, RV1 and RV5). Check who holds the admin role (research R5). Try a tag push from an account without the right if one is available (SC-006, open question Q8). | RELEASING.md (T030) to follow |
 | 2 | Create the Environment `prod`: required reviewer the maintainer, "Prevent self-review" off, deployment tags `runner-v*`, administrators' bypass off. Must exist before any prod tag: a workflow that names a missing environment creates it with no protection (research R6). | T030 |
 | 3 | Merge `005-runner-release` into `dev`, push `dev`, push the one tag `runner-v0.1.0-dev.1` (never several tags at once). Watch the run. | All tasks T001 to T039; steps 1 and 2 |
 | 4 | Run `bun apps/runner/scripts/second-build.ts runner-v0.1.0-dev.1` on `dev`. On a match, commit `runner-release.json`, push `dev`, add the record to the release notes. On a mismatch, stop (below). | Step 3 succeeded |
@@ -214,8 +214,9 @@ Four layers, each cheap:
 4. **The prod release refuses.** `release.ts check` stops a prod tag whose commit's
    `runner-release.json` holds a dev version.
 
-A required status check on `main` would make layer 3 blocking; that is a repository setting, and
-it is not proposed here.
+Layer 3 reports; on its own it stops nothing (security-review.md, RV5). Since the review, the rule
+for `main` in RELEASING.md, part 1, makes `check-main` a required check for everyone but the
+admins, so layer 2 remains the guard for the maintainer's own pushes.
 
 ## The release procedure page
 

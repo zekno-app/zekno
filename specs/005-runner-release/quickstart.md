@@ -43,12 +43,14 @@ exactly; the workflow files keep their permissions, pins and environment.
 
 ```bash
 bun test apps/runner/test/second-build.test.ts
-ZEKNO_REAL_BUILD=1 bun test apps/runner/test/second-build.test.ts   # needs the network; builds HEAD twice
+ZEKNO_REAL_BUILD=1 bun test apps/runner/test/second-build.test.ts   # needs the network; builds HEAD twice, downloading Bun's Linux runtimes each time
 ```
 
 Expected: a full match writes `runner-release.json` and prints the record and the next commands;
 any difference, in any of the three places, exits with status 1, names the file and writes
-nothing. The real build gives the same bytes twice.
+nothing; a tag on a commit that is not on the branch here exits with status 1 before anything is
+downloaded or built. The build runs no package's install script and gets only the variables of
+contracts/second-build.md, "The build". The real build gives the same bytes twice.
 
 ## 4. The Linux runners
 
@@ -153,6 +155,36 @@ wrapping of three sentences in `apps/cli/README.md` and the docs pages, and two 
   are of builds that found them there. A build that has to download them was not timed.
 - This shows two builds on one machine agree. Whether GitHub's Linux build agrees with a macOS
   build is known only at maintainer step 4 (plan.md, "If GitHub's build differs").
+
+### The same, again, after the security review's fixes (2026-11-14)
+
+The review (security-review.md, RV1 and RV7) changed how the second build builds: `bun install
+--frozen-lockfile --ignore-scripts`, as the workflow now installs; only `HOME`, `PATH` (this Bun
+first), a `TMPDIR` of its own and, for the compile steps, an empty `BUN_INSTALL_CACHE_DIR` of its
+own, so each build downloads Bun's two Linux runtimes afresh. Run the same way:
+`ZEKNO_REAL_BUILD=1 bun test apps/runner/test/second-build.test.ts -t "the real build gives the same bytes twice"`,
+same machine, Bun 1.4.4.
+
+The commit built was `42c27ef`. The commit that records these results changes no file the runner's
+build reads: `apps/runner/src`, `apps/runner/package.json`, `packages/core`, the root
+`package.json` and `bun.lock` are the same.
+
+| Build | `zekno-runner-linux-x64` SHA-256 | `zekno-runner-linux-arm64` SHA-256 | Took |
+|-------|----------------------------------|------------------------------------|------|
+| first | `fb68d252cb89956750c558123449954ff07f043b893a81efef3517aeb94463f6` | `5829b647353f7b71d5f99be61dbba0c9f946cbd0f1c773656cdc7ef9692c51b5` | 7.2 s |
+| second | `fb68d252cb89956750c558123449954ff07f043b893a81efef3517aeb94463f6` | `5829b647353f7b71d5f99be61dbba0c9f946cbd0f1c773656cdc7ef9692c51b5` | 6.1 s |
+
+- The two builds agree, byte for byte, and the bytes did not change: they are the values recorded
+  above for T017 and T028, so `--ignore-scripts` and the fresh runtimes make no difference to the
+  runner. No recorded value was changed. Sizes as above.
+- The runtimes each build downloaded, by SHA-256: `bun-linux-x64-baseline-v1.4.4`
+  `10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235`, `bun-linux-aarch64-v1.4.4`
+  `354c2b049c716aca07b2e5cddb887928ac58950675d1258bb6312083917793b6`, the same in both builds and
+  the same as the copies in `~/.bun/install/cache` on this machine, dated 2026-11-14 19:18.
+- The npm packages came from Bun's cache on this machine. Before the run, the same install in a
+  copy of the commit was run with the network denied (`sandbox-exec`), and installed all 695
+  packages: the runtimes were the only download.
+- The times include the two downloads of each build.
 
 ### The Linux runners (T028, 2026-11-14)
 

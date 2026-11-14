@@ -143,7 +143,7 @@ These protect the security promise. Changes that break them need a very good rea
 3. **Nothing in this repository depends on closed code.** The app, the runner and the website reach the control plane only through the public protocol in `packages/core`.
 4. **No secret editing in a browser.** A web page is code served fresh on every visit, so a compromised server could serve a page that steals keys. The website's dashboard is read-only for anything secret.
 5. **No hosted service may hold a signing key.** Builds that deploy run on the customer's server or in their CI.
-6. **Releases and updates are signed with an offline key**, and the app verifies that signature itself before applying an update.
+6. **Releases and updates are signed with an offline key**, and the app verifies that signature itself before applying an update. This is the rule for the planned desktop app. Runner releases are not signed yet: a server installs a runner only when its checksum equals the one the CLI holds, recorded after a second build (see the threat table above).
 7. **No credentials in this repository.** Environment files are ignored by git; only `.env.example` files with placeholder values are committed.
 8. **The Electrobun version is pinned**, and `packages/core` stays free of Electrobun code.
 

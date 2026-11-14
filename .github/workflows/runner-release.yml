@@ -5,13 +5,23 @@
 # be on `dev` and is published as a pre-release, never as the latest release. A prod version
 # (`runner-v0.1.0`) must be on `main` and waits for the maintainer's approval in the `prod`
 # environment before anything is built or published. Every check is in
-# apps/runner/scripts/release.ts, which is tested; this file only runs it.
+# apps/runner/scripts/release.ts, which is tested; this file only runs it. Each release job also
+# works out from the tag itself, in its first step, that the tag is of its own kind: it does not
+# take the `check` job's word for that, nor for the version or the Bun version.
 #
 # The release holds the runner for Linux on x86-64 and ARM64 (gzip), SHA256SUMS of the unpacked
 # binaries and RELEASE-NOTES.md. It uses no secret beyond the token GitHub gives every workflow,
-# and that token only in the step that publishes. Recording the checksums in
-# apps/cli/src/runner-release.json is not done here: only the maintainer's second build writes
-# them, after it built the same files on another machine.
+# and that token may write only in the two release jobs. There, actions/checkout gets it by
+# default, to read the repository, and keeps none of it (`persist-credentials: false`); the step
+# that publishes gets it to publish. Every install skips the packages' own scripts
+# (`--ignore-scripts`). Code that runs earlier in a release job, during the build or in the built
+# runner asked for its version, could still reach the publishing step through what GitHub carries
+# from one step to the next, such as GITHUB_PATH. Splitting each release job into a build job
+# that cannot write and a publish job that runs nothing of the repository waits for the
+# maintainer (specs/005-runner-release/research.md, Q11; security-review.md, RV1).
+#
+# Recording the checksums in apps/cli/src/runner-release.json is not done here: only the
+# maintainer's second build writes them, after it built the same files on another machine.
 name: runner release
 
 on:
@@ -62,8 +72,9 @@ jobs:
         with:
           bun-version: ${{ steps.pin.outputs.bun }}
 
+      # No package's install script runs, here or in the second build (security review RV1).
       - name: Install
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       # The tag reaches the shell only through an environment variable. The script prints its
       # four lines only once every check passed, each held to its pattern.
@@ -81,16 +92,43 @@ jobs:
     permissions:
       contents: write
     steps:
+      # First, before anything is checked out, set up or installed: the tag itself must be a dev
+      # release's. Bash's own test, in the C locale so that [0-9] means 0 to 9 only. The version
+      # it gives is the one published.
+      - name: Check that the tag is a dev release's
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+          LC_ALL: C
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^runner-v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})-dev\.[1-9][0-9]{0,8})$ ]]; then
+            echo "This tag is not runner-v<x.y.z>-dev.<n>. This job publishes development releases only." >&2
+            exit 1
+          fi
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: ${{ needs.check.outputs.bun }}
+          bun-version: ${{ steps.pin.outputs.bun }}
 
       - name: Install
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Build for Linux on x86-64 and ARM64
         working-directory: apps/runner
@@ -99,11 +137,12 @@ jobs:
           bun run compile:linux-x64
           bun run compile:linux-arm64
 
+      # The commit is the one `check` passed; `files` stops unless the checkout is that commit.
       - name: Check the runner and write the release's files
         env:
           TAG: ${{ github.ref_name }}
           COMMIT: ${{ needs.check.outputs.commit }}
-          BUN: ${{ needs.check.outputs.bun }}
+          BUN: ${{ steps.pin.outputs.bun }}
         run: bun apps/runner/scripts/release.ts files --tag "$TAG" --commit "$COMMIT" --bun "$BUN"
 
       - name: Publish the pre-release
@@ -111,7 +150,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-          VERSION: ${{ needs.check.outputs.version }}
+          VERSION: ${{ steps.tag.outputs.version }}
         run: |
           set -euo pipefail
           gh --version
@@ -136,16 +175,42 @@ jobs:
     permissions:
       contents: write
     steps:
+      # First, before anything is checked out, set up or installed: the tag itself must be a prod
+      # release's. As in release-dev.
+      - name: Check that the tag is a prod release's
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+          LC_ALL: C
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^runner-v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8}))$ ]]; then
+            echo "This tag is not runner-v<x.y.z>. This job publishes prod releases only." >&2
+            exit 1
+          fi
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: ${{ needs.check.outputs.bun }}
+          bun-version: ${{ steps.pin.outputs.bun }}
 
       - name: Install
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Build for Linux on x86-64 and ARM64
         working-directory: apps/runner
@@ -158,7 +223,7 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
           COMMIT: ${{ needs.check.outputs.commit }}
-          BUN: ${{ needs.check.outputs.bun }}
+          BUN: ${{ steps.pin.outputs.bun }}
         run: bun apps/runner/scripts/release.ts files --tag "$TAG" --commit "$COMMIT" --bun "$BUN"
 
       - name: Publish the release
@@ -166,7 +231,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-          VERSION: ${{ needs.check.outputs.version }}
+          VERSION: ${{ steps.tag.outputs.version }}
         run: |
           set -euo pipefail
           gh --version

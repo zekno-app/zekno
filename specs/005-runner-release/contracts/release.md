@@ -32,6 +32,9 @@ release; without, a **prod** release. Order and examples: data-model.md, "Versio
 The script in `apps/cli/src/install.ts` keeps its own check, so that a value that got past the CLI
 and the transport is refused on the server too (feature 004, security review: three checks).
 
+- The script sets `LC_ALL=C` and exports it before anything else, whatever locale SSH passed on:
+  in a UTF-8 locale bash 4.2's `[0-9]` also matched digits of other scripts (security-review.md,
+  RV8).
 - `is_version <v>`: true exactly when `<v>` matches the pattern above. Written with `case`, `expr`,
   `cut` and `sed` only: no `${`, no backquote, no `[[`, nothing outside POSIX `sh`.
 - `is_newer <a> <b>`: true exactly when `a` is newer than `b` in the order above. Both are checked
@@ -48,17 +51,35 @@ Runs on `push` of tags `runner-v*`. `permissions: {}` at the top; each job asks 
 `concurrency: runner-release-${{ github.ref }}`, never cancelled. Actions stay pinned to the full
 commits they use today (`actions/checkout@11d5960a326750d5838078e36cf38b85af677262`, v4.4.0;
 `oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6`, v2.2.0). Every value from an expression
-reaches a shell only through an environment variable. No secret but the default token, and that
-token only in the publish step's environment.
+reaches a shell only through an environment variable. Every install is `bun install
+--frozen-lockfile --ignore-scripts`, so no package's install script runs, here or in the second
+build. No secret but the default token. It can write only in the two release jobs; there,
+`actions/checkout` gets it by default to read the repository and keeps none of it
+(`persist-credentials: false`), and only the publish step names it in its environment. Code that
+runs earlier in a release job could still reach the publish step through what GitHub carries from
+step to step: splitting each release job waits for the maintainer (research.md, Q11).
 
 | Job | Runs when | Environment | Permissions | Steps |
 |-----|-----------|-------------|-------------|-------|
-| `check` | always | none | `contents: read` | checkout with `fetch-depth: 0` and `persist-credentials: false`; read the Bun pin from the root `package.json` (`^bun@[0-9]+\.[0-9]+\.[0-9]+$`); set up that Bun; `bun install --frozen-lockfile`; `bun apps/runner/scripts/release.ts check --tag "$TAG" >> "$GITHUB_OUTPUT"` |
-| `release-dev` | `needs.check.outputs.environment == 'dev'` | none | `contents: write` | checkout (one commit, `persist-credentials: false`); set up Bun `needs.check.outputs.bun`; `bun install --frozen-lockfile`; with `working-directory: apps/runner`, `bun run compile:linux-x64` and `bun run compile:linux-arm64`; `bun apps/runner/scripts/release.ts files --tag "$TAG" --commit "$COMMIT" --bun "$BUN"`; publish as a pre-release |
-| `release-prod` | `needs.check.outputs.environment == 'prod'` | `prod` (waits for approval before its first step) | `contents: write` | the same as `release-dev`; publish as a release |
+| `check` | always | none | `contents: read` | checkout with `fetch-depth: 0` and `persist-credentials: false`; read the Bun pin from the root `package.json` (`^bun@[0-9]+\.[0-9]+\.[0-9]+$`); set up that Bun; `bun install --frozen-lockfile --ignore-scripts`; `bun apps/runner/scripts/release.ts check --tag "$TAG" >> "$GITHUB_OUTPUT"` |
+| `release-dev` | `needs.check.outputs.environment == 'dev'` | none | `contents: write` | first, before any checkout: the tag itself must be a dev tag (below), which gives the version; checkout (one commit, `persist-credentials: false`); read the Bun pin as `check` does; set up that Bun; `bun install --frozen-lockfile --ignore-scripts`; with `working-directory: apps/runner`, `bun run compile:linux-x64` and `bun run compile:linux-arm64`; `bun apps/runner/scripts/release.ts files --tag "$TAG" --commit "$COMMIT" --bun "$BUN"`; publish as a pre-release |
+| `release-prod` | `needs.check.outputs.environment == 'prod'` | `prod` (waits for approval before its first step) | `contents: write` | the same as `release-dev`, with a prod tag; publish as a release |
 
 `check` outputs `environment`, `version`, `commit` and `bun`, from the four lines `release.ts
-check` prints.
+check` prints. The release jobs do not take its word for anything a changed tool could turn. Each
+works out from the tag itself, in its first step, before anything is checked out, set up or
+installed, that the tag is of its own kind, with bash's `[[ =~ ]]` in the C locale:
+
+```text
+release-dev:  ^runner-v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})-dev\.[1-9][0-9]{0,8})$
+release-prod: ^runner-v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8}))$
+```
+
+Otherwise it stops with `This tag is not runner-v<x.y.z>-dev.<n>. This job publishes development
+releases only.` (or `runner-v<x.y.z>` and `prod releases`), which does not repeat the tag. The
+version it matched is the one published. The Bun version is read from the commit in the job
+itself. Only `commit` is taken from `check`, and `release.ts files` stops unless the checkout is
+that commit.
 
 Publishing, in `apps/runner/dist`, with `GH_TOKEN` set to the default token:
 
@@ -187,8 +208,11 @@ schema whose `version` uses `RUNNER_VERSION_PATTERN`. Written only by the second
 
 Runs on `push` to `main` and on `pull_request` into `main`. `permissions: {}`, the one job
 `contents: read`. Steps: checkout (pinned, `persist-credentials: false`); read the Bun pin; set up
-Bun (pinned); `bun install --frozen-lockfile`; `bun apps/runner/scripts/release.ts check-main`. It
-fails, and so marks the commit, when `main` carries a dev version.
+Bun (pinned); `bun install --frozen-lockfile --ignore-scripts`; `bun apps/runner/scripts/release.ts
+check-main`. It fails, and so marks the commit, when `main` carries a dev version. It reports and
+does not stop a push on its own: it runs after the push, `[skip ci]` skips it, and a push made with
+a workflow's token does not start it. The branch rule for `main` in apps/runner/RELEASING.md, part
+1, makes its job `check-main` a required check for everyone but the admins.
 
 ## `apps/runner/package.json` scripts
 

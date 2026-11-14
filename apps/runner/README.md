@@ -223,10 +223,18 @@ x86-64 runner answers with the tag's version, and publishes four files:
 - `RELEASE-NOTES.md`, which is also the release's text: the commit, the Bun version, what the
   runner is built for, the checksums, and the second build's record once it is made.
 
-A tag that already has a release gets no second one. The actions are pinned to full commits, and
-the workflow uses no secret beyond the token GitHub gives every workflow, and that token only in
-the step that publishes. Another workflow, `.github/workflows/main-versions.yml`, fails on a push
-to `main`, or a pull request into it, that carries a development version.
+A tag that already has a release gets no second one. The actions are pinned to full commits. Every
+install skips the packages' own install scripts, and each release job checks the tag itself before
+it checks out or installs anything. The workflow uses no secret beyond the token GitHub gives every
+workflow, and that token can write only in the release jobs: `actions/checkout` uses it there to
+read the repository and keeps none of it, and the step that publishes uses it to publish. Code that
+runs earlier in a release job, during the build, could still reach that step. Splitting each
+release job in two, so that the job that can write runs nothing of the repository, is an open
+finding (RV1 in
+[`specs/005-runner-release/security-review.md`](../../specs/005-runner-release/security-review.md))
+that waits for the maintainer. Another workflow, `.github/workflows/main-versions.yml`, fails on a
+push to `main`, or a pull request into it, that carries a development version. It reports; it holds
+a push back only where `main`'s branch rule makes it a required check.
 
 The workflow does not record checksums in zekno. Only the maintainer's second build does, once a
 build of the same commit on their own machine gave the same files
@@ -250,8 +258,11 @@ How to cut a release, from start to end, and how to withdraw one: [RELEASING.md]
   start it with their own environment: no `PermitUserEnvironment`, no `AcceptEnv ZEKNO_*`, no
   sudo rule that keeps those variables. The compiled runner does not load `.env` or `bunfig.toml`
   from the folder it is started in, which over SSH is the login user's home folder: it is built
-  with both turned off. Like any program built with Bun, it still reads `BUN_OPTIONS` from its
-  environment.
+  with both turned off. Like any program built with Bun, it still obeys three of Bun's own
+  variables: `BUN_OPTIONS` (for example `--preload <file>`, which runs that file first),
+  `BUN_BE_BUN=1` (it then acts as Bun itself) and `BUN_INSPECT` (it opens a debugger). Whoever can
+  set them already controls that account. The server's SSH must not accept `BUN_*` from clients:
+  no `AcceptEnv BUN_*`.
 - **Signing a deploy is equal to root on the server.** A Compose file can mount anything Docker
   can reach. The signature decides who may do that; the runner does not limit what they deploy.
 - **Docker's messages are passed back as they are.** An error from Docker can repeat a value

@@ -3,6 +3,12 @@
 # only, so apps/runner/package.json and apps/cli/src/runner-release.json hold plain versions
 # there. Before merging `dev` into `main`, the prod versions are committed on `dev`
 # (apps/runner/RELEASING.md).
+#
+# It reports; on its own it stops nothing. It runs once the push is made, a commit message with
+# `[skip ci]` skips it, and a push made with a workflow's token does not start it. It holds a push
+# back only where the rule for `main` (RELEASING.md, part 1) makes `check-main` a required check,
+# and that rule lets the repository's admins pass. Before pushing `main`, the maintainer runs
+# the same check by hand (RELEASING.md, part 4).
 name: main versions
 
 on:
@@ -43,8 +49,9 @@ jobs:
         with:
           bun-version: ${{ steps.pin.outputs.bun }}
 
+      # No package's install script runs (security review RV1).
       - name: Install
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Check that main holds prod versions only
         run: bun apps/runner/scripts/release.ts check-main

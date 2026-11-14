@@ -17,9 +17,9 @@ There are two kinds of release:
 A dev release is for proving a runner on a real server before the prod release of the same
 version.
 
-Steps marked **[outward]** change something on GitHub: a setting, a push, a tag or a release.
-Each is the maintainer's own, done by hand, at the time. Everything else only reads, or changes
-this machine.
+Steps marked **[outward]** change something on GitHub: a setting, a push, a tag, a release or a
+workflow run. Each is the maintainer's own, done by hand, at the time. Everything else only reads,
+or changes this machine.
 
 ## Waiting for the maintainer's answer
 
@@ -36,6 +36,11 @@ marked with its question, such as **[Q2]**. Remove this list and the marks once 
 - **[Q7]** After a prod release, a short proof on a real server.
 - **[Q8]** The maintainer is the only person with the admin role.
 - **[Q10]** Security reports go through GitHub's private vulnerability reporting.
+- **[Q11]** Not built yet. Each release job still builds and publishes in one job, so code that
+  runs during its build could reach the token that publishes. The recommended answer splits each
+  release job in two before the first release.
+- **[Q12]** Not answered. Neither build checks the Bun runtimes for Linux it downloads against
+  Bun's own published checksums.
 
 ## In short
 
@@ -49,7 +54,7 @@ A dev release:
 A prod release:
 
 1. Once: part 1.
-2. The prod versions on `dev`, merged into `main` (part 4).
+2. The prod versions on `dev`, merged into `main`, and the environment `prod` checked (part 4).
 3. Tag the commit and push the tag (part 5). Approve the run (part 6).
 4. The second build on `main`, and the commands it prints (part 7). The notes (part 8).
 5. Merge `main` back into `dev` (part 10).
@@ -59,13 +64,19 @@ The first releases are `0.1.0-dev.1`, then `0.1.0`. Both version files on `dev` 
 [`specs/005-runner-release/quickstart.md`](../../specs/005-runner-release/quickstart.md), section 7,
 describes.
 
-The commands below use two shell variables. Set them in the terminal you release from, with the
-version of this release:
+The commands below use two shell variables. Set them in the terminal you release from. Write the
+version of this release in place of `<version>`, such as `0.1.0-dev.1`:
 
 ```sh
-VERSION=0.1.0-dev.1
-TAG=runner-v$VERSION
+unset VERSION TAG
+VERSION=<version>
+TAG="runner-v${VERSION:?}"
 ```
+
+`unset` clears what an earlier release left in this terminal. Until `<version>` is replaced, the
+second line is not a command any shell runs, and the third stops with an error that names
+`VERSION`. Every command below writes them as `${VERSION:?}` and `${TAG:?}`, so it stops the same
+way instead of acting on an empty or an older version.
 
 ## 1. Once, before the first release
 
@@ -93,6 +104,37 @@ chooses the workflow that runs for it. Without the ruleset, anyone with write ac
 To prove it, from another account that has the Write role and nothing more, **[outward]**
 `git push origin runner-v0.0.1-dev.1` must be refused by GitHub. Write down whether this was tried.
 
+### The rules for `dev` and `main`
+
+A release is checked against these two branches. The workflow and the second build look for the
+tagged commit on them, and `apps/cli/src/runner-release.json` on each decides what every zekno
+built from it installs.
+
+1. **[outward]** **Settings**, **Rules**, **Rulesets**, **New ruleset**, **New branch ruleset**.
+2. Name it `release branches`. Enforcement status: **Active**.
+3. Target branches: **Add target**, **Include by pattern**, `dev`. Again for `main`.
+4. Rules: tick **Restrict deletions**, so that neither branch can be deleted and made again with
+   other commits, and **Block force pushes**, so that a commit once on a branch stays on it, and a
+   release cut from it can always be traced to it.
+5. Bypass list: **Add bypass**, the **Repository admin** role. Nothing else.
+6. **Create**.
+
+Then a second branch ruleset, for `main` only:
+
+1. **[outward]** **New ruleset**, **New branch ruleset**. Name it `main versions`. Enforcement
+   status: **Active**. Target branches: **Include by pattern**, `main`.
+2. Rules: tick **Require status checks to pass** and add the check `check-main`: the job of the
+   workflow `main versions` (`.github/workflows/main-versions.yml`). Type the name if it is not
+   offered. A commit then reaches `main` only once that check has passed on it, for example in a
+   pull request, so `main` does not carry a development version. Without this rule the workflow
+   only reports (part 4).
+3. Bypass list: the **Repository admin** role. Nothing else. The maintainer's own push to `main`
+   is therefore not held by it: that is why part 4 runs the same check before pushing `main`.
+4. **Create**.
+
+These rules do not stop a push to `dev` or `main` by someone with write access, or by the release
+workflow's own token while a release job runs **[Q11]**.
+
 ### The environment `prod`
 
 A prod release waits in it for the maintainer's approval before anything is built or published.
@@ -109,7 +151,7 @@ A prod release waits in it for the maintainer's approval before anything is buil
 
 It must exist before the first prod tag is pushed. A workflow that names an environment that does
 not exist creates it, with no protection, and the release would be published with nobody
-approving it.
+approving it. Part 4 checks it before each prod tag.
 
 ### Security reports **[Q10]**
 
@@ -132,6 +174,7 @@ holds.
   `<tag> is a dev release, so its commit must be on dev. Commit <12 hex> is not on origin/dev.`
   (or `prod` and `main`). A commit of `main` that was merged into `dev` is on both, so a dev
   release can be cut from it.
+- The second build refuses it too, against the branch as your own checkout has it (part 7).
 
 ## 3. The version
 
@@ -163,7 +206,7 @@ bun run typecheck
 bun run lint
 bun run test
 git add apps/runner/package.json
-git commit -m "chore(runner): version $VERSION"
+git commit -m "chore(runner): version ${VERSION:?}"
 ```
 
 **[outward]** `git push origin dev`
@@ -172,10 +215,12 @@ git commit -m "chore(runner): version $VERSION"
 
 Only for a prod release. `main` must never carry a dev version: a zekno built from `main` installs
 prod releases only. So the prod versions are committed on `dev` first, then merged into `main`.
+Write the prod version in place of `<version>`, such as `0.1.0`:
 
 ```sh
-VERSION=0.1.0
-TAG=runner-v$VERSION
+unset VERSION TAG
+VERSION=<version>
+TAG="runner-v${VERSION:?}"
 git switch dev
 git pull --ff-only origin dev
 ```
@@ -184,9 +229,9 @@ In `apps/runner/package.json`, set `"version"` to the version. Then write
 `apps/cli/src/runner-release.json` with the same version and no checksums:
 
 ```sh
-cat > apps/cli/src/runner-release.json <<EOF
+cat <<EOF > apps/cli/src/runner-release.json
 {
-  "version": "$VERSION",
+  "version": "${VERSION:?}",
   "files": {
     "linux-x64": {
       "sha256": null
@@ -202,7 +247,7 @@ bun run typecheck
 bun run lint
 bun run test
 git add apps/runner/package.json apps/cli/src/runner-release.json
-git commit -m "chore: prod versions for runner $VERSION"
+git commit -m "chore: prod versions for runner ${VERSION:?}"
 ```
 
 **[outward]** `git push origin dev`
@@ -217,12 +262,31 @@ bun apps/runner/scripts/release.ts check-main
 ```
 
 `check-main` must print
-`No development version: apps/runner/package.json holds 0.1.0, apps/cli/src/runner-release.json holds 0.1.0.`
+`No development version: apps/runner/package.json holds <version>, apps/cli/src/runner-release.json holds <version>.`
 If it names a file instead, stop: fix it on `dev` and merge again.
 
 **[outward]** `git push origin main`
 
-On every push to `main`, the workflow `main-versions` runs the same `check-main`.
+The workflow `main versions` runs the same `check-main` on GitHub. It reports; it does not stop a
+push on its own. It runs once the push is made, a commit message with `[skip ci]` skips it, and a
+push made with a workflow's token does not start it. The rule for `main` in part 1 makes it a
+required check, but not for the admins. So the `check-main` you ran here is what keeps a dev
+version off `main`.
+
+Then check the environment `prod` as GitHub has it, before each prod tag. Both commands only read:
+
+```sh
+gh api repos/zekno-app/zekno/environments/prod --jq '{deployment_branch_policy, reviewers: [.protection_rules[] | select(.reviewers != null) | {prevent_self_review, logins: [.reviewers[].reviewer.login]}]}'
+gh api repos/zekno-app/zekno/environments/prod/deployment-branch-policies --jq '[.branch_policies[] | {name, type}]'
+```
+
+The first must show `deployment_branch_policy` with `custom_branch_policies` true and
+`protected_branches` false, and one entry under `reviewers` with `prevent_self_review` false whose
+`logins` hold the maintainer's GitHub login. The second must show one policy, `name` `runner-v*`
+and `type` `tag`, and nothing else. If either command fails, for example with `HTTP 404`, or shows
+anything else, push no prod tag: make `prod` as part 1 says and check again. Whether
+administrators may bypass its rules is not in these answers: check on the environment's settings
+page that **Allow administrators to bypass configured protection rules** is unticked.
 
 From here until part 7 is done, a zekno built from `dev` or `main` holds no checksums, and says it
 has no published runner to install. That is expected.
@@ -236,17 +300,18 @@ commit, and run the workflow's own checks against it:
 git switch dev
 git pull --ff-only origin dev
 git log -1 --format='%H %s'
-git tag -a "$TAG" -m "zekno-runner $VERSION"
-bun apps/runner/scripts/release.ts check --tag "$TAG"
+git tag -a "${TAG:?}" -m "zekno-runner ${VERSION:?}"
+bun apps/runner/scripts/release.ts check --tag "${TAG:?}"
 ```
 
-For a prod release, use `main` in place of `dev` in the first two commands.
+For a prod release, use `main` in place of `dev` in the first two commands. Keep the commit and
+the subject `git log` printed: the second build names them (part 7).
 
 `check` prints four lines, `environment=`, `version=`, `commit=` and `bun=`, or one sentence that
 says what is wrong. When it refuses, the tag was never pushed, so the version is still unused:
-remove the tag with `git tag -d "$TAG"`, fix what it said, and make the tag again.
+remove the tag with `git tag -d "${TAG:?}"`, fix what it said, and make the tag again.
 
-**[outward]** `git push origin "$TAG"`
+**[outward]** `git push origin "${TAG:?}"`
 
 Push this one tag, never `git push --tags` and never several tags at once. GitHub starts no
 workflow when more than three tags are pushed together, and any other tag pushed by mistake would
@@ -266,7 +331,12 @@ Or open **Actions**, **runner release** on GitHub.
 | Job | What it checks and does |
 |-----|-------------------------|
 | `check` | The tag is `runner-v<version>`. The checked-out commit is the tag's. That commit is on `origin/dev` (dev) or `origin/main` (prod). `apps/runner/package.json` says the version. The root `package.json` pins Bun. For prod, `apps/cli/src/runner-release.json` names no dev version. Then it hands on the environment, the version, the commit and the Bun version. |
-| `release-dev` or `release-prod` | Builds the runner for Linux on x86-64 and ARM64 with that Bun. Checks that both were built, each at most 256 MiB, and that the x86-64 runner answers with the version. Writes the two `.gz` files, `SHA256SUMS` and `RELEASE-NOTES.md`. Stops if a release for the tag exists already. Publishes: a dev release as a pre-release that is never the latest. |
+| `release-dev` or `release-prod` | First, before anything is checked out, checks that the tag itself is of its kind, dev or prod, and takes the version from it. Reads the pinned Bun version from the commit, installs the packages without running their install scripts, and builds the runner for Linux on x86-64 and ARM64 with that Bun. Checks that it builds the commit `check` passed, that both runners were built, each at most 256 MiB, and that the x86-64 runner answers with the version. Writes the two `.gz` files, `SHA256SUMS` and `RELEASE-NOTES.md`. Stops if a release for the tag exists already. Publishes: a dev release as a pre-release that is never the latest. |
+
+The token GitHub gives the workflow can write only in `release-dev` and `release-prod`. There,
+the step that publishes gets it, and `actions/checkout` gets it to read the repository and keeps
+none of it. Code that runs earlier in the same job, during the build or in the built runner, could
+still reach the publishing step **[Q11]**.
 
 Nothing is published when any step fails. Read why with
 `gh run view <run id> --repo zekno-app/zekno --log-failed`. When it failed for a passing reason,
@@ -276,14 +346,14 @@ publishes nothing twice. When the commit itself is at fault, the version is used
 and take the next number (part 3).
 
 **Approving a prod release.** `release-prod` waits for review before its first step. Before you
-approve, check that the run names your tag and the commit that `git rev-parse "$TAG^{commit}"`
+approve, check that the run names your tag and the commit that `git rev-parse "${TAG:?}^{commit}"`
 prints here. Then, on the run's page: **[outward]** **Review deployments**, tick **prod**,
 **Approve and deploy**. **Reject** publishes nothing.
 
 When the run has passed:
 
 ```sh
-gh release view "$TAG" --repo zekno-app/zekno
+gh release view "${TAG:?}" --repo zekno-app/zekno
 ```
 
 It lists four files: `zekno-runner-linux-x64.gz`, `zekno-runner-linux-arm64.gz`, `SHA256SUMS` and
@@ -296,31 +366,38 @@ No zekno installs the release yet. That waits for the second build.
 The second build is the only way checksums get into zekno. It runs on your own machine, so
 GitHub's build service cannot change the runner without the difference being seen.
 
-It needs the Bun version the root `package.json` pins, the network (it downloads the release's
-files, npm packages and Bun's runtimes for Linux), and a few minutes. Run it on the branch the
-release is recorded on: `dev` for a dev release, `main` for a prod release.
+It needs the Bun version the root `package.json` pins, the network, and a few minutes. It
+downloads the release's files and Bun's two runtimes for Linux, about 107 MB each unpacked, and
+any npm package `bun.lock` names that Bun's cache on this machine lacks. Run it on the branch the
+release is recorded on: `dev` for a dev release, `main` for a prod release. Pull that branch
+first: the tagged commit must be on it as your checkout has it.
 
 ```sh
 git switch dev
 git pull --ff-only origin dev
 git status --short apps/cli/src/runner-release.json
 bun --version
-bun apps/runner/scripts/second-build.ts "$TAG"
+bun apps/runner/scripts/second-build.ts "${TAG:?}"
 ```
 
 For a prod release, use `main` in place of `dev` in the first two commands. `git status` must
 print nothing.
 
 It checks the tag, the branch, that `apps/cli/src/runner-release.json` has no change of its own
-and records nothing newer, that the tag here and on GitHub is the same commit, that Bun is the
-pinned version, and that the commit builds this version. It downloads the release's four files
-from the address servers use, over HTTPS only. It builds the tagged commit from `git archive` in a
-temporary folder, with `bun install --frozen-lockfile` and the runner's own compile scripts. Then
-it compares each binary three ways: its own build, the downloaded file, and the line of
-`SHA256SUMS`.
+and records nothing newer, that the tagged commit is on the branch here, that the tag here and on
+GitHub is the same commit, that Bun is the pinned version, and that the commit builds this
+version. Nothing of a commit that is not on the branch is downloaded or built. It downloads the
+release's four files from the address servers use, over HTTPS only. It builds the tagged commit
+from `git archive` in a temporary folder, with `bun install --frozen-lockfile --ignore-scripts`, as
+the workflow installs, and the runner's own compile scripts. The build is given only `HOME`,
+`PATH`, and a temporary folder and a folder for Bun's runtimes of its own, which starts empty, so
+Bun downloads the runtimes again instead of using copies already on this machine. Other variables
+of your terminal, such as `BUN_OPTIONS` or a proxy, do not reach it. Then it compares each binary
+three ways: its own build, the downloaded file, and the line of `SHA256SUMS`.
 
 **When all agree**, it writes the checksums into `apps/cli/src/runner-release.json`, prints the
-record, `Second build of <tag> (<dev|prod>): matched.` and a table, then:
+record, `Second build of <tag> (<dev|prod>): matched.`, the commit and its subject, and a table,
+then:
 
 ```text
 Recorded runner <version> in apps/cli/src/runner-release.json. Next, on <branch>:
@@ -330,9 +407,12 @@ Recorded runner <version> in apps/cli/src/runner-release.json. Next, on <branch>
   gh release edit <tag> --repo zekno-app/zekno --notes-file <notes file>
 ```
 
-It runs none of them. Run the first two as printed. The commit message holds the record **[Q3]**.
-Add the "Tried on" section to the notes file (part 8). Then **[outward]** run the `git push` and
-**[outward]** the `gh release edit` as printed.
+It runs none of them. First compare the commit and the subject in the record with those `git log`
+printed when you made the tag (part 5). If they differ, stop: run none of the commands, undo the
+change with `git restore apps/cli/src/runner-release.json`, and decide with the maintainer, as for
+a file that differs (below). If they are the same, run the first two commands as printed. The
+commit message holds the record **[Q3]**. Add the "Tried on" section to the notes file (part 8).
+Then **[outward]** run the `git push` and **[outward]** the `gh release edit` as printed.
 
 From that commit on, a zekno built from the branch installs the release.
 
@@ -340,11 +420,13 @@ From that commit on, a zekno built from the branch installs the release.
 
 | Status | Meaning | What to do |
 |--------|---------|------------|
-| 1 | Something did not match: a file, the commit, the version, `SHA256SUMS` or the notes. | Below. |
-| 2 | A condition on this machine: the wrong branch, a change in `apps/cli/src/runner-release.json`, another Bun, no tag here, or a newer release already recorded. | Do what its sentence says. For a missing tag: `git fetch origin tag "$TAG"`. |
-| 3 | It could not finish: the network, or the build. | Run it again. |
+| 1 | Something did not match: a file, the commit, the version, `SHA256SUMS` or the notes. Or the tagged commit is not on the branch here. | For a commit not on the branch: pull the branch and run it again. If it says so again, the release was not cut from the branch: record nothing, and decide with the maintainer. Otherwise, below. |
+| 2 | A condition on this machine: the wrong branch, a change in `apps/cli/src/runner-release.json`, another Bun, no tag here, or a newer release already recorded. | Do what its sentence says. A tag you made on another machine can be fetched with `git fetch origin tag "${TAG:?}"`. Its commit must then be on the branch here, as for any tag. |
+| 3 | It could not finish: the network, the build, or another failure that is none of its checks, such as a program that could not start. Its sentence says whether it had compared anything. | Fix what it names and run it again. |
 
-Nothing is written to `apps/cli/src/runner-release.json` in any of these.
+Nothing is written to `apps/cli/src/runner-release.json` with status 1 or 2, or with status 3
+before the comparison. After the comparison, status 3 says so: check that file with `git diff`
+before you commit anything.
 
 **When a file differs** (status 1), it names each file that differs with its three checksums,
 keeps its build and the downloaded files in a folder it names, and writes the notes with the
@@ -353,15 +435,15 @@ record of the mismatch. No zekno installs that release. Then:
 1. Stop. Record nothing by hand. Never change the comparison, the build or this rule to make them
    agree.
 2. **[outward]** Put the record in the release notes:
-   `gh release edit "$TAG" --repo zekno-app/zekno --notes-file <the notes file it names>`.
+   `gh release edit "${TAG:?}" --repo zekno-app/zekno --notes-file <the notes file it names>`.
 3. Decide with the maintainer what comes next (`specs/005-runner-release/plan.md`, "If GitHub's
    build differs from the maintainer's"). Keep the folder it named until then.
 
 **What both builds share.** The second build runs on another machine, with its own copy of the
 source and its own Bun, so it shows that GitHub's build service changed nothing. Both builds
-fetch the same npm packages, pinned by `bun.lock`, and the same Bun runtimes for Linux. A problem
-in those would be in both builds, and they would still match. The second build does not check
-them.
+fetch the same npm packages, pinned by `bun.lock` with their checksums, and the same Bun runtimes
+for Linux, from the same places. A problem in those would be in both builds, and they would still
+match. Neither build checks the runtimes against Bun's own published checksums **[Q12]**.
 
 ## 8. The release notes
 
@@ -383,26 +465,30 @@ After the second build, two things are added, in the notes file the second build
 - Not tried: <what was not, and what stood in for it>.
 ```
 
-**[outward]** `gh release edit "$TAG" --repo zekno-app/zekno --notes-file <notes file>`
+**[outward]** `gh release edit "${TAG:?}" --repo zekno-app/zekno --notes-file <notes file>`
 
 The notes can be edited again at any time, for example once a proof on a real server is done. A
 release's files are never replaced.
 
 ## 9. Withdrawing a release
 
-When a release turns out to be bad, these steps make every zekno stop installing it **[Q2]**.
+When a release turns out to be bad, these steps stop zekno from installing it, within the limits
+below **[Q2]**.
 
 1. On each branch that records it, write `apps/cli/src/runner-release.json` with the same version
    and no checksums. A dev release is recorded on `dev`. A prod release is recorded on `main`, and
-   on `dev` too once `main` was merged back (part 10). On `dev`, for example:
+   on `dev` too once `main` was merged back (part 10). On `dev`, with the version being withdrawn in
+   place of `<version>`:
 
    ```sh
-   VERSION=0.1.0-dev.1
+   unset VERSION TAG
+   VERSION=<version>
+   TAG="runner-v${VERSION:?}"
    git switch dev
    git pull --ff-only origin dev
-   cat > apps/cli/src/runner-release.json <<EOF
+   cat <<EOF > apps/cli/src/runner-release.json
    {
-     "version": "$VERSION",
+     "version": "${VERSION:?}",
      "files": {
        "linux-x64": {
          "sha256": null
@@ -415,19 +501,32 @@ When a release turns out to be bad, these steps make every zekno stop installing
    EOF
    git diff
    git add apps/cli/src/runner-release.json
-   git commit -m "chore(cli): withdraw runner $VERSION"
+   git commit -m "chore(cli): withdraw runner ${VERSION:?}"
    ```
 
    **[outward]** `git push origin dev`, and the same on `main` for a prod release.
-
-   A zekno built from that commit says it has no published runner to install.
 2. **[outward]** Delete the GitHub release and keep its tag:
-   `gh release delete "runner-v$VERSION" --repo zekno-app/zekno --yes`. Never add `--cleanup-tag`.
-   A zekno built before step 1 still holds the checksums. With the files gone, a server it asks
-   stops at the download, says it could not download the runner, and installs nothing. A server
-   half way through a download stops the same way, with nothing put in place.
-3. The version is never used again (part 3). The fix is a new release with the next version,
+   `gh release delete "${TAG:?}" --repo zekno-app/zekno`. It asks before it deletes: check that
+   it names the release you are withdrawing. Never add `--cleanup-tag`.
+3. Delete the workflow runs of its tag, so that none can be run again and publish it anew.
+   `gh run list --repo zekno-app/zekno --workflow runner-release.yml --limit 20` lists the runs;
+   those of the tag show it as their branch. **[outward]** Delete each with
+   `gh run delete <run id> --repo zekno-app/zekno`.
+4. The version is never used again (part 3). The fix is a new release with the next version,
    recorded as usual.
+
+**What it does.** A zekno built from the commit of step 1, or later, does not install the release:
+it says it has no published runner to install. A zekno built before step 1 still holds the
+checksums. With the files gone (step 2), a server it asks stops at the download, says it could not
+download the runner, and installs nothing. A server half way through a download stops the same
+way, with nothing put in place.
+
+**What it does not do.** It does not stop a zekno built before step 1 for good. Anyone with write
+access to the repository can create a release again on the kept tag with the original files,
+which anyone could have downloaded while they were public. Such a zekno then installs it again,
+because the checksums it holds match. Running the release's workflow run again would do the same,
+which step 3 prevents. Whether immutable releases **[Q1]** would stop a release from being created
+again on a kept tag is not known. And it changes nothing on servers that already run it.
 
 **Servers that already run it** keep running it: nothing on them changes. Once the next release is
 recorded, `zekno server update <name>` replaces it on each, because the next version is newer.
