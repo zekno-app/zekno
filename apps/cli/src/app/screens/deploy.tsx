@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import type { DeployStage } from "../../ops/deploy"
 import { Confirm } from "../../ui/confirm"
 import type { KeyHint } from "../../ui/key-hints"
-import { Panel } from "../../ui/panel"
+import { Panel, type PanelTone } from "../../ui/panel"
 import { Stages, type Stage, type StageState } from "../../ui/stages"
 import { Frame, Header, NoticeLine, Trail } from "../frame"
 import { CHOICES, type DeployProgress, type Question, type Screen, type State } from "../state"
@@ -47,8 +47,13 @@ function Elapsed({ deploy }: { deploy: DeployProgress }) {
   return <Text dimColor>{seconds(end - deploy.since)}</Text>
 }
 
-/** The summary panel: the number, app, server, where the definition comes from, the secrets and what it replaces. */
-function Summary({ deploy, width }: { deploy: DeployProgress; width: number }) {
+/**
+ * The summary panel: the number, app, server, where the definition comes
+ * from, the secrets and what it replaces. The single commands draw it too
+ * (ui/deploy-view.tsx), with a faint border, as on the board "zekno deploy:
+ * success and failure".
+ */
+export function Summary({ deploy, width, tone = "focus" }: { deploy: DeployProgress; width: number; tone?: PanelTone }) {
   const names = deploy.secretNames ?? []
   const count = deploy.secrets ?? names.length
   const secrets = (
@@ -66,7 +71,7 @@ function Summary({ deploy, width }: { deploy: DeployProgress; width: number }) {
   if (deploy.replaces !== undefined) rows.push(["replaces", `deploy ${deploy.replaces}`])
   return (
     <Box width={width}>
-      <Panel title={deploy.sequence === undefined ? "Deploy" : `Deploy ${deploy.sequence}`} tone="focus" flexGrow={1}>
+      <Panel title={deploy.sequence === undefined ? "Deploy" : `Deploy ${deploy.sequence}`} tone={tone} flexGrow={1}>
         <Fields rows={rows} labelWidth={10} />
       </Panel>
     </Box>

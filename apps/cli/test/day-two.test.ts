@@ -28,7 +28,7 @@ describe("User Story 3: change, roll back and retire", () => {
     await m.zekno("deploy", ...where)
 
     expect(await m.zekno("rollback", ...where)).toBe(0)
-    expect(m.lastOut()).toBe("Deploy 3 of web is running on dev with 1 secret(s).")
+    expect(m.lastOut()).toBe("Deploy 3 of web is running on dev with 1 secret.")
     const { readFileSync } = await import("node:fs")
     const { join } = await import("node:path")
     expect(readFileSync(join(m.runnerHome, "apps/web/compose.yaml"), "utf8")).toBe(COMPOSE_V1)

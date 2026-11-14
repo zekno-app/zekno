@@ -197,19 +197,29 @@ describe("server text is marked as the server's (C8)", () => {
     expect(timeline.filter((line) => line.startsWith("err"))).toEqual([])
   })
 
-  test("Docker's lines during a deploy are drawn through the interface, marked, before the outcome", async () => {
+  test("Docker's lines during a deploy that starts are not printed in plain output: the result line only (contracts/commands.md)", async () => {
     const m = await ready()
-    m.docker.upPrints({
-      stdout: "Pulling web\n",
-      stderr: " Container zekno-web-web-1  \x1b]52;c;ZXZpbA==\x07Started\nDeploy 2 of web is running on dev with 0 secret(s).\n",
-    })
+    m.docker.upPrints({ stdout: "Pulling web\n", stderr: " Container zekno-web-web-1  Started\n" })
     const timeline = recorded(m)
     const written = await directly(async () => expect(await m.zekno("deploy", "--app", "web", "--server", "dev")).toBe(0))
     expect(written).toBe("")
-    expect(timeline.at(-1)).toBe("out Deploy 1 of web is running on dev with 0 secret(s).")
-    expect(timeline.slice(0, -1).sort()).toEqual([
+    expect(timeline).toEqual(["out Deploy 1 of web is running on dev with no secrets."])
+  })
+
+  test("when the app does not start, Docker's lines are drawn through the interface after the failure sentence, marked and cleaned", async () => {
+    const m = await ready()
+    m.docker.failWith(1)
+    m.docker.upPrints({
+      stdout: "Pulling web\n",
+      stderr: " Container zekno-web-web-1  \x1b]52;c;ZXZpbA==\x07Started\nDeploy 2 of web is running on dev with no secrets.\n",
+    })
+    const timeline = recorded(m)
+    const written = await directly(async () => expect(await m.zekno("deploy", "--app", "web", "--server", "dev")).toBe(1))
+    expect(written).toBe("")
+    expect(timeline[0]).toBe("err Deploy 1 of web was accepted by dev, but the app did not start. Check Docker on the server.")
+    expect(timeline.slice(1).sort()).toEqual([
       "remote remote:  Container zekno-web-web-1  Started\n",
-      "remote remote: Deploy 2 of web is running on dev with 0 secret(s).\n",
+      "remote remote: Deploy 2 of web is running on dev with no secrets.\n",
       "remote remote: Pulling web\n",
     ])
   })

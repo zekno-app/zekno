@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { RUNNER_RELEASE } from "../../runner-release"
 import { Confirm } from "../../ui/confirm"
 import type { KeyHint } from "../../ui/key-hints"
+import { secretsWords } from "../../ui/deploy"
 import { useTheme } from "../../ui/theme"
 import { Frame, Header, PRE_ALPHA } from "../frame"
 import { CHOICES, selectedApp, selectedServer, type AppRow, type Screen, type ServerRow, type State } from "../state"
@@ -13,13 +14,39 @@ import { HINTS } from "./placeholder"
 
 type HomeScreenState = Extract<Screen, { name: "home" }>
 
-/** Pane widths at 100 columns. Below that the details pane is left out (the 80-column board arranges it differently). */
+/**
+ * Pane widths. At 100 columns and more, as on the board "Home". Below that,
+ * as on the board "Home at 80 columns": the servers pane is as wide (196 px
+ * of 720), and there is no details pane; the selected app's details are at
+ * the foot of the apps pane and its actions are keys on the last line.
+ */
 export const SERVERS_WIDTH = 22
 export const DETAILS_WIDTH = 28
-/** The apps table's fixed columns: deploy, state and when. The app's name takes what is left. */
+/** Below this many columns Home is arranged as on the board "Home at 80 columns". */
+export const HOME_WIDE = 100
+/** The apps table's fixed columns: deploy, state and when, each with the space after it. The app's name takes what is left. */
 const DEPLOY_WIDTH = 8
+/** Both boards' state column (96 px at 80 columns, 110 px at 100): room for `● running`, `● stopped`, `● unknown`. */
 const STATE_WIDTH = 12
-const WHEN_WIDTH = 12
+/** Room for `● partly running`, given when the app's name keeps at least `MIN_APP_WIDTH`. */
+const STATE_FULL_WIDTH = 17
+/** The app name column of the 80-column board (140 px): never made narrower to widen the state column. */
+const MIN_APP_WIDTH = 16
+/** The when column of the boards at 100 and at 80 columns; it widens for a longer time, such as "23 hours ago". */
+const WHEN_WIDTH = { wide: 12, narrow: 11 }
+
+/**
+ * The state column's width: the boards' at 80 and 100 columns, where
+ * `● partly running` is cut at a word (`● partly`, parts.tsx `StateCell`),
+ * and wide enough for it where the window leaves the app's name as much room
+ * as the 80-column board does.
+ */
+export function stateWidth(columns: number, whenWidth: number): number {
+  const wide = columns >= HOME_WIDE
+  // The window's margins, the panes beside the apps pane and the gaps between them, the pane's border and padding, the marker.
+  const pane = columns - 2 - SERVERS_WIDTH - (wide ? DETAILS_WIDTH + 2 : 1) - 4 - 2
+  return pane - DEPLOY_WIDTH - whenWidth - STATE_FULL_WIDTH >= MIN_APP_WIDTH ? STATE_FULL_WIDTH : STATE_WIDTH
+}
 
 /** What a deploy's result is called in the details pane. */
 export const OUTCOME_WORDS = { started: "started", start_failed: "did not start", sent: "no answer recorded" } as const
@@ -32,9 +59,10 @@ export const runnerWords = (version: string | undefined): string => (version ===
  * be reached, and its address below. A server whose runner is older than this
  * zekno shows `! runner 0.1.0` until it is updated, as on the board "Two
  * questions the app asks": on a line of its own under the name, because the
- * servers pane is narrower than the board's.
+ * servers pane is narrower than the board's. Below 100 columns the address
+ * is left out, as on the board "Home at 80 columns".
  */
-function ServerItem({ server, selected }: { server: ServerRow; selected: boolean }) {
+function ServerItem({ server, selected, narrow }: { server: ServerRow; selected: boolean; narrow: boolean }) {
   const theme = useTheme()
   const outdated = server.reachable !== false && server.runner?.outdated === true
   return (
@@ -54,21 +82,23 @@ function ServerItem({ server, selected }: { server: ServerRow; selected: boolean
           </Text>
         </Box>
       ) : null}
-      <Box paddingLeft={2}>
-        <Text dimColor wrap="truncate-end">
-          {server.destination ?? "this machine"}
-        </Text>
-      </Box>
+      {narrow ? null : (
+        <Box paddingLeft={2}>
+          <Text dimColor wrap="truncate-end">
+            {server.destination ?? "this machine"}
+          </Text>
+        </Box>
+      )}
     </Box>
   )
 }
 
-function ServersPane({ servers, selected, focused }: { servers: readonly ServerRow[]; selected: number; focused: boolean }) {
+function ServersPane({ servers, selected, focused, narrow }: { servers: readonly ServerRow[]; selected: number; focused: boolean; narrow: boolean }) {
   return (
     <Pane title="Servers" focused={focused} width={SERVERS_WIDTH}>
       <Box flexDirection="column">
         {servers.map((server, index) => (
-          <ServerItem key={server.name} server={server} selected={index === selected} />
+          <ServerItem key={server.name} server={server} selected={index === selected} narrow={narrow} />
         ))}
         <Box>
           <Marker selected={selected === servers.length} />
@@ -81,7 +111,10 @@ function ServersPane({ servers, selected, focused }: { servers: readonly ServerR
   )
 }
 
-function AppTable({ apps, selected, now }: { apps: readonly AppRow[]; selected: number; now: Date }) {
+function AppTable({ apps, selected, now, columns }: { apps: readonly AppRow[]; selected: number; now: Date; columns: number }) {
+  const when = apps.map((app) => (app.at ? relativeTime(app.at, now) : ""))
+  const whenWidth = Math.max(columns >= HOME_WIDE ? WHEN_WIDTH.wide : WHEN_WIDTH.narrow, ...when.map((text) => text.length + 1))
+  const state = stateWidth(columns, whenWidth)
   return (
     <Box flexDirection="column">
       <Box>
@@ -92,10 +125,10 @@ function AppTable({ apps, selected, now }: { apps: readonly AppRow[]; selected: 
         <Cell width={DEPLOY_WIDTH}>
           <Text dimColor>deploy</Text>
         </Cell>
-        <Cell width={STATE_WIDTH}>
+        <Cell width={state}>
           <Text dimColor>state</Text>
         </Cell>
-        <Cell width={WHEN_WIDTH}>
+        <Cell width={whenWidth}>
           <Text dimColor>when</Text>
         </Cell>
       </Box>
@@ -106,11 +139,11 @@ function AppTable({ apps, selected, now }: { apps: readonly AppRow[]; selected: 
             <Text bold={index === selected}>{app.name}</Text>
           </Cell>
           <Cell width={DEPLOY_WIDTH}>{app.accepted ?? app.deploy ?? ""}</Cell>
-          <Cell width={STATE_WIDTH}>
-            <StateCell state={app.state} />
+          <Cell width={state}>
+            <StateCell state={app.state} room={state - 1} />
           </Cell>
-          <Cell width={WHEN_WIDTH}>
-            <Text dimColor>{app.at ? relativeTime(app.at, now) : ""}</Text>
+          <Cell width={whenWidth}>
+            <Text dimColor>{when[index]}</Text>
           </Cell>
         </Box>
       ))}
@@ -118,8 +151,13 @@ function AppTable({ apps, selected, now }: { apps: readonly AppRow[]; selected: 
   )
 }
 
-/** The foot of the apps pane: whether the server could be reached, and whether this folder is linked. */
-function AppsFoot({ state, server }: { state: State; server: ServerRow }) {
+/**
+ * The foot of the apps pane: whether the server could be reached, and
+ * whether this folder is linked. Below 100 columns the selected app's
+ * details say "this folder is linked" for the app it is linked to, so the
+ * sentence is left out while that app is selected.
+ */
+function AppsFoot({ state, server, said }: { state: State; server: ServerRow; said: boolean }) {
   const theme = useTheme()
   const lines: ReactNode[] = []
   if (server.reachable === false) {
@@ -132,7 +170,7 @@ function AppsFoot({ state, server }: { state: State; server: ServerRow }) {
       </Box>
     )
   }
-  if (state.linked?.server === server.name) {
+  if (state.linked?.server === server.name && !said) {
     lines.push(
       <Text key="linked" dimColor>
         This folder is linked to <Text dimColor={false}>{state.linked.app}</Text> on <Text dimColor={false}>{state.linked.server}</Text> by
@@ -148,7 +186,54 @@ function AppsFoot({ state, server }: { state: State; server: ServerRow }) {
   )
 }
 
-function AppsPane({ state, server, selected, focused, now }: { state: State; server?: ServerRow; selected: number; focused: boolean; now: Date }) {
+/**
+ * The selected app's details at the foot of the apps pane, below 100
+ * columns, as on the board "Home at 80 columns": `demo deploy 4, started,
+ * signed by ada` and `2 secrets, compose.yaml, this folder is linked`.
+ */
+function AppDetailsFoot({ app, file }: { app: AppRow; file?: string }) {
+  const deploy = app.deploy === undefined ? "none yet" : `${app.deploy}${app.outcome ? `, ${OUTCOME_WORDS[app.outcome]}` : ""}`
+  const signed = app.signer === undefined ? "" : `, signed by ${app.signer}`
+  const second = [app.secrets === undefined ? undefined : secretsWords(app.secrets), file, file === undefined ? undefined : "this folder is linked"]
+    .filter((part) => part !== undefined)
+    .join(", ")
+  return (
+    <Box flexDirection="column" flexShrink={0}>
+      <Rule />
+      <Text wrap="truncate-end">
+        <Text bold>{app.name}</Text>{" "}
+        <Text dimColor>
+          deploy {deploy}
+          {signed}
+        </Text>
+      </Text>
+      {second ? (
+        <Text dimColor wrap="truncate-end">
+          {second}
+        </Text>
+      ) : null}
+    </Box>
+  )
+}
+
+function AppsPane({
+  state,
+  server,
+  selected,
+  focused,
+  now,
+  columns,
+  details,
+}: {
+  state: State
+  server?: ServerRow
+  selected: number
+  focused: boolean
+  now: Date
+  columns: number
+  /** Below 100 columns: the selected app, whose details go at the foot, and its Compose file when this folder is linked to it. */
+  details?: { app?: AppRow; file?: string }
+}) {
   if (!server) {
     return (
       <Pane title="Apps" focused={focused}>
@@ -159,12 +244,13 @@ function AppsPane({ state, server, selected, focused, now }: { state: State; ser
   return (
     <Pane title={`Apps on ${server.name}`} right={<Text dimColor>{server.apps.length}</Text>} focused={focused}>
       {server.apps.length > 0 ? (
-        <AppTable apps={server.apps} selected={selected} now={now} />
+        <AppTable apps={server.apps} selected={selected} now={now} columns={columns} />
       ) : (
         <Text dimColor>Nothing deployed to {server.name} from this machine yet.</Text>
       )}
       <Box flexGrow={1} />
-      <AppsFoot state={state} server={server} />
+      <AppsFoot state={state} server={server} said={details?.file !== undefined} />
+      {details?.app ? <AppDetailsFoot app={details.app} file={details.file} /> : null}
     </Pane>
   )
 }
@@ -217,11 +303,29 @@ function linkedFile(state: State, server: ServerRow | undefined, app: AppRow | u
   return linked && linked.server === server?.name && linked.app === app?.name ? linked.compose : undefined
 }
 
-/** Home's key hints: the board's, and `u` while the selected server's runner is out of date (contracts/app.md). */
-export function homeHints(server: ServerRow | undefined): readonly KeyHint[] {
-  if (!server?.runner?.outdated) return HINTS.home
-  const at = HINTS.home.findIndex(([key]) => key === "?")
-  return [...HINTS.home.slice(0, at), ["u", "update runner"], ...HINTS.home.slice(at)]
+/**
+ * Home's key hints below 100 columns, as on the board "Home at 80 columns":
+ * there is no details pane, so its actions are keys here.
+ */
+export const NARROW_HOME_HINTS: readonly KeyHint[] = [
+  ["↑↓", "move"],
+  ["←→", "pane"],
+  ["enter", "open"],
+  ["d", "deploy"],
+  ["r", "roll back"],
+  ["l", "logs"],
+  ["s", "secrets"],
+  ["a", "add"],
+  ["?", "help"],
+  ["q", "quit"],
+]
+
+/** Home's key hints: the board's for the width, and `u` while the selected server's runner is out of date (contracts/app.md). */
+export function homeHints(server: ServerRow | undefined, narrow = false): readonly KeyHint[] {
+  const hints = narrow ? NARROW_HOME_HINTS : HINTS.home
+  if (!server?.runner?.outdated) return hints
+  const at = hints.findIndex(([key]) => key === "?")
+  return [...hints.slice(0, at), ["u", "update runner"], ...hints.slice(at)]
 }
 
 /** The answers to "update the runner?", the reducer's own (state.ts `CHOICES`). */
@@ -270,11 +374,12 @@ export function HomeScreen({ state, screen, columns, status }: { state: State; s
   const servers = team?.servers ?? []
   const server = selectedServer(state, screen)
   const app = selectedApp(state, screen)
-  const wide = columns >= 100
+  const wide = columns >= HOME_WIDE
+  // The 80-column board says "pre-alpha" alone; the details pane's words are at the foot of the apps pane.
   const right = (
     <Box columnGap={2}>
       {team && wide ? <Text dimColor>team list v{team.version}</Text> : null}
-      <Text dimColor>{PRE_ALPHA}</Text>
+      <Text dimColor>{wide ? PRE_ALPHA : "pre-alpha"}</Text>
     </Box>
   )
   const place = team ? (
@@ -292,10 +397,18 @@ export function HomeScreen({ state, screen, columns, status }: { state: State; s
     )
   }
   return (
-    <Frame header={<Header place={place} right={right} />} hints={homeHints(server)} status={status}>
+    <Frame header={<Header place={place} right={right} />} hints={homeHints(server, !wide)} status={status}>
       <Box flexGrow={1} columnGap={1}>
-        <ServersPane servers={servers} selected={screen.server} focused={screen.pane === "servers"} />
-        <AppsPane state={state} server={server} selected={screen.app} focused={screen.pane === "apps"} now={new Date()} />
+        <ServersPane servers={servers} selected={screen.server} focused={screen.pane === "servers"} narrow={!wide} />
+        <AppsPane
+          state={state}
+          server={server}
+          selected={screen.app}
+          focused={screen.pane === "apps"}
+          now={new Date()}
+          columns={columns}
+          details={wide ? undefined : { app, file: linkedFile(state, server, app) }}
+        />
         {wide ? <DetailsPane app={app} file={linkedFile(state, server, app)} /> : null}
       </Box>
     </Frame>

@@ -307,6 +307,114 @@ describe("the app screen (board 'One app: deploys and secrets')", () => {
   })
 })
 
+describe("at 80 columns (boards 'Home at 80 columns' and 'One app at 80 columns')", () => {
+  const NARROW = { columns: 80, rows: 24 }
+  /** What the board shows running: demo and api running, worker stopped, and this folder linked to demo on prod. */
+  const RUNNING = { type: "app-states", server: "prod", states: { demo: "running", api: "running", worker: "stopped" }, accepted: { demo: 4, api: 12, worker: 3 } } as const
+  const narrowHome = () =>
+    play(initialState({ kind: "team", team: BOARD_TEAM, linked: { server: "prod", app: "demo", compose: "compose.yaml" } }, NARROW), key({ kind: "right" }), RUNNING)
+
+  test("Home: the servers without their addresses, the apps, the selected app's details at the foot and its actions as keys", () => {
+    const screen = draw(narrowHome(), 80, 24)
+    const lines = screen.split("\n")
+    expect(lines[2]).toMatch(/ada's team +pre-alpha$/)
+    expect(screen).not.toContain("unaudited")
+    expect(screen).not.toContain("team list v2")
+    expect(screen).toMatch(/│ ❯ prod +● │/)
+    expect(screen).toMatch(/│ {3}staging +● │/)
+    expect(screen).toContain("+ add a server")
+    expect(screen).not.toContain("deploy@203.0.113.7")
+    expect(screen).not.toContain("staging-box")
+    expect(screen).toMatch(/Apps on prod +3 │/)
+    expect(screen).toMatch(/app +deploy +state +when/)
+    expect(screen).toMatch(/❯ demo +4 +● running +2 min ago/)
+    expect(screen).toMatch(/ {3}api +12 +● running +yesterday/)
+    expect(screen).toMatch(/ {3}worker +3 +● stopped +3 days ago/)
+    // No details pane: its words are at the foot of the apps pane, under a rule, and its actions are keys.
+    expect(screen).not.toContain("Deploy this folder")
+    expect(screen).not.toContain("This folder is linked to")
+    expect(pane(screen, "Apps on prod")).toContain("demo deploy 4, started, signed by ada")
+    expect(pane(screen, "Apps on prod")).toContain("2 secrets, compose.yaml, this folder is linked")
+    expect(screen).toMatch(/│ ─+ │/)
+    expect(words(lines.slice(-2).join(" "))).toBe(" ↑↓ move ←→ pane enter open d deploy r roll back l logs s secrets a add ? help q quit")
+    fits(screen, 80, 24)
+  })
+
+  test("Home: a folder linked to another app is said as at 100 columns; an app with no history says so", () => {
+    const onApi = play(narrowHome(), key({ kind: "down" }))
+    const screen = draw(onApi, 80, 24)
+    expect(pane(screen, "Apps on prod")).toContain("api deploy 12, started, signed by ada")
+    expect(pane(screen, "Apps on prod")).toContain("1 secret")
+    expect(pane(screen, "Apps on prod")).not.toContain("this folder is linked")
+    expect(pane(screen, "Apps on prod")).toContain("This folder is linked to demo on prod by zekno.json.")
+    fits(screen, 80, 24)
+    // A server that could not be reached, with the folder linked elsewhere, still fits.
+    const gone = play(onApi, { type: "server-reached", server: "prod", reachable: false, problem: "The connection to the runner ended before it answered." })
+    fits(draw(gone, 80, 24), 80, 24)
+  })
+
+  test("`● partly running` is cut at a word where the boards' state column is, never in a word; in full where there is room", () => {
+    const partly = play(narrowHome(), { ...RUNNING, states: { ...RUNNING.states, api: "partly running" } })
+    for (const [columns, rows] of [
+      [80, 24],
+      [100, 30],
+    ] as const) {
+      const screen = draw(update(partly, { type: "resize", columns, rows }).state, columns, rows)
+      expect(screen).toMatch(/ {3}api +12 +● partly +yesterday/)
+      expect(screen).not.toContain("● partly r")
+    }
+    const wide = draw(update(partly, { type: "resize", columns: 130, rows: 30 }).state, 130, 30)
+    expect(wide).toMatch(/ {3}api +12 +● partly running +yesterday/)
+  })
+
+  test("the app screen: the state alone in the header, deploys without column names, short results and versions, the details at the foot", () => {
+    const state = play(boardApp(NARROW), RUNNING)
+    const screen = draw(state, 80, 24)
+    const lines = screen.split("\n")
+    expect(lines[2]).toContain("› prod › demo")
+    expect(lines[2]!.trimEnd()).toMatch(/● running$/)
+    expect(lines[2]).not.toContain("deploy 4")
+    expect(screen).toMatch(/│ Deploys +│/)
+    expect(screen).not.toContain("last 50 are kept")
+    expect(screen).not.toMatch(/no\. +result/)
+    expect(screen).toMatch(/❯ 4 +● running now +today 21:52/)
+    expect(screen).toMatch(/ {3}3 +✔ rollback to 1 +today 21:50/)
+    expect(screen).toMatch(/ {3}2 +✔ started +today 21:47/)
+    expect(screen).toMatch(/ {3}1 +✔ started +today 21:41/)
+    expect(pane(screen, "Deploys")).toContain("deploy 4, signed by ada, team list v2")
+    expect(pane(screen, "Deploys")).toContain("web (caddy:2), 1 secret")
+    expect(screen).toMatch(/DATABASE_URL +v3 │/)
+    expect(screen).toMatch(/SESSION_KEY +v1 ! │/)
+    expect(screen).toMatch(/GREETING +removed │/)
+    expect(screen).toContain("+ set a secret")
+    // The secrets pane is as wide as the board's, and its last lines fit on one line each.
+    expect(screen).toMatch(/│ ! not deployed yet +│/)
+    expect(screen).toMatch(/│ Values are never shown\. │/)
+    expect(screen).not.toContain("To change one")
+    expect(words(lines.slice(-2).join(" "))).toBe(" d deploy r roll back to selected l logs s set secret x remove secret tab pane esc back")
+    fits(screen, 80, 24)
+  })
+
+  test("the app screen: a time or number longer than the board's column widens it, never cut", () => {
+    const state = play(boardApp(NARROW), {
+      type: "app-view",
+      server: "prod",
+      app: "demo",
+      deploys: [
+        { sequence: 10432, outcome: "start_failed", at: dayAt(1, 21, 47), rollbackTo: 3 },
+        { sequence: 10431, outcome: "sent", at: dayAt(40, 9, 5) },
+      ],
+      secrets: [{ name: "TOKEN", version: 2, removed: true, afterDeploy: true }],
+    })
+    const screen = draw(state, 80, 24)
+    expect(screen).toMatch(/❯ 10432 +✖ did not start +yesterday 21:47/)
+    // Forty days ago: a date with its time, or in another year the date alone (time.ts `clockTime`).
+    expect(screen).toMatch(/ {3}10431 +! no answer recorded +\d{1,2} [A-Z][a-z]{2} (09:05|\d{4}) +│/)
+    expect(screen).toMatch(/TOKEN +removed ! │/)
+    fits(screen, 80, 24)
+  })
+})
+
 describe("the deploy screen (board 'A deploy in progress')", () => {
   test("the summary panel, the stage row, the live line, and that leaving does not cancel", () => {
     const screen = draw(boardDeploy())

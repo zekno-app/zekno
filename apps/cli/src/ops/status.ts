@@ -3,7 +3,7 @@ import { RunnerAppStatesSchema, RunnerStatusSchema, type RunnerAppStates, type R
 import { openTeam, reach, type OpDeps, type Team } from "../context"
 import { CliError, RunnerRefused } from "../errors"
 import { findServer, type Server } from "../profile"
-import { withSession, type Session, type SessionMode } from "../session"
+import { namedUnreachable, withSession, type Session, type SessionMode } from "../session"
 
 /** A server of the verified team, found by name. Nothing has been asked of it yet. */
 export type Located = { team: Team; server: Server }
@@ -119,5 +119,7 @@ export async function readOver(session: Session, { team, server }: Checked, opti
 
 /** Asks a server what it holds and what is running, over one session of its own. */
 export async function readStatus(deps: OpDeps, checked: Checked): Promise<StatusResult> {
-  return withSession(reach(deps, checked.server.target), (session) => readOver(session, checked))
+  return withSession(reach(deps, checked.server.target), (session) => readOver(session, checked)).catch((error: unknown) => {
+    throw namedUnreachable(error, checked.server.name)
+  })
 }

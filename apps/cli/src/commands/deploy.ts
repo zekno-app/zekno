@@ -1,120 +1,86 @@
+import { realpathSync } from "node:fs"
+import { isAbsolute, relative, resolve } from "node:path"
+
 import { remoteThroughUi, type Deps } from "../context"
-import { prepareDeploy, prepareRollback, sendDeploy, type DeployCallbacks, type DeployPlan, type Where } from "../ops/deploy"
-import type { Ui } from "../ui/types"
+import { prepareDeploy, prepareRollback, sendDeploy, type DeployPlan, type Where } from "../ops/deploy"
+import { shownPath } from "../project"
+import { sanitize } from "../sanitize"
+import { plainDeployView, type DeployStart } from "../ui/deploy"
 
-type Options = Where & { json?: boolean }
+/** Kept where earlier tests and tools look for them. */
+export { HELD_LINES, heldLines, leftOut } from "../ui/deploy"
 
-/** The most lines of Docker's output held while an earlier one is still being drawn (research R5). */
-export const HELD_LINES = 500
+/**
+ * `typed`: the `--app` and `--server` the person typed, as opposed to those
+ * zekno.json gave, so that what a result suggests running next acts on the
+ * same app and server.
+ */
+type Options = Where & { json?: boolean; typed?: { app?: string; server?: string } }
 
-/** How long, once a deploy has its answer, Docker's last lines may take to be drawn. */
-const LAST_LINES_MS = 1000
+/** The flags to type again for the same app and server: those typed, and none that zekno.json gives anyway. Both are names held to a pattern. */
+export function flagsAgain(typed: Options["typed"]): string {
+  return `${typed?.app === undefined ? "" : ` --app ${typed.app}`}${typed?.server === undefined ? "" : ` --server ${typed.server}`}`
+}
 
-/** Runs `work`, and lets a line that could not be drawn be lost: the deploy goes on. */
-async function quietly(work: () => unknown): Promise<void> {
+/** A Compose file as the person knows it: from the folder they are in when it is inside it, else from their home. Cleaned: a folder's name can hold anything. */
+export function shownFile(cwd: string, path: string): string {
+  const folders = [resolve(cwd)]
   try {
-    await work()
+    // A file found by its real path is inside the folder's real path.
+    folders.push(realpathSync(folders[0]!))
   } catch {
-    // Lost, like a line nobody reads.
+    // A folder that cannot be found again is compared as it was given.
   }
+  for (const folder of folders) {
+    const inside = relative(folder, path)
+    if (inside !== "" && !inside.startsWith("..") && !isAbsolute(inside)) return sanitize(inside)
+  }
+  return shownPath(path)
 }
 
 /**
- * Draws lines one at a time, in order. While `draw` is still busy with one,
- * at most `limit` newer lines are held; past that the oldest held line is
- * dropped and counted. The runner never waits for a progress line, so a
- * terminal or pipe slower than Docker's output must not fill memory instead.
- * `dropped` hears how many were left out before the next line is drawn.
+ * Signs and sends, shown by the deploy view: at a terminal the summary panel,
+ * the stage row and the result (board "zekno deploy: success and failure");
+ * in plain output the result line, and Docker's lines when the app did not
+ * start. With `--json`, only the JSON object on standard output, and those
+ * lines on standard error when the app did not start.
  */
-export function heldLines(draw: (line: string) => unknown, dropped: (count: number) => unknown, limit = HELD_LINES) {
-  const held: string[] = []
-  let lost = 0
-  let pumping: Promise<void> | undefined
-
-  const report = async () => {
-    if (lost === 0) return
-    const count = lost
-    lost = 0
-    await quietly(() => dropped(count))
-  }
-
-  async function pump(): Promise<void> {
-    for (let line = held.shift(); line !== undefined; line = held.shift()) {
-      // Whatever was dropped came before this line.
-      await report()
-      const next = line
-      await quietly(() => draw(next))
-    }
-    pumping = undefined
-  }
-
-  return {
-    push(line: string): void {
-      if (held.length >= limit) {
-        held.shift()
-        lost++
-      }
-      held.push(line)
-      pumping ??= pump()
-    },
-    /** Waits until every held line is drawn, for `ms` at most. Lines still held then are left out and counted. */
-    async finish(ms: number): Promise<void> {
-      if (pumping) {
-        let timer: ReturnType<typeof setTimeout> | undefined
-        await Promise.race([pumping, new Promise((resolve) => (timer = setTimeout(resolve, ms)))])
-        clearTimeout(timer)
-      }
-      lost += held.length
-      held.length = 0
-      await report()
-    },
-  }
-}
-
-export const leftOut = (count: number) =>
-  `Left out ${count} line${count === 1 ? "" : "s"} of Docker's output that came faster than they could be shown.`
-
-/** Docker's own lines during a deploy, already cleaned, drawn as the server's: they came from it. */
-export const dockerLines = (ui: Ui) =>
-  heldLines(
-    (line) => ui.remote(line),
-    (count) => ui.warn(leftOut(count))
-  )
-
-async function send(deps: Deps, plan: DeployPlan, options: Options): Promise<number> {
-  const lines = dockerLines(deps.ui)
-  const callbacks: DeployCallbacks = { warning: (text) => deps.ui.warn(text), progress: (line) => lines.push(line) }
+async function send(deps: Deps, plan: DeployPlan, options: Options, start: DeployStart): Promise<number> {
+  const view = options.json ? plainDeployView(deps.ui, false) : deps.ui.deploy(start)
+  const began = Date.now()
   let result
   try {
-    result = await deps.ui.step(`Deploying ${plan.app} to ${plan.server.name}`, () => sendDeploy(remoteThroughUi(deps), plan, callbacks), {
-      quiet: plan.server.target.kind === "ssh",
+    result = await sendDeploy(remoteThroughUi(deps), plan, {
+      stage: (stage, info) => view.stage(stage, info),
+      progress: (line) => view.progress(line),
+      warning: (text) => deps.ui.warn(text),
     })
-  } finally {
-    // Docker's last lines come before the outcome, unless they cannot be drawn in time.
-    await lines.finish(LAST_LINES_MS)
+  } catch (error) {
+    // The stage it stopped at stays on the screen, and the reason is said below it.
+    await view.end({ outcome: "error" })
+    throw error
   }
   if (options.json) deps.ui.json({ ...result.report, server: result.server })
-  if (result.outcome === "start_failed") {
-    if (!options.json) {
-      deps.ui.error(
-        `Deploy ${result.sequence} of ${result.app} was accepted by ${result.server}, but the app did not start. Check Docker on the server.`
-      )
-    }
-    return 1
-  }
-  if (!options.json) {
-    deps.ui.success(`Deploy ${result.sequence} of ${result.app} is running on ${result.server} with ${result.secrets} secret(s).`)
-  }
-  return 0
+  await view.end({
+    outcome: result.outcome,
+    sequence: result.sequence,
+    app: result.app,
+    server: result.server,
+    secrets: result.secrets,
+    ms: Date.now() - began,
+  })
+  return result.outcome === "start_failed" ? 1 : 0
 }
 
 export async function deploy(deps: Deps, options: Options & { file?: string }): Promise<number> {
-  return send(deps, await prepareDeploy(deps, options), options)
+  const plan = await prepareDeploy(deps, options)
+  const start = { app: plan.app, server: plan.server.name, file: shownFile(deps.cwd, plan.from), flags: flagsAgain(options.typed) }
+  return send(deps, plan, options, start)
 }
 
 /** Deploys an earlier service definition again, under the next number, with the current secrets. */
 export async function rollback(deps: Deps, options: Options & { to?: string }): Promise<number> {
   const plan = await prepareRollback(deps, options, { warning: (text) => deps.ui.warn(text) })
   if (!options.json) deps.ui.info(`Rolling back ${plan.app} to what deploy ${plan.from} ran.`)
-  return send(deps, plan, options)
+  return send(deps, plan, options, { app: plan.app, server: plan.server.name, flags: flagsAgain(options.typed) })
 }

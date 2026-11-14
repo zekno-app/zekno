@@ -86,18 +86,18 @@
 
 **Independent Test**: `bun test apps/cli/test/single-commands.test.tsx`
 
-- [ ] T049 [US5] Add a deploy view to the `Ui` in apps/cli/src/ui/types.ts, ink.tsx and plain.ts: at a terminal the summary panel, stage row and result line of canvas board "zekno deploy: success and failure", with what Docker reported on a failed start; plain mode prints only the result line and, on a failed start, Docker's lines on standard error
-- [ ] T050 [US5] Style `status`, `secret ls`, `server ls` and errors at a terminal as on canvas board "Status, lists, errors and piped output" in apps/cli/src/ui/ink.tsx and apps/cli/src/commands/
-- [ ] T051 [US5] Apply the two plain-output changes of contracts/commands.md in apps/cli/src/commands/: "`<k>` secrets", "1 secret" or "no secrets"; and the state cell in `status`; update the tests that assert the old lines
-- [ ] T052 [US5] Tests in apps/cli/test/single-commands.test.tsx: terminal output rendered with `renderToString` matches the canvas wording; piped output has no colour, symbols or panels; a command without a terminal never asks and names the flag; `zekno` with no arguments and no terminal prints the help; `deploy`, `status` and `server add` each open one session (counted)
+- [X] T049 [US5] Add a deploy view to the `Ui` in apps/cli/src/ui/types.ts, ink.tsx and plain.ts: at a terminal the summary panel, stage row and result line of canvas board "zekno deploy: success and failure", with what Docker reported on a failed start; plain mode prints only the result line and, on a failed start, Docker's lines on standard error
+- [X] T050 [US5] Style `status`, `secret ls`, `server ls` and errors at a terminal as on canvas board "Status, lists, errors and piped output" in apps/cli/src/ui/ink.tsx and apps/cli/src/commands/
+- [X] T051 [US5] Apply the two plain-output changes of contracts/commands.md in apps/cli/src/commands/: "`<k>` secrets", "1 secret" or "no secrets"; and the state cell in `status`; update the tests that assert the old lines
+- [X] T052 [US5] Tests in apps/cli/test/single-commands.test.tsx: terminal output rendered with `renderToString` matches the canvas wording; piped output has no colour, symbols or panels; a command without a terminal never asks and names the flag; `zekno` with no arguments and no terminal prints the help; `deploy`, `status` and `server add` each open one session (counted)
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T053 (canvas: "Home at 80 columns" and "One app at 80 columns", approved 2026-11-14) arrange Home and the app screen at 80 columns in apps/cli/src/app/screens/home.tsx and app.tsx, with `renderToString` tests at 80 columns
+- [X] T053 (canvas: "Home at 80 columns" and "One app at 80 columns", approved 2026-11-14) arrange Home and the app screen at 80 columns in apps/cli/src/app/screens/home.tsx and app.tsx, with `renderToString` tests at 80 columns
 - [X] T054 (canvas: "Terminal too small", approved 2026-11-14) implement the message in apps/cli/src/app/app.tsx for a window under 80 by 24, returning to the same screen when there is room
 - [X] T055 (canvas: "Home on a light terminal", approved 2026-11-14) implement background detection in apps/cli/src/ui/background.ts (ask the terminal with OSC 11, short timeout, assume dark) with tests for the answer parser, and apply the colour rules of apps/cli/src/ui/theme.ts to every screen
 - [X] T056 (canvas: "Profile could not be verified", approved 2026-11-14) implement the error screen for a profile that does not verify in apps/cli/src/app/screens/profile-error.tsx
-- [ ] T057 [P] Confirm every test of apps/cli/test/hardening.test.ts, journey.test.ts, secret-input.test.ts and apps/runner/test/refusals.test.ts still passes, and extend the "no key and no value in any file" test of apps/cli/test/journey.test.ts to a run that used the app, logs and state
+- [X] T057 [P] Confirm every test of apps/cli/test/hardening.test.ts, journey.test.ts, secret-input.test.ts and apps/runner/test/refusals.test.ts still passes, and extend the "no key and no value in any file" test of apps/cli/test/journey.test.ts to a run that used the app, logs and state
 - [ ] T058 Independent internal security review of the new surface (session mode, the install script and `--runner-file`, state and log text reaching the terminal, `zekno.json`, the release workflow), fix every finding rated high or critical, and record all findings in specs/004-cli-app/security-review.md
 - [X] T059 [P] Update apps/cli/README.md and apps/runner/README.md to describe exactly what exists: the app and its keys, every command, `zekno.json`, the install route and its limits, the session command
 - [X] T060 [P] Update the public docs in apps/web/content/docs/ (a CLI page and a runner page, and the status table of index.mdx) and the repository table and roadmap in README.md

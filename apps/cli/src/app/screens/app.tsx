@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { Confirm } from "../../ui/confirm"
 import type { KeyHint } from "../../ui/key-hints"
 import { clampIndex } from "../../ui/select"
+import { secretsWords } from "../../ui/deploy"
 import { useTheme } from "../../ui/theme"
 import { Frame, Header, Trail } from "../frame"
 import { appViewOf, CHOICES, type DeployRow, type RunState, type Screen, type SecretRow, type State } from "../state"
@@ -13,10 +14,20 @@ import { HINTS } from "./placeholder"
 
 type AppScreenState = Extract<Screen, { name: "app" }>
 
-/** The secrets pane's width at 100 columns and more. */
+/** The secrets pane's width at 100 columns and more (board "One app: deploys and secrets"). */
 export const SECRETS_WIDTH = 36
-const NUMBER_WIDTH = 6
-const WHEN_WIDTH = 14
+/**
+ * Below 100 columns, as on the board "One app at 80 columns" (236 px of
+ * 720): one column more than 236 px makes, so that its last line, "Values
+ * are never shown.", fits on one line inside the border and padding as it
+ * does on the board.
+ */
+export const NARROW_SECRETS_WIDTH = 27
+/** Below this many columns the app screen is arranged as on the board "One app at 80 columns". */
+export const APP_WIDE = 100
+/** The number and when columns at 100 columns and at 80, each with the space after it. Both widen for what is in them. */
+const NUMBER_WIDTH = { wide: 6, narrow: 4 }
+const WHEN_WIDTH = { wide: 14, narrow: 12 }
 const VERSION_WIDTH = 11
 
 /**
@@ -24,9 +35,11 @@ const VERSION_WIDTH = 11
  * colour alone. The deploy the runner runs now, while every service of the
  * app is running, is `● running now`, as on the board (`runningNow`).
  */
-function Result({ deploy, runningNow }: { deploy: DeployRow; runningNow: boolean }) {
+function Result({ deploy, runningNow, narrow }: { deploy: DeployRow; runningNow: boolean; narrow: boolean }) {
   const theme = useTheme()
-  const rollback = deploy.rollbackTo === undefined ? "" : `, a rollback to ${deploy.rollbackTo}`
+  // Below 100 columns, as on the board "One app at 80 columns": a rollback that started is `✔ rollback to 1`, and the others say their result alone.
+  const rollback = deploy.rollbackTo === undefined || narrow ? "" : `, a rollback to ${deploy.rollbackTo}`
+  if (narrow && !runningNow && deploy.outcome === "started" && deploy.rollbackTo !== undefined) return <Text>✔ rollback to {deploy.rollbackTo}</Text>
   if (runningNow) {
     return (
       <Text>
@@ -53,6 +66,26 @@ function Result({ deploy, runningNow }: { deploy: DeployRow; runningNow: boolean
   }
 }
 
+/**
+ * The selected deploy below 100 columns, as on the board "One app at 80
+ * columns": `deploy 4, signed by ada, team list v2` and `web (caddy:2), 1
+ * secret`, faint.
+ */
+function NarrowDeployDetails({ deploy }: { deploy: DeployRow }) {
+  const first = [`deploy ${deploy.sequence}`, deploy.signer ? `signed by ${deploy.signer}` : undefined, deploy.teamVersion ? `team list v${deploy.teamVersion}` : undefined]
+  const second = [...(deploy.services ?? []), secretsWords(deploy.secrets?.length ?? 0)]
+  return (
+    <Box flexDirection="column">
+      <Text dimColor wrap="truncate-end">
+        {first.filter(Boolean).join(", ")}
+      </Text>
+      <Text dimColor wrap="truncate-end">
+        {second.join(", ")}
+      </Text>
+    </Box>
+  )
+}
+
 /** The selected deploy: who signed it and from which team list, its services and its secrets. */
 function DeployDetails({ deploy }: { deploy: DeployRow }) {
   const label = `deploy ${deploy.sequence}`
@@ -72,6 +105,7 @@ function DeploysPane({
   focused,
   now,
   running,
+  narrow,
 }: {
   deploys?: readonly DeployRow[]
   selected: number
@@ -79,37 +113,45 @@ function DeploysPane({
   now: Date
   /** The deploy that runs now, when the app is running. */
   running?: number
+  /** Below 100 columns: no column names and no "last 50 are kept", as on the board "One app at 80 columns". */
+  narrow: boolean
 }) {
   const at = clampIndex(selected, deploys?.length ?? 0)
   const chosen = deploys?.[at]
+  const when = (deploys ?? []).map((deploy) => clockTime(deploy.at, now))
+  // Wide enough for every number and time shown, and never narrower than the board's.
+  const numberWidth = Math.max(narrow ? NUMBER_WIDTH.narrow : NUMBER_WIDTH.wide, ...(deploys ?? []).map((deploy) => String(deploy.sequence).length + 1))
+  const whenWidth = Math.max(narrow ? WHEN_WIDTH.narrow : WHEN_WIDTH.wide, ...when.map((text) => text.length + 1))
   return (
-    <Pane title="Deploys" right={<Text dimColor>last 50 are kept</Text>} focused={focused}>
+    <Pane title="Deploys" right={narrow ? undefined : <Text dimColor>last 50 are kept</Text>} focused={focused}>
       {deploys && deploys.length === 0 ? <Text dimColor>No deploys from this machine yet.</Text> : null}
       {deploys && deploys.length > 0 ? (
         <Box flexDirection="column" flexShrink={1} overflow="hidden">
-          <Box>
-            <Box width={2} flexShrink={0} />
-            <Cell width={NUMBER_WIDTH}>
-              <Text dimColor>no.</Text>
-            </Cell>
-            <Cell>
-              <Text dimColor>result</Text>
-            </Cell>
-            <Cell width={WHEN_WIDTH}>
-              <Text dimColor>when</Text>
-            </Cell>
-          </Box>
+          {narrow ? null : (
+            <Box>
+              <Box width={2} flexShrink={0} />
+              <Cell width={numberWidth}>
+                <Text dimColor>no.</Text>
+              </Cell>
+              <Cell>
+                <Text dimColor>result</Text>
+              </Cell>
+              <Cell width={whenWidth}>
+                <Text dimColor>when</Text>
+              </Cell>
+            </Box>
+          )}
           {deploys.map((deploy, index) => (
             <Box key={deploy.sequence}>
               <Marker selected={index === at} />
-              <Cell width={NUMBER_WIDTH}>
+              <Cell width={numberWidth}>
                 <Text bold={index === at}>{deploy.sequence}</Text>
               </Cell>
               <Cell>
-                <Result deploy={deploy} runningNow={deploy.sequence === running} />
+                <Result deploy={deploy} runningNow={deploy.sequence === running} narrow={narrow} />
               </Cell>
-              <Cell width={WHEN_WIDTH}>
-                <Text dimColor>{clockTime(deploy.at, now)}</Text>
+              <Cell width={whenWidth}>
+                <Text dimColor>{when[index]}</Text>
               </Cell>
             </Box>
           ))}
@@ -119,7 +161,7 @@ function DeploysPane({
       {chosen ? (
         <Box flexDirection="column" flexShrink={0}>
           <Rule />
-          <DeployDetails deploy={chosen} />
+          {narrow ? <NarrowDeployDetails deploy={chosen} /> : <DeployDetails deploy={chosen} />}
         </Box>
       ) : null}
     </Pane>
@@ -142,18 +184,39 @@ export function changedNote(secrets: readonly SecretRow[], deploy: number | unde
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)} changed after deploy ${deploy}. They take effect on the next deploy.`
 }
 
+/**
+ * A secret's version below 100 columns, as on the board "One app at 80
+ * columns": `v3`, or `removed`, and `!` after it when it changed after the
+ * deploy that runs, in the warning colour; the pane's last lines say what
+ * `!` means. Drawn at the pane's right edge, with no space after it.
+ */
+function ShortVersion({ secret }: { secret: SecretRow }) {
+  const theme = useTheme()
+  const words = `${secret.removed ? "removed" : `v${secret.version}`}${secret.afterDeploy ? " !" : ""}`
+  return (
+    <Box flexShrink={0}>
+      <Text color={secret.afterDeploy ? theme.warning : undefined} dimColor={!secret.afterDeploy}>
+        {words}
+      </Text>
+    </Box>
+  )
+}
+
 function SecretsPane({
   secrets,
   selected,
   focused,
   latest,
   width,
+  narrow,
 }: {
   secrets?: readonly SecretRow[]
   selected: number
   focused: boolean
   latest?: number
   width: number
+  /** Below 100 columns: short versions and short last lines, as on the board "One app at 80 columns". */
+  narrow: boolean
 }) {
   const theme = useTheme()
   const rows = secrets ?? []
@@ -170,9 +233,13 @@ function SecretsPane({
                 {secret.name}
               </Text>
             </Cell>
-            <Cell width={VERSION_WIDTH}>
-              <Text dimColor>{secret.removed ? "removed" : `version ${secret.version}`}</Text>
-            </Cell>
+            {narrow ? (
+              <ShortVersion secret={secret} />
+            ) : (
+              <Cell width={VERSION_WIDTH}>
+                <Text dimColor>{secret.removed ? "removed" : `version ${secret.version}`}</Text>
+              </Cell>
+            )}
           </Box>
         ))}
         <Box>
@@ -181,10 +248,17 @@ function SecretsPane({
         </Box>
       </Box>
       <Box flexGrow={1} />
-      <Box flexDirection="column" flexShrink={0}>
-        <Text dimColor>Values are never shown. To change one, set it again.</Text>
-        {note ? <Text color={theme.warning}>! {note}</Text> : null}
-      </Box>
+      {narrow ? (
+        <Box flexDirection="column" flexShrink={0}>
+          {note ? <Text color={theme.warning}>! not deployed yet</Text> : null}
+          <Text dimColor>Values are never shown.</Text>
+        </Box>
+      ) : (
+        <Box flexDirection="column" flexShrink={0}>
+          <Text dimColor>Values are never shown. To change one, set it again.</Text>
+          {note ? <Text color={theme.warning}>! {note}</Text> : null}
+        </Box>
+      )}
     </Pane>
   )
 }
@@ -228,10 +302,12 @@ export function AppScreen({
   const latest = view?.deploys.find((deploy) => deploy.outcome !== "sent")?.sequence
   // The header names the deploy the runner holds, once it has said; until then, or when it cannot be reached, this machine's.
   const shown = row?.accepted ?? latest
+  const narrow = columns < APP_WIDE
+  // The 80-column board shows the state alone.
   const right = (
     <Box columnGap={1}>
       <StateCell state={runState} />
-      {shown !== undefined ? <Text dimColor>deploy {shown}</Text> : null}
+      {shown !== undefined && !narrow ? <Text dimColor>deploy {shown}</Text> : null}
     </Box>
   )
   const header = <Header place={<Trail parts={[screen.server, screen.app]} />} right={right} />
@@ -258,13 +334,15 @@ export function AppScreen({
           focused={screen.pane === "deploys"}
           now={new Date()}
           running={runningNow(view?.deploys, runState, row?.accepted)}
+          narrow={narrow}
         />
         <SecretsPane
           secrets={view?.secrets}
           selected={screen.secret}
           focused={screen.pane === "secrets"}
           latest={latest}
-          width={columns >= 100 ? SECRETS_WIDTH : 30}
+          width={narrow ? NARROW_SECRETS_WIDTH : SECRETS_WIDTH}
+          narrow={narrow}
         />
       </Box>
     </Frame>

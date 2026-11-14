@@ -1,4 +1,4 @@
-import { CoreError } from "@workspace/core"
+import { CoreError, LIMITS, SECRET_NAME } from "@workspace/core"
 import { parseArgs } from "node:util"
 
 import { deploy, rollback } from "./commands/deploy"
@@ -48,6 +48,16 @@ const WORDS: Record<string, number> = {
 }
 
 /**
+ * Said when a value follows `zekno secret set NAME`, worded as on the board
+ * "Status, lists, errors and piped output". The name is repeated only when it
+ * is one: it is put in front of a person as a command to type.
+ */
+export function valueAsArgument(name: string | undefined): string {
+  const shown = name !== undefined && SECRET_NAME.test(name) && name.length <= LIMITS.secretNameLength ? name : "<NAME>"
+  return `A secret value is never given as an argument. It would stay in your shell history. Run \`zekno secret set ${shown}\` and type it when asked.`
+}
+
+/**
  * Runs one command and returns the exit status: 0 for success, 1 when the
  * action failed or was refused, 2 for wrong usage.
  */
@@ -88,11 +98,7 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
     // Nothing may trail a command. In particular a secret value is never an argument:
     // it would stay in the shell's history and show in the list of processes.
     if (positionals.length > (WORDS[name] ?? Infinity)) {
-      throw new UsageError(
-        name === "secret set"
-          ? "A secret value is never given as an argument. Leave it out to be asked for it, or pipe it in with `--stdin`."
-          : `Unexpected "${positionals[WORDS[name]!]}" after \`zekno ${name}\`.`
-      )
+      throw new UsageError(name === "secret set" ? valueAsArgument(third) : `Unexpected "${positionals[WORDS[name]!]}" after \`zekno ${name}\`.`)
     }
 
     // Details not given as flags come from the project file, once this machine accepted it (contracts/commands.md). Flags win.
@@ -120,9 +126,9 @@ export async function run(argv: string[], deps: Deps): Promise<number> {
         await secretList(deps, project(["app", "server"]))
         return 0
       case "deploy":
-        return await deploy(deps, project(["app", "server", "file"]))
+        return await deploy(deps, { ...project(["app", "server", "file"]), typed: { app: values.app, server: values.server } })
       case "rollback":
-        return await rollback(deps, project(["app", "server"]))
+        return await rollback(deps, { ...project(["app", "server"]), typed: { app: values.app, server: values.server } })
       case "status":
         await status(deps, project(["server"]))
         return 0

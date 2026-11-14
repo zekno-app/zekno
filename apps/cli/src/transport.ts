@@ -68,6 +68,11 @@ export type Transport = {
    * limit when undefined.
    */
   firstAnswerMs?: number
+  /**
+   * The SSH destination, for a runner reached over SSH: said when SSH itself
+   * could not connect. Held to `SSH_DESTINATION` by `connect`.
+   */
+  destination?: string
 }
 
 /** The longest piece of a runner's standard error passed on as one line. */
@@ -299,6 +304,7 @@ export function connect(target: Target, localRunner: string[], options: ConnectO
   const runner = transport((word) => ssh(target.destination, `${target.runnerPath} ${word}`, batch), () => undefined, out)
   return {
     ...runner,
+    destination: target.destination,
     script(words) {
       if (words.length === 0 || words.length > SCRIPT_WORDS || !words.every((word) => SCRIPT_WORD.test(word))) {
         throw new CliError("The installer's arguments are not valid, so nothing was sent to the server.")

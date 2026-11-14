@@ -10,7 +10,7 @@ import { RunnerReportSchema, RunnerStatusSchema } from "@workspace/core"
 import { openTeam, reach, type OpDeps, type Team } from "../context"
 import { CliError } from "../errors"
 import { findServer, type Server } from "../profile"
-import { ENDED, openSession, type Session } from "../session"
+import { ENDED, namedUnreachable, openSession, type Session } from "../session"
 import { checkApp, type Where } from "./deploy"
 import { checkIdentity } from "./status"
 
@@ -118,7 +118,7 @@ export async function followLogs(
   } catch (error) {
     if (ended) return ended
     if (error instanceof CliError && error.message === ENDED) throw new CliError(logsDropped(server.name))
-    throw error
+    throw namedUnreachable(error, server.name)
   } finally {
     stop?.removeEventListener("abort", stopped)
     await session?.close()

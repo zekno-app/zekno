@@ -60,14 +60,14 @@ describe("single commands in a linked folder", () => {
     writeFileSync(join(m.project, "deploy", "prod.yaml"), COMPOSE_V2)
     await linkAccepted(m, { app: "web", server: "dev", compose: "deploy/prod.yaml" })
     expect(await m.zekno("deploy")).toBe(0)
-    expect(m.lastOut()).toBe("Deploy 1 of web is running on dev with 0 secret(s).")
+    expect(m.lastOut()).toBe("Deploy 1 of web is running on dev with no secrets.")
     expect(deployed(m, "web")).toBe(COMPOSE_V2)
 
     // From a folder below, the same file applies, and its Compose file is found from the file's own folder.
     m.deps.cwd = join(m.project, "deploy")
     writeFileSync(join(m.project, "deploy", "prod.yaml"), COMPOSE_V1)
     expect(await m.zekno("deploy")).toBe(0)
-    expect(m.lastOut()).toBe("Deploy 2 of web is running on dev with 0 secret(s).")
+    expect(m.lastOut()).toBe("Deploy 2 of web is running on dev with no secrets.")
     expect(deployed(m, "web")).toBe(COMPOSE_V1)
     expect(m.docker.calls()).toHaveLength(2)
   })
@@ -80,7 +80,7 @@ describe("single commands in a linked folder", () => {
     await linkAccepted(m, { app: "web", server: "dev", compose: "web.yaml" })
     // Another app: the server from the file, the Compose file as without one (compose.yaml here), never web.yaml.
     expect(await m.zekno("deploy", "--app", "api")).toBe(0)
-    expect(m.lastOut()).toBe("Deploy 1 of api is running on dev with 0 secret(s).")
+    expect(m.lastOut()).toBe("Deploy 1 of api is running on dev with no secrets.")
     expect(deployed(m, "api")).toBe(COMPOSE_V1)
     expect(await m.zekno("deploy", "--app", "api", "--server", "dev")).toBe(0)
     expect(deployed(m, "api")).toBe(COMPOSE_V1)
@@ -88,7 +88,7 @@ describe("single commands in a linked folder", () => {
     expect(await m.zekno("deploy", "--app", "web", "--server", "dev")).toBe(0)
     expect(deployed(m, "web")).toBe(WEB)
     expect(await m.zekno("deploy", "-f", "other.yaml")).toBe(0)
-    expect(m.lastOut()).toBe("Deploy 2 of web is running on dev with 0 secret(s).")
+    expect(m.lastOut()).toBe("Deploy 2 of web is running on dev with no secrets.")
     expect(deployed(m, "web")).toBe(COMPOSE_V2)
     // A server typed on the command line is the typist's: the sentence does not blame the file.
     expect(await m.zekno("deploy", "--server", "prod")).toBe(1)
@@ -131,7 +131,7 @@ describe("single commands in a linked folder", () => {
     expect(m.out).toContain("web\tdeploy 2\tstopped")
 
     expect(await m.zekno("rollback")).toBe(0)
-    expect(m.lastOut()).toBe("Deploy 3 of web is running on dev with 1 secret(s).")
+    expect(m.lastOut()).toBe("Deploy 3 of web is running on dev with 1 secret.")
     expect(deployed(m, "web")).toBe(COMPOSE_V1)
 
     m.docker.logs("web", "web-1  | 2026-11-14T21:52:03Z hello\n")

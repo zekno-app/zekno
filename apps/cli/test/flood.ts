@@ -6,8 +6,10 @@
  * - `stderr`: `zekno status` against a runner that writes far more on
  *   standard error than anyone reads. The runner's id goes in `<folder>/pid`,
  *   and `<folder>/pid.done` appears if it ever got all of it out.
- * - `progress`: Docker's lines during a deploy, handed over as fast as a
- *   session reads them, far more than anyone reads.
+ * - `progress`: Docker's lines during a deploy, handed over to the deploy
+ *   view of plain output as fast as a session reads them, far more than
+ *   anyone reads; then the app does not start, so the lines kept are written
+ *   on standard error, where nobody reads them.
  *
  * `<folder>/ready` appears once the flood starts, `<folder>/done` once the
  * process has nothing left to do. It uses an in-memory key store, never the
@@ -18,7 +20,6 @@ import { join } from "node:path"
 
 import { RUNNER_MAIN } from "../../runner/test/helpers"
 import { run } from "../src/cli"
-import { dockerLines } from "../src/commands/deploy"
 import type { Deps } from "../src/context"
 import { memoryKeyStore } from "../src/keystore"
 import { connect } from "../src/transport"
@@ -51,14 +52,14 @@ if (kind === "stderr") {
   writeFileSync(join(dir, "ready"), "")
   await run(["status", "--server", "dev"], deps)
 } else if (kind === "progress") {
-  const lines = dockerLines(ui)
+  const view = ui.deploy({ app: "web", server: "dev", file: "compose.yaml", flags: "" })
   writeFileSync(join(dir, "ready"), "")
   for (let index = 0; index < FLOOD_BYTES / LINE.length; index++) {
-    lines.push(LINE)
+    view.progress(LINE)
     // A session hands lines over as it reads their frames, and waits for input now and then.
     if (index % 500 === 0) await Bun.sleep(0)
   }
-  await lines.finish(100)
+  await view.end({ outcome: "start_failed", sequence: 1, app: "web", server: "dev", secrets: 0, ms: 1 })
 }
 writeFileSync(join(dir, "done"), "")
 process.exit(0)

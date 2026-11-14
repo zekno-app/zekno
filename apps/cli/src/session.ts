@@ -69,6 +69,30 @@ export const TOO_LARGE = "The runner sent more than an answer can hold. Check wh
 export const ENDED = "The connection to the runner ended before it answered."
 export const TOO_OLD = "The runner on that server is too old for this. State and logs need a runner update."
 
+/**
+ * Said when SSH itself could not connect, as on the board "Status, lists,
+ * errors and piped output": `name` is the server's name where it is known,
+ * and the command to check with names its destination.
+ */
+export const sshUnreachable = (name: string, destination: string): string =>
+  `${name} could not be reached over SSH. Check with: \`ssh ${destination} true\``
+
+/**
+ * SSH ended with its own status, 255, before the runner said anything: it
+ * could not connect or log in. The runner never exits with 255. Whoever
+ * knows the server's name says it with `sshUnreachable`.
+ */
+export class SshUnreachable extends CliError {
+  constructor(readonly destination: string) {
+    super(sshUnreachable(destination, destination))
+  }
+}
+
+/** The same failure, named by its server: `prod could not be reached over SSH.` Anything else is passed on as it is. */
+export function namedUnreachable(error: unknown, server: string): unknown {
+  return error instanceof SshUnreachable ? new CliError(sshUnreachable(server, error.destination)) : error
+}
+
 /** The one kind of event each request may send before its result. */
 const EVENTS: Partial<Record<SessionCommand, SessionEvent["event"]>> = { apply: "progress", logs: "log" }
 
@@ -204,8 +228,10 @@ async function start(transport: Transport, patience: number | undefined, signal:
     }
     if (line.kind === "end") {
       // Status 2 is a runner from before sessions saying `session` is not one of its commands.
-      if ((await within(child.exited, CLOSE_GRACE_MS)) === 2) return { kind: "one-shot" }
+      const code = await within(child.exited, CLOSE_GRACE_MS)
+      if (code === 2) return { kind: "one-shot" }
       stop(child, lines)
+      if (code === 255 && transport.destination !== undefined) throw new SshUnreachable(transport.destination)
       throw new CliError(UNEXPECTED)
     }
     const frame = parseMessage(SessionFrameSchema, line.bytes)

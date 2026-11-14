@@ -1,3 +1,5 @@
+import type { DeployStart, DeployView } from "./deploy"
+
 /**
  * What every line from a server starts with, as git marks what the other
  * side said. The server cannot leave it out, and none of zekno's own messages
@@ -12,10 +14,25 @@ export const REMOTE_MARK = "remote:"
  * the word, so the state is never shown by colour alone (FR-008).
  */
 export type MarkedCell = { text: string; mark: string; tone: "success" | "danger" | "warning" | "quiet" }
-export type Cell = string | MarkedCell
+/**
+ * A cell with a look of its own at a terminal: `strong` bold, `plain` the
+ * text colour, `quiet` faint. Plain output prints `text`. A terminal draws
+ * `terminal` instead when it is given, for words only a person reading
+ * needs, such as "version 1, not deployed yet" where plain output keeps
+ * "version 1".
+ */
+export type StyledCell = { text: string; style: "strong" | "plain" | "quiet"; terminal?: string }
+export type Cell = string | MarkedCell | StyledCell
 
 /** The words of a cell, as plain output prints them. */
 export const cellText = (cell: Cell): string => (typeof cell === "string" ? cell : cell.text)
+
+/** A bold cell at a terminal. */
+export const strong = (text: string): StyledCell => ({ text, style: "strong" })
+/** A faint cell at a terminal. */
+export const quiet = (text: string, terminal?: string): StyledCell => (terminal === undefined ? { text, style: "quiet" } : { text, style: "quiet", terminal })
+/** A cell in the terminal's text colour, where a table would make it faint. */
+export const plainCell = (text: string): StyledCell => ({ text, style: "plain" })
 
 /** One line of an app's logs, as `zekno logs` prints it. Each part is already cleaned or held to a pattern. */
 export type LogOutput = { time: string; service: string; text: string }
@@ -36,6 +53,22 @@ export interface Ui {
   field(label: string, value: string): void
   /** Rows of cells. Plain output joins cells with tabs. */
   table(rows: Cell[][]): void
+  /**
+   * One line that reads differently at a terminal, such as the first line of
+   * `zekno status` (board "Status, lists, errors and piped output"). Plain
+   * output prints `plain` on standard output; a terminal draws `cells`, a
+   * space apart, in their looks. Either may be left out, for a line that only
+   * one of them has.
+   */
+  line(plain: string | undefined, cells?: readonly Cell[]): void
+  /**
+   * Shows a deploy as it happens: `zekno deploy` and `zekno rollback`. At a
+   * terminal the summary panel, the stage row and the result line of the
+   * board "zekno deploy: success and failure"; in plain output the result
+   * line only, and Docker's lines on standard error when the app did not
+   * start (contracts/commands.md). Nothing is drawn until it is told a stage.
+   */
+  deploy(start: DeployStart): DeployView
   /**
    * One line of an app's logs. Plain output prints `<time>\t<service>\t<text>`
    * on standard output; the time is RFC 3339 as Docker wrote it, the service

@@ -109,16 +109,34 @@ export function Rule() {
 }
 
 /**
+ * The words of a state cell with `room` columns: `● partly running`, or
+ * where it does not fit, its first words that do (`● partly`), never a word
+ * cut in the middle.
+ */
+export function stateWords(state: RunState, room?: number): string {
+  const words = `● ${state}`
+  if (room === undefined || words.length <= room) return words
+  const parts = words.split(" ")
+  let kept = parts[0]!
+  for (const part of parts.slice(1)) {
+    if (kept.length + 1 + part.length > room) break
+    kept = `${kept} ${part}`
+  }
+  return kept
+}
+
+/**
  * Whether an app is running, by a word and a symbol as well as a colour
  * (FR-008): `● running`, `● stopped`, `● partly running`, and a faint
- * `● unknown` when it has not been read.
+ * `● unknown` when it has not been read. In a column of `room` columns that
+ * is too narrow, it is cut at a word (`stateWords`).
  */
-export function StateCell({ state }: { state: RunState }) {
+export function StateCell({ state, room }: { state: RunState; room?: number }) {
   const theme = useTheme()
   const color = { running: theme.success, stopped: theme.danger, "partly running": theme.warning, unknown: undefined }[state]
   return (
     <Text color={color} dimColor={state === "unknown"}>
-      ● {state}
+      {stateWords(state, room)}
     </Text>
   )
 }

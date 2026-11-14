@@ -401,7 +401,9 @@ describe("state on Home and the app screen (boards 'Home' and 'One app')", () =>
     const state = play(home(), states)
     const screen = draw(state)
     expect(screen).toMatch(/❯ demo +4 +● running/)
-    expect(screen).toMatch(/ {3}api +12 +● partly r/)
+    // The board's state column has no room for `● partly running` at 100 columns: it is cut at a word, never in one.
+    expect(screen).toMatch(/ {3}api +12 +● partly +│/)
+    expect(screen).not.toContain("● partly r")
     expect(screen).toMatch(/ {3}worker +3 +● stopped/)
     const narrow = draw(play(home({ columns: 80, rows: 24 }), states), 80, 24)
     expect(narrow).toMatch(/❯ demo +4 +● running/)

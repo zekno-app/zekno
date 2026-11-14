@@ -1,4 +1,5 @@
 import { CliError } from "../errors"
+import { plainDeployView } from "./deploy"
 import { cellText, REMOTE_MARK, type Ui } from "./types"
 
 /**
@@ -65,13 +66,18 @@ export function plainUi(
   remote: (text: string) => void | Promise<void> = writeStandardError,
   logs?: ReturnType<typeof standardOutput>
 ): Ui {
-  return {
+  const ui: Ui = {
     info: out,
     success: out,
     warn: err,
     error: err,
     field: (label, value) => out(`${label}: ${value}`),
     table: (rows) => rows.forEach((row) => out(row.map(cellText).join("\t"))),
+    line: (plain) => {
+      if (plain !== undefined) out(plain)
+    },
+    // Only the result line, and Docker's lines when the app did not start (contracts/commands.md).
+    deploy: () => plainDeployView(ui, true),
     // A reader slower than the logs slows the reading down instead of filling memory.
     logLine: (line) => {
       const text = `${line.time}\t${line.service}\t${line.text}`
@@ -92,6 +98,7 @@ export function plainUi(
     },
     close: async () => {},
   }
+  return ui
 }
 
 /** The plain interface as `zekno` runs it when output is piped: this process's own standard output and error. */

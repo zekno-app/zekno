@@ -7,7 +7,7 @@ import { CliError, MISSING_APP, UsageError } from "../errors"
 import { findServer, NAME, type History, type Server } from "../profile"
 import type { ProjectLink } from "../project"
 import { sanitize } from "../sanitize"
-import { withSession, type SessionMode } from "../session"
+import { namedUnreachable, withSession, type SessionMode } from "../session"
 import { checkIdentity } from "./status"
 
 /** data-model.md, "Stages of a deploy". A refusal ends a deploy at whatever stage it had reached. */
@@ -236,5 +236,7 @@ export async function sendDeploy(deps: OpDeps, plan: DeployPlan, callbacks: Depl
     store.saveHistory(server.serverId, app, [...history, { envelope: deploy.envelope, at, outcome }])
     callbacks.stage?.(outcome === "started" ? "started" : "failed", info)
     return { ...info, outcome, report, mode: session.mode }
+  }).catch((error: unknown) => {
+    throw namedUnreachable(error, server.name)
   })
 }

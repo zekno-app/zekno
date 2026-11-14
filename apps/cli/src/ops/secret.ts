@@ -4,6 +4,7 @@ import {
   createSecretRemoval,
   currentSecrets,
   isReservedSecretName,
+  readSignedDeploy,
   verifySecret,
   verifySecretRemoval,
   type TeamTrust,
@@ -95,17 +96,46 @@ export async function removeSecret(deps: OpDeps, name: string | undefined, where
   return { name, version, app, server: server.name }
 }
 
+/**
+ * The secrets the latest deploy the runner accepted carries, by name and
+ * version, from this machine's history; undefined when there is none. Only a
+ * deploy signed for this team, server and app counts, read from under its
+ * signature, as the app screen reads the history (app/views.ts). A history
+ * that cannot be read counts as no deploy: this only adds a note to a list.
+ */
+function deployedSecrets(team: Team, server: Server, app: string): Map<string, number> | undefined {
+  let history
+  try {
+    history = team.store.history(server.serverId, app)
+  } catch {
+    return undefined
+  }
+  let latest: { sequence: number; secrets: readonly { name: string; version: number }[] } | undefined
+  for (const entry of history) {
+    if (entry.outcome === "sent") continue
+    const read = readSignedDeploy({ envelope: entry.envelope, trust: team.trust })
+    const deploy = read.ok ? read.value.deploy : undefined
+    if (deploy?.teamId !== team.trust.teamId || deploy.serverId !== server.serverId || deploy.app !== app) continue
+    if (!latest || deploy.sequence >= latest.sequence) latest = deploy
+  }
+  return latest && new Map(latest.secrets.map((secret) => [secret.name, secret.version]))
+}
+
+/** One secret of an app now. `notDeployed`: set after the latest deploy the runner accepted, so that deploy does not carry this version. */
+export type ListedSecret = { name: string; version: number; notDeployed: boolean }
+
 /** The secrets an app has now: names and versions only. Nothing here ever holds a value. */
-export async function listSecrets(
-  deps: OpDeps,
-  where: Where
-): Promise<{ app: string; server: string; secrets: { name: string; version: number }[] }> {
-  const { trust, server, app, secrets } = await locate(deps, where)
+export async function listSecrets(deps: OpDeps, where: Where): Promise<{ app: string; server: string; secrets: ListedSecret[] }> {
+  const { team, trust, server, app, secrets } = await locate(deps, where)
   const current = currentSecrets({ trust, serverId: server.serverId, app, ...secrets })
-  const listed: { name: string; version: number }[] = []
+  const deployed = deployedSecrets(team, server, app)
+  const listed: ListedSecret[] = []
   for (const record of current.secrets) {
     const checked = verifySecret({ record, trust, serverId: server.serverId, app })
-    if (checked.ok) listed.push({ name: checked.value.name, version: checked.value.version })
+    if (!checked.ok) continue
+    const { name, version } = checked.value
+    const carried = deployed?.get(name)
+    listed.push({ name, version, notDeployed: deployed !== undefined && (carried === undefined || carried < version) })
   }
   return { app, server: server.name, secrets: listed }
 }

@@ -1,0 +1,453 @@
+/**
+ * User Story 5: single commands that match the app at a terminal, and stay
+ * plain and stable in scripts (contracts/commands.md, boards "zekno deploy:
+ * success and failure" and "Status, lists, errors and piped output").
+ */
+import { describe, expect, spyOn, test } from "bun:test"
+import { renderToString } from "ink"
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
+import { PassThrough, Writable } from "node:stream"
+
+import { runner, RUNNER_MAIN, tempDir } from "../../runner/test/helpers"
+import type { DeployProgress } from "../src/app/state"
+import { HELP } from "../src/cli"
+import { sshUnreachable } from "../src/session"
+import { secretsWords, type DeployStart } from "../src/ui/deploy"
+import { DeployBlock, type DeployShown } from "../src/ui/deploy-view"
+import { inkUi } from "../src/ui/ink"
+import { plainUi } from "../src/ui/plain"
+import { COMPOSE_V1, COMPOSE_V2, machine, ready } from "./helpers"
+
+type Machine = ReturnType<typeof machine>
+
+const where = ["--app", "web", "--server", "dev"]
+
+/** Escape sequences, as Ink writes them for colour and for redrawing. */
+const strip = (text: string) => text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\x1b\][^\x07]*\x07/g, "")
+
+/** Every line, with the space at its end taken off. */
+const linesOf = (text: string) => text.split("\n").map((line) => line.trimEnd())
+
+/** Nothing is drawn past the window. */
+function fits(text: string, columns: number) {
+  for (const line of text.split("\n")) expect([...line].length).toBeLessThanOrEqual(columns)
+}
+
+/**
+ * Runs `zekno <args>` with the interface a terminal gets (Ink), drawing into
+ * a stream `columns` wide, and gives back the exit status and what was drawn.
+ */
+async function atTerminal(m: Machine, columns: number, ...args: string[]): Promise<{ code: number; text: string }> {
+  let text = ""
+  const stdout = Object.assign(
+    new Writable({
+      write(chunk, _encoding, done) {
+        text += String(chunk)
+        done()
+      },
+    }),
+    { columns, rows: 40 }
+  )
+  const ui = inkUi({ stdout: stdout as unknown as NodeJS.WriteStream, stdin: new PassThrough() as unknown as NodeJS.ReadStream })
+  const before = m.deps.ui
+  m.deps.ui = { ...ui, askSecret: before.askSecret }
+  try {
+    const code = await m.zekno(...args)
+    await ui.close()
+    return { code, text: strip(text) }
+  } finally {
+    m.deps.ui = before
+  }
+}
+
+/** Plain output, as when piped: every line written, and where, in the order written. */
+function piped(m: Machine) {
+  const written: { to: "out" | "err" | "remote"; line: string }[] = []
+  m.deps.ui = {
+    ...plainUi(
+      (line) => void written.push({ to: "out", line }),
+      (line) => void written.push({ to: "err", line }),
+      (text) => void written.push({ to: "remote", line: text.replace(/\n$/, "") })
+    ),
+    askSecret: m.deps.ui.askSecret,
+  }
+  return {
+    written,
+    out: () => written.filter((entry) => entry.to === "out").map((entry) => entry.line),
+    err: () => written.filter((entry) => entry.to !== "out").map((entry) => entry.line),
+    clear: () => void written.splice(0),
+  }
+}
+
+const START: DeployStart = { app: "demo", server: "prod", file: "compose.yaml", flags: "" }
+
+/** A deploy as the terminal shows it, at the board's numbers. */
+function shown(deploy: Partial<DeployProgress>, extra: Partial<DeployShown> = {}): DeployShown {
+  return {
+    start: START,
+    dropped: 0,
+    ...extra,
+    deploy: { server: "prod", app: "demo", sequence: 5, secrets: 2, lines: [], running: true, since: 0, ...deploy },
+  }
+}
+
+const drawn = (value: DeployShown, columns = 100) => renderToString(<DeployBlock shown={value} columns={columns} />, { columns })
+
+describe("zekno deploy at a terminal (board 'zekno deploy: success and failure')", () => {
+  test("a deploy that started: the summary panel, the stage row, the result line and what to run next", () => {
+    const lines = linesOf(drawn(shown({ stage: "started", running: false, outcome: "started" }, { ms: 6100 })))
+    expect(lines[0]).toBe("")
+    expect(lines[1]).toMatch(/^╭─ Deploy 5 ─+╮$/)
+    expect(lines.slice(2, 5)).toEqual([expect.stringMatching(/^│ app +demo +│$/), expect.stringMatching(/^│ server +prod +│$/), expect.stringMatching(/^│ secrets +2 +│$/)])
+    expect(lines[5]).toMatch(/^╰─+╯$/)
+    expect(lines.slice(6)).toEqual([
+      "",
+      "✔ Checked  ✔ Signed  ✔ Sent  ✔ Started",
+      "",
+      "✔ demo is live on prod in 6.1s",
+      "  zekno logs to watch it, zekno rollback to undo",
+      "",
+    ])
+  })
+
+  test("an app that did not start: ✖ Starting, that the number is used, what Docker said, and what to do", () => {
+    const failed = shown(
+      { sequence: 6, stage: "failed", running: false, outcome: "start_failed", lines: ["pull access denied for example/web, repository does not exist or may require 'docker login'"] },
+      { ms: 3000 }
+    )
+    const text = drawn(failed)
+    const lines = linesOf(text)
+    expect(lines[1]).toMatch(/^╭─ Deploy 6 ─+╮$/)
+    expect(lines).toContain("✔ Checked  ✔ Signed  ✔ Sent  ✖ Starting")
+    const result = lines.indexOf("✖ prod accepted deploy 6, but the app did not start.")
+    expect(result).toBeGreaterThan(0)
+    expect(lines[result + 1]).toBe("  Number 6 is used, so the next deploy will be 7.")
+    expect(lines[result + 3]).toMatch(/^╭─ Docker said ─+╮$/)
+    expect(text.replace(/[│\s]+/g, " ")).toContain("pull access denied for example/web, repository does not exist or may require 'docker login'")
+    expect(lines.at(-2)).toBe("Fix compose.yaml and run zekno deploy again, or go back with zekno rollback.")
+    // The panel is no wider than the summary panel above it.
+    expect([...lines[result + 3]!].length).toBe([...lines[1]!].length)
+  })
+
+  test("a rollback that did not start points at a fixed Compose file and further back, with the flags typed", () => {
+    const rolled = { ...shown({ sequence: 4, stage: "failed", running: false, outcome: "start_failed" }), start: { app: "demo", server: "prod", flags: " --app demo --server prod" } }
+    const words = (text: string) => text.replace(/\s+/g, " ")
+    expect(words(drawn(rolled, 200))).toContain(
+      "Deploy a fixed Compose file with zekno deploy --app demo --server prod, or go back further with zekno rollback --app demo --server prod --to <number>."
+    )
+    const started = { ...shown({ stage: "started", running: false, outcome: "started" }), start: rolled.start }
+    expect(linesOf(drawn(started, 200))).toContain("  zekno logs --app demo --server prod to watch it, zekno rollback --app demo --server prod to undo")
+  })
+
+  test("while it runs: the stage in progress has the spinner, and the latest of Docker's lines is the one live line", () => {
+    const lines = linesOf(drawn(shown({ stage: "starting", lines: [" Container zekno-demo-web-1  Recreate"] })))
+    expect(lines).toContainEqual(expect.stringMatching(/^✔ Checked {2}✔ Signed {2}✔ Sent {2}[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Starting$/))
+    expect(lines.at(-1)).toBe(" Container zekno-demo-web-1  Recreate")
+    // Before the first of Docker's lines, the line is there and empty, so nothing moves when it comes.
+    expect(linesOf(drawn(shown({ stage: "sent" }))).length).toBe(lines.length)
+  })
+
+  test("a deploy refused or cut off keeps its stage row with ✖ where it stopped, and says nothing more itself", () => {
+    const lines = linesOf(drawn(shown({ stage: "sent", running: false, outcome: "error" })))
+    expect(lines).toContain("✔ Checked  ✔ Signed  ✔ Sent  ✖ Starting")
+    expect(lines.join("\n")).not.toContain("is live")
+    expect(lines.join("\n")).not.toContain("Docker said")
+  })
+
+  test("narrower than a panel, under 60 columns, every line stays inside the window: panels shrink and words wrap", () => {
+    const long = "x".repeat(150)
+    for (const columns of [20, 40, 59, 60, 64, 80]) {
+      fits(drawn(shown({ stage: "started", running: false, outcome: "started" }, { ms: 1 }), columns), columns)
+      fits(drawn(shown({ sequence: 6, stage: "failed", running: false, outcome: "start_failed", lines: [long, "a b ".repeat(40)] }), columns), columns)
+      fits(drawn(shown({ stage: "starting", lines: [long] }), columns), columns)
+    }
+  })
+
+  test("more of Docker's lines than are kept: the panel says how many came before those shown", () => {
+    const text = drawn(shown({ sequence: 6, stage: "failed", running: false, outcome: "start_failed", lines: ["last"] }, { dropped: 12 }))
+    expect(text).toContain("Left out Docker's first 12 lines. The last 500 are kept.")
+  })
+
+  test("end to end against a runner: the board's lines, a failed start, and the stage row left in place before an error", async () => {
+    const m = await ready()
+    m.typing("demo-value")
+    expect(await m.zekno("secret", "set", "GREETING", ...where)).toBe(0)
+    const started = await atTerminal(m, 100, "deploy", ...where)
+    expect(started.code).toBe(0)
+    const lines = linesOf(started.text)
+    expect(lines).toContainEqual(expect.stringMatching(/^╭─ Deploy 1 ─+╮$/))
+    expect(lines).toContain("✔ Checked  ✔ Signed  ✔ Sent  ✔ Started")
+    expect(lines).toContainEqual(expect.stringMatching(/^✔ web is live on dev in \d+\.\ds$/))
+    // The app and server were typed as flags, so what to run next carries them.
+    expect(lines).toContain("  zekno logs --app web --server dev to watch it, zekno rollback --app web --server dev to undo")
+    expect(started.text).not.toContain("remote:")
+
+    m.docker.failWith(1)
+    m.docker.upPrints({ stderr: "pull access denied for example/web\n" })
+    const failed = await atTerminal(m, 100, "deploy", ...where)
+    expect(failed.code).toBe(1)
+    const after = linesOf(failed.text)
+    expect(after).toContain("✔ Checked  ✔ Signed  ✔ Sent  ✖ Starting")
+    expect(after).toContain("✖ dev accepted deploy 2, but the app did not start.")
+    expect(after).toContain("  Number 2 is used, so the next deploy will be 3.")
+    expect(after).toContainEqual(expect.stringMatching(/^│ pull access denied for example\/web +│$/))
+    expect(after).toContain("Fix compose.yaml and run zekno deploy again, or go back with zekno rollback --app web --server dev.")
+
+    // A runner that answers who it is, then is gone as soon as the deploy is sent: the connection drops.
+    m.docker.failWith(0)
+    const status = (await runner(m.runnerHome, m.docker.path, "status")).json
+    const frame = (value: unknown) => `printf '%s\\n' '${JSON.stringify({ result: value })}'`
+    m.deps.localRunner = ["sh", "-c", `read -r l; ${frame({ version: "0.2.0", protocol: 2 })}; read -r l; ${frame(status)}; read -r l; exit 1`]
+    const dropped = await atTerminal(m, 100, "deploy", ...where)
+    expect(dropped.code).toBe(1)
+    const end = linesOf(dropped.text)
+    const row = end.indexOf("✔ Checked  ✔ Signed  ✔ Sent  ✖ Starting")
+    const error = end.indexOf("✖ The connection to the runner ended before it answered.")
+    expect(row).toBeGreaterThan(0)
+    expect(error).toBeGreaterThan(row)
+  })
+})
+
+describe("status, lists and errors at a terminal (board 'Status, lists, errors and piped output')", () => {
+  test("status: the server, reachable, its team list, then each app with its deploy and state", async () => {
+    const m = await ready()
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    expect(await m.zekno("deploy", "--app", "worker", "--server", "dev")).toBe(0)
+    m.docker.ps("web", '{"Service":"web","State":"running","ExitCode":0,"Health":""}\n')
+    m.docker.ps("worker", '{"Service":"worker","State":"exited","ExitCode":1,"Health":""}\n')
+    const { code, text } = await atTerminal(m, 100, "status", "--server", "dev")
+    expect(code).toBe(0)
+    const lines = linesOf(text)
+    expect(lines[0]).toBe("dev ● reachable team list v2")
+    expect(lines).toContainEqual(expect.stringMatching(/^web +deploy 1 +● running$/))
+    expect(lines).toContainEqual(expect.stringMatching(/^worker +deploy 1 +● stopped$/))
+  })
+
+  test("secret ls: names and versions, which are not deployed yet, and that values are never shown", async () => {
+    const m = await ready()
+    m.typing("one")
+    expect(await m.zekno("secret", "set", "DATABASE_URL", ...where)).toBe(0)
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    m.typing("two")
+    expect(await m.zekno("secret", "set", "SESSION_KEY", ...where)).toBe(0)
+    const { code, text } = await atTerminal(m, 100, "secret", "ls", ...where)
+    expect(code).toBe(0)
+    expect(linesOf(text).filter(Boolean)).toEqual([
+      expect.stringMatching(/^DATABASE_URL +version 1$/),
+      expect.stringMatching(/^SESSION_KEY +version 1, not deployed yet$/),
+      "web on dev. Values are never shown.",
+    ])
+    expect(text).not.toContain("one")
+    expect(text).not.toContain("two")
+  })
+
+  test("server ls: name, where it is and its id, from the left edge", async () => {
+    const m = await ready()
+    const { text } = await atTerminal(m, 100, "server", "ls")
+    expect(linesOf(text).filter(Boolean)).toEqual([expect.stringMatching(/^dev {2}this machine {2}srv_[0-9a-f]{32}$/)])
+  })
+
+  test("an error: ✖ and its first sentence, the rest below it, commands without backticks", async () => {
+    const m = await ready()
+    const value = await atTerminal(m, 100, "secret", "set", "API_KEY", "sk_live_51H")
+    expect(value.code).toBe(2)
+    expect(linesOf(value.text).filter(Boolean)).toEqual([
+      "✖ A secret value is never given as an argument.",
+      "  It would stay in your shell history. Run zekno secret set API_KEY and type it when asked.",
+      "  Run zekno --help for the list of commands.",
+    ])
+    // What is not a secret's name is not repeated as a command to type.
+    const odd = await atTerminal(m, 100, "secret", "set", "a\x1b[2Jb", "value")
+    expect(odd.text).toContain("Run zekno secret set <NAME> and type it when asked.")
+    expect(odd.text).not.toContain("a\x1b")
+  })
+
+  test("a server SSH cannot reach: named, and the command to check it with", async () => {
+    const m = await ready()
+    m.tamper("profile.json", (profile) => ({
+      ...profile,
+      servers: profile.servers.map((server: object) => ({ ...server, target: { kind: "ssh", destination: "deploy@203.0.113.7", runnerPath: "zekno-runner" } })),
+    }))
+    // A stand-in for ssh that fails as SSH does when it cannot connect: its own status, 255.
+    const dir = tempDir("ssh")
+    const fakeSsh = join(dir, "ssh")
+    writeFileSync(fakeSsh, "#!/bin/sh\necho 'ssh: connect to host 203.0.113.7 port 22: Connection refused' >&2\nexit 255\n")
+    chmodSync(fakeSsh, 0o755)
+    const spawn = Bun.spawn
+    const spy = spyOn(Bun, "spawn").mockImplementation(((argv: string[], options: never) =>
+      spawn(argv[0] === "ssh" ? [fakeSsh, ...argv.slice(1)] : argv, options)) as never)
+    try {
+      const terminal = await atTerminal(m, 100, "deploy", ...where)
+      expect(terminal.code).toBe(1)
+      const lines = linesOf(terminal.text).filter(Boolean)
+      expect(lines.slice(-2)).toEqual(["✖ dev could not be reached over SSH.", "  Check with: ssh deploy@203.0.113.7 true"])
+      // What SSH said is the server's line, marked; no panel was drawn for a deploy that never reached the runner.
+      expect(lines).toContain("remote: ssh: connect to host 203.0.113.7 port 22: Connection refused")
+      expect(terminal.text).not.toContain("Deploy 1")
+      const plain = piped(m)
+      expect(await m.zekno("status", "--server", "dev")).toBe(1)
+      expect(plain.err().at(-1)).toBe(sshUnreachable("dev", "deploy@203.0.113.7"))
+      expect(plain.err().at(-1)).toBe("dev could not be reached over SSH. Check with: `ssh deploy@203.0.113.7 true`")
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
+describe("piped, in scripts and CI: plain and stable (contracts/commands.md)", () => {
+  /** Printable ASCII and tabs only: no escape byte, no symbol, no box line. */
+  const PLAIN = /^[\x20-\x7e\t]*$/
+
+  test("every command writes plain lines only: no escape byte, no symbol, no panel, no cursor movement", async () => {
+    const m = machine()
+    const plain = piped(m)
+    const project = join(m.project, "zekno.json")
+    const runs: [number, string[]][] = [
+      [0, ["init", "--name", "Ada"]],
+      [0, ["server", "add", "dev", "--local"]],
+      [0, ["server", "ls"]],
+      [0, ["secret", "set", "GREETING", ...where]],
+      [0, ["secret", "ls", ...where]],
+      [0, ["deploy", ...where]],
+      [0, ["deploy", ...where, "--json"]],
+      [0, ["status", "--server", "dev"]],
+      [0, ["status", "--server", "dev", "--json"]],
+      [0, ["logs", ...where, "--no-follow"]],
+      [0, ["rollback", ...where]],
+      [0, ["secret", "rm", "GREETING", ...where]],
+      [0, ["link", ...where]],
+      [0, ["deploy"]],
+      [1, ["deploy", "--app", "web", "--server", "nowhere"]],
+      [2, ["secret", "set", "API_KEY", "sk_live_51H"]],
+      [2, ["deploy", "--bogus"]],
+    ]
+    m.compose(COMPOSE_V1)
+    m.typing("demo-value")
+    m.docker.ps("web", '{"Service":"web","State":"running","ExitCode":0,"Health":""}\n')
+    m.docker.logs("web", "web-1  | 2026-11-14T21:52:03.000000001Z started\n")
+    for (const [status, args] of runs) {
+      if (args[0] === "deploy" && args.length === 1) m.compose(COMPOSE_V2)
+      expect([args.join(" "), await m.zekno(...args)]).toEqual([args.join(" "), status])
+    }
+    // A failed start: the failure sentence, then Docker's lines, on standard error.
+    m.docker.failWith(1)
+    m.docker.upPrints({ stdout: "Pulling web\n", stderr: "pull access denied for example/web\n" })
+    expect(await m.zekno("deploy", ...where)).toBe(1)
+    expect(existsSync(project)).toBe(true)
+
+    expect(plain.written.length).toBeGreaterThan(20)
+    // An error of two lines is written at once, with a line break between them.
+    for (const line of plain.written.flatMap((entry) => entry.line.split("\n"))) {
+      expect(line).toMatch(PLAIN)
+      expect(line).not.toContain("\x1b")
+    }
+    expect(plain.out()).toContain("Deploy 1 of web is running on dev with 1 secret.")
+    expect(plain.out()).toContain('{"outcome":"started","app":"web","sequence":2,"server":"dev"}')
+    expect(plain.out()).toContain("web\tdeploy 2\trunning")
+    expect(plain.out()).toContain("2026-11-14T21:52:03.000000001Z\tweb\tstarted")
+    expect(plain.out()).toContain("Deploy 4 of web is running on dev with no secrets.")
+    const failed = plain.err().slice(-3)
+    expect(failed[0]).toBe("Deploy 5 of web was accepted by dev, but the app did not start. Check Docker on the server.")
+    // Docker's standard output and error come in either order.
+    expect(failed.slice(1).sort()).toEqual(["remote: Pulling web", "remote: pull access denied for example/web"])
+  })
+
+  test("the count of secrets in a deploy's line: no secrets, 1 secret, 2 secrets", async () => {
+    expect([0, 1, 2, 12].map(secretsWords)).toEqual(["no secrets", "1 secret", "2 secrets", "12 secrets"])
+    const m = await ready()
+    const plain = piped(m)
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    for (const name of ["A_ONE", "B_TWO"]) {
+      m.typing("v")
+      expect(await m.zekno("secret", "set", name, ...where)).toBe(0)
+      expect(await m.zekno("deploy", ...where)).toBe(0)
+    }
+    expect(plain.out().filter((line) => line.startsWith("Deploy "))).toEqual([
+      "Deploy 1 of web is running on dev with no secrets.",
+      "Deploy 2 of web is running on dev with 1 secret.",
+      "Deploy 3 of web is running on dev with 2 secrets.",
+    ])
+    // Nothing but the result line while a deploy runs and when it started: no stage, no Docker line.
+    expect(plain.err()).toEqual([])
+  })
+
+  test("--json: one JSON object on standard output and nothing else; when the app did not start, Docker's lines on standard error", async () => {
+    const m = await ready()
+    const plain = piped(m)
+    m.docker.upPrints({ stderr: " Container zekno-web-web-1  Started\n" })
+    expect(await m.zekno("deploy", ...where, "--json")).toBe(0)
+    expect(plain.written).toEqual([{ to: "out", line: '{"outcome":"started","app":"web","sequence":1,"server":"dev"}' }])
+    plain.clear()
+    m.docker.failWith(1)
+    expect(await m.zekno("deploy", ...where, "--json")).toBe(1)
+    expect(plain.written).toEqual([
+      { to: "out", line: '{"outcome":"start_failed","app":"web","sequence":2,"server":"dev"}' },
+      { to: "remote", line: "remote:  Container zekno-web-web-1  Started" },
+    ])
+  })
+
+  test("without a terminal a command never asks: a missing detail or answer is an error that names the flag", async () => {
+    const m = await ready()
+    // The plain interface with nothing queued to type: as with no terminal at all.
+    const err: string[] = []
+    m.deps.ui = plainUi(
+      () => {},
+      (line) => void err.push(line)
+    )
+    expect(await m.zekno("secret", "set", "GREETING", ...where)).toBe(1)
+    expect(err.at(-1)).toBe("There is no terminal to ask on. Pipe the value in and add `--stdin`.")
+    expect(await m.zekno("deploy", "--server", "dev")).toBe(2)
+    expect(err.at(-1)).toContain("Say which app with `--app <name>`, or link this folder to it with `zekno link`, which keeps it in zekno.json.")
+    expect(await m.zekno("deploy", "--app", "web")).toBe(2)
+    expect(err.at(-1)).toContain("`--server <name>`")
+    m.tamper("profile.json", (profile) => ({
+      ...profile,
+      servers: profile.servers.map((server: object) => ({ ...server, target: { kind: "ssh", destination: "deploy@203.0.113.7", runnerPath: "zekno-runner" } })),
+    }))
+    expect(await m.zekno("server", "update", "dev")).toBe(1)
+    expect(err.at(-1)).toBe("There is no terminal to ask on. Add `--yes` to update the runner on dev.")
+  })
+
+  test("`zekno` with no arguments and no terminal prints the help and exits with status 2, as before", async () => {
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, "../src/main.ts")], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      // A profile folder that does not exist: the help is printed before anything is read.
+      env: { ...process.env, ZEKNO_HOME: join(tempDir("no-profile"), "none") },
+    })
+    child.stdin.end()
+    const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+    expect(code).toBe(2)
+    expect(out).toBe(`${HELP}\n`)
+    expect(err).toBe("")
+    expect(out).not.toContain("\x1b")
+  })
+})
+
+describe("one connection per command (FR-034)", () => {
+  test("`server add`, `deploy` and `status` each start the runner once, at a terminal as when piped", async () => {
+    const m = machine()
+    const log = join(m.project, "starts.log")
+    m.deps.localRunner = ["sh", "-c", `for word; do :; done; echo "$word" >> "$0"; exec "$@"`, log, "env", `ZEKNO_DOCKER=${m.docker.path}`, process.execPath, RUNNER_MAIN]
+    // A first answer that is late on a busy machine costs one more process and nothing else; this test is about requests sharing one.
+    const connect = m.deps.connect
+    m.deps.connect = (target, localRunner, options) => ({ ...connect(target, localRunner, options), firstAnswerMs: undefined })
+    const starts = () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : [])
+    piped(m)
+    expect(await m.zekno("init", "--name", "Ada")).toBe(0)
+    m.compose(COMPOSE_V1)
+    const once = async (run: () => Promise<number>) => {
+      const before = starts().length
+      expect(await run()).toBe(0)
+      expect(starts().slice(before)).toEqual(["session"])
+    }
+    await once(() => m.zekno("server", "add", "dev", "--local"))
+    await once(async () => (await atTerminal(m, 100, "deploy", ...where)).code)
+    await once(async () => (await atTerminal(m, 100, "status", "--server", "dev")).code)
+    await once(() => m.zekno("deploy", ...where))
+    await once(() => m.zekno("status", "--server", "dev"))
+    expect(starts()).toEqual(Array(5).fill("session"))
+  })
+})

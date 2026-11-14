@@ -333,7 +333,7 @@ describe("a runner that does not speak sessions gets the one-shot commands", () 
     // Deploys work exactly as they did with that runner, and the operation reports how it got there.
     m.deps.localRunner = older(log, m.docker.path)
     expect(await m.zekno("deploy", ...where)).toBe(0)
-    expect(m.lastOut()).toBe("Deploy 1 of web is running on dev with 0 secret(s).")
+    expect(m.lastOut()).toBe("Deploy 1 of web is running on dev with no secrets.")
     const result = await sendDeploy(m.deps, await prepareDeploy(m.deps, { app: "web", server: "dev" }))
     expect(result).toMatchObject({ outcome: "started", sequence: 2, mode: "one-shot" })
     expect(words(log).slice(2)).toEqual(["session", "status", "apply", "session", "status", "apply"])
@@ -381,7 +381,7 @@ describe("one command, one runner process (FR-034)", () => {
       expect(await m.zekno(...command)).toBe(0)
       expect(words(log).slice(before)).toEqual(["session"])
     }
-    expect(m.lastOut()).toBe("Deploy 3 of web is running on dev with 0 secret(s).")
+    expect(m.lastOut()).toBe("Deploy 3 of web is running on dev with no secrets.")
   })
 
   test("over SSH, each command opens one connection: the destination after `--`, and only the runner path and a fixed word as the remote command", async () => {
@@ -409,7 +409,7 @@ describe("one command, one runner process (FR-034)", () => {
       expect(calls()).toEqual([`-- deploy@example.test ${wrapper} session`])
       m.compose(COMPOSE_V2)
       expect(await m.zekno("deploy", "--app", "web", "--server", "prod")).toBe(0)
-      expect(m.lastOut()).toBe("Deploy 1 of web is running on prod with 0 secret(s).")
+      expect(m.lastOut()).toBe("Deploy 1 of web is running on prod with no secrets.")
       expect(await m.zekno("status", "--server", "prod")).toBe(0)
       expect(calls()).toEqual(Array(3).fill(`-- deploy@example.test ${wrapper} session`))
     } finally {

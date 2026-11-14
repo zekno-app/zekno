@@ -1,8 +1,11 @@
-import { Box, render, Static, Text, useInput, type RenderOptions } from "ink"
+import { Box, render, Static, Text, useInput, useWindowSize, type RenderOptions } from "ink"
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react"
 
+import type { DeployProgress } from "../app/state"
 import { logClock } from "../app/time"
 import { CliError } from "../errors"
+import { keptLines } from "./deploy"
+import { DeployBlock, type DeployShown } from "./deploy-view"
 import { readStdin } from "./plain"
 import { applySecretInput } from "./secret-input"
 import { BRAND } from "./theme"
@@ -13,11 +16,17 @@ type Item =
   | { id: number; kind: "field"; label: string; value: string }
   | { id: number; kind: "table"; rows: Cell[][] }
   | { id: number; kind: "log"; line: LogOutput; serviceWidth: number }
+  | { id: number; kind: "line"; cells: readonly Cell[] }
+  | { id: number; kind: "deploy"; shown: DeployShown }
 
 type Prompt = { question: string; settle(result: { value: string } | { error: Error }): void }
 type Question = { question: string; settle(yes: boolean): void }
-/** `generation` changes when lines already drawn are let go; Static then starts afresh with what is left. */
-type State = { items: Item[]; generation: number; step?: string; prompt?: Prompt; question?: Question }
+/**
+ * `generation` changes when lines already drawn are let go; Static then
+ * starts afresh with what is left. `deploy` is a deploy still running, drawn
+ * below the lines and redrawn as it goes; once it ends it becomes a line.
+ */
+type State = { items: Item[]; generation: number; step?: string; prompt?: Prompt; question?: Question; deploy?: DeployShown }
 
 /**
  * How many drawn lines may pile up before they are let go. Static writes a
@@ -61,8 +70,66 @@ const MARK = { success: "✔", warn: "!", error: "✖" } as const
 const COLOR = { success: "green", warn: "yellow", error: "red" } as const
 const TONE = { success: "green", danger: "red", warning: "yellow" } as const
 
-/** A cell as a terminal draws it: a marked cell's symbol before its word. */
-const drawnCell = (cell: Cell | undefined): string => (cell === undefined ? "" : typeof cell === "string" ? cell : `${cell.mark} ${cell.text}`)
+/** A cell as a terminal draws it: a marked cell's symbol before its word, a styled cell's words for a terminal. */
+const drawnCell = (cell: Cell | undefined): string => {
+  if (cell === undefined) return ""
+  if (typeof cell === "string") return cell
+  return "mark" in cell ? `${cell.mark} ${cell.text}` : (cell.terminal ?? cell.text)
+}
+
+/**
+ * One cell in its look: a marked cell in its tone's colour, a styled cell
+ * bold, faint or in the text colour, and a bare word as `bare` says.
+ */
+function CellText({ cell, text, bare }: { cell: Cell; text: string; bare: "plain" | "quiet" }) {
+  if (typeof cell === "string") return <Text dimColor={bare === "quiet"}>{text}</Text>
+  if ("mark" in cell) {
+    return (
+      <Text color={cell.tone === "quiet" ? undefined : TONE[cell.tone]} dimColor={cell.tone === "quiet"}>
+        {text}
+      </Text>
+    )
+  }
+  return (
+    <Text bold={cell.style === "strong"} dimColor={cell.style === "quiet"}>
+      {text}
+    </Text>
+  )
+}
+
+/** A sentence's end: a full stop before a space or a line break. */
+const SENTENCE_END = /\.(?=\s)/
+
+/**
+ * An error as the board "Status, lists, errors and piped output" draws it:
+ * its first sentence, in bold after ✖, and the rest faint on the lines
+ * below, in line with that sentence. Commands are drawn as the board draws
+ * them, without the backticks plain output keeps around them.
+ */
+export function ErrorLine({ text }: { text: string }) {
+  const shown = text.replace(/`([^`\n]+)`/g, "$1")
+  const end = shown.search(SENTENCE_END)
+  const first = end === -1 ? shown : shown.slice(0, end + 1)
+  const rest = end === -1 ? "" : shown.slice(end + 1).trim()
+  return (
+    <Box flexDirection="column">
+      <Box>
+        <Box flexShrink={0} marginRight={1}>
+          <Text color={COLOR.error}>{MARK.error}</Text>
+        </Box>
+        <Text bold>{first}</Text>
+      </Box>
+      {rest ? (
+        <Box paddingLeft={2}>
+          <Text dimColor>{rest}</Text>
+        </Box>
+      ) : null}
+    </Box>
+  )
+}
+
+/** How often, at most, the live line under a running deploy is redrawn. */
+const LIVE_LINE_MS = 100
 
 /** The widest service column `zekno logs` lines up to; a longer name is cut. */
 const SERVICE_COLUMN = 16
@@ -89,7 +156,7 @@ export function LogItem({ line, serviceWidth }: { line: LogOutput; serviceWidth:
   )
 }
 
-function Line({ item }: { item: Item }) {
+function Line({ item, columns }: { item: Item; columns: number }) {
   if (item.kind === "field") {
     return (
       <Text>
@@ -100,31 +167,33 @@ function Line({ item }: { item: Item }) {
   }
   if (item.kind === "table") {
     const widths = item.rows[0]?.map((_, column) => Math.max(...item.rows.map((row) => drawnCell(row[column]).length))) ?? []
+    // At the left edge, as the board's lists: a bare first column in the text colour, the others faint.
     return (
-      <Box flexDirection="column" marginLeft={2}>
+      <Box flexDirection="column">
         {item.rows.map((row, index) => (
           <Text key={index}>
-            {row.map((cell, column) => {
-              const text = drawnCell(cell).padEnd((widths[column] ?? 0) + 2)
-              if (typeof cell === "string") {
-                return (
-                  <Text key={column} dimColor={column > 0}>
-                    {text}
-                  </Text>
-                )
-              }
-              return (
-                <Text key={column} color={cell.tone === "quiet" ? undefined : TONE[cell.tone]} dimColor={cell.tone === "quiet"}>
-                  {text}
-                </Text>
-              )
-            })}
+            {row.map((cell, column) => (
+              <CellText key={column} cell={cell} text={drawnCell(cell).padEnd((widths[column] ?? 0) + 2)} bare={column > 0 ? "quiet" : "plain"} />
+            ))}
           </Text>
         ))}
       </Box>
     )
   }
+  if (item.kind === "line") {
+    return (
+      <Text>
+        {item.cells.map((cell, index) => (
+          <Text key={index}>
+            {index > 0 ? " " : ""}
+            <CellText cell={cell} text={drawnCell(cell)} bare="plain" />
+          </Text>
+        ))}
+      </Text>
+    )
+  }
   if (item.kind === "log") return <LogItem line={item.line} serviceWidth={item.serviceWidth} />
+  if (item.kind === "deploy") return <DeployBlock shown={item.shown} columns={columns} />
 
   if (item.kind === "info") {
     // Indented as a block, so text of several lines stays aligned with the marked lines.
@@ -135,6 +204,7 @@ function Line({ item }: { item: Item }) {
     )
   }
   if (item.kind === "remote") return <RemoteLine text={item.text} />
+  if (item.kind === "error") return <ErrorLine text={item.text} />
   return (
     <Box>
       <Box flexShrink={0} marginRight={1}>
@@ -219,13 +289,15 @@ function QuestionPrompt({ question }: { question: Question }) {
 
 function App({ store }: { store: ReturnType<typeof createStore> }) {
   const state = useSyncExternalStore(store.subscribe, store.get)
+  const { columns } = useWindowSize()
   // Ink writes Static's new items to the terminal as the commit ends, before this runs.
   useLayoutEffect(() => store.drawn(state.generation, state.items.length))
   return (
     <>
       <Static key={state.generation} items={state.items}>
-        {(item) => <Line key={item.id} item={item} />}
+        {(item) => <Line key={item.id} item={item} columns={columns} />}
       </Static>
+      {state.deploy ? <DeployBlock shown={state.deploy} columns={columns} /> : null}
       {state.prompt ? (
         <SecretPrompt prompt={state.prompt} />
       ) : state.question ? (
@@ -259,6 +331,62 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
     error: (text) => add({ kind: "error", text }),
     field: (label, value) => add({ kind: "field", label, value }),
     table: (rows) => add({ kind: "table", rows }),
+    line: (_plain, cells) => {
+      if (cells !== undefined && cells.length > 0) add({ kind: "line", cells })
+    },
+    deploy(start) {
+      const kept = keptLines()
+      // Nothing is drawn until the runner has answered: until then SSH may be asking for a password on this terminal.
+      let shown: DeployShown | undefined
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let ended = false
+      const latest = (): string[] => (kept.lines.length > 0 ? [kept.lines.at(-1)!] : [])
+      const show = (deploy: DeployProgress) => {
+        shown = { start, deploy, dropped: 0 }
+        store.set({ deploy: shown })
+      }
+      return {
+        stage(stage, info) {
+          if (ended) return
+          const deploy = shown?.deploy ?? { server: start.server, app: start.app, lines: [], running: true, since: Date.now() }
+          show({ ...deploy, stage, sequence: info.sequence, secrets: info.secrets, lines: latest() })
+        },
+        progress(line) {
+          kept.push(line)
+          // The live line is redrawn a few times a second at most, however fast Docker writes.
+          if (shown && !ended && timer === undefined) {
+            timer = setTimeout(() => {
+              timer = undefined
+              if (shown && !ended) show({ ...shown.deploy, lines: latest() })
+            }, LIVE_LINE_MS)
+          }
+        },
+        async end(ending) {
+          if (ended) return
+          ended = true
+          clearTimeout(timer)
+          const was = shown?.deploy
+          store.set({ deploy: undefined })
+          // A deploy that ended before the runner answered was never drawn: the error says it all.
+          if (!was && ending.outcome === "error") return
+          const sequence = ending.outcome === "error" ? was?.sequence : ending.sequence
+          const secrets = ending.outcome === "error" ? was?.secrets : ending.secrets
+          const stage = ending.outcome === "started" ? "started" : ending.outcome === "start_failed" ? "failed" : was?.stage
+          const deploy: DeployProgress = {
+            ...(was ?? { server: start.server, app: start.app, since: Date.now() }),
+            sequence,
+            secrets,
+            stage,
+            running: false,
+            outcome: ending.outcome,
+            lines: [...kept.lines],
+          }
+          // The last frame becomes a line of its own, so whatever comes next is said below it.
+          add({ kind: "deploy", shown: { start, deploy, dropped: kept.dropped, ms: ending.outcome === "error" ? undefined : ending.ms } })
+          await app.waitUntilRenderFlush()
+        },
+      }
+    },
     json: (value) => add({ kind: "info", text: JSON.stringify(value) }),
     async remote(line) {
       add({ kind: "remote", text: line })

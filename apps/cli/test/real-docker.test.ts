@@ -37,7 +37,7 @@ test.skipIf(!available)("SC-002: a real container starts with the secret in its 
   const started = performance.now()
   expect(await m.zekno("deploy", "--app", app, "--server", "dev")).toBe(0)
   console.log(`deploy with real Docker: ${Math.round(performance.now() - started)} ms`)
-  expect(m.lastOut()).toBe(`Deploy 1 of ${app} is running on dev with 1 secret(s).`)
+  expect(m.lastOut()).toBe(`Deploy 1 of ${app} is running on dev with 1 secret.`)
 
   const printed = await docker("compose", "-p", `zekno-${app}`, "exec", "-T", "web", "printenv", "GREETING")
   expect(printed.out).toBe("hello from a real container")
