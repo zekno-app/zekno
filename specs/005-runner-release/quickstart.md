@@ -278,3 +278,62 @@ Run once at `4da7369` with `bun run test:e2e` in `apps/cli`: 11 of 11 passed, al
 goals replayed from the cache, no model call. None of the screens those tests read changed in
 this feature: the new wording for older and newer runners shows only for a server whose runner
 differs from the one zekno carries, which no end-to-end test sets up.
+
+### The first dev release, `runner-v0.1.0-dev.1` (T040, 2026-11-14)
+
+Made by the assistant with the maintainer's go-ahead for the git and GitHub steps this once.
+
+**Repository settings, created before the tag** (RELEASING.md part 1), each read back afterwards:
+
+- Tag ruleset `runner release tags` on `refs/tags/runner-v*`: creations, updates, deletions and
+  force pushes restricted. Bypass: the organization's owners. The page says "the Repository admin
+  role"; through GitHub's REST API the documented actor for this is `OrganizationAdmin`, and the
+  maintainer is the organization's only owner and only member, so it is the same person.
+- Branch ruleset `release branches` on `dev` and `main`: no deletions, no force pushes.
+- Branch ruleset `main versions` on `main`: the status check `check-main` is required.
+- Environment `prod`: the maintainer is the required reviewer, self-review allowed,
+  administrators cannot bypass, and only tags matching `runner-v*` may deploy to it.
+- Private vulnerability reporting: on. Artifact retention: 90 days.
+- SC-006, a push by an account without the right: not tried. There is no second account.
+
+**The release.** `dev` was pushed, then the tag, at commit
+`90b95e4e38765a4ef49557f8f0b8e1f402c7469b`. Before pushing the tag, `release.ts check` printed:
+
+```text
+environment=dev
+version=0.1.0-dev.1
+commit=90b95e4e38765a4ef49557f8f0b8e1f402c7469b
+bun=1.4.4
+```
+
+Run: https://github.com/zekno-app/zekno/actions/runs/43616593996. It passed at the first attempt:
+`check`, `build-dev` (32 seconds), `publish-dev` (16 seconds); the two prod jobs were skipped. The
+download of the artifact in `publish-dev` worked with `contents: write` alone. One notice:
+`actions/checkout` at the pinned commit targets Node.js 20 and was run on Node.js 24 by GitHub.
+
+Published as a pre-release, https://github.com/zekno-app/zekno/releases/tag/runner-v0.1.0-dev.1:
+
+| File | Bytes |
+|------|-------|
+| `zekno-runner-linux-x64.gz` | 51,642,393 |
+| `zekno-runner-linux-arm64.gz` | 51,412,471 |
+| `SHA256SUMS` | 180 |
+| `RELEASE-NOTES.md` | 1,172 |
+
+**The second build**, on the maintainer's machine (macOS on ARM64, Bun 1.4.4), exit status 0:
+
+```text
+Second build of runner-v0.1.0-dev.1 (dev): matched.
+
+| File | This build | Downloaded | SHA256SUMS | Result |
+| zekno-runner-linux-x64 | fb68d252cb89956750c558123449954ff07f043b893a81efef3517aeb94463f6 | same | same | match |
+| zekno-runner-linux-arm64 | 5829b647353f7b71d5f99be61dbba0c9f946cbd0f1c773656cdc7ef9692c51b5 | same | same | match |
+```
+
+So a build on GitHub's Linux machine and a build on macOS give the same files, byte for byte
+(SC-003): the question the plan could not answer before the first release. They are also the
+checksums the local double builds gave before the release (T017).
+
+The checksums were recorded on `dev` in commit `da5586f`, and the record was added to the
+release's notes. With the checksums in place: core 102, runner 147 (1 skipped), CLI 663, web 28
+tests pass.
