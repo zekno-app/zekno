@@ -1,10 +1,9 @@
 import { appsOf, latestFirst } from "../app/views"
 import { remoteThroughUi, type Deps } from "../context"
-import { runnerRelation } from "../ops/server"
+import { runnerRelation, runnerWarning } from "../ops/server"
 import { locateServer, readStatus, stateOf, type RunState } from "../ops/status"
 import { RUNNER_RELEASE } from "../runner-release"
 import { plainCell, quiet, strong, type MarkedCell } from "../ui/types"
-import { outdatedWarning } from "./server"
 
 const TONES: Record<RunState, MarkedCell["tone"]> = { running: "success", stopped: "danger", "partly running": "warning", unknown: "quiet" }
 
@@ -21,9 +20,10 @@ export async function status(deps: Deps, options: { server?: string; serverFrom?
   const { status: answer, behind, mode, runner, states } = await deps.ui.step(`Asking ${server.name}`, () => readStatus(remoteThroughUi(deps), located), {
     quiet: server.target.kind === "ssh",
   })
-  // An older runner is said once, on standard error, and changes nothing else.
+  // A runner older or newer than this zekno's is said once, on standard error, and changes nothing else.
   const carried = (deps.release ?? RUNNER_RELEASE).version
-  if (server.target.kind === "ssh" && runnerRelation(mode, runner, carried).relation === "older") deps.ui.warn(outdatedWarning(server.name, runner?.version, carried))
+  const warning = server.target.kind === "ssh" ? runnerWarning(server.name, runner?.version, runnerRelation(mode, runner, carried), carried) : undefined
+  if (warning) deps.ui.warn(warning)
   // In Home's order: the latest deploy from this machine's verified history first; an app it has none of last, by name.
   const at = new Map(appsOf(located.team, server, deps.home).map((row) => [row.name, row.at]))
   const apps = Object.keys(answer.lastSequence).sort((a, b) => latestFirst({ name: a, at: at.get(a) }, { name: b, at: at.get(b) }))

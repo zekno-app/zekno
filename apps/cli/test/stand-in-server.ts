@@ -84,6 +84,24 @@ exec env ZEKNO_DOCKER="${docker}" "${process.execPath}" "${RUNNER_MAIN}" "$@"
 `
 }
 
+/**
+ * The real runner, as a runner of another release and protocol would be: it
+ * answers `version`, and a session's first request, which is always the
+ * CLI's request for its version, with `version` and `protocol`; the rest of
+ * the session, and everything else, the runner of this repository does.
+ */
+export function reportingRunner(docker: string, version: string, protocol: number): string {
+  const answer = JSON.stringify({ version, protocol })
+  return `#!/bin/sh
+if [ "$1" = version ]; then printf '%s\\n' '${answer}'; exit 0; fi
+if [ "$1" = session ]; then
+  IFS= read -r request || exit 1
+  printf '%s\\n' '{"result":${answer}}'
+fi
+exec env ZEKNO_DOCKER="${docker}" "${process.execPath}" "${RUNNER_MAIN}" "$@"
+`
+}
+
 /** A runner that does not report its version: it knows neither `version` nor `session`, as feature 003's runner. */
 export function olderRunner(docker: string): string {
   return `#!/bin/sh

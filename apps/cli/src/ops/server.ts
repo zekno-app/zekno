@@ -1,6 +1,7 @@
 import {
   compareRunnerVersions,
   CoreError,
+  isDevVersion,
   proposeRoster,
   RUNNER_PROTOCOL,
   RunnerReportSchema,
@@ -125,6 +126,35 @@ export function runnerRelation(mode: SessionMode, runner: RunnerVersion | undefi
     missing: runner.protocol < RUNNER_PROTOCOL ? "some" : "nothing",
     newerProtocol: runner.protocol > RUNNER_PROTOCOL,
   }
+}
+
+/**
+ * What `server add`, `status` and the app say about a runner of another
+ * version than this CLI's (contracts/versions.md, "Single commands"): W1 to
+ * W5 by the relation, then D1 or D2 when exactly one of the two versions is
+ * a development release. Undefined when it has this CLI's version. A runner
+ * that reports no version is not said to be a development release or not.
+ */
+export function runnerWarning(server: string, version: string | undefined, relation: RunnerRelation, carried: string): string | undefined {
+  if (relation.relation === "same") return undefined
+  const update = `run \`zekno server update ${server}\`.`
+  if (version === undefined) {
+    return `The runner on ${server} does not report its version, so it is older than this zekno's ${carried}. Deploys still work. Running state and logs need the newer runner: ${update}`
+  }
+  let sentence: string
+  if (relation.relation === "older") {
+    sentence =
+      relation.missing === "some"
+        ? `The runner on ${server} is version ${version}, older than this zekno's ${carried}. Deploys still work. Some of what this zekno does needs the newer runner: ${update}`
+        : `The runner on ${server} is version ${version}, older than this zekno's ${carried}. Everything works with it. To bring it to ${carried}, ${update}`
+  } else {
+    sentence = relation.newerProtocol
+      ? `The runner on ${server} is version ${version}, newer than this zekno's ${carried}, and speaks a newer protocol. Update zekno before you deploy to ${server}.`
+      : `The runner on ${server} is version ${version}, newer than this zekno's ${carried}. It works with this zekno. Update zekno to match it; \`zekno server update\` never replaces a newer runner.`
+  }
+  if (isDevVersion(version) && !isDevVersion(carried)) return `${sentence} Version ${version} is a development release.`
+  if (isDevVersion(carried) && !isDevVersion(version)) return `${sentence} This zekno carries a development release.`
+  return sentence
 }
 
 /** Checks the name and how to reach the server; reads `--runner-file` once, here. */

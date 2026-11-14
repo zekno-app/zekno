@@ -1,9 +1,9 @@
 # Versions Contract: what a person is told
 
 What the CLI and the app say about a runner's version, and the installer's new ways to stop. The
-order of versions is in data-model.md. Everything here except W1 changes approved wording and
-needs the maintainer's approval first (research, open question Q4). W1 is the rewording the
-rename requires (FR-016a).
+order of versions is in data-model.md. Everything here except W1 changes approved wording; the
+maintainer approved it as written on 2026-11-14 (research.md, Q4). W1 is the rewording the rename
+requires (FR-016a).
 
 In the sentences: `<S>` the server's name, `<F>` the version the runner reports, `<C>` the version
 this zekno carries (`runner-release.json`).
@@ -36,7 +36,8 @@ server is connected. Nothing is said when the relation is "same". `--json` outpu
 | W4 | newer, same protocol | ``The runner on <S> is version <F>, newer than this zekno's <C>. It works with this zekno. Update zekno to match it; `zekno server update` never replaces a newer runner.`` |
 | W5 | newer, higher protocol | `The runner on <S> is version <F>, newer than this zekno's <C>, and speaks a newer protocol. Update zekno before you deploy to <S>.` |
 
-When exactly one of `<F>` and `<C>` is a dev version, one sentence is added at the end:
+When exactly one of `<F>` and `<C>` is a dev version, one sentence is added at the end. A runner that
+reports no version (W1) gets neither: there is no `<F>` to be one or not.
 
 | Id | When | Added |
 |----|------|-------|

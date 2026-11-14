@@ -59,8 +59,26 @@ export function stateWidth(columns: number, whenWidth: number): number {
 /** What a deploy's result is called in the details pane. */
 export const OUTCOME_WORDS = { started: "started", start_failed: "did not start", sent: "no answer recorded" } as const
 
-/** How Home names a runner's version beside its server: `runner 0.1.0`, or `old runner` when it does not say. */
-export const runnerWords = (version: string | undefined): string => (version === undefined ? "old runner" : `runner ${version}`)
+/**
+ * The line under a server whose runner is not this zekno's version
+ * (contracts/versions.md, "The app"). Fourteen columns: they fit the sixteen
+ * the servers pane leaves under a name at 80 columns, which a version such as
+ * `0.1.0-dev.1` beside "runner" would not.
+ */
+export const RUNNER_MARKS = { older: "! older runner", newer: "! newer runner" } as const
+
+/** What does not work with an older runner until it is updated, as the question `u` asks says it. */
+export const MISSING_WORDS = {
+  "state and logs": "Deploys still work. Running state and logs need the newer runner.",
+  some: "Deploys still work. Some of what this zekno does needs the newer runner.",
+  nothing: "Everything works with it.",
+} as const
+
+/** The runner line to show under a server, if any: none while it cannot be reached, and none when its runner is this zekno's version. */
+const runnerLineOf = (server: ServerRow): string | undefined => {
+  const relation = server.reachable === false ? undefined : server.runner?.relation
+  return relation === "older" || relation === "newer" ? RUNNER_MARKS[relation] : undefined
+}
 
 /** The line under a server's name while SSH needs an answer to reach it (`ServerRow.asks`). */
 /** Short enough to stand whole under a server's name at 80 columns, where 16 are free. */
@@ -72,17 +90,18 @@ export const needsAnswerHere = (server: ServerRow | undefined): boolean => serve
 /**
  * One server: the marker, its name, ● once it answered, ✖ when it could not
  * be reached, or `!` when SSH needs an answer to reach it, and its address
- * below. A server whose runner is older than this zekno shows `! runner
- * 0.1.0` until it is updated, as on the board "Two questions the app asks":
- * on a line of its own under the name, because the servers pane is narrower
- * than the board's. A server where SSH needs an answer has `needs an answer`
- * on that line instead; its runner cannot be known then. Below 100 columns the address is
- * left out, as on the board "Home at 80 columns".
+ * below. A server whose runner is older or newer than this zekno shows
+ * `! older runner` or `! newer runner` in place of ●, on a line of its own
+ * under the name, because the servers pane is narrower than the board's
+ * (contracts/versions.md, "The app"). A server where SSH needs an answer has
+ * `needs an answer` on that line instead; its runner cannot be known then.
+ * Below 100 columns the address is left out, as on the board "Home at 80
+ * columns".
  */
 function ServerItem({ server, selected, narrow }: { server: ServerRow; selected: boolean; narrow: boolean }) {
   const theme = useTheme()
   const asks = needsAnswerHere(server)
-  const outdated = server.reachable !== false && server.runner?.outdated === true
+  const runnerLine = runnerLineOf(server)
   // The pane's border and padding, and the indent under the name.
   const room = (narrow ? SERVERS_WIDTH.narrow : SERVERS_WIDTH.wide) - 4 - 2
   return (
@@ -92,7 +111,7 @@ function ServerItem({ server, selected, narrow }: { server: ServerRow; selected:
         <Cell>
           <Text bold={selected}>{server.name}</Text>
         </Cell>
-        {server.reachable === true && !outdated ? <Text color={theme.success}> ●</Text> : null}
+        {server.reachable === true && runnerLine === undefined ? <Text color={theme.success}> ●</Text> : null}
         {server.reachable === false && !asks ? <Text color={theme.danger}> ✖</Text> : null}
         {asks ? <Text color={theme.warning}> !</Text> : null}
       </Box>
@@ -103,10 +122,10 @@ function ServerItem({ server, selected, narrow }: { server: ServerRow; selected:
           </Text>
         </Box>
       ) : null}
-      {outdated ? (
+      {runnerLine !== undefined ? (
         <Box paddingLeft={2}>
           <Text color={theme.warning} wrap="truncate-end">
-            ! {runnerWords(server.runner?.version)}
+            {runnerLine}
           </Text>
         </Box>
       ) : null}
@@ -510,14 +529,14 @@ export const NARROW_HOME_HINTS: readonly KeyHint[] = [
 
 /**
  * Home's key hints: the board's for the width; `u` while the selected
- * server's runner is out of date (contracts/app.md); and `enter connect` in
+ * server's runner is older than this zekno (contracts/versions.md); and `enter connect` in
  * place of `enter open` while the servers pane has the keys and its marked
  * server is one SSH needs an answer to reach.
  */
 export function homeHints(server: ServerRow | undefined, narrow = false, pane: "servers" | "apps" = "apps"): readonly KeyHint[] {
   const board = narrow ? NARROW_HOME_HINTS : HINTS.home
   const hints = pane === "servers" && needsAnswerHere(server) ? board.map((hint): KeyHint => (hint[0] === "enter" ? ["enter", "connect"] : hint)) : board
-  if (!server?.runner?.outdated) return hints
+  if (server?.runner?.relation !== "older") return hints
   const at = hints.findIndex(([key]) => key === "?")
   return [...hints.slice(0, at), ["u", "update runner"], ...hints.slice(at)]
 }
@@ -527,8 +546,9 @@ const UPDATE_HINTS: readonly KeyHint[] = CHOICES["update-runner"].map((choice) =
 
 /**
  * Board "Two questions the app asks", right half: the runner on a server is
- * older than this zekno. Deploys still work; updating is offered and done
- * only on `u`.
+ * older than this zekno. What does not work until it is updated is said by
+ * what it lacks (contracts/versions.md, "The app"); updating is offered and
+ * done only on `u`.
  */
 function UpdateQuestion({ server, columns }: { server: ServerRow; columns: number }) {
   return (
@@ -548,7 +568,7 @@ function UpdateQuestion({ server, columns }: { server: ServerRow; columns: numbe
             <Text>{RUNNER_RELEASE.version}</Text>
           </Box>
         </Box>
-        <Text>Deploys still work. Running state and logs need the newer runner.</Text>
+        <Text>{MISSING_WORDS[server.runner?.missing ?? "state and logs"]}</Text>
         <Text dimColor>
           Updating downloads the runner on {server.name} and checks it before it replaces the old one. Your apps keep running.
         </Text>

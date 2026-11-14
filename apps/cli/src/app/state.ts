@@ -84,14 +84,18 @@ export type ServerRow = {
    * `enter` on it on Home.
    */
   asks?: boolean
-  /**
-   * The runner's version, and whether it is older than the one this CLI
-   * carries. `version` is undefined for a runner that does not report its
-   * version.
-   */
-  runner?: { version?: string; outdated: boolean }
+  /** The runner's version and how it stands to the one this CLI carries. Undefined until it answered. */
+  runner?: RunnerRow
   apps: AppRow[]
 }
+
+/**
+ * A server's runner as Home shows it (contracts/versions.md, "The app"):
+ * its version, undefined for a runner that does not report one; whether it
+ * is older than the one this CLI carries, the same or newer; and, for an
+ * older one, what needs it updated (ops/server.ts `RunnerRelation`).
+ */
+export type RunnerRow = { version?: string; relation: "older" | "same" | "newer"; missing: "state and logs" | "some" | "nothing" }
 
 /** The verified team, as the screens show it. `code` is the team code, which servers check. */
 export type TeamView = { member: string; version: number; code?: string; servers: ServerRow[] }
@@ -438,7 +442,7 @@ export type AppEvent =
       reachable: boolean
       problem?: string
       asks?: boolean
-      runner?: { version?: string; outdated: boolean }
+      runner?: RunnerRow
     }
   /** Adding a server began: its details were found valid. */
   | { type: "add-started"; destination: string; name: string; local: boolean }
@@ -900,7 +904,8 @@ function onHome(state: State, screen: Extract<Screen, { name: "home" }>, key: Ap
     case "s":
       return server && app ? push(state, setSecretScreen(server.name, app.name)) : stay(state)
     case "u":
-      return server?.runner?.outdated ? stay({ ...state, question: { kind: "update-runner", server: server.name } }) : stay(state)
+      // Only an older runner is updated: a newer one is never replaced, and one of this version needs nothing.
+      return server?.runner?.relation === "older" ? stay({ ...state, question: { kind: "update-runner", server: server.name } }) : stay(state)
   }
   return undefined
 }

@@ -48,40 +48,99 @@ and the transport is refused on the server too (feature 004, security review: th
 ## The workflow: `.github/workflows/runner-release.yml`
 
 Runs on `push` of tags `runner-v*`. `permissions: {}` at the top; each job asks for its own.
-`concurrency: runner-release-${{ github.ref }}`, never cancelled. Actions stay pinned to the full
-commits they use today (`actions/checkout@11d5960a326750d5838078e36cf38b85af677262`, v4.4.0;
-`oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6`, v2.2.0). Every value from an expression
-reaches a shell only through an environment variable. Every install is `bun install
---frozen-lockfile --ignore-scripts`, so no package's install script runs, here or in the second
-build. No secret but the default token. It can write only in the two release jobs; there,
-`actions/checkout` gets it by default to read the repository and keeps none of it
-(`persist-credentials: false`), and only the publish step names it in its environment. Code that
-runs earlier in a release job could still reach the publish step through what GitHub carries from
-step to step: splitting each release job waits for the maintainer (research.md, Q11).
+`concurrency: runner-release-${{ github.ref }}`, never cancelled. Actions are pinned to full
+commits: `actions/checkout@11d5960a326750d5838078e36cf38b85af677262` (v4.4.0) and
+`oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6` (v2.2.0), as before;
+`actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9` (v7.0.2) and
+`actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333` (v8.0.2), added for the split
+(research.md, Q11). Every value from an expression reaches a shell only through an environment
+variable. Every install is `bun install --frozen-lockfile --ignore-scripts`, so no package's
+install script runs, here or in the second build. No secret but the default token.
+
+Each kind of release is two jobs (security-review.md, RV1). A **build** job can read and not
+write: the packages, the build tool and the built runner run there and nowhere else. A **publish**
+job is the only one whose token can write: it checks out nothing, sets up nothing, installs nothing
+and runs no file it was handed. The four files go from one to the other as one artifact of the run.
+Every checkout keeps no credentials (`persist-credentials: false`), and only the publish step names
+the token in its environment.
 
 | Job | Runs when | Environment | Permissions | Steps |
 |-----|-----------|-------------|-------------|-------|
 | `check` | always | none | `contents: read` | checkout with `fetch-depth: 0` and `persist-credentials: false`; read the Bun pin from the root `package.json` (`^bun@[0-9]+\.[0-9]+\.[0-9]+$`); set up that Bun; `bun install --frozen-lockfile --ignore-scripts`; `bun apps/runner/scripts/release.ts check --tag "$TAG" >> "$GITHUB_OUTPUT"` |
-| `release-dev` | `needs.check.outputs.environment == 'dev'` | none | `contents: write` | first, before any checkout: the tag itself must be a dev tag (below), which gives the version; checkout (one commit, `persist-credentials: false`); read the Bun pin as `check` does; set up that Bun; `bun install --frozen-lockfile --ignore-scripts`; with `working-directory: apps/runner`, `bun run compile:linux-x64` and `bun run compile:linux-arm64`; `bun apps/runner/scripts/release.ts files --tag "$TAG" --commit "$COMMIT" --bun "$BUN"`; publish as a pre-release |
-| `release-prod` | `needs.check.outputs.environment == 'prod'` | `prod` (waits for approval before its first step) | `contents: write` | the same as `release-dev`, with a prod tag; publish as a release |
+| `build-dev` | `needs: check`, `needs.check.outputs.environment == 'dev'` | none | `contents: read` | first, before any checkout: the tag itself must be a dev tag (below); checkout (one commit, `persist-credentials: false`); read the Bun pin as `check` does; set up that Bun; `bun install --frozen-lockfile --ignore-scripts`; with `working-directory: apps/runner`, `bun run compile:linux-x64` and `bun run compile:linux-arm64`; `bun apps/runner/scripts/release.ts files --tag "$TAG" --commit "$COMMIT" --bun "$BUN"`; upload the four files (below), kept 1 day |
+| `publish-dev` | `needs: build-dev` | none | `contents: write` | first: the tag itself must be a dev tag; download the artifact into `release`; check the four files (below); publish as a pre-release |
+| `build-prod` | `needs: check`, `needs.check.outputs.environment == 'prod'` | none | `contents: read` | the same as `build-dev`, with a prod tag; the artifact kept 30 days |
+| `publish-prod` | `needs: build-prod` | `prod` (waits for approval before its first step) | `contents: write` | the same as `publish-dev`, with a prod tag; publish as a release |
+
+A publish job has no `if:`: a job whose `needs` failed or was skipped is skipped too (GitHub,
+"Workflow syntax", `jobs.<job_id>.needs`), so it runs only after its own build passed. For prod,
+the build runs at once and only `publish-prod` waits for the maintainer: the approval guards the
+token that publishes, not the build, and the maintainer can read the build's log, with the
+checksums `release.ts files` printed, before approving.
 
 `check` outputs `environment`, `version`, `commit` and `bun`, from the four lines `release.ts
-check` prints. The release jobs do not take its word for anything a changed tool could turn. Each
-works out from the tag itself, in its first step, before anything is checked out, set up or
-installed, that the tag is of its own kind, with bash's `[[ =~ ]]` in the C locale:
+check` prints. The jobs after it do not take its word for anything a changed tool could turn. Each
+works out from the tag itself, in its first step, before anything is checked out, set up,
+installed or downloaded, that the tag is of its own kind, with bash's `[[ =~ ]]` in the C locale:
 
 ```text
-release-dev:  ^runner-v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})-dev\.[1-9][0-9]{0,8})$
-release-prod: ^runner-v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8}))$
+build-dev, publish-dev:   ^runner-v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})-dev\.[1-9][0-9]{0,8})$
+build-prod, publish-prod: ^runner-v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8}))$
 ```
 
 Otherwise it stops with `This tag is not runner-v<x.y.z>-dev.<n>. This job publishes development
 releases only.` (or `runner-v<x.y.z>` and `prod releases`), which does not repeat the tag. The
-version it matched is the one published. The Bun version is read from the commit in the job
-itself. Only `commit` is taken from `check`, and `release.ts files` stops unless the checkout is
-that commit.
+version it matched is the one published. A build job reads the Bun version from the commit itself
+and takes only `commit` from `check`; `release.ts files` stops unless the checkout is that commit.
+A publish job takes nothing from another job but the artifact.
 
-Publishing, in `apps/runner/dist`, with `GH_TOKEN` set to the default token:
+### The artifact
+
+The build job's last step, `actions/upload-artifact`:
+
+| Input | Value | Why (the action's README at that commit) |
+|-------|-------|------------------------------------------|
+| `name` | `runner-release` | the one name the publish job downloads |
+| `path` | the four files of `apps/runner/dist`, one per line | with several paths, "the least common ancestor of all the search paths will be used as the root directory of the artifact", so the four are at its top level |
+| `if-no-files-found` | `error` | "Fail the action with an error message" when none is found (the default only warns) |
+| `retention-days` | `1` for dev, `30` for prod | "Minimum 1 day"; a dev release is published right after its build. A prod release waits for its approval up to 30 days ("Gate approval time", GitHub's Actions limits), so its files are kept that long |
+| `compression-level` | `0` | the runners are gzip already; "For large files that are not easily compressed, a value of 0 is recommended" |
+
+`overwrite` and `include-hidden-files` keep their defaults (`false`): an artifact once uploaded in a
+run is not replaced, and no hidden file is taken.
+
+The publish job's `actions/download-artifact` has `name: runner-release` and `path: release`. A
+single artifact downloaded by name is "extracted directly to the specified path". It is given no
+token: it downloads from this run only. Its `digest-mismatch` stays `error`, so a download that does
+not match the digest recorded at upload fails.
+
+### What a publish job trusts
+
+The artifact comes from a job that ran code from the packages and the built runner. Its content is
+trusted for nothing but being published; the second build is what checks it. It must not be able
+to steer the job that holds the token:
+
+- The four names are fixed in the workflow. In `release`, there must be exactly four entries
+  (hidden ones counted), and those four names must each be a regular file, not a link. Otherwise:
+  `The build did not hand on exactly the four release files.`
+- Sizes: each `.gz` 1 byte to 256 MiB; `SHA256SUMS` 1 byte to 4 KiB; `RELEASE-NOTES.md` 1 byte to
+  64 KiB, the limit the second build downloads it with (it is public text). Otherwise
+  `<name> is empty or larger than <limit>.`
+- Each `.gz` is unpacked with `gzip -dc` into a new temporary folder, at most 256 MiB plus one byte
+  (`head -c`); any failure of `gzip` (not gzip, cut off, data after it) or more than 256 MiB stops
+  with `<name>.gz does not unpack to one runner of at most 256 MiB.` Each unpacked file is hashed
+  with `sha256sum` from its standard input. The two lines `SHA256SUMS` must hold are written by the
+  job itself, in data-model.md's form, and compared byte for byte with `cmp`: the file is never
+  parsed, and no name in it is opened (`sha256sum -c` is not used). Otherwise
+  `SHA256SUMS does not name the two runners as they unpack.` The temporary folder is removed on
+  every way out.
+- Nothing from the artifact is run, sourced, evaluated or made executable, and no name or text from
+  it reaches a command line: the files are named by the workflow's own words. The notes reach `gh`
+  only through `--notes-file RELEASE-NOTES.md`.
+- Tools: `bash`, `wc`, `gzip`, `head`, `sha256sum`, `cmp`, `mktemp`, `rm` and `gh`, all of GitHub's
+  `ubuntu-24.04` image.
+
+Publishing, in `release`, with `GH_TOKEN` set to the default token:
 
 ```sh
 gh --version
@@ -91,12 +150,24 @@ if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
 fi
 gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
   --title "zekno-runner $VERSION" --notes-file RELEASE-NOTES.md \
-  [--prerelease --latest=false]   # release-dev only
+  [--prerelease --latest=false]   # publish-dev only
   zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz SHA256SUMS RELEASE-NOTES.md
 ```
 
-Nothing is published when any step before fails. Recording the checksums in the CLI is not part
-of the workflow.
+`gh` needs no checkout: `--repo` names the repository. Nothing is published when any step before
+fails. Recording the checksums in the CLI is not part of the workflow.
+
+### What the split does not cover
+
+- A build job can hand on files other than its source makes, with a `SHA256SUMS` and notes that
+  agree with them. They are published. No zekno installs them: the second build compares them with
+  its own build and records nothing when they differ.
+- The notes are whatever the build wrote, within 64 KiB: links or mentions in them are published as
+  they are. The second build checks their first line; the maintainer reads them before editing them
+  (apps/runner/RELEASING.md, part 8).
+- A flaw in `gzip`, `sha256sum`, `cmp`, `gh` or the download action on GitHub's machine.
+- Whoever can push a `runner-v*` tag chooses the workflow that runs (research R5); the tag ruleset
+  is the boundary for that.
 
 ## `apps/runner/scripts/release.ts`
 
@@ -222,5 +293,5 @@ a workflow's token does not start it. The branch rule for `main` in apps/runner/
 | `compile:linux-x64` | `bun build --compile --target=bun-linux-x64-baseline --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/main.ts --outfile dist/zekno-runner-linux-x64` |
 | `compile:linux-arm64` | `bun build --compile --target=bun-linux-arm64 --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/main.ts --outfile dist/zekno-runner-linux-arm64` |
 
-The two autoload flags depend on open question Q5. The output names must stay as they are: the
-binary embeds its file name, and the second build compares byte for byte.
+The two autoload flags are kept, as the maintainer answered Q5 (research.md). The output names must
+stay as they are: the binary embeds its file name, and the second build compares byte for byte.

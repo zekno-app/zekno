@@ -25,19 +25,20 @@ An external audit is still required before production use.
 
 | Attacker | Can do |
 |----------|--------|
-| Code in a release build | A compromised npm package (its install script, or its code bundled into the runner) or build tool. Runs on GitHub's machine during a release job. |
+| Code in a release build | A compromised npm package (its install script, or its code bundled into the runner) or build tool. Runs on GitHub's machine during a release job (since the split, a build job, which cannot write). |
 | Whoever can push a tag or a commit | Anyone with write access until the rulesets exist, and the workflow's own token while a release job runs. Whoever pushes a tag also chooses the workflow that runs for it (research R5). |
 | Whoever serves the release's files | Changes what the download address serves, or makes a deleted release again. |
 | A server that lies | As in feature 004: answers the installer anything. |
 | The maintainer's machine | Not an attacker: its environment and Bun's caches, which the second build should not take on trust. |
 
-**Outcome**: one finding rated high, one medium, four low, and six notes. The high finding is fixed
-in part; its last part, splitting each release job in two, waits for the maintainer (research Q11).
-Every other finding is fixed, in code or in the pages.
+**Outcome**: one finding rated high, one medium, four low, and six notes. Every finding is fixed, in
+code or in the pages. The high finding's last part, splitting each release job in two, was built on
+2026-11-14 once the maintainer answered research Q11; that part was written by the implementer and
+has not had a review of its own (below, "The split").
 
 | Id | Rating | Finding | State |
 |----|--------|---------|-------|
-| RV1 | High | **Untrusted code ran in the same job as the token that can write.** Each release job held `contents: write` and ran `bun install`, whose install scripts ran (Bun trusts `esbuild`'s `postinstall`), the build, and the built runner. Code run there can put its own `gh` on `GITHUB_PATH`, which GitHub applies to every later step, and so get the publishing step's token: push to `dev` or `main` (a new `runner-release.json`), or replace a release's files. A fake `bun` in the `check` job could send a prod tag to the dev job, past the approval. Reproduced in part (the install scripts ran in a frozen install); the rest reasoned from GitHub's documentation. | **Fixed in part.** (1) Every `bun install`, in both workflows and in the second build, has `--ignore-scripts`. (2) Each release job's first step, before any checkout, setup or install, checks with bash, in the C locale, that the tag itself is of the job's kind, and takes the version from it; the job reads the Bun version from the commit itself; only the commit comes from `check`, and `release.ts files` stops unless the checkout is that commit. (3) RELEASING.md part 1 sets rules for `dev` and `main`: no deletions, no force pushes, `check-main` required on `main`, the admin role the only bypass. (4) The workflow's comment and the test's name say what is true. **Open, waiting for the maintainer** (research Q11, recommended: yes, before the first release): split each release job into a build job that cannot write and a publish job that runs nothing of the repository. Until then, code bundled into the runner, or a changed build tool, runs beside the token, and the branch rules do not stop such a push to `dev`. |
+| RV1 | High | **Untrusted code ran in the same job as the token that can write.** Each release job held `contents: write` and ran `bun install`, whose install scripts ran (Bun trusts `esbuild`'s `postinstall`), the build, and the built runner. Code run there can put its own `gh` on `GITHUB_PATH`, which GitHub applies to every later step, and so get the publishing step's token: push to `dev` or `main` (a new `runner-release.json`), or replace a release's files. A fake `bun` in the `check` job could send a prod tag to the dev job, past the approval. Reproduced in part (the install scripts ran in a frozen install); the rest reasoned from GitHub's documentation. | **Fixed.** (1) Every `bun install`, in both workflows and in the second build, has `--ignore-scripts`. (2) Each job after `check`, in its first step, before any checkout, setup, install or download, checks with bash, in the C locale, that the tag itself is of the job's kind, and takes the version from it; a build job reads the Bun version from the commit itself; only the commit comes from `check`, and `release.ts files` stops unless the checkout is that commit. (3) RELEASING.md part 1 sets rules for `dev` and `main`: no deletions, no force pushes, `check-main` required on `main`, the admin role the only bypass. (4) The workflow's comment and the test's name say what is true. (5) Since 2026-11-14 (research Q11): each release job is two. `build-dev` and `build-prod` hold `contents: read`, install, build, ask the runner for its version and upload exactly the four files as one artifact. `publish-dev` and `publish-prod` hold `contents: write`, check out nothing, set up nothing, install nothing and run nothing they were handed: they check that exactly the four files are there as regular files, within their sizes (notes at most 64 KiB), that the two runners unpack to what `SHA256SUMS` says (written by the job and compared with `cmp`, never parsed), and publish with `gh --notes-file`. `environment: prod` is on `publish-prod`, so the approval guards the token. What the split does not cover: a build can still hand on files other than its source makes, with checksums and notes that agree with them, and they are published; no zekno installs them before the second build matched them. The notes' text is published as the build wrote it. A flaw in `gzip`, `sha256sum`, `cmp`, `gh` or the download action on GitHub's machine. Whoever can push a tag still chooses the workflow (R5). |
 | RV2 | Medium | **The second build trusted the tag.** It checked only that the tag here is the tag on GitHub, never that the tagged commit is on `dev` or `main`, and its frozen install ran the tagged commit's install scripts on the maintainer's machine before anything was compared. A commit on no release branch was recorded on `dev` with status 0. Reproduced. | Fixed: before anything is downloaded or built, the tagged commit must be an ancestor of `refs/heads/dev` (dev tag) or `refs/heads/main` (prod tag) as the maintainer's checkout has it; otherwise status 1, and a sentence that says to pull first. The install has `--ignore-scripts`. The record names the commit and its one-line subject (printable ASCII, at most 100 characters), and RELEASING.md part 7 says to compare them with the commit that was tagged before running anything it prints. The advice for a missing tag now says that a fetched tag's commit must be on the branch here. |
 | RV3 | Low | **Withdrawing does not stop every zekno**, as the page said. A release can be made again on the kept tag with the original files, which were public, or the original dev run run again; a zekno built before the withdrawal then installs it again. | Fixed in the page: part 9 says what withdrawal does and does not do, adds deleting the tag's workflow runs (marked **[outward]**), and says that whether immutable releases (Q1) would change this is not known. |
 | RV4 | Low | **"Only the publishing step gets the token" was not met**: `actions/checkout` gets it by default. | Fixed in words, with RV1 (4). Every checkout keeps `persist-credentials: false`, no step is handed the token as an input (tested), and the workflow's comment, contracts/release.md, the runner's README and its docs page say that checkout gets it to read the repository. |
@@ -67,7 +68,8 @@ Every other finding is fixed, in code or in the pages.
 
 | Finding | Test |
 |---------|------|
-| RV1 (1), (2), (4), RV4 | `apps/runner/test/workflow.test.ts`: "every install runs no package's scripts" for each workflow; "each release job's first step works out from the tag itself that it is of its kind", which runs the step's own script with bash for every valid, refused and hostile tag of the version fixtures and compares it with `parseTag`; "the release jobs take from `check` only the commit"; "the token is named only in the publishing step's environment"; the pins unchanged. Seven of its thirteen tests fail at `42c27ef`. |
+| RV1 (1), (2), (4), RV4 | `apps/runner/test/workflow.test.ts`: "every install runs no package's scripts" for each workflow; "each job after check works out from the tag itself, in its first step, that it is of its kind", in all four jobs, which runs the step's own script with bash for every valid, refused and hostile tag of the version fixtures and compares it with `parseTag`; "a build job takes from `check` only the commit"; "the token is named only in the publishing step's environment"; the pins. Seven of its thirteen tests failed at `42c27ef`. |
+| RV1 (5) | `apps/runner/test/workflow.test.ts`: "only the two publish jobs may write; only publish-prod waits in the prod environment"; "each publish job checks out nothing, sets up nothing, installs nothing and runs no bun"; "both build jobs ... hand on exactly the four files as one artifact, last"; the four pins. "The publish job's check of the four files" runs that step's own script with bash against a folder as a good build hands it on (passes) and against one file missing, one more, a hidden file or folder, a folder or a link in place of one, another name, seven kinds of wrong `SHA256SUMS`, a runner one byte different, not gzip, cut off, data after it, unpacking to nothing or to 256 MiB and one byte, notes of 64 KiB and one byte, and an empty or oversized file (each refused with its sentence); files whose content would run something if anything ran or expanded it leave no mark. "The publish job's publishing step" runs that step with a stand-in `gh`: the exact arguments, the notes given as a file whatever they hold, and no second release. Run against the workflow of `a5824de`, where the jobs were not split: eight of the file's tests fail and the two groups that run the publish job's steps cannot be collected. |
 | RV1 (1) in the second build, RV7 | `apps/runner/test/second-build.test.ts`, "the second build's own build, without the network": on a repository of workspaces only, neither the root's nor a package's `postinstall` runs, and each compile step gets exactly the variables above, with the runtime cache empty. At `42c27ef` both `postinstall` scripts ran. |
 | RV2 | `second-build.test.ts`, "a tag on a commit that is not on the release's branch here" (the reviewer's case, status 0 at `42c27ef`; a branch not pulled yet; a commit of `main` that `dev` holds), and "the record names the commit's subject". |
 | RV9 | `second-build.test.ts`, "a failure that is none of its own checks" (at `42c27ef` the call threw) and "a step that cannot even start" (at `42c27ef` the build threw). |
@@ -96,10 +98,9 @@ Every other finding is fixed, in code or in the pages.
 
 **Noticed while fixing, not part of the review**
 
-- `release.ts files` still starts the built runner in the release job, with the job's environment.
-  Code bundled into the runner runs there, beside the token; that is part of what Q11 removes.
-  Giving that process fewer variables would only slow such code down, since the files GitHub reads
-  between steps can be found without them. Not changed.
+- `release.ts files` still starts the built runner, with the job's environment. Since the split it
+  does so in a build job, whose token cannot write; code bundled into the runner can at most change
+  the files it hands on, which the second build compares.
 - The branch rules of part 1 do not include **Restrict updates**. On `dev` and `main` it would stop
   a push by anyone but the admins, the workflow's token included, and also every merge by someone
   else. Not in the decided fix; for the maintainer to choose.
@@ -111,10 +112,28 @@ Every other finding is fixed, in code or in the pages.
 - The record cleans the commit's subject to printable ASCII, so a letter such as `é` is shown as
   `?`.
 
+**The split (RV1, part 5), as built on 2026-11-14**
+
+Not reviewed by anyone but the implementer who built it. What each job can and cannot do:
+
+| Job | Its token | Runs | Cannot |
+|-----|-----------|------|--------|
+| `check` | `contents: read` | checkout, Bun, the frozen install without scripts, `release.ts check` | write anything; choose a build or publish job's kind (each checks the tag itself) |
+| `build-dev`, `build-prod` | `contents: read` | checkout, Bun, the install, the build, the built runner, the upload | write to the repository or its releases; reach the publish job's steps (GitHub carries `GITHUB_ENV` and `GITHUB_PATH` within a job only) other than through the one artifact it downloads by name |
+| `publish-dev`, `publish-prod` | `contents: write` | the tag check, the pinned download action, its own check with `bash`, `wc`, `gzip`, `head`, `sha256sum`, `cmp`, then `gh` | (by its steps) check out, install or run anything of the repository, its packages or the artifact; use a name or text from the artifact in a command |
+
+What the publish job trusts: GitHub's runner image and its tools, `gh` as installed there, the pinned
+download action (whose unpacking, read in its `dist/index.js`, writes plain files only and turns
+`..` into `.`), and `github.ref_name`. Not the artifact.
+
 **Not checked by any review of this feature**
 
 - Either workflow running on GitHub; the rulesets, the environment `prod` and the token's real
   permissions there; the answers of the `gh api` calls (checked against the documentation only).
+- The split on GitHub: that the download needs no permission beyond `contents: write`; what a re-run
+  of failed jobs does with the artifact (research Q11, "Not confirmed"); that the repository allows
+  an artifact to be kept 30 days; the publish job's check under GitHub's bash 5 and GNU tools (it
+  was run here under bash 3.2 with macOS's `gzip`, `sha256sum`, `cmp` and `wc`).
 - The release jobs' first step under GitHub's bash 5; it was run under bash 3.2 on macOS only.
 - Whether a build on GitHub equals one on macOS (the first release shows it).
 - What immutable releases do to a release made again on a kept tag (Q1).
@@ -123,8 +142,8 @@ Every other finding is fixed, in code or in the pages.
 
 **Open, for the maintainer**
 
-- RV1's last part: split each release job (research Q11). Recommended before the first release.
-- Q12: whether to check Bun's runtimes against Bun's published checksums.
+- Q12: whether to check Bun's runtimes against Bun's published checksums. Answered 2026-11-14: it
+  stays an open note, and nothing is built for it.
 - Whether to add **Restrict updates** to the rules for `dev` and `main` (above).
 - The landing page copy on signed releases (RV12).
 - An external audit is still required before anything here is relied on.

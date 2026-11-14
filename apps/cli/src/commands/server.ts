@@ -1,11 +1,6 @@
 import { remoteThroughUi, type Deps } from "../context"
-import { addServer, listServers, prepareServerAdd, prepareServerUpdate, updateRunner } from "../ops/server"
+import { addServer, listServers, prepareServerAdd, prepareServerUpdate, runnerWarning, updateRunner } from "../ops/server"
 import { RUNNER_RELEASE } from "../runner-release"
-
-/** What `server add` and `status` say when the runner on a server is older than this zekno. */
-export const outdatedWarning = (server: string, version: string | undefined, carried: string): string =>
-  `The runner on ${server} ${version === undefined ? "does not report its version, so it is" : `is version ${version},`} older than this zekno's ${carried}. ` +
-  `Deploys still work. Running state and logs need the newer runner: run \`zekno server update ${server}\`.`
 
 /**
  * Connects a server: over SSH with no runner path, the runner is found or
@@ -47,7 +42,9 @@ export async function serverAdd(
   if (result.target.kind === "ssh") {
     deps.ui.info("You reached this server over SSH, so its identity rests on SSH's host verification.")
   }
-  if (result.relation?.relation === "older") deps.ui.warn(outdatedWarning(result.name, result.runner?.version, (deps.release ?? RUNNER_RELEASE).version))
+  // A runner of another version than this zekno's is said once, on standard error.
+  const warning = result.relation && runnerWarning(result.name, result.runner?.version, result.relation, (deps.release ?? RUNNER_RELEASE).version)
+  if (warning) deps.ui.warn(warning)
 }
 
 /**

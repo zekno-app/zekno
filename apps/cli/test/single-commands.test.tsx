@@ -4,7 +4,7 @@
  * success and failure" and "Status, lists, errors and piped output").
  */
 import { describe, expect, spyOn, test } from "bun:test"
-import { compareRunnerVersions } from "@workspace/core"
+import { compareRunnerVersions, isDevVersion } from "@workspace/core"
 import { renderToString } from "ink"
 import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -584,7 +584,9 @@ describe("a zekno and a runner one release apart still deploy (FR-021)", () => {
     server.installed(realRunner(m.docker.path))
     const carrying = (version: string) => (m.deps.release = { version, files: { "linux-x64": { sha256: null }, "linux-arm64": { sha256: null } } })
     const said = (from: number) => m.err.slice(from).filter((line) => line.startsWith("The runner on prod "))
-    const escaped = (version: string) => version.replaceAll(".", "\\.")
+    // D1 or D2 of contracts/versions.md, when exactly one of the two is a development release: these tests hold for a dev or a prod version.
+    const dev = (runner: string, carried: string) =>
+      isDevVersion(runner) && !isDevVersion(carried) ? ` Version ${runner} is a development release.` : isDevVersion(carried) && !isDevVersion(runner) ? " This zekno carries a development release." : ""
     await withSsh(sshStandIn(server), async () => {
       carrying(after)
       expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")).toBe(0)
@@ -595,8 +597,10 @@ describe("a zekno and a runner one release apart still deploy (FR-021)", () => {
       let err = m.err.length
       expect(await m.zekno("status", "--server", "prod")).toBe(0)
       expect(m.out.slice(out)).toContainEqual(expect.stringMatching(/^web\tdeploy 1\t/))
-      // W2 of contracts/versions.md comes whole with task T023, once its wording is approved; this part of it is said today.
-      expect(said(err)).toEqual([expect.stringMatching(new RegExp(`^The runner on prod is version ${escaped(own)}, older than this zekno's ${escaped(after)}\\. `))])
+      // W2 of contracts/versions.md: older, the same protocol.
+      expect(said(err)).toEqual([
+        `The runner on prod is version ${own}, older than this zekno's ${after}. Everything works with it. To bring it to ${after}, run \`zekno server update prod\`.${dev(own, after)}`,
+      ])
 
       carrying(before)
       expect(await m.zekno("deploy", ...at)).toBe(0)
@@ -604,7 +608,10 @@ describe("a zekno and a runner one release apart still deploy (FR-021)", () => {
       err = m.err.length
       expect(await m.zekno("status", "--server", "prod")).toBe(0)
       expect(m.out.slice(out)).toContainEqual(expect.stringMatching(/^web\tdeploy 2\t/))
-      // W4 for a newer runner comes with task T023 too.
+      // W4: newer, the same protocol.
+      expect(said(err)).toEqual([
+        `The runner on prod is version ${own}, newer than this zekno's ${before}. It works with this zekno. Update zekno to match it; \`zekno server update\` never replaces a newer runner.${dev(own, before)}`,
+      ])
       expect(m.docker.calls().map((call) => call.env.GREETING)).toEqual(["hello", "hello"])
     })
   }, 60_000)

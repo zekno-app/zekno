@@ -151,6 +151,9 @@ describe("apps/runner/RELEASING.md", () => {
     const listed = top === -1 ? new Set<string>() : marks(page.slice(top, page.indexOf("\n## ", top + 1)))
     expect(marks(page.slice(first))).toEqual(listed)
     if (top !== -1) expect(top).toBeLessThan(first)
+    // The maintainer answered every one on 2026-11-14 (research.md): the page reads as decided.
+    expect(top).toBe(-1)
+    expect(marks(page)).toEqual(new Set())
   })
 
   test("apps/runner/README.md links to it", () => {

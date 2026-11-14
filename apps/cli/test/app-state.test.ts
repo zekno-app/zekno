@@ -27,13 +27,13 @@ const TEAM: TeamView = {
     {
       name: "prod",
       destination: "deploy@203.0.113.7",
-      runner: { version: "0.1.0", outdated: true },
+      runner: { version: "0.1.0", relation: "older", missing: "nothing" },
       apps: [
         { name: "demo", deploy: 4, state: "running" },
         { name: "api", deploy: 12, state: "running" },
       ],
     },
-    { name: "staging", destination: "staging-box", runner: { version: "0.1.1", outdated: false }, apps: [] },
+    { name: "staging", destination: "staging-box", runner: { version: "0.1.1", relation: "same", missing: "nothing" }, apps: [] },
   ],
 }
 
@@ -196,6 +196,25 @@ describe("Home", () => {
     expect(play(asked, K.esc)).toEqual({ state: { ...asked, question: undefined }, effects: [] })
     const current = play(home(), K.down).state
     expect(update(current, text("u"))).toEqual({ state: current, effects: [] })
+  })
+
+  test("u asks about an older runner whatever it lacks, and never about a newer one, one of this version, or one not known (contracts/versions.md)", () => {
+    const withRunner = (runner: TeamView["servers"][number]["runner"]): State =>
+      initialState({ kind: "team", team: { ...TEAM, servers: [{ ...TEAM.servers[0]!, runner }, TEAM.servers[1]!] } }, SIZE)
+    for (const missing of ["state and logs", "some", "nothing"] as const) {
+      const older = withRunner({ version: missing === "state and logs" ? undefined : "0.0.9", relation: "older", missing })
+      expect(play(older, text("u")).state.question).toEqual({ kind: "update-runner", server: "prod" })
+    }
+    for (const runner of [{ version: "0.2.0", relation: "newer", missing: "nothing" } as const, { version: "0.1.0", relation: "same", missing: "nothing" } as const, undefined]) {
+      const state = withRunner(runner)
+      expect(update(state, text("u"))).toEqual({ state, effects: [] })
+    }
+    // A server that answers with a newer runner keeps it so; one that cannot be reached has no runner known.
+    const newer = { version: "0.2.0", relation: "newer", missing: "nothing" } as const
+    const reached = play(home(), { type: "server-reached", server: "prod", reachable: true, runner: newer }).state
+    expect(reached.team?.servers[0]?.runner).toEqual(newer)
+    expect(update(reached, text("u"))).toEqual({ state: reached, effects: [] })
+    expect(play(reached, { type: "server-reached", server: "prod", reachable: false, problem: "gone" }).state.team?.servers[0]?.runner).toBeUndefined()
   })
 
   test("? opens help; esc on Home does nothing; keys Home does not use are ignored", () => {

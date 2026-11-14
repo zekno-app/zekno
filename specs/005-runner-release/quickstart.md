@@ -37,7 +37,9 @@ bun apps/runner/scripts/release.ts check-main   # on this branch: refuses, namin
 
 Expected: `check` passes a dev tag on a commit of `dev` and a prod tag on a commit of `main`, and
 refuses every other case with the sentence of contracts/release.md; `files` writes the four files
-exactly; the workflow files keep their permissions, pins and environment.
+exactly; the workflow files keep their permissions, pins and environment; only the two publish jobs
+can write, and their own steps, run with bash, publish only exactly the four files a good build
+hands on and run nothing in them.
 
 ## 3. The second build, without a release
 
@@ -83,13 +85,14 @@ processor (SSE4.2) or for an old kernel.
 
 | Step | What to see |
 |------|-------------|
-| 1. Ruleset | Settings, Rulesets lists it as Active for `runner-v*`. From an account without the bypass role, `git push origin runner-v0.0.1-dev.1` is refused by GitHub (SC-006). |
+| 1. Ruleset | Settings, Rulesets lists it as Active for `runner-v*`. The artifact retention is at least 30 days. From an account without the bypass role, when one is at hand, `git push origin runner-v0.0.1-dev.1` is refused by GitHub (SC-006); otherwise SC-006 is recorded as not tried. |
 | 2. Environment `prod` | Settings, Environments, `prod`: required reviewer, deployment tags `runner-v*`, administrators' bypass off. |
-| 3. `runner-v0.1.0-dev.1` | The run shows `check` passed with `environment=dev`, then `release-dev`; the release is a pre-release, not latest, with four files. |
+| 3. `runner-v0.1.0-dev.1` | The run shows `check` passed with `environment=dev`, then `build-dev`, then `publish-dev`; the release is a pre-release, not latest, with four files. |
 | 4. Second build on `dev` | `Second build of runner-v0.1.0-dev.1 (dev): matched.` and `runner-release.json` written; or status 1 and the plan stops. |
 | 5. Real server | Below. |
-| 6. `runner-v0.1.0` | `check` passes with `environment=prod`; `release-prod` waits for review; after approval the release is published as latest. |
-| 7. Second build on `main` | matched; `runner-release.json` on `main` names `0.1.0` with both checksums. |
+| 6. `runner-v0.1.0` | `check` passes with `environment=prod`; `build-prod` passes; `publish-prod` waits for review; after approval the release is published as latest. |
+| 7. Second build on `main` | matched; `runner-release.json` on `main` names `0.1.0` with both checksums; `main` merged back into `dev`. |
+| 8. The prod CLI on the dev runner | With a zekno built from `main`, on the server that runs `0.1.0-dev.1`: `zekno status` says W2 then D1; `zekno server update` brings it to `0.1.0`; a deploy works. |
 
 ## 7. A real server (maintainer step 5)
 
@@ -236,3 +239,35 @@ runs as root, so the runner goes to `/usr/local/bin/zekno-runner`.
   (SC-007).
 - The driver used is a script outside the repository; it imports `INSTALL_SCRIPT` from
   `apps/cli/src/install.ts` and adds nothing to it.
+
+### Results, checks at the end (T039, 2026-11-14)
+
+From the repository root, on this machine (macOS, Apple silicon), Bun 1.4.4, at the working tree
+of the commit that records these results (the wording of T021 to T025 and the split release jobs
+of T043 included), each without Turbo's cache (`--force`):
+
+| Command | Packages | Result |
+|---------|----------|--------|
+| `bun run typecheck --force` | `@workspace/cli`, `@workspace/core`, `@workspace/runner`, `@workspace/ui`, `web` | 5 of 5 passed |
+| `bun run lint --force` | `@workspace/ui`, `web` (the only packages with a `lint` script) | 2 of 2 passed |
+| `bun run test --force` | `@workspace/cli`, `@workspace/core`, `@workspace/runner`, `web` | 4 of 4 passed, 2 min 26 s in all |
+
+| Package | Pass | Skip | Fail | Time |
+|---------|------|------|------|------|
+| `@workspace/core` | 102 | 0 | 0 | 0.5 s |
+| `@workspace/runner` | 147 | 1 | 0 | 50.9 s |
+| `@workspace/cli` | 663 | 0 | 0 | 145.7 s |
+| `web` | 28 | 0 | 0 | 0.02 s |
+
+- The one skipped test is the second build's real build, which runs only with `ZEKNO_REAL_BUILD=1`
+  (T017).
+- Against the start of this work (`a5824de`: core 102, runner 137 and 1 skipped, cli 659, web 28):
+  the runner gained 10 tests (the split jobs, the publish job's own steps run with bash, the stand-in
+  `gh`), the CLI 4 (the sentences W1 to W5 with D1 and D2, Home's two lines and the question, the
+  commands over a stand-in runner that reports another version and protocol, the newer runner in the
+  app). The CLI suite took 146.7 s alone at `a5824de` on this machine, and 145.7 s here.
+- `bun run build` was not run: for `web` it runs `next build`, which this work was told not to run.
+  The two compiled programs are built by their own tests (`apps/cli/test/compiled.test.ts`,
+  `apps/runner/test/compiled.test.ts`), which passed above.
+- T038 (the agent end-to-end tests) is not part of this record: it is left to the orchestrator,
+  because refreshing their replay cache can cost the maintainer money.

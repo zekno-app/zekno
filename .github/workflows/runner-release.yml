@@ -3,22 +3,28 @@
 #
 # Runs only when a tag `runner-v<version>` is pushed. A dev version (`runner-v0.1.0-dev.1`) must
 # be on `dev` and is published as a pre-release, never as the latest release. A prod version
-# (`runner-v0.1.0`) must be on `main` and waits for the maintainer's approval in the `prod`
-# environment before anything is built or published. Every check is in
-# apps/runner/scripts/release.ts, which is tested; this file only runs it. Each release job also
-# works out from the tag itself, in its first step, that the tag is of its own kind: it does not
-# take the `check` job's word for that, nor for the version or the Bun version.
+# (`runner-v0.1.0`) must be on `main`, and its publishing waits for the maintainer's approval in
+# the `prod` environment. Every check is in apps/runner/scripts/release.ts, which is tested; this
+# file only runs it. Each job after `check` works out from the tag itself, in its first step, that
+# the tag is of its own kind: it does not take the `check` job's word for that, nor for the
+# version or the Bun version.
+#
+# Each kind of release is two jobs. The build job (`build-dev`, `build-prod`) can only read: it
+# checks out the commit, installs the packages without their own scripts (`--ignore-scripts`),
+# builds the runner, asks it for its version, writes the release's four files and hands exactly
+# those on as an artifact of this run. Code from the packages and the built runner runs there,
+# and nowhere else. The publish job (`publish-dev`, `publish-prod`) is the only one whose token
+# may write. It checks out nothing, sets up nothing, installs nothing and runs no file it was
+# handed: it takes the four files, checks their names, their sizes and that the two runners
+# unpack to what SHA256SUMS says, with the tools GitHub's machine has, and publishes them with
+# `gh`. What the files hold is not trusted for anything but being published: no zekno installs
+# them until the maintainer's second build, on another machine, gave the same files
+# (specs/005-runner-release/security-review.md, RV1).
 #
 # The release holds the runner for Linux on x86-64 and ARM64 (gzip), SHA256SUMS of the unpacked
-# binaries and RELEASE-NOTES.md. It uses no secret beyond the token GitHub gives every workflow,
-# and that token may write only in the two release jobs. There, actions/checkout gets it by
-# default, to read the repository, and keeps none of it (`persist-credentials: false`); the step
-# that publishes gets it to publish. Every install skips the packages' own scripts
-# (`--ignore-scripts`). Code that runs earlier in a release job, during the build or in the built
-# runner asked for its version, could still reach the publishing step through what GitHub carries
-# from one step to the next, such as GITHUB_PATH. Splitting each release job into a build job
-# that cannot write and a publish job that runs nothing of the repository waits for the
-# maintainer (specs/005-runner-release/research.md, Q11; security-review.md, RV1).
+# binaries and RELEASE-NOTES.md. It uses no secret beyond the token GitHub gives every workflow.
+# Every checkout keeps none of it (`persist-credentials: false`); only the step that publishes
+# names it.
 #
 # Recording the checksums in apps/cli/src/runner-release.json is not done here: only the
 # maintainer's second build writes them, after it built the same files on another machine.
@@ -84,17 +90,17 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: bun apps/runner/scripts/release.ts check --tag "$TAG" >> "$GITHUB_OUTPUT"
 
-  release-dev:
+  # Builds a dev release and hands its four files on. Reads only.
+  build-dev:
     needs: check
     if: needs.check.outputs.environment == 'dev'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     steps:
       # First, before anything is checked out, set up or installed: the tag itself must be a dev
-      # release's. Bash's own test, in the C locale so that [0-9] means 0 to 9 only. The version
-      # it gives is the one published.
+      # release's. Bash's own test, in the C locale so that [0-9] means 0 to 9 only.
       - name: Check that the tag is a dev release's
         id: tag
         env:
@@ -145,8 +151,113 @@ jobs:
           BUN: ${{ steps.pin.outputs.bun }}
         run: bun apps/runner/scripts/release.ts files --tag "$TAG" --commit "$COMMIT" --bun "$BUN"
 
+      # Exactly the four files, at the artifact's top level. The publish job runs right after, so
+      # the shortest retention there is will do: one day.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: runner-release
+          path: |
+            apps/runner/dist/zekno-runner-linux-x64.gz
+            apps/runner/dist/zekno-runner-linux-arm64.gz
+            apps/runner/dist/SHA256SUMS
+            apps/runner/dist/RELEASE-NOTES.md
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  # Publishes what build-dev handed on. The only dev job that may write; it runs nothing of the
+  # repository, nothing of the packages and nothing it was handed.
+  publish-dev:
+    needs: build-dev
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check that the tag is a dev release's
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+          LC_ALL: C
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^runner-v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})-dev\.[1-9][0-9]{0,8})$ ]]; then
+            echo "This tag is not runner-v<x.y.z>-dev.<n>. This job publishes development releases only." >&2
+            exit 1
+          fi
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: runner-release
+          path: release
+
+      # The four files by their fixed names, and nothing else; then the two runners against
+      # SHA256SUMS. No name, path or text from the files reaches a command, and none is run.
+      - name: Check the four files
+        working-directory: release
+        env:
+          LC_ALL: C
+        run: |
+          set -euo pipefail
+          refuse() {
+            echo "$1" >&2
+            exit 1
+          }
+          shopt -s nullglob dotglob
+          entries=(*)
+          if [[ ${#entries[@]} -ne 4 ]]; then
+            refuse "The build did not hand on exactly the four release files."
+          fi
+          for name in zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz SHA256SUMS RELEASE-NOTES.md; do
+            if [[ -L "$name" || ! -f "$name" ]]; then
+              refuse "The build did not hand on exactly the four release files."
+            fi
+          done
+          size() {
+            local bytes
+            bytes=$(wc -c < "$1")
+            echo $((bytes))
+          }
+          for name in zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz; do
+            if (( $(size "$name") < 1 || $(size "$name") > 268435456 )); then
+              refuse "$name is empty or larger than 256 MiB."
+            fi
+          done
+          if (( $(size SHA256SUMS) < 1 || $(size SHA256SUMS) > 4096 )); then
+            refuse "SHA256SUMS is empty or larger than 4 KiB."
+          fi
+          if (( $(size RELEASE-NOTES.md) < 1 || $(size RELEASE-NOTES.md) > 65536 )); then
+            refuse "RELEASE-NOTES.md is empty or larger than 64 KiB."
+          fi
+          unpacked=$(mktemp -d)
+          trap 'rm -rf -- "$unpacked"' EXIT
+          sums=""
+          for arch in x64 arm64; do
+            name="zekno-runner-linux-$arch"
+            if ! gzip -dc -- "$name.gz" | head -c 268435457 > "$unpacked/$name"; then
+              refuse "$name.gz does not unpack to one runner of at most 256 MiB."
+            fi
+            if (( $(size "$unpacked/$name") < 1 || $(size "$unpacked/$name") > 268435456 )); then
+              refuse "$name.gz does not unpack to one runner of at most 256 MiB."
+            fi
+            sum=$(sha256sum < "$unpacked/$name")
+            sum=${sum%% *}
+            if [[ ! "$sum" =~ ^[0-9a-f]{64}$ ]]; then
+              refuse "Could not hash $name."
+            fi
+            sums+="$sum  $name"$'\n'
+          done
+          printf '%s' "$sums" > "$unpacked/SHA256SUMS"
+          if ! cmp -s -- SHA256SUMS "$unpacked/SHA256SUMS"; then
+            refuse "SHA256SUMS does not name the two runners as they unpack."
+          fi
+          echo "The four release files are there, and the runners unpack to what SHA256SUMS says:"
+          printf '%s' "$sums"
+
+      # The notes reach gh as a file, never as an argument or through the shell.
       - name: Publish the pre-release
-        working-directory: apps/runner/dist
+        working-directory: release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
@@ -163,20 +274,18 @@ jobs:
             --prerelease --latest=false \
             zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz SHA256SUMS RELEASE-NOTES.md
 
-  # Waits for the maintainer's approval in the `prod` environment before its first step. That
-  # environment must exist, with its reviewer, before any prod tag is pushed: a workflow that
-  # names a missing environment creates it without protection (apps/runner/RELEASING.md).
-  release-prod:
+  # Builds a prod release and hands its four files on. Reads only, and needs no approval: what
+  # it builds is published only once the maintainer approved publish-prod.
+  build-prod:
     needs: check
     if: needs.check.outputs.environment == 'prod'
-    environment: prod
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     steps:
       # First, before anything is checked out, set up or installed: the tag itself must be a prod
-      # release's. As in release-dev.
+      # release's. As in build-dev.
       - name: Check that the tag is a prod release's
         id: tag
         env:
@@ -226,8 +335,112 @@ jobs:
           BUN: ${{ steps.pin.outputs.bun }}
         run: bun apps/runner/scripts/release.ts files --tag "$TAG" --commit "$COMMIT" --bun "$BUN"
 
+      # Kept as long as GitHub lets publish-prod wait for its approval: 30 days.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: runner-release
+          path: |
+            apps/runner/dist/zekno-runner-linux-x64.gz
+            apps/runner/dist/zekno-runner-linux-arm64.gz
+            apps/runner/dist/SHA256SUMS
+            apps/runner/dist/RELEASE-NOTES.md
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  # Waits for the maintainer's approval in the `prod` environment before its first step: the
+  # approval guards the token that publishes. That environment must exist, with its reviewer,
+  # before any prod tag is pushed: a workflow that names a missing environment creates it without
+  # protection (apps/runner/RELEASING.md). As publish-dev, it runs nothing it was handed.
+  publish-prod:
+    needs: build-prod
+    environment: prod
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check that the tag is a prod release's
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+          LC_ALL: C
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^runner-v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8}))$ ]]; then
+            echo "This tag is not runner-v<x.y.z>. This job publishes prod releases only." >&2
+            exit 1
+          fi
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: runner-release
+          path: release
+
+      - name: Check the four files
+        working-directory: release
+        env:
+          LC_ALL: C
+        run: |
+          set -euo pipefail
+          refuse() {
+            echo "$1" >&2
+            exit 1
+          }
+          shopt -s nullglob dotglob
+          entries=(*)
+          if [[ ${#entries[@]} -ne 4 ]]; then
+            refuse "The build did not hand on exactly the four release files."
+          fi
+          for name in zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz SHA256SUMS RELEASE-NOTES.md; do
+            if [[ -L "$name" || ! -f "$name" ]]; then
+              refuse "The build did not hand on exactly the four release files."
+            fi
+          done
+          size() {
+            local bytes
+            bytes=$(wc -c < "$1")
+            echo $((bytes))
+          }
+          for name in zekno-runner-linux-x64.gz zekno-runner-linux-arm64.gz; do
+            if (( $(size "$name") < 1 || $(size "$name") > 268435456 )); then
+              refuse "$name is empty or larger than 256 MiB."
+            fi
+          done
+          if (( $(size SHA256SUMS) < 1 || $(size SHA256SUMS) > 4096 )); then
+            refuse "SHA256SUMS is empty or larger than 4 KiB."
+          fi
+          if (( $(size RELEASE-NOTES.md) < 1 || $(size RELEASE-NOTES.md) > 65536 )); then
+            refuse "RELEASE-NOTES.md is empty or larger than 64 KiB."
+          fi
+          unpacked=$(mktemp -d)
+          trap 'rm -rf -- "$unpacked"' EXIT
+          sums=""
+          for arch in x64 arm64; do
+            name="zekno-runner-linux-$arch"
+            if ! gzip -dc -- "$name.gz" | head -c 268435457 > "$unpacked/$name"; then
+              refuse "$name.gz does not unpack to one runner of at most 256 MiB."
+            fi
+            if (( $(size "$unpacked/$name") < 1 || $(size "$unpacked/$name") > 268435456 )); then
+              refuse "$name.gz does not unpack to one runner of at most 256 MiB."
+            fi
+            sum=$(sha256sum < "$unpacked/$name")
+            sum=${sum%% *}
+            if [[ ! "$sum" =~ ^[0-9a-f]{64}$ ]]; then
+              refuse "Could not hash $name."
+            fi
+            sums+="$sum  $name"$'\n'
+          done
+          printf '%s' "$sums" > "$unpacked/SHA256SUMS"
+          if ! cmp -s -- SHA256SUMS "$unpacked/SHA256SUMS"; then
+            refuse "SHA256SUMS does not name the two runners as they unpack."
+          fi
+          echo "The four release files are there, and the runners unpack to what SHA256SUMS says:"
+          printf '%s' "$sums"
+
       - name: Publish the release
-        working-directory: apps/runner/dist
+        working-directory: release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}

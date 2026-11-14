@@ -2,7 +2,8 @@
 
 Checked on 2026-11-14 on macOS with Bun 1.4.4, gh 2.85.0 and the repository at `e819923`. Decisions
 marked **(maintainer)** were made by the maintainer that day. The rest follow from them, from the
-code, or from the sources named. Nothing was run on a server or on GitHub.
+code, or from the sources named. Nothing was run on a server or on GitHub. The maintainer answered
+every question at the end of this page on 2026-11-14, accepting each recommendation.
 
 ## R1. Versions and tags **(maintainer: the shape; the rest follows)**
 
@@ -61,7 +62,7 @@ code, or from the sources named. Nothing was run on a server or on GitHub.
 - **Rationale**: a sentence "from before 0.1.0" would be true but would also describe
   `0.1.0-dev.1`, which does report its version.
 - **Left as they are**: the records of feature 004 in `specs/004-cli-app/` (what was measured then,
-  with the number used then). Open question Q9.
+  with the number used then). Q9, answered 2026-11-14: they stay as they are.
 - **Risk found**: a runner built from this repository before this feature says `0.2.0`, which
   counts as newer than every release of this feature. Only the maintainer could have one;
   feature 004's real-server run removed its runner afterwards (specs/004-cli-app/quickstart.md).
@@ -105,7 +106,7 @@ runners built on 2026-11-13 in `apps/runner/dist/` (Bun 1.4.2), read with `file`
   the runner starts in the login user's home folder, so a `~/.env` there would be loaded into its
   environment (for example `ZEKNO_RUNNER_HOME`, which moves its folder, or `DOCKER_HOST`), and a
   `~/bunfig.toml` could preload code. Whoever can write those files already controls that account,
-  so this is hardening, not a hole. **Decision (open to the maintainer's veto, Q5)**: build with
+  so this is hardening, not a hole. **Decision (Q5, confirmed by the maintainer on 2026-11-14)**: build with
   `--no-compile-autoload-dotenv --no-compile-autoload-bunfig`, both listed by `bun build --help`.
   `BUN_OPTIONS` cannot be turned off by a flag; it comes from the server's own environment. The
   same applies to the compiled CLI (`apps/cli/build.ts`) in project folders; it is turned off there
@@ -165,7 +166,8 @@ Sources: "Available rules for rulesets", "Creating rulesets for a repository", "
   a release. What any CLI installs is decided by the second build and the checksums the maintainer
   commits, never by the workflow.
 - **"Only the maintainer"** holds while the maintainer is the only person with the bypassing role
-  (admins of the repository, which on an organization includes its owners). Open question Q8.
+  (admins of the repository, which on an organization includes its owners). Q8, answered 2026-11-14:
+  the maintainer is the only admin of the repository.
 
 ## R6. Prod waits for approval: the Environment `prod` **(maintainer)**
 
@@ -191,9 +193,12 @@ Sources: "Deployments and environments" (docs.github.com/en/actions/reference/wo
   `release-dev` with no environment and `release-prod` with `environment: prod`, each with an `if:`
   on the `check` job's output. A job that names a protected environment waits for its rules
   before it proceeds, so the prod build and publication happen only after approval (FR-010a).
-- **Alternatives considered**: building in a job without write rights and publishing after approval
-  in another (needs the artifact actions, which are not in the repository; since the security
-  review, open question Q11); a `dev` environment (not decided, and a dev release has no rule to
+- **Changed by Q11 (2026-11-14)**: each of those jobs is now two. `build-dev` and `build-prod`, with
+  the `if:` on `check`'s output, build and cannot write; `publish-dev` and `publish-prod` `needs`
+  their build and publish. Only `publish-prod` names `environment: prod`. A prod release is
+  therefore built before the approval and published only after it (FR-010a asks for "before
+  anything is published"): the approval guards the token that can write.
+- **Alternatives considered**: a `dev` environment (not decided, and a dev release has no rule to
   hold).
 
 ## R7. Which branch holds the tagged commit
@@ -235,7 +240,7 @@ releases" (docs.github.com, supply chain security).
   release notes of a published immutable release", "If you delete the immutable release, you can
   delete the tag, but you cannot reuse the same tag name", "immutability will only apply to future
   releases", and it generates a release attestation. The decisions exclude attestations in this
-  feature, and FR-012 holds without it. **Not decided here**: open question Q1.
+  feature, and FR-012 holds without it. Q1, answered 2026-11-14: not turned on in this feature.
 - A release that already exists is never replaced: the publish step first runs `gh release view`
   for the tag and stops if it finds one.
 
@@ -261,7 +266,8 @@ releases" (docs.github.com, supply chain security).
 - **Measured by the maintainer on 2026-11-14**: two builds of one commit on one machine are byte
   for byte identical when the output file name is the same. **Unknown**: GitHub's Linux build
   against a macOS build (plan.md, "If GitHub's build differs").
-- **Where its record lives**: open question Q3.
+- **Where its record lives** (Q3, answered 2026-11-14): in the release notes and in the commit that
+  records the checksums.
 
 ## R10. Keeping `main` free of a dev version
 
@@ -282,8 +288,8 @@ releases" (docs.github.com, supply chain security).
 
 - **Decision**: on each branch that carries the release, a commit that sets both checksums in
   `runner-release.json` to `null` (version unchanged). A CLI built from it then says it has no
-  published runner to install (FR-007). Then the GitHub release is marked or deleted (open question
-  Q2), the tag is kept, and the version is never used again. Servers that already run it keep
+  published runner to install (FR-007). Then the GitHub release is deleted (Q2, answered
+  2026-11-14), the tag is kept, and the version is never used again. Servers that already run it keep
   running; nothing on them changes. The fix is a new release with a higher version, recorded as
   usual, then `zekno server update` on each server. If a server must stop using it at once, the
   runner is replaced by hand as the runner's README describes.
@@ -321,7 +327,7 @@ releases" (docs.github.com, supply chain security).
 - **Rationale**: FR-018 asks for both older and newer; today only older is said. FR-021 asks to say
   what does not work, and "Running state and logs need the newer runner" is only true of a runner
   without sessions.
-- **Needs the maintainer's approval** before it is built (open question Q4): it changes the wording
+- **Approved by the maintainer on 2026-11-14** (Q4) before it was built: it changes the wording
   of screens approved in feature 004.
 
 ## R14. The procedure page
@@ -371,42 +377,96 @@ on Bun 1.4.4. Reproduced on this machine (macOS, Bun 1.4.4).
   own behaviour for a development checkout. `BUN_OPTIONS` in the environment is read by a compiled
   program too and cannot be turned off; it comes from the user's own environment.
 
-## Open questions for the maintainer
+## Questions for the maintainer, answered 2026-11-14
 
-Each has a recommended answer. The plan and tasks work with the recommendation; a different answer
-changes only the tasks named.
+Each had a recommended answer. On 2026-11-14 the maintainer accepted every recommendation.
 
-| # | Question | Recommended answer | Tasks it touches |
-|---|----------|--------------------|------------------|
-| Q1 | Turn on immutable releases for the repository? It stops files and tags from being changed after publishing, keeps notes editable, makes a deleted release's tag unusable again, and makes GitHub generate a release attestation, which the decisions left out of this feature. | No, not in this feature. FR-012 holds without it (the CLI's checksum). Revisit with provenance later. | None; RELEASING.md mentions it as not enabled |
-| Q2 | When withdrawing: mark the GitHub release (title and notes say "Withdrawn") or delete it? | Delete it, keep the tag. A CLI built before the withdrawal still holds the checksums; with the files gone it cannot install the release at all. Never reuse the version. | T030 (RELEASING.md) |
-| Q3 | Where does the second build's record live "with the release" (FR-009)? | Added by the maintainer to the release notes (`gh release edit <tag> --notes-file <record>`; notes stay editable on any release), and quoted in the body of the commit that records the checksums. | T016, T030 |
-| Q4 | Approve the wording of contracts/versions.md: the sentences for older, newer and dev runners, `! older runner` and `! newer runner` on Home in place of `! runner 0.1.0`, the add-server details, and the installer's three new failure sentences and the changed `tools` one? | Approve as written. | T019, T021 to T024, T027; possibly T038 |
-| Q5 | Build the runner with `--no-compile-autoload-dotenv --no-compile-autoload-bunfig` (R3)? It changes the binary, so it must be decided before the first release. | Yes. | T002 |
-| Q6 | After a prod release, merge `main` back into `dev` and push `dev`, so the next merge does not conflict on the two version files? | Yes, as the last part of step 7. | RELEASING.md (T030) |
-| Q7 | After step 7, a short proof with the prod CLI on the server that runs `0.1.0-dev.1`: `zekno status` says it is older, `zekno server update` brings it to `0.1.0`, a deploy works. It is the real dev-to-prod case. | Yes, as a step 8 with your go-ahead. | T042 |
-| Q8 | Who else holds the admin role on `zekno-app/zekno` (organization owners included)? Is there a second GitHub account with write access to try pushing a `runner-v*` tag for SC-006? | Make the maintainer the only admin. For SC-006, invite a throwaway account with Write role, try `git push origin runner-v0.0.1-dev.1` from it, record the refusal, remove it. Without one, record SC-006 as not tried. | Step 1, T041 |
-| Q9 | FR-016a says "everywhere". Change the records in `specs/004-cli-app/` too? | No. They record what was run, with the number used then. | T008 |
-| Q10 | README promises "A dedicated contact address will be listed here before the first release." The runner release is a first release. Supply an address, or turn on GitHub's private vulnerability reporting and point to it? | Turn on private vulnerability reporting (a repository setting) and say so in the README before step 3. | T035 |
-| Q11 | Split each release job in two (security-review.md, RV1)? A build job with `contents: read` that checks the tag, builds, runs `release.ts files` and hands the four files on as an artifact of the run; then a publish job with `contents: write` that checks out nothing, installs nothing, takes the four files and runs only `gh`. Today the install, the build and the built runner run in the same job as the token that can write, and GitHub carries `GITHUB_PATH` and `GITHUB_ENV` from each step to the next, so code that runs during the build could put its own `gh` in front of the publishing step and get the token. It needs two more pinned actions, `actions/upload-artifact` and `actions/download-artifact`, which are not in the repository (R6 left them out for that reason). | Yes, before the first release. Details below. | The workflow, `apps/runner/test/workflow.test.ts`, contracts/release.md, RELEASING.md parts 1 and 6 |
-| Q12 | Check Bun's runtimes for Linux, which both builds download and embed, against checksums Bun publishes? | None yet: first find out what is not known below. A check would add a source of truth (Bun's own release checksums and the key that signs them) that the decisions did not name. | `apps/runner/scripts/second-build.ts`, the workflow, RELEASING.md part 7 |
+| # | Question | Answer (2026-11-14) | Where it is applied |
+|---|----------|---------------------|---------------------|
+| Q1 | Turn on immutable releases for the repository? It stops files and tags from being changed after publishing, keeps notes editable, makes a deleted release's tag unusable again, and makes GitHub generate a release attestation, which the decisions left out of this feature. | No, not in this feature. FR-012 holds without it (the CLI's checksum). Revisit with provenance later. | RELEASING.md part 1 says it stays off |
+| Q2 | When withdrawing: mark the GitHub release (title and notes say "Withdrawn") or delete it? | Delete it and keep the tag. A version is never reused. | RELEASING.md parts 3 and 9 |
+| Q3 | Where does the second build's record live "with the release" (FR-009)? | In the release notes (`gh release edit <tag> --notes-file <record>`) and in the body of the commit that records the checksums. | `second-build.ts` (T016); RELEASING.md parts 7 and 8 |
+| Q4 | Approve the wording of contracts/versions.md: the sentences for older, newer and dev runners, `! older runner` and `! newer runner` on Home in place of `! runner 0.1.0`, the add-server details, and the installer's three new failure sentences and the changed `tools` one? | Approved as written: W1 to W5, D1 and D2, `! older runner` and `! newer runner`, the installer's failure sentences. | T019, T021 to T025, T027 |
+| Q5 | Build the runner with `--no-compile-autoload-dotenv --no-compile-autoload-bunfig` (R3)? | Yes, both programs (R16). | T002; `apps/cli/build.ts` |
+| Q6 | After a prod release, merge `main` back into `dev` and push `dev`, so the next merge does not conflict on the two version files? | Yes, as the last part of maintainer step 7. | RELEASING.md part 10; tasks.md, maintainer step 7 |
+| Q7 | After step 7, a short proof with the prod CLI on the server that runs `0.1.0-dev.1`: `zekno status` says it is older, `zekno server update` brings it to `0.1.0`, a deploy works. | Yes, as maintainer step 8, the last. | RELEASING.md part 10; tasks.md, maintainer step 8; T042 |
+| Q8 | Who else holds the admin role on `zekno-app/zekno`? Is there a second GitHub account with write access to try pushing a `runner-v*` tag for SC-006? | The maintainer is the only admin of the repository. The second-account try for SC-006 is skipped unless such an account is at hand; the record then says it was not tried. | RELEASING.md part 1; maintainer step 1; T041 |
+| Q9 | FR-016a says "everywhere". Change the records in `specs/004-cli-app/` too? | No. They keep their 0.2.0: they record what was run, with the number used then. | T008 |
+| Q10 | Supply a security contact address, or turn on GitHub's private vulnerability reporting and point to it? | Private vulnerability reporting, turned on; the README says so. | README.md, "Reporting a vulnerability"; RELEASING.md part 1 |
+| Q11 | Split each release job in two (security-review.md, RV1)? | Yes, before the first release. Built on 2026-11-14 (below). | `.github/workflows/runner-release.yml`, `apps/runner/test/workflow.test.ts`, contracts/release.md, RELEASING.md parts 1 and 6 |
+| Q12 | Check Bun's runtimes for Linux, which both builds download and embed, against checksums Bun publishes? | Stays an open note: nothing is built for it. | RELEASING.md part 7; security-review.md |
 
-### Q11 in more detail
+### Q11, as built (2026-11-14)
 
-- The build job keeps today's first step (the tag must be of the job's kind), `persist-credentials:
-  false`, the Bun pin read from the commit, `--ignore-scripts`, the build and `release.ts files`, all
-  with `contents: read`. For prod it also keeps `environment: prod`, so nothing is built before the
-  approval.
-- The publish job `needs` the build job and holds `contents: write`. Its steps: download the four
-  files of this run, then the existing `gh release view` guard and `gh release create`. No
-  checkout, no setup of Bun, no install, nothing of the repository runs in it. `gh` is the one on
-  GitHub's machine.
-- What it does not change: the build job can still hand over whatever it built. That is caught as
-  now: no zekno installs a release before the second build matched it.
-- Both new actions are pinned to full commits, as the two in use are, and `workflow.test.ts` gains
-  their pins and a check that the publish job has no `run:` step but the publishing one.
+Sources, each read on 2026-11-14:
 
-### Q12 in more detail
+- `git ls-remote https://github.com/actions/upload-artifact` and
+  `.../download-artifact`: `refs/tags/v7.0.2` and `refs/tags/v7` are commit
+  `cf430e030ddbb5b0abf93d22962f4752f3646cd9`; `refs/tags/v8.0.2` and `refs/tags/v8` are commit
+  `9000827ccba6bdab643e8b6fd33ac0654aef8333`. Both tags are lightweight (no peeled entry).
+- `README.md` and `action.yml` of actions/upload-artifact at `cf430e0`
+  (github.com/actions/upload-artifact). `path`: "A file, directory or wildcard pattern that
+  describes what to upload", required. "If multiple paths are provided as input, the least common
+  ancestor of all the search paths will be used as the root directory of the artifact."
+  `if-no-files-found`: "error: Fail the action with an error message"; the default `warn` only
+  warns. `retention-days`: "Minimum 1 day. Maximum 90 days unless changed from the repository
+  settings page." `compression-level`: "For large files that are not easily compressed, a value of 0
+  is recommended for significantly faster uploads." `overwrite`, default `false`: "the action will
+  fail if an artifact for the given name already exists". `include-hidden-files`, default `false`.
+  "Artifacts created by upload-artifact@v4 are immutable." It runs on `node24`.
+- `README.md` and `action.yml` of actions/download-artifact at `9000827`
+  (github.com/actions/download-artifact). `name`, `path` ("Destination path ... Defaults to
+  $GITHUB_WORKSPACE"); "When downloading a single artifact (by name or ID), it will always be
+  extracted directly to the specified path." `github-token`: "If unspecified, the action will
+  download artifacts from the current repo and the current workflow run." `digest-mismatch`:
+  "Default is error which will fail the action."
+- Its `dist/index.js` at that commit, read, not run: a zip artifact is unpacked by `unzip-stream`,
+  whose `_prepareOutStream` replaces every `..` path segment with `.` ("protect against malicious zip
+  files which want to extract to parent dirs") and writes plain files only.
+- GitHub Docs: "Workflow syntax for GitHub Actions", `jobs.<job_id>.needs`: "If a job fails or is
+  skipped, all jobs that need it are skipped unless the jobs use a conditional expression that
+  causes the job to continue." The same page: "If you specify the access for any of these
+  permissions, all of those that are not specified are set to `none`."
+- GitHub Docs: "Actions limits": "Gate approval time | 30 days | A workflow may wait for up to 30
+  days on environment approvals." and "Workflow run time | 35 days / workflow run".
+- GitHub Docs: "Re-running workflows and jobs": "up to 30 days after its initial run"; "When you
+  re-run failed jobs or a specific job, GitHub also re-runs the jobs that depend on them. Jobs that
+  aren't included keep their outputs from the previous attempt".
+- GitHub Docs: "Store and share data with workflow artifacts": "If you want to download artifacts
+  from a different workflow or workflow run, you need to supply a token and run identifier", and
+  "The `retention-days` value cannot exceed the retention limit set by the repository,
+  organization, or enterprise."
+
+What was built (contracts/release.md, "The workflow"):
+
+- Four jobs after `check`. `build-dev` and `build-prod` have `contents: read`, start with the tag
+  check, check out with `persist-credentials: false`, read the Bun pin, set up Bun, install with
+  `--ignore-scripts`, build, run `release.ts files`, and upload exactly the four files as the
+  artifact `runner-release` (`if-no-files-found: error`, `compression-level: 0`).
+  `publish-dev` and `publish-prod` have `contents: write`, `needs` their build job and no `if:`;
+  `publish-prod` alone has `environment: prod`. Their steps: the tag check, the download into
+  `release`, the check of the four files, and `gh`. No checkout, no Bun, no install, nothing run
+  from the artifact.
+- **Retention**: 1 day for dev, the action's minimum: `publish-dev` runs as soon as `build-dev`
+  passed, and a failed publish run again within the day finds the files. 30 days for prod:
+  `publish-prod` may wait for its approval up to the 30 days GitHub allows, and the files must
+  still be there when it is approved. A shorter time would make an approval after it fail at the
+  download, with nothing published. The files are public once published, so keeping them longer
+  costs storage only.
+- `RELEASE-NOTES.md` is public text: at most 64 KiB, the limit the second build downloads it with.
+
+Not confirmed, because it needs a run on GitHub:
+
+- That the download needs no permission beyond `contents: write` (the documentation says a token is
+  needed only for another run).
+- What "re-run failed jobs" does with the artifact: whether a publish job run again sees the
+  artifact of the earlier attempt's build, and whether a build job run again fails because an
+  artifact of that name exists (`overwrite` is `false`). Either way nothing is published that was
+  not checked, and the next try can take the next version.
+- That a retention of 30 days is allowed by the repository's settings ("Artifacts are retained for
+  90 days by default", the upload action's README; RELEASING.md part 1 says to check the setting).
+
+### Q12 in more detail (an open note)
 
 Known, from this repository's work on 2026-11-14:
 

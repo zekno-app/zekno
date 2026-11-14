@@ -22,7 +22,7 @@ import { createTeam } from "../ops/init"
 import { writeLink } from "../ops/link"
 import { followLogs, LOG_TAIL, prepareLogs, type LogLine } from "../ops/logs"
 import { prepareSecretSet, removeSecret, setSecret } from "../ops/secret"
-import { addServer, prepareServerAdd, prepareServerUpdate, runnerRelation, updateRunner } from "../ops/server"
+import { addServer, prepareServerAdd, prepareServerUpdate, runnerRelation, runnerWarning, updateRunner, type RunnerRelation } from "../ops/server"
 import { locateServer, readOver, stateOf, type AppStates, type RunState, type StatusResult } from "../ops/status"
 import { profileStore, type Server } from "../profile"
 import { aboveOf, DEFAULT_COMPOSE, findProject, notSignedHere, shownPath, standingOf, tilde, type ProjectLink, type Standing } from "../project"
@@ -40,6 +40,7 @@ import {
   type Effect,
   type LogLine as ShownLine,
   type Notice,
+  type RunnerRow,
   type Start,
   type TeamView,
 } from "./state"
@@ -233,13 +234,19 @@ export const linkedElsewhere = (link: Pick<ProjectLink, "app" | "server">): stri
   `This folder is linked to ${link.app} on ${link.server}. Select it to deploy this folder. ` +
   "To deploy it elsewhere, run `zekno deploy --app <name> --server <name>` here."
 
-/** What the add-server screen says beside a runner that was already on the server. */
+/**
+ * What the add-server screen says beside a runner that was already on the
+ * server (contracts/versions.md, "The app"): its version, and whether it is
+ * out of date or newer than this zekno. The installer reports a version only,
+ * already held to the version grammar, and never a protocol.
+ */
 export function foundDetail(version: string | undefined, carried: string): string {
   if (version === undefined) return "no version reported, out of date"
-  return version === carried ? `version ${version}` : `version ${version}${compareOlder(version, carried) ? ", out of date" : ""}`
+  const { relation } = runnerRelation("session", { version, protocol: RUNNER_PROTOCOL }, carried)
+  if (relation === "older") return `version ${version}, out of date`
+  if (relation === "newer") return `version ${version}, newer than this zekno`
+  return `version ${version}`
 }
-
-const compareOlder = (version: string, carried: string): boolean => runnerRelation("session", { version, protocol: RUNNER_PROTOCOL }, carried).relation === "older"
 
 /** The sentence for a failure a person can act on, or undefined for one nobody planned for. */
 function reasonOf(error: unknown): string | undefined {
@@ -317,11 +324,14 @@ type Source = { read: ComposeText; named: string; app: string; linked: boolean; 
 /** A size in bytes as the board writes it: "27 MB". */
 export const megabytes = (bytes: number): string => `${Math.max(1, Math.round(bytes / 1_000_000))} MB`
 
-/** The runner's version and whether it is older than the one this zekno carries, for Home. Undefined for a runner on this machine. */
-function runnerOf(target: Target, mode: SessionMode, runner: RunnerVersion | undefined, carried: string) {
-  if (target.kind !== "ssh") return undefined
-  return { version: runner?.version, outdated: runnerRelation(mode, runner, carried).relation === "older" }
+/** How a server's runner stands to the one this zekno carries. Undefined for a runner on this machine, which is never compared. */
+function relationOf(target: Target, mode: SessionMode, runner: RunnerVersion | undefined, carried: string): RunnerRelation | undefined {
+  return target.kind === "ssh" ? runnerRelation(mode, runner, carried) : undefined
 }
+
+/** The runner as Home shows it: its version, older, the same or newer, and what needs it updated. */
+const runnerRow = (runner: RunnerVersion | undefined, relation: RunnerRelation | undefined): RunnerRow | undefined =>
+  relation && { version: runner?.version, relation: relation.relation, missing: relation.missing }
 
 /**
  * Runs the effects the reducer asks for. A failure a person can act on
@@ -400,6 +410,21 @@ export function createEffects(
 
   const carried = (deps.release ?? RUNNER_RELEASE).version
   const notice = (tone: Notice["tone"], text: string) => dispatch({ type: "notice", notice: { tone, text } })
+
+  /**
+   * Servers whose runner was found newer than this zekno in this run. That is
+   * said once per server each time the app runs, when it is first read
+   * (contracts/versions.md, "The app"); for a server added in this run, the
+   * line that says it was added says so instead. An older runner needs no
+   * notice: the line under its name and `u` say it.
+   */
+  const toldNewer = new Set<string>()
+  const tellNewer = (name: string, runner: RunnerVersion | undefined, relation: RunnerRelation | undefined) => {
+    if (relation?.relation !== "newer" || toldNewer.has(name)) return
+    toldNewer.add(name)
+    const text = runnerWarning(name, runner?.version, relation, carried)
+    if (text) notice("warning", text)
+  }
 
   /** Runs work in the background and reports how it failed, if it did. */
   const perform = (work: () => Promise<void>): Promise<void> =>
@@ -730,15 +755,21 @@ export function createEffects(
         throw error
       }
       remember(team)
-      const runner = runnerOf(result.target, result.mode, result.runner, carried)
+      const relation = relationOf(result.target, result.mode, result.runner, carried)
+      const runner = runnerRow(result.runner, relation)
+      // This line says a newer runner, so its first read does not say it again.
+      if (relation?.relation === "newer") toldNewer.add(result.name)
       // The code is in the screen's panel; the reducer adds it to this line only when that screen was left before it was done.
-      const text = runner?.outdated
-        ? `Connected ${result.name}. Its runner is older than this zekno: deploys work, and u updates it.`
-        : `Connected ${result.name} and added it to the signed team list.`
+      const text =
+        relation?.relation === "older"
+          ? `Connected ${result.name}. Its runner is older than this zekno: deploys work, and u updates it.`
+          : relation?.relation === "newer"
+            ? `Connected ${result.name}. Its runner is newer than this zekno: update zekno to match it.`
+            : `Connected ${result.name} and added it to the signed team list.`
       dispatch({
         type: "server-added",
         team: teamView(team, deps.home),
-        notice: { tone: runner?.outdated ? "warning" : "success", text },
+        notice: { tone: relation === undefined || relation.relation === "same" ? "success" : "warning", text },
         code: result.code,
       })
       dispatch({ type: "server-reached", server: result.name, reachable: true, runner })
@@ -776,7 +807,9 @@ export function createEffects(
 
   /** What a server answered, for the reducer: reached, its runner's version, and its apps' state and last deploy numbers. */
   function report(server: Server, result: StatusResult): void {
-    dispatch({ type: "server-reached", server: server.name, reachable: true, runner: runnerOf(server.target, result.mode, result.runner, carried) })
+    const relation = relationOf(server.target, result.mode, result.runner, carried)
+    dispatch({ type: "server-reached", server: server.name, reachable: true, runner: runnerRow(result.runner, relation) })
+    tellNewer(server.name, result.runner, relation)
     // Only the apps this machine has a history for: Home shows no other, so no other is kept.
     const names = appNames(deps.home, server)
     dispatch({ type: "app-states", server: server.name, states: statesFor(result.states, names), accepted: acceptedFor(result.status, names) })

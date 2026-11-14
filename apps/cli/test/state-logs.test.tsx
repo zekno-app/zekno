@@ -515,7 +515,7 @@ describe("state on Home and the app screen (boards 'Home' and 'One app')", () =>
     expect(asking.question?.kind).toBe("remove-secret")
     const prompting = play(onApp, text("s"), ...typing("API_KEY"), K.enter)
     const naming = play(onApp, text("s"))
-    const outdated = play(initialState({ kind: "team", team: { ...TEAM, servers: [{ ...TEAM.servers[0]!, runner: { version: "0.1.0", outdated: true } }] } }, SIZE), text("u"))
+    const outdated = play(initialState({ kind: "team", team: { ...TEAM, servers: [{ ...TEAM.servers[0]!, runner: { version: "0.1.0", relation: "older", missing: "nothing" } }] } }, SIZE), text("u"))
     expect(outdated.question?.kind).toBe("update-runner")
     const filtering = play(onLogs(), text("/"))
     const small = update(home(), { type: "resize", columns: 70, rows: 20 }).state

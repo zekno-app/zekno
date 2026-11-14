@@ -11,7 +11,7 @@ There are two kinds of release:
 | Tag | `runner-v<x.y.z>-dev.<n>`, such as `runner-v0.1.0-dev.1` | `runner-v<x.y.z>`, such as `runner-v0.1.0` |
 | Cut from | a commit on `dev` | a commit on `main` |
 | On GitHub | a pre-release, never the latest release | a release |
-| Approval | none | the maintainer approves it before anything is built |
+| Approval | none | the maintainer approves it before anything is published |
 | Installed by | a zekno built from `dev` | a zekno built from `main` |
 
 A dev release is for proving a runner on a real server before the prod release of the same
@@ -20,27 +20,6 @@ version.
 Steps marked **[outward]** change something on GitHub: a setting, a push, a tag, a release or a
 workflow run. Each is the maintainer's own, done by hand, at the time. Everything else only reads,
 or changes this machine.
-
-## Waiting for the maintainer's answer
-
-These parts follow the recommended answers to open questions in
-[`specs/005-runner-release/research.md`](../../specs/005-runner-release/research.md). Each place is
-marked with its question, such as **[Q2]**. Remove this list and the marks once each is answered.
-
-- **[Q1]** Immutable releases are not turned on.
-- **[Q2]** Withdrawing a release deletes the GitHub release and keeps its tag. Its version is never
-  used again.
-- **[Q3]** The second build's record goes into the release notes, and into the commit that
-  records the checksums.
-- **[Q6]** After a prod release, `main` is merged back into `dev`.
-- **[Q7]** After a prod release, a short proof on a real server.
-- **[Q8]** The maintainer is the only person with the admin role.
-- **[Q10]** Security reports go through GitHub's private vulnerability reporting.
-- **[Q11]** Not built yet. Each release job still builds and publishes in one job, so code that
-  runs during its build could reach the token that publishes. The recommended answer splits each
-  release job in two before the first release.
-- **[Q12]** Not answered. Neither build checks the Bun runtimes for Linux it downloads against
-  Bun's own published checksums.
 
 ## In short
 
@@ -57,7 +36,7 @@ A prod release:
 2. The prod versions on `dev`, merged into `main`, and the environment `prod` checked (part 4).
 3. Tag the commit and push the tag (part 5). Approve the run (part 6).
 4. The second build on `main`, and the commands it prints (part 7). The notes (part 8).
-5. Merge `main` back into `dev` (part 10).
+5. Merge `main` back into `dev`, then a short proof with the prod release (part 10).
 
 The first releases are `0.1.0-dev.1`, then `0.1.0`. Both version files on `dev` already name
 `0.1.0-dev.1`. Between the two, the dev release is proven on a real server, as
@@ -99,10 +78,11 @@ chooses the workflow that runs for it. Without the ruleset, anyone with write ac
 6. **Create**.
 7. Check who holds the admin role: **Settings**, **Collaborators and teams**, and the
    organization's owners (the organization's **People**, role **Owner**). Each of them can push a
-   release tag. **[Q8]** The maintainer is the only one.
+   release tag. The maintainer must be the only one.
 
-To prove it, from another account that has the Write role and nothing more, **[outward]**
-`git push origin runner-v0.0.1-dev.1` must be refused by GitHub. Write down whether this was tried.
+To prove it, when another account that has the Write role and nothing more is at hand, from that
+account **[outward]** `git push origin runner-v0.0.1-dev.1` must be refused by GitHub. Without such
+an account this is not tried. Either way, write down whether it was tried.
 
 ### The rules for `dev` and `main`
 
@@ -133,11 +113,13 @@ Then a second branch ruleset, for `main` only:
 4. **Create**.
 
 These rules do not stop a push to `dev` or `main` by someone with write access, or by the release
-workflow's own token while a release job runs **[Q11]**.
+workflow's own token while a publish job runs. That token can write only in the publish jobs,
+which run nothing of the repository, of its packages or of what the build handed on (part 6).
 
 ### The environment `prod`
 
-A prod release waits in it for the maintainer's approval before anything is built or published.
+A prod release's publish job waits in it for the maintainer's approval before anything is
+published. Its build runs before, with a token that cannot write.
 
 1. **[outward]** **Settings**, **Environments**, **New environment**, name `prod`, **Configure
    environment**.
@@ -153,12 +135,21 @@ It must exist before the first prod tag is pushed. A workflow that names an envi
 not exist creates it, with no protection, and the release would be published with nobody
 approving it. Part 4 checks it before each prod tag.
 
-### Security reports **[Q10]**
+### How long a run keeps its files
+
+The build job hands the release's files to the publish job as an artifact of the run, kept 1 day
+for a dev release and 30 days for a prod release, the longest a prod release can wait for its
+approval. A repository can keep artifacts for less than an artifact asks. Check **Settings**,
+**Actions**, **General**, **Check, workflow run, status, artifact and log retention**: it must be at
+least 30 days. GitHub's default is 90. If it is lower, **[outward]** set it to 90.
+
+### Security reports
 
 **[outward]** **Settings**, the **Security** section (**Advanced Security**), **Private
-vulnerability reporting**, **Enable**. The README's "Reporting a vulnerability" points there.
+vulnerability reporting**, **Enable**, if it is not enabled already. The README's "Reporting a
+vulnerability" points there.
 
-### Left off: immutable releases **[Q1]**
+### Left off: immutable releases
 
 **Settings**, **General**, **Releases**: release immutability stays off. It would stop a release's
 files and tag from changing, and make GitHub publish an attestation, which this feature leaves out.
@@ -331,24 +322,30 @@ Or open **Actions**, **runner release** on GitHub.
 | Job | What it checks and does |
 |-----|-------------------------|
 | `check` | The tag is `runner-v<version>`. The checked-out commit is the tag's. That commit is on `origin/dev` (dev) or `origin/main` (prod). `apps/runner/package.json` says the version. The root `package.json` pins Bun. For prod, `apps/cli/src/runner-release.json` names no dev version. Then it hands on the environment, the version, the commit and the Bun version. |
-| `release-dev` or `release-prod` | First, before anything is checked out, checks that the tag itself is of its kind, dev or prod, and takes the version from it. Reads the pinned Bun version from the commit, installs the packages without running their install scripts, and builds the runner for Linux on x86-64 and ARM64 with that Bun. Checks that it builds the commit `check` passed, that both runners were built, each at most 256 MiB, and that the x86-64 runner answers with the version. Writes the two `.gz` files, `SHA256SUMS` and `RELEASE-NOTES.md`. Stops if a release for the tag exists already. Publishes: a dev release as a pre-release that is never the latest. |
+| `build-dev` or `build-prod` | First, before anything is checked out, checks that the tag itself is of its kind, dev or prod. Reads the pinned Bun version from the commit, installs the packages without running their install scripts, and builds the runner for Linux on x86-64 and ARM64 with that Bun. Checks that it builds the commit `check` passed, that both runners were built, each at most 256 MiB, and that the x86-64 runner answers with the version. Writes the two `.gz` files, `SHA256SUMS` and `RELEASE-NOTES.md`, prints the checksums, and hands the four files on as the run's artifact `runner-release`. It can read the repository and not write to it. |
+| `publish-dev` or `publish-prod` | First checks that the tag itself is of its kind, and takes the version from it. Downloads the artifact. Checks that exactly the four files are there, each within its size (the notes at most 64 KiB), and that the two runners unpack to what `SHA256SUMS` says. Stops if a release for the tag exists already. Publishes with `gh`: a dev release as a pre-release that is never the latest. It checks out nothing, installs nothing, and runs nothing of the repository or of the files it was handed. `publish-prod` waits for your approval before its first step. |
 
-The token GitHub gives the workflow can write only in `release-dev` and `release-prod`. There,
-the step that publishes gets it, and `actions/checkout` gets it to read the repository and keeps
-none of it. Code that runs earlier in the same job, during the build or in the built runner, could
-still reach the publishing step **[Q11]**.
+The token GitHub gives the workflow can write only in `publish-dev` and `publish-prod`, and only
+their publishing step names it. Every checkout keeps none of it. The packages, the build and the
+built runner run only in the build jobs, which cannot write. A build can still hand on files other
+than its source makes; they would be published, and no zekno would install them: the second build
+(part 7) compares them with its own.
 
 Nothing is published when any step fails. Read why with
 `gh run view <run id> --repo zekno-app/zekno --log-failed`. When it failed for a passing reason,
-such as the network, run the same run again: **[outward]**
+such as the network, run the failed jobs again: **[outward]**
 `gh run rerun <run id> --repo zekno-app/zekno --failed`. It builds the same tag and commit, and
-publishes nothing twice. When the commit itself is at fault, the version is used: fix the cause
-and take the next number (part 3).
+publishes nothing twice. A publish job run again needs the artifact its build handed on, which is
+kept 1 day for dev and 30 days for prod. What GitHub does with the artifact of an earlier attempt
+has not been tried: if the run fails again at the upload or the download, or when the commit itself
+is at fault, the version is used. Fix the cause and take the next number (part 3).
 
-**Approving a prod release.** `release-prod` waits for review before its first step. Before you
-approve, check that the run names your tag and the commit that `git rev-parse "${TAG:?}^{commit}"`
-prints here. Then, on the run's page: **[outward]** **Review deployments**, tick **prod**,
-**Approve and deploy**. **Reject** publishes nothing.
+**Approving a prod release.** `build-prod` runs first, without approval; then `publish-prod` waits
+for review before its first step. Before you approve, check that the run names your tag and the
+commit that `git rev-parse "${TAG:?}^{commit}"` prints here, and that `build-prod` passed. Its log
+shows the checksums of the two runners it built. Then, on the run's page: **[outward]** **Review
+deployments**, tick **prod**, **Approve and deploy**. **Reject** publishes nothing. An approval may
+wait up to 30 days; after that GitHub fails the run, nothing is published, and the version is used.
 
 When the run has passed:
 
@@ -411,7 +408,7 @@ It runs none of them. First compare the commit and the subject in the record wit
 printed when you made the tag (part 5). If they differ, stop: run none of the commands, undo the
 change with `git restore apps/cli/src/runner-release.json`, and decide with the maintainer, as for
 a file that differs (below). If they are the same, run the first two commands as printed. The
-commit message holds the record **[Q3]**. Add the "Tried on" section to the notes file (part 8).
+commit message holds the record. Add the "Tried on" section to the notes file (part 8).
 Then **[outward]** run the `git push` and **[outward]** the `gh release edit` as printed.
 
 From that commit on, a zekno built from the branch installs the release.
@@ -443,7 +440,8 @@ record of the mismatch. No zekno installs that release. Then:
 source and its own Bun, so it shows that GitHub's build service changed nothing. Both builds
 fetch the same npm packages, pinned by `bun.lock` with their checksums, and the same Bun runtimes
 for Linux, from the same places. A problem in those would be in both builds, and they would still
-match. Neither build checks the runtimes against Bun's own published checksums **[Q12]**.
+match. Neither build checks the runtimes against Bun's own published checksums: that stays an open
+note (`specs/005-runner-release/research.md`, Q12).
 
 ## 8. The release notes
 
@@ -453,8 +451,8 @@ runner is built for, the checksums, and "Second build: Not made yet."
 
 After the second build, two things are added, in the notes file the second build wrote:
 
-- The second build's record, in place of "Not made yet.". The second build puts it there
-  **[Q3]**.
+- The second build's record, in place of "Not made yet.". The second build puts it there, as it
+  puts it in the commit that records the checksums.
 - A section "Tried on": what was run where, and what was not. Nothing is listed as tried that was
   not.
 
@@ -473,7 +471,7 @@ release's files are never replaced.
 ## 9. Withdrawing a release
 
 When a release turns out to be bad, these steps stop zekno from installing it, within the limits
-below **[Q2]**.
+below. The GitHub release is deleted, its tag is kept, and its version is never used again.
 
 1. On each branch that records it, write `apps/cli/src/runner-release.json` with the same version
    and no checksums. A dev release is recorded on `dev`. A prod release is recorded on `main`, and
@@ -525,8 +523,8 @@ way, with nothing put in place.
 access to the repository can create a release again on the kept tag with the original files,
 which anyone could have downloaded while they were public. Such a zekno then installs it again,
 because the checksums it holds match. Running the release's workflow run again would do the same,
-which step 3 prevents. Whether immutable releases **[Q1]** would stop a release from being created
-again on a kept tag is not known. And it changes nothing on servers that already run it.
+which step 3 prevents. Whether immutable releases, which stay off (part 1), would stop a release
+from being created again on a kept tag is not known. And it changes nothing on servers that already run it.
 
 **Servers that already run it** keep running it: nothing on them changes. Once the next release is
 recorded, `zekno server update <name>` replaces it on each, because the next version is newer.
@@ -538,8 +536,8 @@ one ([README](./README.md), "By hand").
 
 ## 10. After a prod release
 
-1. **[Q6]** Merge `main` back into `dev`, so `dev` records the prod release too and the next merge
-   into `main` does not conflict on the two version files:
+1. Merge `main` back into `dev`, so `dev` records the prod release too and the next merge into
+   `main` does not conflict on the two version files:
 
    ```sh
    git switch dev
@@ -548,8 +546,9 @@ one ([README](./README.md), "By hand").
    ```
 
    **[outward]** `git push origin dev`
-2. **[Q7]** A short proof on a real server: with a zekno built from `main`, on a server that runs
-   the dev release of the same version, `zekno status` says the runner is older,
+2. Last, a short proof on a real server: with a zekno built from `main`, on a server that runs the
+   dev release of the same version, `zekno status` says the runner is older,
    `zekno server update <name>` brings it to the prod release, and a deploy works. Add what was run
    to the release notes' "Tried on" (part 8).
-3. The next dev release sets its version on `dev` (part 3), such as `0.1.1-dev.1`.
+
+The next dev release then sets its version on `dev` (part 3), such as `0.1.1-dev.1`.

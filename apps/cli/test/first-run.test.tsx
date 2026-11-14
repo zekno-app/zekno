@@ -15,14 +15,14 @@ import { wordsThatFit } from "../src/app/screens/parts"
 import { initialState, top, update, type AppEvent, type State, type TeamView } from "../src/app/state"
 import { openTeam, type OpDeps } from "../src/context"
 import { NO_RELEASE, RUNNER_PATHS } from "../src/install"
-import { compareVersions, runnerRelation } from "../src/ops/server"
+import { compareVersions, runnerRelation, runnerWarning } from "../src/ops/server"
 import { RUNNER_RELEASE, type RunnerRelease } from "../src/runner-release"
 import runnerPackage from "../../runner/package.json"
 import { plainUi } from "../src/ui/plain"
 import { yesOrNo } from "../src/ui/ink"
 import { ORDERED_VERSIONS } from "../../../packages/core/test/fixtures/versions"
 import { COMPOSE_V1, filesUnder, machine } from "./helpers"
-import { fakeRunner, olderRunner, realRunner, releasedRunner, sha256, sshStandIn, standInServer, withSsh, type StandInServer } from "./stand-in-server"
+import { fakeRunner, olderRunner, realRunner, releasedRunner, reportingRunner, sha256, sshStandIn, standInServer, withSsh, type StandInServer } from "./stand-in-server"
 
 type Machine = ReturnType<typeof machine>
 
@@ -246,7 +246,7 @@ describe("adding a server over SSH (board 'Add a server')", () => {
       expect(ssh.calls()).toEqual([`-- deploy@203.0.113.7 sh -s -- add ${OWN} release x64 ${m.deps.release!.files["linux-x64"].sha256}`])
       expect(profileServers(m)[0]?.target).toEqual({ kind: "ssh", destination: "deploy@203.0.113.7", runnerPath: RUNNER_PATHS.user })
       expect(server.mode(server.runnerPath)).toBe(0o755)
-      expect(app.state.team?.servers[0]).toMatchObject({ name: "prod", reachable: true, runner: { version: OWN, outdated: false } })
+      expect(app.state.team?.servers[0]).toMatchObject({ name: "prod", reachable: true, runner: { version: OWN, relation: "same", missing: "nothing" } })
 
       // The board, drawn as it was while the runner was being set up.
       const settingUp = seen.find((state) => state.adding?.steps.runner && !state.adding.steps.set_up)!
@@ -364,10 +364,10 @@ describe("adding a server over SSH (board 'Add a server')", () => {
       expect(server.calls("curl")).toEqual([])
       expect(readFileSync(server.runnerPath, "utf8")).toBe(older)
       // Home says so beside the server, and offers u.
-      expect(app.state.team?.servers[0]).toMatchObject({ name: "prod", reachable: true, runner: { outdated: true } })
+      expect(app.state.team?.servers[0]).toMatchObject({ name: "prod", reachable: true, runner: { relation: "older", missing: "state and logs" } })
       const home = app.draw()
       expect(home).toMatch(/❯ prod +│/)
-      expect(home).toMatch(/│ {3}! old runner +│/)
+      expect(home).toMatch(/│ {3}! older runner +│/)
       expect(lastLine(home)).toBe("↑↓ move  ←→ pane  enter open  a add  u update runner  ? help  q quit")
 
       // u asks first, as on the board; esc leaves it alone.
@@ -387,7 +387,7 @@ describe("adding a server over SSH (board 'Add a server')", () => {
       // u, u: updated by the same verified route, then asked again.
       app.type("u")
       app.type("u")
-      await app.until(() => app.state.team?.servers[0]?.runner?.outdated === false, "the runner to be updated")
+      await app.until(() => app.state.team?.servers[0]?.runner?.relation === "same", "the runner to be updated")
       expect(readFileSync(server.runnerPath, "utf8")).toBe(realRunner(m.docker.path))
       expect(server.calls("curl")).toHaveLength(1)
       expect(app.draw()).toMatch(/❯ prod +●/)
@@ -770,6 +770,82 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
     expect(ssh.calls()).toHaveLength(calls)
   }, 90_000)
 
+  test("server add and status say W2 to W5 of contracts/versions.md, with D1 or D2, once on standard error, by the version and protocol the runner reports; nothing for the same", async () => {
+    const m = machine()
+    expect(await m.zekno("init", "--name", "Ada")).toBe(0)
+    const server = standInServer()
+    const P = RUNNER_PROTOCOL
+    const carrying = (version: string) => (m.deps.release = { version, files: { "linux-x64": { sha256: null }, "linux-arm64": { sha256: null } } })
+    const said = (from: number) => m.err.slice(from).filter((line) => line.startsWith("The runner on prod "))
+    const update = "run `zekno server update prod`."
+    await withSsh(sshStandIn(server), async () => {
+      // A zekno built from dev on a server that runs the prod release of the same numbers: W4, then D2.
+      const w4 =
+        "The runner on prod is version 0.1.0, newer than this zekno's 0.1.0-dev.2. It works with this zekno. Update zekno to match it; `zekno server update` never replaces a newer runner. This zekno carries a development release."
+      server.installed(reportingRunner(m.docker.path, "0.1.0", P))
+      carrying("0.1.0-dev.2")
+      let from = m.err.length
+      expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")).toBe(0)
+      expect(said(from)).toEqual([w4])
+      from = m.err.length
+      expect(await m.zekno("status", "--server", "prod")).toBe(0)
+      expect(said(from)).toEqual([w4])
+
+      for (const [runner, protocol, carried, sentence] of [
+        // A zekno built from main on a server that runs the dev release: W2, then D1.
+        [
+          "0.1.0-dev.1",
+          P,
+          "0.1.0",
+          `The runner on prod is version 0.1.0-dev.1, older than this zekno's 0.1.0. Everything works with it. To bring it to 0.1.0, ${update} Version 0.1.0-dev.1 is a development release.`,
+        ],
+        ["0.1.0", P - 1, "0.2.0", `The runner on prod is version 0.1.0, older than this zekno's 0.2.0. Deploys still work. Some of what this zekno does needs the newer runner: ${update}`],
+        ["0.2.0", P + 1, "0.1.0", "The runner on prod is version 0.2.0, newer than this zekno's 0.1.0, and speaks a newer protocol. Update zekno before you deploy to prod."],
+        ["0.1.0", P, "0.1.0", undefined],
+      ] as const) {
+        server.installed(reportingRunner(m.docker.path, runner, protocol))
+        carrying(carried)
+        from = m.err.length
+        expect(await m.zekno("status", "--server", "prod")).toBe(0)
+        expect({ runner, protocol, carried, said: said(from) }).toEqual({ runner, protocol, carried, said: sentence === undefined ? [] : [sentence] })
+      }
+    })
+  }, 90_000)
+
+  test("in the app, a newer runner: adding it says so once, and in a later run its notice comes once however often it is read", async () => {
+    const m = machine()
+    const server = standInServer()
+    server.installed(reportingRunner(m.docker.path, "0.1.0", RUNNER_PROTOCOL))
+    m.deps.release = { version: "0.1.0-dev.2", files: { "linux-x64": { sha256: null }, "linux-arm64": { sha256: null } } }
+    const W4 =
+      "The runner on prod is version 0.1.0, newer than this zekno's 0.1.0-dev.2. It works with this zekno. Update zekno to match it; `zekno server update` never replaces a newer runner. This zekno carries a development release."
+    const notices = (events: AppEvent[]) => events.flatMap((event) => (event.type === "notice" ? [event.notice] : []))
+    await withSsh(sshStandIn(server), async () => {
+      const app = await named(m)
+      await added(app, "deploy@203.0.113.7", "prod")
+      expect(app.failures).toEqual([])
+      expect(app.state.adding?.steps.runner).toEqual({ state: "done", detail: "version 0.1.0, newer than this zekno", found: true })
+      expect(app.state.notice).toEqual({ tone: "warning", text: "Connected prod. Its runner is newer than this zekno: update zekno to match it." })
+      // The kept session's first read does not say it again.
+      await app.until(() => app.events.some((event) => event.type === "app-states"), "the first read of prod")
+      expect(notices(app.events)).toEqual([])
+      expect(app.state.team?.servers[0]?.runner).toEqual({ version: "0.1.0", relation: "newer", missing: "nothing" })
+      expect(app.draw()).toMatch(/│ {3}! newer runner +│/)
+      expect(lastLine(app.draw())).not.toContain("u update runner")
+      app.type("u")
+      expect(app.state.question).toBeUndefined()
+      await app.effects.close()
+
+      // The next time the app runs: once, at the first read, and not at the next.
+      const again = openApp(m, await loadStart(m.deps))
+      await again.effects.checkServers()
+      await again.effects.checkServers()
+      expect(again.failures).toEqual([])
+      expect(notices(again.events)).toEqual([{ tone: "warning", text: W4 }])
+      expect(again.state.notice).toEqual({ tone: "warning", text: W4 })
+    })
+  }, 60_000)
+
   test("server update replaces an older runner and leaves every file of its folder, and their modes, as they were; a newer runner is not touched", async () => {
     const m = machine()
     expect(await m.zekno("init", "--name", "Ada")).toBe(0)
@@ -866,8 +942,8 @@ describe("what the screens say", () => {
     expect(foundDetail("0.1.0-dev.1", "0.1.0-dev.1")).toBe("version 0.1.0-dev.1")
     expect(foundDetail("0.0.9", "0.1.0")).toBe("version 0.0.9, out of date")
     expect(foundDetail("0.1.0-dev.2", "0.1.0")).toBe("version 0.1.0-dev.2, out of date")
-    expect(foundDetail("0.1.1", "0.1.0")).toBe("version 0.1.1")
-    expect(foundDetail("0.1.0", "0.1.0-dev.10")).toBe("version 0.1.0")
+    expect(foundDetail("0.1.1", "0.1.0")).toBe("version 0.1.1, newer than this zekno")
+    expect(foundDetail("0.1.0", "0.1.0-dev.10")).toBe("version 0.1.0, newer than this zekno")
     expect(foundDetail(undefined, "0.1.0")).toBe("no version reported, out of date")
   })
 
@@ -913,31 +989,112 @@ describe("what the screens say", () => {
     }
   })
 
-  test("Home: `! runner 0.1.0` beside a server that is out of date, and `u` in the hints only then", () => {
+  test("what server add and status say of a runner of another version: W1 to W5 of contracts/versions.md, with D1 or D2, and nothing for the same", () => {
+    const P = RUNNER_PROTOCOL
+    const say = (version: string | undefined, protocol: number, carried: string) =>
+      runnerWarning("prod", version, runnerRelation(version === undefined ? "one-shot" : "session", version === undefined ? undefined : { version, protocol }, carried), carried)
+    const update = "run `zekno server update prod`."
+    // W1: no version, so older; a runner that reports none is said to be neither a development release nor not.
+    const w1 = (carried: string) =>
+      `The runner on prod does not report its version, so it is older than this zekno's ${carried}. Deploys still work. Running state and logs need the newer runner: ${update}`
+    expect(say(undefined, P, "0.1.0")).toBe(w1("0.1.0"))
+    expect(say(undefined, P, "0.1.0-dev.1")).toBe(w1("0.1.0-dev.1"))
+    // W2: older, the same protocol.
+    expect(say("0.0.9", P, "0.1.0")).toBe(`The runner on prod is version 0.0.9, older than this zekno's 0.1.0. Everything works with it. To bring it to 0.1.0, ${update}`)
+    // W3: older, a lower protocol.
+    expect(say("0.0.9", P - 1, "0.1.0")).toBe(
+      `The runner on prod is version 0.0.9, older than this zekno's 0.1.0. Deploys still work. Some of what this zekno does needs the newer runner: ${update}`
+    )
+    // W4: newer, the same protocol.
+    expect(say("0.2.0", P, "0.1.0")).toBe(
+      "The runner on prod is version 0.2.0, newer than this zekno's 0.1.0. It works with this zekno. Update zekno to match it; `zekno server update` never replaces a newer runner."
+    )
+    // W5: newer, a higher protocol.
+    expect(say("0.2.0", P + 1, "0.1.0")).toBe("The runner on prod is version 0.2.0, newer than this zekno's 0.1.0, and speaks a newer protocol. Update zekno before you deploy to prod.")
+    // The contract's two examples: a zekno from main on a server that runs a dev release (W2, D1), and the reverse (W4, D2).
+    expect(say("0.1.0-dev.1", P, "0.1.0")).toBe(
+      `The runner on prod is version 0.1.0-dev.1, older than this zekno's 0.1.0. Everything works with it. To bring it to 0.1.0, ${update} Version 0.1.0-dev.1 is a development release.`
+    )
+    expect(say("0.1.0", P, "0.1.0-dev.2")).toBe(
+      "The runner on prod is version 0.1.0, newer than this zekno's 0.1.0-dev.2. It works with this zekno. Update zekno to match it; `zekno server update` never replaces a newer runner. This zekno carries a development release."
+    )
+    // D1 and D2 after W3 and W5 too; neither when both or neither is a development release.
+    expect(say("0.1.0-dev.1", P - 1, "0.1.0")).toEndWith("needs the newer runner: run `zekno server update prod`. Version 0.1.0-dev.1 is a development release.")
+    expect(say("0.2.0", P + 1, "0.1.0-dev.1")).toEndWith("Update zekno before you deploy to prod. This zekno carries a development release.")
+    expect(say("0.1.0-dev.1", P, "0.1.0-dev.2")).toEndWith(`To bring it to 0.1.0-dev.2, ${update}`)
+    expect(say("0.1.1", P, "0.1.0")).toEndWith("never replaces a newer runner.")
+    // Nothing for the same version, whatever its protocol.
+    for (const version of ORDERED_VERSIONS) {
+      expect(say(version, P, version)).toBeUndefined()
+      expect(say(version, P + 1, version)).toBeUndefined()
+    }
+    // No dash a person reads.
+    for (const sentence of [say(undefined, P, "0.1.0"), say("0.0.9", P - 1, "0.1.0"), say("0.2.0", P + 1, "0.1.0-dev.1")]) expect(sentence).not.toMatch(/[—–]/)
+  })
+
+  test("Home: `! older runner` or `! newer runner` under a server of another version, whole at 100 and at 80 columns; `u` and its question only for an older one", () => {
     const team: TeamView = {
       member: "ada",
       version: 2,
       servers: [
-        { name: "prod", destination: "deploy@203.0.113.7", reachable: true, runner: { version: "0.1.0", outdated: true }, apps: [] },
-        { name: "staging", destination: "staging-box", reachable: true, runner: { version: "0.1.1", outdated: false }, apps: [] },
+        { name: "prod", destination: "deploy@203.0.113.7", reachable: true, runner: { version: "0.1.0-dev.1", relation: "older", missing: "nothing" }, apps: [] },
+        { name: "staging", destination: "staging-box", reachable: true, runner: { version: "999999999.0.0-dev.999999999", relation: "newer", missing: "nothing" }, apps: [] },
+        { name: "edge", destination: "edge-box", reachable: true, runner: { version: RUNNER_RELEASE.version, relation: "same", missing: "nothing" }, apps: [] },
       ],
     }
     const home = initialState({ kind: "team", team }, SIZE)
-    const screen = draw(home)
-    expect(screen).toMatch(/❯ prod +│/)
-    expect(screen).toMatch(/│ {3}! runner 0\.1\.0 +│/)
-    expect(screen).toMatch(/ {3}staging +●/)
-    expect(lastLine(screen)).toBe("↑↓ move  ←→ pane  enter open  a add  u update runner  ? help  q quit")
-    expect(homeHints(team.servers[1]).map(([k]) => k)).not.toContain("u")
+    for (const [columns, rows] of [
+      [100, 30],
+      [80, 24],
+    ] as const) {
+      const screen = draw({ ...home, size: { columns, rows } }, columns, rows)
+      fits(screen, columns, rows)
+      // Under the name, in place of ●, each whole inside the servers pane: 18 columns there at 100, 16 at 80.
+      expect(screen).toMatch(/│ ❯ prod +│/)
+      expect(screen).toMatch(/│ {3}! older runner +│/)
+      expect(screen).toMatch(/│ {3}staging +│/)
+      expect(screen).toMatch(/│ {3}! newer runner +│/)
+      expect(screen).toMatch(/│ {3}edge +● +│/)
+      expect(screen).not.toContain("runner…")
+      // A version is never drawn on Home.
+      expect(screen).not.toContain("0.1.0-dev.1")
+      expect(screen).not.toContain("999999999")
+    }
+    expect(lastLine(draw(home))).toBe("↑↓ move  ←→ pane  enter open  a add  u update runner  ? help  q quit")
+    for (const server of team.servers.slice(1)) expect(homeHints(server).map(([k]) => k)).not.toContain("u")
     const onStaging = update(home, key({ kind: "down" })).state
     expect(lastLine(draw(onStaging))).toBe("↑↓ move  ←→ pane  enter open  a add  ? help  q quit")
-    const asked = draw(update(home, text("u")).state)
-    expect(asked).toMatch(/on prod +0\.1\.0/)
-    fits(draw(update(home, text("u")).state, 80, 24), 80, 24)
+    expect(update(onStaging, text("u"))).toEqual({ state: onStaging, effects: [] })
+    const onEdge = update(onStaging, key({ kind: "down" })).state
+    expect(update(onEdge, text("u"))).toEqual({ state: onEdge, effects: [] })
+
+    // The question on an older runner: its rows, then what does not work by what it lacks, then the dim line.
+    for (const [missing, version, sentence] of [
+      ["state and logs", undefined, "Deploys still work. Running state and logs need the newer runner."],
+      ["some", "0.0.9", "Deploys still work. Some of what this zekno does needs the newer runner."],
+      ["nothing", "0.1.0-dev.1", "Everything works with it."],
+    ] as const) {
+      const older: TeamView = { ...team, servers: [{ ...team.servers[0]!, runner: { version, relation: "older", missing } }, ...team.servers.slice(1)] }
+      const asked = update(initialState({ kind: "team", team: older }, SIZE), text("u")).state
+      expect(asked.question).toEqual({ kind: "update-runner", server: "prod" })
+      for (const [columns, rows] of [
+        [100, 30],
+        [80, 24],
+      ] as const) {
+        const screen = draw({ ...asked, size: { columns, rows } }, columns, rows)
+        fits(screen, columns, rows)
+        expect(screen).toContain("╭─ The runner on prod is out of date ─")
+        expect(screen).toMatch(new RegExp(`on prod +${(version ?? "no version reported").replaceAll(".", "\\.")}`))
+        expect(screen).toContain(`this zekno    ${RUNNER_RELEASE.version}`)
+        expect(words(screen)).toContain(`${sentence} Updating downloads the runner on prod and checks it before it replaces the old one. Your apps keep running.`)
+        expect(lastLine(screen)).toBe("u update now  esc later")
+      }
+    }
     // Once it cannot be reached, its version is not known: no mark and no u.
     const gone = update(home, { type: "server-reached", server: "prod", reachable: false, problem: "gone" }).state
     expect(gone.team?.servers[0]?.runner).toBeUndefined()
     expect(draw(gone)).toMatch(/❯ prod +✖/)
+    expect(draw(gone)).not.toContain("older runner")
   })
 
   test("Home: `!` and `SSH needs an answer` for a server SSH needs an answer to reach, at 100 and 80 columns; enter connects to it", () => {
@@ -947,7 +1104,7 @@ describe("what the screens say", () => {
       servers: [
         { name: "prod", destination: "deploy@203.0.113.7", reachable: true, apps: [{ name: "demo", deploy: 4, state: "running" }] },
         // Out of date as well: once SSH needs an answer, its runner cannot be known, and the SSH line is shown.
-        { name: "staging", destination: "staging-box", reachable: true, runner: { version: "0.1.0", outdated: true }, apps: [{ name: "web", deploy: 7, state: "running" }] },
+        { name: "staging", destination: "staging-box", reachable: true, runner: { version: "0.1.0", relation: "older", missing: "nothing" }, apps: [{ name: "web", deploy: 7, state: "running" }] },
       ],
     }
     const sentence = needsAnswer("staging-box", "staging")
@@ -964,7 +1121,7 @@ describe("what the screens say", () => {
       fits(screen, columns, rows)
       expect(screen).toMatch(/│ ❯ staging +! │/)
       expect(screen).not.toContain("✖")
-      expect(screen).not.toContain("runner 0.1.0")
+      expect(screen).not.toContain("older runner")
       // The line under the name, cut at a word where the pane is too narrow for all of it: 18 columns at 100, 16 at 80.
       expect(wordsThatFit("SSH needs an answer", 18)).toBe("SSH needs an")
       expect(screen).toMatch(/│ {3}needs an answer +│/)

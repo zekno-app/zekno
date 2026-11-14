@@ -25,7 +25,7 @@ carries, and the installer says what a server lacks when the runner cannot start
 
 **Language/Version**: TypeScript 5 on Bun 1.4.4 (pinned in the root `package.json`), POSIX `sh` for the installer script, GitHub Actions YAML
 
-**Primary Dependencies**: `@workspace/core`, `zod` 4.6.7, Ink 8 (CLI), Bun built-ins (`Bun.CryptoHasher`, `Bun.gzipSync`, `Bun.gunzipSync`, `Bun.spawn`, `fetch`), `git`, `gh` on GitHub's machine only. **No new packages, actions or services.**
+**Primary Dependencies**: `@workspace/core`, `zod` 4.6.7, Ink 8 (CLI), Bun built-ins (`Bun.CryptoHasher`, `Bun.gzipSync`, `Bun.gunzipSync`, `Bun.spawn`, `fetch`), `git`, `gh` on GitHub's machine only. **No new packages or services.** Two GitHub actions are added to the release workflow, pinned to full commits, for splitting each release job in two: `actions/upload-artifact` (v7.0.2) and `actions/download-artifact` (v8.0.2) (research Q11, security-review.md RV1)
 
 **Storage**: files: `apps/cli/src/runner-release.json` (what a CLI installs), `apps/runner/package.json` (what the runner reports), the GitHub Release's four files
 
@@ -61,7 +61,7 @@ carries, and the installer says what a server lacks when the runner cannot start
 
 | Principle | How this plan complies | Status |
 |-----------|------------------------|--------|
-| I. Security Promise First | No signing key exists anywhere. A server installs only a file whose SHA-256 equals the value the CLI holds, and that value is written only after a build on the maintainer's machine matched GitHub's build and `SHA256SUMS`. GitHub's build service alone cannot get a different runner onto a server. The workflow keeps only the default token. Nothing closed is added. | Pass |
+| I. Security Promise First | No signing key exists anywhere. A server installs only a file whose SHA-256 equals the value the CLI holds, and that value is written only after a build on the maintainer's machine matched GitHub's build and `SHA256SUMS`. GitHub's build service alone cannot get a different runner onto a server. The workflow keeps only the default token, and only a job that runs nothing of the repository, its packages or its build can write with it. Nothing closed is added. | Pass |
 | II. Honest Surface | Release notes name what Bun documents and, separately, what was tried (SC-007). Docs never say a release exists before one is recorded, and never say none exists after. The threat table row that says runner releases are "signed" is corrected (they are checked against pinned checksums). "Pre-alpha and unaudited" stays everywhere it is (FR-027). "Runner", never "agent". | Pass |
 | III. Read the Installed Docs First | Bun's own docs in `node_modules/.bun/bun-types@1.4.4/.../docs` were read for the compile targets, the C library, the processor floor and the config autoload (research R3). GitHub and git facts are cited to their official pages. No Next.js code changes; the docs pages are MDX content only. | Pass |
 | IV. One Design System | No new component. Wording changes in existing screens only. Feature 004's justified deviation (the CLI's own theme) is unchanged. | Pass |
@@ -79,7 +79,7 @@ repository pins 1.4.4. That is a wording fix to the constitution, outside this f
 ```text
 specs/005-runner-release/
 ├── plan.md               # this file
-├── research.md           # Phase 0: findings with sources, and the open questions
+├── research.md           # Phase 0: findings with sources, and the maintainer's answers to its questions
 ├── data-model.md         # Phase 1: versions, tags, environments, release files, records
 ├── quickstart.md         # Phase 1: how to check it; results are added as tasks complete
 ├── contracts/
@@ -123,7 +123,7 @@ apps/cli/src/
 └── app/effects.ts, state.ts, screens/home.tsx   # the same in the app
 
 .github/workflows/
-├── runner-release.yml               # rewritten: check, then release-dev or release-prod
+├── runner-release.yml               # rewritten: check, then build-dev and publish-dev, or build-prod and publish-prod
 └── main-versions.yml                # new: main never holds a dev version
 ```
 
@@ -175,17 +175,18 @@ Each needs the maintainer's go-ahead at the time. The tasks named must be done f
 
 | # | Step | Needs first |
 |---|------|-------------|
-| 1 | Create the tag ruleset for `runner-v*` (restrict creations, updates and deletions; block force pushes; bypass: Repository admin only), and the rules for `dev` and `main` (restrict deletions, block force pushes, `check-main` required on `main`; security-review.md, RV1 and RV5). Check who holds the admin role (research R5). Try a tag push from an account without the right if one is available (SC-006, open question Q8). | RELEASING.md (T030) to follow |
+| 1 | Create the tag ruleset for `runner-v*` (restrict creations, updates and deletions; block force pushes; bypass: Repository admin only), and the rules for `dev` and `main` (restrict deletions, block force pushes, `check-main` required on `main`; security-review.md, RV1 and RV5). Check that the repository keeps artifacts at least 30 days (research Q11). Check who holds the admin role (research R5). Try a tag push from an account without the right if one is at hand (SC-006, research Q8: the maintainer is the only admin; without such an account SC-006 is recorded as not tried). | RELEASING.md (T030) to follow |
 | 2 | Create the Environment `prod`: required reviewer the maintainer, "Prevent self-review" off, deployment tags `runner-v*`, administrators' bypass off. Must exist before any prod tag: a workflow that names a missing environment creates it with no protection (research R6). | T030 |
-| 3 | Merge `005-runner-release` into `dev`, push `dev`, push the one tag `runner-v0.1.0-dev.1` (never several tags at once). Watch the run. | All tasks T001 to T039; steps 1 and 2 |
+| 3 | Merge `005-runner-release` into `dev`, push `dev`, push the one tag `runner-v0.1.0-dev.1` (never several tags at once). Watch the run. | All tasks T001 to T039 and T043; steps 1 and 2 |
 | 4 | Run `bun apps/runner/scripts/second-build.ts runner-v0.1.0-dev.1` on `dev`. On a match, commit `runner-release.json`, push `dev`, add the record to the release notes. On a mismatch, stop (below). | Step 3 succeeded |
 | 5 | The proof on the maintainer's server: add a server from the dev release, deploy, update from an older runner (quickstart, "Real server"). | Step 4 |
-| 6 | On `dev`, commit the prod versions (`apps/runner/package.json` `0.1.0`, `runner-release.json` `0.1.0` with no checksums), merge `dev` into `main`, run `release.ts check-main`, push `main`, push `runner-v0.1.0`, approve the run. | Step 5 passed; step 2 |
-| 7 | Run the second build for `runner-v0.1.0` on `main`; commit and push on a match; add the record to the release notes. | Step 6 published |
+| 6 | On `dev`, commit the prod versions (`apps/runner/package.json` `0.1.0`, `runner-release.json` `0.1.0` with no checksums), merge `dev` into `main`, run `release.ts check-main`, push `main`, push `runner-v0.1.0`, approve `publish-prod` once `build-prod` passed. | Step 5 passed; step 2 |
+| 7 | Run the second build for `runner-v0.1.0` on `main`; commit and push on a match; add the record to the release notes. Then merge `main` back into `dev` and push `dev` (research Q6). | Step 6 published |
+| 8 | A short proof with the prod CLI (built from `main`) on the server that runs `0.1.0-dev.1`: `zekno status` says it is older, `zekno server update` brings it to `0.1.0`, a deploy works (research Q7). | Step 7 matched and is committed on `main` |
 
-Tasks T040 to T042 record what the steps showed and tick the roadmap. Open questions Q6 and
-Q7 in research.md propose two more steps (merge `main` back into `dev`; a short proof with the prod
-release); they are not part of this list unless the maintainer adds them.
+Tasks T040 to T042 record what the steps showed and tick the roadmap. The maintainer answered every
+open question on 2026-11-14 (research.md); step 7's merge back and step 8 are those answers to Q6
+and Q7.
 
 ## If GitHub's build differs from the maintainer's
 

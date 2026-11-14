@@ -108,7 +108,7 @@ of Home. Only `q` and `ctrl-c` work there.
 | `s` | Home, App | Set a secret |
 | `x` | App, secrets pane | Remove the selected secret, after a confirm |
 | `a` | Home | Add a server |
-| `u` | Home, on a server whose runner is out of date | Update the runner, after a confirm |
+| `u` | Home, on a server marked `! older runner` | Update the runner, after a confirm |
 | `o` | Deploy, Add a server | Show or hide the full output |
 | `f` | Logs | Pause or resume following |
 | `/` | Logs | Filter by text; `esc` clears it |
@@ -262,8 +262,8 @@ the server's key. Teammates compare it before they trust the server.
 - `--ssh <user@host>`: over SSH. `zekno` checks Docker with Compose, looks for
   a runner, and installs one when none is there (see
   [Installing the runner](#installing-the-runner)). A runner that is already
-  there is used as it is, whatever its version; one that is older than this
-  `zekno` is reported.
+  there is used as it is, whatever its version; one that is older or newer
+  than this `zekno` is reported.
 - `--runner-path <path>`: use the runner already installed at that path on the
   server. Nothing is installed, and the install steps are not run.
 - `--runner-file <path>`: development only. Sends a runner built on your
@@ -364,8 +364,11 @@ zekno rollback --app api --server prod --to 3
 
 Reads what a server holds: its team list version, each app's last deploy and
 whether it is running, and each secret's version. Never a value. When the
-runner is older than this `zekno`, a warning says so and how to bring it up
-to date with `zekno server update`. Deploys still work.
+runner is older or newer than the one this `zekno` carries, a warning says
+so, and what works until they match: an older runner is brought up to date
+with `zekno server update`, and for a newer one you update `zekno`. Deploys
+still work, unless the newer runner speaks a newer protocol; then you are told
+to update `zekno` first.
 
 ```bash
 zekno status --server prod
@@ -619,7 +622,9 @@ A development version is older than the prod version with the same three
 numbers. So a `zekno` built from `main` brings a server that runs
 `0.1.0-dev.1` up to `0.1.0` with `zekno server update`, and a `zekno` built
 from `dev` never replaces that `0.1.0` with a development release of the same
-numbers.
+numbers. When one of the two is a development release and the other is not,
+`zekno status`, `zekno server add` and the app say so after they say which is
+older.
 
 When you work on `zekno` itself, your build installs the release your
 branch's `apps/cli/src/runner-release.json` names, not the runner in your

@@ -206,16 +206,17 @@ A runner release is a GitHub Release of this repository, started by pushing a ta
 | Tag | `runner-v<x.y.z>-dev.<n>`, such as `runner-v0.1.0-dev.1` | `runner-v<x.y.z>`, such as `runner-v0.1.0` |
 | Cut from | a commit on `dev` | a commit on `main` |
 | On GitHub | a pre-release, never shown as the latest | a release |
-| Approval | none | waits for the maintainer in the GitHub Environment `prod` before anything is built |
+| Approval | none | waits for the maintainer in the GitHub Environment `prod` before anything is published |
 | Installed by | a zekno built from `dev` | a zekno built from `main` |
 
 `.github/workflows/runner-release.yml` runs on such a tag. Its first job, `check`, runs
 `scripts/release.ts check`, which stops the release when the tag is not a version, when the
 tagged commit is not on the branch for its kind, when `package.json` here says another version,
 when the root `package.json` pins no Bun version, or, for prod, when
-`apps/cli/src/runner-release.json` names a development version. Then `release-dev` or
-`release-prod` builds the runner for Linux on x86-64 and ARM64 with the pinned Bun, checks that the
-x86-64 runner answers with the tag's version, and publishes four files:
+`apps/cli/src/runner-release.json` names a development version. Then `build-dev` or `build-prod`
+builds the runner for Linux on x86-64 and ARM64 with the pinned Bun, checks that the x86-64 runner
+answers with the tag's version, and hands four files on to `publish-dev` or `publish-prod`, which
+publishes them:
 
 - `zekno-runner-linux-x64.gz` and `zekno-runner-linux-arm64.gz`: the two runners, compressed with
   gzip;
@@ -224,17 +225,21 @@ x86-64 runner answers with the tag's version, and publishes four files:
   runner is built for, the checksums, and the second build's record once it is made.
 
 A tag that already has a release gets no second one. The actions are pinned to full commits. Every
-install skips the packages' own install scripts, and each release job checks the tag itself before
-it checks out or installs anything. The workflow uses no secret beyond the token GitHub gives every
-workflow, and that token can write only in the release jobs: `actions/checkout` uses it there to
-read the repository and keeps none of it, and the step that publishes uses it to publish. Code that
-runs earlier in a release job, during the build, could still reach that step. Splitting each
-release job in two, so that the job that can write runs nothing of the repository, is an open
-finding (RV1 in
-[`specs/005-runner-release/security-review.md`](../../specs/005-runner-release/security-review.md))
-that waits for the maintainer. Another workflow, `.github/workflows/main-versions.yml`, fails on a
-push to `main`, or a pull request into it, that carries a development version. It reports; it holds
-a push back only where `main`'s branch rule makes it a required check.
+install skips the packages' own install scripts, and each job after `check` checks the tag itself
+before it does anything else. The workflow uses no secret beyond the token GitHub gives every
+workflow, and that token can write only in the two publish jobs. They check out nothing, install
+nothing and run nothing of the repository, of its packages or of what the build handed on: they
+check that exactly the four files are there, within their sizes, and that the two runners unpack to
+what `SHA256SUMS` says, then publish them with `gh`. The packages and the built runner run only in
+the build jobs, which can read and not write (RV1 in
+[`specs/005-runner-release/security-review.md`](../../specs/005-runner-release/security-review.md)).
+For a prod release, the build runs at once and the publish job waits for the maintainer's approval,
+so the approval guards the token that can publish. A build can still hand on files other than its
+source makes: that is what the second build catches, and no zekno installs a release before it.
+
+Another workflow, `.github/workflows/main-versions.yml`, fails on a push to `main`, or a pull
+request into it, that carries a development version. It reports; it holds a push back only where
+`main`'s branch rule makes it a required check.
 
 The workflow does not record checksums in zekno. Only the maintainer's second build does, once a
 build of the same commit on their own machine gave the same files
