@@ -116,9 +116,12 @@ export function plainUi(
  * own standard output and error. Warnings and failures are written to
  * standard error as they are: `console.error` colours them where standard
  * error is a terminal. Such a write can still be waiting when the command
- * ends, so `close` waits until standard error has taken them all: none is
- * lost when the process exits.
+ * ends, so `close` waits until standard error has taken them all, for
+ * `CLOSE_WAIT_MS` at most: none is lost when the process exits, and a reader
+ * that stopped reading does not hold the command (security review, C7).
  */
+export const CLOSE_WAIT_MS = 1000
+
 export function processPlainUi(): Ui {
   let taken: Promise<unknown> = Promise.resolve()
   const ui = plainUi(
@@ -133,7 +136,9 @@ export function processPlainUi(): Ui {
   return {
     ...ui,
     close: async () => {
-      await taken
+      let timer: ReturnType<typeof setTimeout> | undefined
+      await Promise.race([taken, new Promise((resolve) => (timer = setTimeout(resolve, CLOSE_WAIT_MS)))])
+      clearTimeout(timer)
     },
   }
 }

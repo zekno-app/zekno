@@ -185,7 +185,7 @@ A Turborepo monorepo on Bun workspaces. The table shows what exists today.
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) 1.4.2, the version pinned in `package.json`
+- [Bun](https://bun.sh) 1.4.4, the version pinned in `package.json`
 - [Node.js](https://nodejs.org) 26.13 or later in the 26.x line
 
 ### Install and run

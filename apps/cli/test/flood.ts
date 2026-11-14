@@ -23,17 +23,15 @@ import { run } from "../src/cli"
 import type { Deps } from "../src/context"
 import { memoryKeyStore } from "../src/keystore"
 import { connect } from "../src/transport"
-import { plainUi } from "../src/ui/plain"
+import { processPlainUi } from "../src/ui/plain"
 
 const [kind, dir] = process.argv.slice(2) as [string, string]
 const LINE = "x".repeat(1000)
 /** At most this much is sent, so that a build without the fix cannot exhaust the machine. */
 const FLOOD_BYTES = 400_000_000
 
-const ui = plainUi(
-  (line) => console.log(line),
-  (line) => console.error(line)
-)
+// As `main.ts` builds it for piped output, and closed as `main.ts` closes it.
+const ui = processPlainUi()
 
 if (kind === "stderr") {
   const deps: Deps = {
@@ -61,5 +59,6 @@ if (kind === "stderr") {
   }
   await view.end({ outcome: "start_failed", sequence: 1, app: "web", server: "dev", secrets: 0, ms: 1 })
 }
+await ui.close()
 writeFileSync(join(dir, "done"), "")
 process.exit(0)
