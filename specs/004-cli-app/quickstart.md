@@ -266,3 +266,198 @@ Not covered by this run: installing from a published release (none exists yet, s
 `server add` without `--runner-file` and `zekno server update` could not be run against a real
 server), a server reached as a user who is not root, an ARM64 server, and a server that asks for
 a password.
+
+### Walkthrough of every screen (2026-11-14)
+
+T062, on the code of `eb6a65e` (the commit after it, `ac1db21`, changed only this file and
+tasks.md). A Python driver ran each program in a pseudo-terminal: it read the terminal the whole
+time in a `select` loop while it typed, set the window size with `TIOCSWINSZ`, answered the
+terminal's background question (OSC 11, then DA1) as a dark terminal, or a white one for the
+light board, and kept a small screen model with colours and attributes. Each screen was compared
+as text and by its SGR codes. A frame drawn inside a synchronised update was read whole, as a
+terminal shows it. The app ran as `main.ts` opens it, with an in-memory key store, the real
+`detectBackground()`, the stand-in Docker of `apps/runner/test/helpers.ts`, and the stand-in
+server and stand-in `ssh` of `apps/cli/test/stand-in-server.ts`. The stand-in's folder was first
+on `PATH` before Bun started, and every run checked that `Bun.which("ssh")` was the stand-in
+before anything ran. No real `ssh`, server or keychain was used.
+
+The data followed the boards: team ada; prod reached as `deploy@203.0.113.7` through the stand-in
+`ssh`, its runner installed by the installer from a stand-in release; staging, a runner on this
+machine; demo with deploys 1 to 4 (3 a rollback to 1), api with 12 deploys, worker with 3 and
+stopped; DATABASE_URL at version 3, SESSION_KEY set after deploy 4, GREETING removed; the folder
+linked to demo on prod. Times, "team list v3", "this machine" under staging, "1 secret" for
+deploy 4 and the paths of temporary folders differ from the boards for that reason and are not
+counted below.
+
+Each board was compared line by line at 100 by 30 and at 80 by 24, by resizing the window, and
+once by opening at 80 by 24: every word, symbol, key hint and column, and what is bold, dim or
+coloured. The logo is three lines on every screen that has it, "zekno" in the terminal's own
+colour and ".app" in `38;2;35;131;226` on a dark terminal, `38;2;26;115;209` on a light one. A
+selected row is the arrow and bold text. No background colour was set anywhere.
+
+| Board | 100 by 30 | 80 by 24 |
+|-------|-----------|----------|
+| Welcome | Matches. | No board at 80. Same content; the blank lines inside the panel are left out. |
+| AddServer | Matches in wording, symbols, colours and keys, but D5. Minor: D10, D12. | No board at 80. Nothing left out; the three steps of first run move into the body. Minor: D10. |
+| Main (Home) | Differs: D1, D2. | Compared with Home80. |
+| Home80 | Compared with Main. | Matches. |
+| LightHome | Differs as Main: D1, D2. The marker, the focused border, ".app" and the action letters are `brand-darker`: by decision (tasks.md T003, design/README.md). | Matches Home80, with `brand-darker`. |
+| App | Matches. Minor: D10, D11. | Compared with App80. |
+| App80 | Compared with App. | Matches. Minor: D11. |
+| Deploying | Matches. | No board at 80. Nothing left out. |
+| Logs | Differs: D3. | No board at 80. "all services" is left out of the header, a choice made in logs.tsx. |
+| SetSecret | Matches. | Matches. Minor: D10. |
+| Questions | "Remember this folder?" matches. "The runner on prod is out of date" matches; it says "from before 0.2.0", as a runner of feature 003 does not report its version. The line on Home differs: D4. | Both questions as at 100. Minor: D14. |
+| Help | Matches. | Matches; more descriptions wrap inside their columns. |
+| TooSmall | At 70 by 20: matches. Back at 100 by 30 the same screen returned. | Not applicable. |
+| ProfileError | Differs: D6. Minor: D10. | Matches with a short profile path. Minor: D13. |
+| CmdDeploy | Success and failure match. | Success and failure match. |
+| CmdOther | `secret ls` matches. The refused `secret set` matches and adds "Run zekno --help for the list of commands.", the usage hint every exit status 2 has (contracts/commands.md). `status` adds the secret lines of the status table in contracts/commands.md, and differs: D7. An unreachable server: the two lines match; above them is what SSH printed, after `remote:` (security-review.md C8), but D8. Piped: `secret ls \| cat`, `deploy --json` and `deploy --app demo --server prod < /dev/null \| cat` match. Differs: D9. | As at 100. |
+
+**Unexplained differences.** None of these is recorded in contracts/app.md, contracts/commands.md
+or the results above.
+
+- D1. Home at 100 (Main, LightHome): the servers pane shows prod's address as `deploy@203.0.11…`.
+  The board shows `deploy@203.0.113.7` whole. The pane is 22 columns and the address gets 16.
+- D2. Home at 100 (Main, LightHome): the board draws "This folder is linked to demo on prod by
+  zekno.json." with "demo" and "prod" in the normal text colour and the rest dim. The app draws
+  the whole sentence dim: the terminal receives `ESC[2mThis folder is linked to demo on prod by
+  ESC[22m`. home.tsx asks for the two names without dim inside a dim text, and Ink does not undo
+  the outer dim.
+- D3. Logs: the board shows "job 1842 failed: connection refused, retry in 5s" in red. The app
+  draws every log line in the normal text colour.
+- D4. Questions, the line on Home: the board shows `❯ prod ! runner 0.1.0` on one row. The app
+  shows `❯ prod`, then `! old runner` on the line below, then the address. It says "old runner"
+  because the runner does not report a version. The reason for the separate line (the servers
+  pane is narrower than the board's) is only in a comment in home.tsx.
+- D5. AddServer: the "Server code" panel never shows the code. When setup finishes the screen
+  closes at once, and Home says "✔ Connected prod and added it to the signed team list. Server
+  code MM4G-GPD7-M9VM-ACGJ-Y48R." without the sentence on what the code identifies. On the board
+  the code appears in the panel, above "Identifies this server's key. Teammates compare it before
+  they trust the server." (spec FR-013).
+- D6. ProfileError: the board says "A team list in the profile is not the one this machine's key
+  belongs to." The app says "The team list in the profile is not the one this machine's key
+  belongs to.", the error's own sentence.
+- D7. CmdOther, `zekno status` at a terminal: the line "  Asking prod…" stays above the answer, at
+  100 and at 80 (Ink erases one line too few after it). The apps are listed worker, api, demo;
+  the board, and Home, list demo, api, worker.
+- D8. CmdOther, an unreachable server at a terminal: a word longer than the room left on a
+  `remote:` line (here a path) is not broken by zekno, so the terminal wraps it and the rest
+  starts at the left edge: `irectory` at 100 columns, `ine 19:` and `/home:` at 80.
+  security-review.md C8 says such a line never goes on at the left edge.
+- D9. CmdOther: the board shows `zekno deploy --app demo --server prod < /dev/null` printing the
+  plain line "Deploy 5 of demo is running on prod with 2 secrets." With the terminal as standard
+  output, the app draws the panel, the stage row and the result line. The plain line comes only
+  when standard output is not a terminal either (`| cat`).
+
+Minor:
+
+- D10. A line the app wraps can start with a space: " next deploy." (App), " agrees to obey your
+  team." (AddServer), " < file" (SetSecret at 80), " when they do not match." (ProfileError),
+  " to accept it." (the line about a zekno.json not accepted here).
+- D11. App and App80: the secret names start two columns in, room for the marker. The board has
+  no such indent.
+- D12. AddServer at 100, before the questions are answered: "○ Add the server to the signed team
+  l…" is cut; at 80 it is whole.
+- D13. ProfileError at 80 by 24 with a profile path that takes three lines: "If you restored the
+  folder from a backup, restore the matching one." is not drawn. With a short path both closing
+  lines show.
+- D14. At 80 columns the place in the header of "set a secret" (opened with `s`) and of "Remember
+  this folder?" is cut to "› prod › demo…", so the screen's own name is not shown.
+
+**Flows walked**: 11 driver scripts, each run of the program in fresh temporary folders, 162
+checks. 161 passed; the one that did not is the red sentence on standard error described under
+"What looked wrong".
+
+- First run: the welcome screen; "ada" typed; enter created the key in the in-memory key store and
+  opened "add a server" at step 2. Destination and name typed. SSH was called in batch mode
+  first; it would have asked, so the app left the alternate screen, wrote "SSH needs an answer to
+  reach deploy@203.0.113.7. zekno carries on once it is connected.", and SSH's password question
+  came up in line mode with echo. After the password the app took the terminal back (raw mode),
+  a step held in progress was drawn as on the board, `o` showed the details, every step
+  completed, and Home showed prod. Two `ssh` calls in all. `esc` on the welcome screen quits with
+  nothing written.
+- A deploy from Home: the summary panel, the stage row, one live line; `o` showed and hid
+  Docker's output; `?` opened help and `esc` came back; `esc` left while it ran; "✔ demo is live
+  on prod" arrived as a line on Home; Docker's `up` ran once.
+- A failed start from the app screen: "✖ Starting", the sentence, "Number 6 is used, so the next
+  deploy will be 7.", the "Docker said" panel; the history row "✖ did not start".
+- Rollback from the app screen to the selected deploy 1, and from Home with `r`; each started.
+- `q` during a deploy showed "waiting for deploy 9 to finish"; Ctrl-C did not cut it short; the
+  app closed with status 0 once the deploy ended.
+- A secret set through the hidden prompt: echo and line mode were off; while 18 characters were
+  typed the terminal received 0 bytes and the screen did not change; the value, or any 3
+  characters of it, was in nothing the terminal received during the run. Stored as version 1.
+  Ctrl-C at the prompt went back to the name question and the app stayed open. A secret removed
+  after "Remove API_TOKEN?" and enter.
+- Missing values (two names): the list and the hidden prompt; `esc` back to the list; `esc` asked
+  "Deploy demo to prod without 2 values?"; `n` said "Nothing was deployed." and Docker was not
+  called; `d`, `esc`, `esc`, `y` deployed once, without the two names; both values set from the
+  list, then the deploy carried them.
+- "Remember this folder?": `esc` wrote nothing and deployed nothing; enter wrote exactly `app`,
+  `server` and `compose` and deployed.
+- A zekno.json not accepted here: the line "✖ zekno.json here names api on prod. It was not made
+  or accepted on this machine. Run `zekno link` to accept it."; `d` on either pane deployed and
+  asked nothing.
+- A runner of feature 003 on prod: "! old runner" and `u update runner` on Home; `u` asked; `esc`
+  left it; `u`, `u` replaced it on the stand-in server: "✔ Updated the runner on prod to 0.2.0.
+  It matched the checksum this zekno holds."
+- Logs: following; `f` paused ("● paused" in yellow) and resumed; `/` asked for a filter, enter
+  kept it, `/` and `esc` cleared it; `1` and `2` showed one service, `0` all; `↑` `↓` scrolled; a
+  log line's colour codes and an OSC 52 clipboard write never reached the terminal. With the logs
+  session's runner killed: "✖ disconnected", "✖ The connection to prod ended." and `enter
+  reconnect`; enter reconnected.
+- `?` opened help on Home, App, Logs, the deploy screen and the list of missing values, and `esc`
+  came back. Where a text question is open (welcome, add a server, the secret's name, the logs
+  filter) `?` is typed into it, as contracts/app.md says for open questions. On the other
+  questions and on ProfileError it does nothing.
+- Too small: at 70 by 20 the message; `d` did nothing; back at 100 by 30 the same screen.
+- Quitting: `q` from Home, help, logs and ProfileError; Ctrl-C from App and Home; `esc` from the
+  welcome screen. Each time: status 0, the alternate screen left, the cursor shown, and
+  `tcgetattr` on the pseudo-terminal showed `ICANON` and `ECHO` on again (both were off while the
+  app ran).
+- After every run `ps` showed no runner, stand-in `ssh`, stand-in Docker or entry process left.
+
+**What looked wrong in a flow** (none of it breaks the contract):
+
+- After adding a server where SSH must ask, Home at once marks it "✖ prod could not be reached"
+  with "SSH needs an answer to reach deploy@203.0.113.7. zekno asks only when it starts and when
+  you add or update a server, deploy or open logs, never in the background.", right under "✔
+  Connected prod and added it to the signed team list." This follows app.md ("Reconnecting"), but
+  the two lines read as a contradiction.
+- Home's `r` said "Roll back to deploy 6" while deploy 6 had not started, and ran what deploy 6
+  ran. That is the contract's "the one before the latest": every deploy the runner accepted
+  counts, as in feature 003.
+- After `r` on the app screen with deploy 1 selected, the marker stayed on the same row, which
+  then showed deploy 2.
+- With only standard output piped, a failed deploy's sentence on standard error (still the
+  terminal) is red: Bun colours `console.error` on a terminal. With both piped there is no escape
+  sequence.
+- `zekno logs --no-follow` at a terminal: the service column widens when "worker" first appears,
+  so the first lines do not line up with the rest.
+
+**The compiled programs.** `bun run compile` in apps/cli wrote `dist/zekno`, 64,456,050 bytes
+(61.5 MiB); in apps/runner it wrote `dist/zekno-runner`, 62,920,434 bytes (60.0 MiB); both Mach-O
+ARM64 on this machine, Bun 1.4.2. `git status` showed nothing new: `dist` is ignored. The compiled
+`zekno`, in a pseudo-terminal with an empty `ZEKNO_HOME` in a temporary folder and an `ssh` on
+`PATH` that would only leave a mark: it asked the background question, opened the welcome screen
+on the alternate screen, "ada" typed reached the name question, and `esc` closed it with status 0,
+the terminal back in line mode with echo and the cursor shown. Nothing was written to
+`ZEKNO_HOME` and `ssh` never ran. Enter was not pressed: the compiled program uses the real
+keychain. `zekno --help` exits 0 with the list of commands. `zekno-runner version` prints
+`{"version":"0.2.0","protocol":2}` and exits 0.
+
+**Not checked**: a real terminal emulator (only the driver's screen model), real Docker, a real
+server or `ssh` (see "A real server"), a host-key question, the compiled `zekno` past the name
+(it would write to the real keychain), and `--tail` (the stand-in Docker ignores it).
+
+#### Checks at the end
+
+T064, from the repository root at `ac1db21` (no source change since `eb6a65e`), with
+`--force` so nothing came from the cache:
+
+- `bun run typecheck`: passed in all 5 packages that have it (core, ui, cli, runner, web), no
+  error.
+- `bun run lint`: passed in the 2 packages that have a lint script (ui, web), no warning.
+- `bun run test`: 750 tests, all passed, none failed: core 88 (12 files), runner 80 (5 files),
+  cli 554 (25 files), web 28 (3 files).
