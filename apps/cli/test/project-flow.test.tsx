@@ -642,6 +642,25 @@ describe("the app in a project folder", () => {
     expect(app.failures).toEqual([])
   })
 
+  test("a folder linked to an app its server does not have yet: d deploys it as a first deploy, whichever row is marked, and replaces nothing", async () => {
+    const { m, app } = await onHome(COMPOSE_PLAIN, async (m) => {
+      expect(await m.zekno("deploy", "--app", "billing", "--server", "dev")).toBe(0)
+      expect(await m.zekno("link", "--app", "fresh", "--server", "dev")).toBe(0)
+    })
+    // The linked app is not on the server yet, so it has no row to select: another app is marked.
+    const before = app.state.team!.servers[0]!.apps.map((row) => [row.name, row.deploy])
+    expect(before.map(([name]) => name)).not.toContain("fresh")
+    expect(before.length).toBeGreaterThan(0)
+    app.type("d")
+    await ended(app)
+    expect(app.state.deploy).toMatchObject({ server: "dev", app: "fresh", sequence: 1, outcome: "started" })
+    // The apps that were there were not touched: each still has the deploy it had.
+    const after = app.state.team!.servers[0]!.apps.map((row) => [row.name, row.deploy])
+    for (const row of before) expect(after).toContainEqual(row)
+    expect(after.map(([name]) => name)).toContain("fresh")
+    expect(app.failures).toEqual([])
+  })
+
   test("a linked folder deploys only to its own app: d on another app says so, names how to deploy elsewhere, and deploys nothing", async () => {
     const { m, app } = await onHome(COMPOSE_PLAIN, async (m) => {
       expect(await m.zekno("deploy", "--app", "billing", "--server", "dev")).toBe(0)

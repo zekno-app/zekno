@@ -27,7 +27,7 @@ the app, and a last line listing its keys.
 | `←` `→`, `tab` | Home, App | Move between panes |
 | `enter` | Lists, questions | Open, or confirm |
 | `esc` | Everywhere but Home | Go back. On Deploy, the deploy carries on. At the hidden prompt before a deploy, back to the list of missing values; on that list, the question "deploy without them?" |
-| `d` | Home, App | Deploy this folder. A linked folder deploys only to its own app on its own server (on a server with no apps, only when that server is its own); with another app or server selected, it says so and deploys nothing |
+| `d` | Home, App | Deploy this folder. A linked folder deploys only to its own app on its own server (on a server with no apps, only when that server is its own); with another app or server selected, it says so and deploys nothing. One exception: on its own server, a linked app that has never been deployed there has no row to select, so `d` deploys it as its first deploy whichever row is marked |
 | `r` | Home, App | Roll back: on App to the selected deploy, on Home to the one before the latest |
 | `l` | Home, App | Logs |
 | `s` | Home, App | Set a secret |
@@ -85,7 +85,9 @@ keys type into it.
   neither, the app says so and names `zekno link`. A linked folder deploys only to its own app
   and server: with another selected, `d` says "This folder is linked to &lt;app&gt; on
   &lt;server&gt;. Select it to deploy this folder. To deploy it elsewhere, run `zekno deploy
-  --app <name> --server <name>` here." and deploys nothing. The Compose file is read once, when
+  --app <name> --server <name>` here." and deploys nothing. A linked app that has never been
+  deployed to its own server cannot be selected there, so on that server `d` deploys it as a
+  first deploy whichever row is marked; no other app is replaced. The Compose file is read once, when
   `d` is pressed; the names listed and the text signed come from that read, also after a
   question.
 - **Missing values**: before a deploy, names the Compose file expects that have no secret are

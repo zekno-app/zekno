@@ -148,8 +148,9 @@ question is open, letter keys type into it.
 - A folder linked by a `zekno.json` your machine accepted deploys only to its
   own app on its own server, and on a server with no apps only when that
   server is its own. With another app or server selected, `d` says so and
-  deploys nothing. So the first deploy of a new app to a server that already
-  runs other apps is made with `zekno deploy` in the folder.
+  deploys nothing. One exception: on its own server, a linked app that has
+  never been deployed there has no row to select yet, so `d` deploys it as
+  its first deploy whichever row is marked. No other app is replaced.
 - A folder with no `zekno.json` deploys its `compose.yaml` to the selected
   app. Before the first deploy, the app asks whether to remember the folder;
   yes writes `zekno.json` and accepts it. With no app selected, it points you

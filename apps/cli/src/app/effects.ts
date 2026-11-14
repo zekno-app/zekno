@@ -408,10 +408,32 @@ export function createEffects(
    * - the folder is linked to another app or server than the one selected:
    *   it deploys only to its own, and on a server with no apps only when
    *   that server is its own (a zekno.json naming a server that is not
-   *   connected supplies nothing);
+   *   connected supplies nothing). One case is let through: on the folder's
+   *   own server, an app the folder is linked to that has never been
+   *   deployed there cannot be selected, so `d` deploys it whichever row is
+   *   marked. It is a first deploy: no other app is replaced.
    * - there is no Compose file, or no app is selected in a folder that is
    *   not linked.
    */
+  /**
+   * The apps this machine has a deploy on record for, on the server of that
+   * name. Only used to tell a first deploy from a later one, so the servers
+   * are read from the profile as it stands when it has not been verified in
+   * this run yet: the deploy itself verifies everything before it signs.
+   */
+  function appsDeployedTo(server: string): string[] {
+    let servers = known?.servers
+    if (!servers) {
+      try {
+        servers = profileStore(deps.home).load().servers
+      } catch {
+        return []
+      }
+    }
+    const entry = servers.find((item) => item.name === server)
+    return entry ? appNames(deps.home, entry) : []
+  }
+
   function composeOf(server: string, selected: string | undefined): Source | undefined {
     const link = findProject(ops.cwd)
     if (link) {
@@ -419,7 +441,8 @@ export function createEffects(
         notice("error", notAcceptedHere(link, ops.cwd))
         return undefined
       }
-      if (link.server !== server || (selected !== undefined && selected !== link.app)) {
+      const first = link.server === server && !appsDeployedTo(server).includes(link.app)
+      if (link.server !== server || (selected !== undefined && selected !== link.app && !first)) {
         const connected = known === undefined || known.servers.some((entry) => entry.name === link.server)
         notice(connected ? "info" : "error", connected ? linkedElsewhere(link) : notConnected(link))
         return undefined
