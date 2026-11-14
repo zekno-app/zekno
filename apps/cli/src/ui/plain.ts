@@ -46,6 +46,16 @@ export function standardOutput(stream: NodeJS.WriteStream = process.stdout): { w
   }
 }
 
+/**
+ * Whether a command prints plain lines rather than the interface a terminal
+ * gets: with `--json`, with `TERM=dumb`, and whenever standard output or
+ * standard input is not a terminal (piped, in a script, `< /dev/null`), so
+ * output stays stable for whatever reads it, and nothing waits on a person.
+ */
+export function wantsPlain(argv: readonly string[], stdout: { isTTY?: boolean }, stdin: { isTTY?: boolean }, env: Record<string, string | undefined> = process.env): boolean {
+  return argv.includes("--json") || !stdout.isTTY || !stdin.isTTY || env.TERM === "dumb"
+}
+
 /** Reads everything on standard input, without one trailing line break. */
 export async function readStdin(): Promise<string> {
   const text = await new Response(Bun.stdin.stream()).text()
@@ -101,11 +111,29 @@ export function plainUi(
   return ui
 }
 
-/** The plain interface as `zekno` runs it when output is piped: this process's own standard output and error. */
-export const processPlainUi = (): Ui =>
-  plainUi(
+/**
+ * The plain interface as `zekno` runs it when output is piped: this process's
+ * own standard output and error. Warnings and failures are written to
+ * standard error as they are: `console.error` colours them where standard
+ * error is a terminal. Such a write can still be waiting when the command
+ * ends, so `close` waits until standard error has taken them all: none is
+ * lost when the process exits.
+ */
+export function processPlainUi(): Ui {
+  let taken: Promise<unknown> = Promise.resolve()
+  const ui = plainUi(
     (line) => console.log(line),
-    (line) => console.error(line),
+    (line) => {
+      const waiting = writeStandardError(`${line}\n`)
+      if (waiting) taken = Promise.all([taken, waiting])
+    },
     writeStandardError,
     standardOutput()
   )
+  return {
+    ...ui,
+    close: async () => {
+      await taken
+    },
+  }
+}

@@ -69,6 +69,13 @@ export function appNames(home: string, server: Server): string[] {
 }
 
 /**
+ * Home's order of apps, which `zekno status` keeps too: the one this machine
+ * deployed most recently first, then by name; one with no deploy time last.
+ */
+export const latestFirst = (a: { name: string; at?: string }, b: { name: string; at?: string }): number =>
+  (b.at ?? "").localeCompare(a.at ?? "") || a.name.localeCompare(b.name)
+
+/**
  * One server's apps for Home, the most recently deployed first. An app with
  * no deploy that verifies is not listed. The state is "unknown": what is
  * running is read from the server, which this does not do.
@@ -90,7 +97,7 @@ export function appsOf(team: Team, server: Server, home: string): AppRow[] {
       previous: accepted(entries).at(-2)?.deploy.sequence,
     })
   }
-  return rows.sort((a, b) => (b.at ?? "").localeCompare(a.at ?? "") || a.name.localeCompare(b.name))
+  return rows.sort(latestFirst)
 }
 
 /**

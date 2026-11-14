@@ -9,10 +9,21 @@
  * repository, is accepted: with no names given, the one that applies to the
  * folder is checked the same way and recorded as it is, never rewritten.
  */
-import { accept, sha256Of } from "../accepted"
+import { accept, isAccepted, sha256Of } from "../accepted"
 import { openTeam, type OpDeps, type Team } from "../context"
+import { UsageError } from "../errors"
 import { findServer } from "../profile"
-import { composeFor, DEFAULT_COMPOSE, findProject, projectFileIn, projectText, shownPath, writeProject, type ProjectLink } from "../project"
+import {
+  composeFor,
+  DEFAULT_COMPOSE,
+  findProject,
+  notAccepted,
+  projectFileIn,
+  projectText,
+  shownPath,
+  writeProject,
+  type ProjectLink,
+} from "../project"
 import { checkApp } from "./deploy"
 
 export type LinkInput = { app?: string; server?: string; file?: string; force?: boolean }
@@ -51,10 +62,10 @@ function acceptAsItIs(deps: OpDeps, team: Team, found: ProjectLink): Linked {
  * Checks what zekno.json would hold and writes it, never over an existing
  * one without `force`, then records it as accepted. An app or server not
  * given is taken from a zekno.json that already applies here (in this
- * folder, or one above), so one name can be changed with `--force`; the
- * Compose file is `-f`, or compose.yaml. With no names given at all, that
- * zekno.json is accepted as it is; so is the one in this folder when the
- * names given are exactly its own.
+ * folder, or one above) and that this machine accepted, so one name can be
+ * changed with `--force`; the Compose file is `-f`, or compose.yaml. With no
+ * names given at all, that zekno.json is accepted as it is; so is the one in
+ * this folder when the names given are exactly its own.
  */
 export async function linkFolder(deps: OpDeps, input: LinkInput): Promise<Linked> {
   const team = await openTeam(deps)
@@ -62,6 +73,10 @@ export async function linkFolder(deps: OpDeps, input: LinkInput): Promise<Linked
   // Given both names, a zekno.json here that cannot be read does not stop `--force` replacing it.
   const found = input.app === undefined || input.server === undefined ? findProject(deps.cwd) : quietly(deps.cwd)
   if (found && !named) return acceptAsItIs(deps, team, found)
+  // A name it would fill in comes only from a file accepted here: a cloned one would otherwise be written anew and accepted, unread.
+  if (found && (input.app === undefined || input.server === undefined) && !isAccepted(deps.home, found)) {
+    throw new UsageError(notAccepted(found))
+  }
 
   const fromFile = input.server === undefined && found ? shownPath(found.path) : undefined
   const server = findServer(team.profile, input.server ?? found?.server, fromFile)

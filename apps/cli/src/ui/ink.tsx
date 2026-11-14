@@ -25,8 +25,16 @@ type Question = { question: string; settle(yes: boolean): void }
  * `generation` changes when lines already drawn are let go; Static then
  * starts afresh with what is left. `deploy` is a deploy still running, drawn
  * below the lines and redrawn as it goes; once it ends it becomes a line.
+ * `step` is work in progress, with a spinner, or `still` without one.
  */
-type State = { items: Item[]; generation: number; step?: string; prompt?: Prompt; question?: Question; deploy?: DeployShown }
+type State = {
+  items: Item[]
+  generation: number
+  step?: { label: string; still: boolean }
+  prompt?: Prompt
+  question?: Question
+  deploy?: DeployShown
+}
 
 /**
  * How many drawn lines may pile up before they are let go. Static writes a
@@ -138,11 +146,12 @@ const SERVICE_COLUMN = 16
  * One line of `zekno logs` at a terminal, as on the board "Live logs": the
  * time, faint; the service; the text. A line wider than the terminal goes on
  * under its own text, never at the left edge, so the part after the wrap
- * cannot pass for a line with a time and a service of its own.
+ * cannot pass for a line with a time and a service of its own. `columns`
+ * bounds it, as for a server's line (`RemoteLine`).
  */
-export function LogItem({ line, serviceWidth }: { line: LogOutput; serviceWidth: number }) {
+export function LogItem({ line, serviceWidth, columns }: { line: LogOutput; serviceWidth: number; columns?: number }) {
   return (
-    <Box>
+    <Box width={columns}>
       <Box flexShrink={0} width={10}>
         <Text dimColor>{logClock(line.time)}</Text>
       </Box>
@@ -192,7 +201,7 @@ function Line({ item, columns }: { item: Item; columns: number }) {
       </Text>
     )
   }
-  if (item.kind === "log") return <LogItem line={item.line} serviceWidth={item.serviceWidth} />
+  if (item.kind === "log") return <LogItem line={item.line} serviceWidth={item.serviceWidth} columns={columns} />
   if (item.kind === "deploy") return <DeployBlock shown={item.shown} columns={columns} />
 
   if (item.kind === "info") {
@@ -203,7 +212,7 @@ function Line({ item, columns }: { item: Item; columns: number }) {
       </Box>
     )
   }
-  if (item.kind === "remote") return <RemoteLine text={item.text} />
+  if (item.kind === "remote") return <RemoteLine text={item.text} columns={columns} />
   if (item.kind === "error") return <ErrorLine text={item.text} />
   return (
     <Box>
@@ -219,10 +228,13 @@ function Line({ item, columns }: { item: Item; columns: number }) {
  * A line from a server: dim, after the mark. A line wider than the terminal
  * goes on under its own text, never at the left edge where zekno's marked
  * lines start, so the part after the wrap cannot pass for one of them.
+ * Single commands draw it among the lines already written, where nothing
+ * bounds its width: `columns` does, so a word longer than the room left,
+ * such as a path, is broken here and not by the terminal.
  */
-export function RemoteLine({ text }: { text: string }) {
+export function RemoteLine({ text, columns }: { text: string; columns?: number }) {
   return (
-    <Box>
+    <Box width={columns}>
       <Box flexShrink={0} marginRight={1}>
         <Text dimColor>{REMOTE_MARK}</Text>
       </Box>
@@ -302,8 +314,12 @@ function App({ store }: { store: ReturnType<typeof createStore> }) {
         <SecretPrompt prompt={state.prompt} />
       ) : state.question ? (
         <QuestionPrompt question={state.question} />
+      ) : state.step?.still ? (
+        <Box marginLeft={2}>
+          <Text>{state.step.label}…</Text>
+        </Box>
       ) : state.step ? (
-        <Spinner label={state.step} />
+        <Spinner label={state.step.label} />
       ) : null}
     </>
   )
@@ -313,7 +329,7 @@ function App({ store }: { store: ReturnType<typeof createStore> }) {
  * The interface at a terminal: progress, a hidden prompt, aligned tables and
  * colour. Tests pass their own streams.
  */
-export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"> = {}): Ui {
+export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr" | "interactive"> = {}): Ui {
   const store = createStore()
   // Ink is not left to act on Ctrl-C: it would close the interface and leave the
   // command waiting for an answer that never comes. While the prompt is open
@@ -400,11 +416,8 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
       await app.waitUntilRenderFlush()
     },
     async step(label, work, options) {
-      if (options?.quiet) {
-        add({ kind: "info", text: `${label}…` })
-        return work()
-      }
-      store.set({ step: label })
+      // Quiet, it is not animated, so nothing is redrawn over what SSH may write unless a line comes to be drawn above it. Either way it is erased once the work ends.
+      store.set({ step: { label, still: options?.quiet === true } })
       try {
         return await work()
       } finally {

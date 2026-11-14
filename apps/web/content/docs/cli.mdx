@@ -70,7 +70,7 @@ is left as it was, also after an error.
 | Deploy | `d`, or `r` | Summary panel, stage row, one live line; Docker's output on `o` and on failure |
 | Logs | `l` | Time, service, text; following or paused |
 | First run | Start, when no team exists | The logo, the three steps (your key, a server, a first deploy), the name question |
-| Add a server | `a` on Home, or step 2 of first run | The destination and name, each step as it completes, the team code and the server code with what each is for |
+| Add a server | `a` on Home, or step 2 of first run | The destination and name, each step as it completes, the team code and the server code with what each is for. Once done it stays, every step ticked and the server code shown, until `enter` goes to Home |
 | Set a secret | `s`, or before a deploy when values are missing | The names that are missing, the hidden prompt |
 | Help | `?` | Every key of the app, in groups |
 
@@ -83,7 +83,7 @@ of Home. Only `q` and `ctrl-c` work there.
 | --- | --- | --- |
 | `↑` `↓` | Lists, logs | Move the selection, or scroll |
 | `←` `→`, `tab` | Home, App | Move between panes |
-| `enter` | Lists, questions | Open, or confirm. On a secret, set its new value. On Logs after the connection dropped, connect again |
+| `enter` | Lists, questions | Open, or confirm. On a secret, set its new value. On Logs after the connection dropped, connect again. On Add a server once it is done, go to Home with the new server selected |
 | `esc` | Everywhere but Home | Go back. On Deploy, the deploy carries on. At the hidden prompt before a deploy, back to the list of missing values; on that list, the question "deploy without them?" |
 | `d` | Home, App | Deploy this folder (see [Deploying from the app](#deploying-from-the-app)) |
 | `r` | Home, App | Roll back: on App to the selected deploy, on Home to the one before the latest |
@@ -352,7 +352,9 @@ Writes `zekno.json` in the current folder and records it as accepted on your
 machine. See [The project file](#the-project-file-zeknojson).
 
 - An app or server not given is taken from a `zekno.json` that already
-  applies to the folder.
+  applies to the folder, once your machine accepted it. From one it did not
+  accept nothing is taken: it stops with exit status 2 and says how to accept
+  it.
 - `-f` defaults to `compose.yaml` and must be a file inside the folder.
 - It does not overwrite a `zekno.json` without `--force`.
 - With no `--app`, `--server` or `-f`, a `zekno.json` that already applies (in
@@ -381,9 +383,10 @@ result line with what to run next; a failed start shows what Docker reported.
 Over SSH nothing is animated, because SSH may ask for a password in the same
 terminal.
 
-When output is piped, in a script, with `TERM=dumb` or with `--json`, commands
-print plain lines: results on standard output with table cells separated by
-tabs, warnings and failures on standard error, no colour, symbols or panels.
+When standard output or standard input is not a terminal (piped, in a script,
+`< /dev/null`), with `TERM=dumb` or with `--json`, commands print plain lines:
+results on standard output with table cells separated by tabs, warnings and
+failures on standard error, no colour, symbols or panels.
 With `--json`, one JSON object. That form is stable, and these are the changes
 from the first version:
 
@@ -391,7 +394,7 @@ from the first version:
 | --- | --- | --- |
 | `deploy`, `rollback` | `Deploy <n> of <app> is running on <server> with <k> secrets.` | Yes: "`<k> secret(s)`" became "`<k> secrets`", "`1 secret`" or "`no secrets`" |
 | `deploy --json` | `{"outcome","app","sequence","server"}` | No |
-| `status` | `<server>: team list version <v>`, then `<app>\tdeploy <n>\t<state>`, then `<app>/<NAME>\tversion <v>` | Yes: a third cell, `running`, `stopped`, `partly running` or `unknown` |
+| `status` | `<server>: team list version <v>`, then `<app>\tdeploy <n>\t<state>`, then `<app>/<NAME>\tversion <v>` | Yes: a third cell, `running`, `stopped`, `partly running` or `unknown`; the apps in Home's order, the latest deploy from your machine first |
 | `status --json` | As before, plus `"apps": { "<app>": { "state", "services": [...] } }` | Yes: one added field |
 | `secret ls`, `server ls` | Unchanged | No |
 | `logs` | `<time>\t<service>\t<text>`, one line per log line | New |
@@ -445,7 +448,9 @@ One that was not accepted is never used:
   "zekno.json in `<folder>` names `<app>` on `<server>`. It was not made or
   accepted on this machine. To use it, run `zekno link` in that folder. To
   leave it aside, give --app and --server." Given both `--app` and `--server`,
-  it is left aside, its Compose file too.
+  it is left aside, its Compose file too. So is one that cannot be read (a
+  link, another user's file, not valid JSON): it then counts as no
+  `zekno.json`.
 - The app does not select what it names, says why on Home, and `d` in that
   folder deploys nothing.
 

@@ -8,7 +8,7 @@ import type { OpDeps } from "./context"
 import { CliError } from "./errors"
 import { osKeychain } from "./keystore"
 import { connect } from "./transport"
-import { processPlainUi } from "./ui/plain"
+import { processPlainUi, wantsPlain } from "./ui/plain"
 
 const argv = process.argv.slice(2)
 
@@ -43,8 +43,8 @@ async function withoutDev<T>(work: () => Promise<T>): Promise<T> {
 
 /** One command: an operation plus the interface, Ink at a terminal or plain lines. */
 async function command(): Promise<number> {
-  // Piped, in a script or with `--json` it is plain lines, so output stays stable for whatever reads it.
-  const plain = argv.includes("--json") || !process.stdout.isTTY || process.env.TERM === "dumb"
+  // Piped either way, in a script or with `--json` it is plain lines, so output stays stable for whatever reads it.
+  const plain = wantsPlain(argv, process.stdout, process.stdin)
   const ui = plain ? processPlainUi() : await withoutDev(async () => (await import("./ui/ink")).inkUi())
   try {
     return await run(argv, { ...deps, ui })

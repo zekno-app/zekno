@@ -18,7 +18,7 @@ Everything in feature 003's command contract still holds unless this page change
 | `zekno rollback [--to <number>]` | As before, with the same defaults from `zekno.json`. |
 | `zekno status [--server <name>]` | As before, plus running or stopped for each app when the runner is new enough. |
 | `zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]` | Prints an app's logs, following until interrupted. Ctrl-C, or a reader that closes the pipe (`zekno logs \| head -1`), stops the reading on the server and ends the command quietly with status 0. |
-| `zekno link [--app <app>] [--server <name>] [-f <file>] [--force]` | Writes `zekno.json` in the current folder and records it as accepted on this machine. Refuses to overwrite one without `--force`. An app or server not given is taken from a `zekno.json` that already applies to the folder; `-f` defaults to `compose.yaml` and must be a file inside the folder. With no `--app`, `--server` or `-f`, a valid `zekno.json` that already applies (in this folder or one above) is checked as one being written would be (its server connected, its Compose file a file inside its folder) and accepted as it is, not rewritten: `Accepted zekno.json: <app> on <server>, file <compose>.` (the file's path in place of `zekno.json` when it is in a folder above). Names given that are exactly those of the `zekno.json` in this folder accept it the same way, with no `--force`. |
+| `zekno link [--app <app>] [--server <name>] [-f <file>] [--force]` | Writes `zekno.json` in the current folder and records it as accepted on this machine. Refuses to overwrite one without `--force`. An app or server not given is taken from a `zekno.json` that already applies to the folder, only once this machine accepted it; from one it did not accept, nothing is taken and the command stops with exit status 2 and the sentence below; `-f` defaults to `compose.yaml` and must be a file inside the folder. With no `--app`, `--server` or `-f`, a valid `zekno.json` that already applies (in this folder or one above) is checked as one being written would be (its server connected, its Compose file a file inside its folder) and accepted as it is, not rewritten: `Accepted zekno.json: <app> on <server>, file <compose>.` (the file's path in place of `zekno.json` when it is in a folder above). Names given that are exactly those of the `zekno.json` in this folder accept it the same way, with no `--force`. |
 
 Flags win over `zekno.json`. A command that still lacks a detail fails with a message naming the
 flag and the project file. A command never asks a question when there is no terminal (FR-033).
@@ -29,7 +29,8 @@ here stops before anything is read from the keychain, signed or sent, with exit 
 "zekno.json in &lt;folder&gt; names &lt;app&gt; on &lt;server&gt;. It was not made or accepted on
 this machine. To use it, run `zekno link` in that folder. To leave it aside, give --app and
 --server." (with the usage hint every exit status 2 has). Given both `--app` and `--server`, it
-is not used at all.
+is not used at all, and one that cannot be read (a link, another user's file, not valid JSON)
+counts as no `zekno.json`.
 
 Its Compose file goes with its app. With `--app` naming another app, the Compose file is `-f`, or
 `compose.yaml` in the current folder, as without a project file.
@@ -52,12 +53,15 @@ output" are the reference.
 ### Output when piped, in a script, or with `--json`
 
 Plain lines, tab-separated cells, no colour, symbols or panels. One JSON object with `--json`.
+This is the output whenever standard output or standard input is not a terminal (so
+`zekno deploy < /dev/null` at a terminal prints the plain line), with `--json`, and with
+`TERM=dumb`.
 
 | Command | Plain output | Changed from feature 003? |
 |---------|--------------|---------------------------|
 | `deploy`, `rollback` | `Deploy <n> of <app> is running on <server> with <k> secrets.` | Yes: "`<k> secret(s)`" becomes "`<k> secrets`", or "`1 secret`", or "`no secrets`" |
 | `deploy --json` | `{"outcome","app","sequence","server"}` | No |
-| `status` | `<server>: team list version <v>`, then `<app>\tdeploy <n>\t<state>`, then `<app>/<NAME>\tversion <v>` | Yes: a third cell, `running`, `stopped`, `partly running` or `unknown` |
+| `status` | `<server>: team list version <v>`, then `<app>\tdeploy <n>\t<state>`, then `<app>/<NAME>\tversion <v>` | Yes: a third cell, `running`, `stopped`, `partly running` or `unknown`; the apps in Home's order, the latest deploy from this machine first |
 | `status --json` | As before, plus `"apps": { "<app>": { "state", "services": [...] } }` | Yes: one added field |
 | `secret ls`, `server ls` | Unchanged | No |
 | `logs` | `<time>\t<service>\t<text>`, one line per log line | New |

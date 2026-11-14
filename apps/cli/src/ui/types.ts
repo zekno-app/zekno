@@ -96,7 +96,8 @@ export interface Ui {
   /**
    * Runs work while showing that it is in progress. Pass `quiet` when the
    * work may write to the terminal itself, such as SSH asking for a
-   * password: the label is then printed once and nothing is animated over it.
+   * password: the label is then drawn once and nothing is animated over it.
+   * Either way it is gone once the work ends.
    */
   step<T>(label: string, work: () => Promise<T>, options?: { quiet?: boolean }): Promise<T>
   /** Reads a secret value: hidden at a terminal, or everything on standard input. */

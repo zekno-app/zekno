@@ -4,7 +4,9 @@ import {
   createSecretRemoval,
   currentSecrets,
   isReservedSecretName,
+  LIMITS,
   readSignedDeploy,
+  SECRET_NAME,
   verifySecret,
   verifySecretRemoval,
   type TeamTrust,
@@ -38,10 +40,13 @@ function latestVersion(trust: TeamTrust, serverId: string, app: string, held: Se
   return latest
 }
 
+/** Said for a name that cannot be a secret's. It states the rule and never repeats what was typed, which may be a value. */
+const BAD_NAME = "A secret name uses letters, digits and underscore, and does not start with a digit."
+
 function asCliError(error: unknown): never {
   if (error instanceof CoreError) {
     const messages: Partial<Record<CoreError["code"], string>> = {
-      invalid_name: "A secret name uses letters, digits and underscore, and does not start with a digit.",
+      invalid_name: BAD_NAME,
       invalid_value: "That value is not valid text.",
       too_large: "That value is larger than the 64 KiB limit.",
     }
@@ -60,6 +65,8 @@ export type SecretChange = { name: string; version: number; app: string; server:
 export async function prepareSecretSet(deps: OpDeps, name: string | undefined, where: Where): Promise<SecretPlan> {
   const { team, server, app, secrets } = await locate(deps, where)
   if (!name) throw new UsageError("Say which secret: `zekno secret set <NAME> ...`.")
+  // Checked now, as the core library will check it, so `NAME=value` is refused before a prompt repeats it and asks for more.
+  if (!SECRET_NAME.test(name) || name.length > LIMITS.secretNameLength) throw new CliError(BAD_NAME)
   if (isReservedSecretName(name)) {
     throw new CliError(`"${name}" is reserved: the runner uses it to start Docker. Choose another name.`)
   }

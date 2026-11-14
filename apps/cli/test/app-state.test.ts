@@ -438,11 +438,34 @@ describe("adding a server", () => {
     expectIgnored(working, [K.esc, text("o"), text("?")])
   })
 
-  test("when it is done Home shows the new team and a line says so; when it fails the details can be fixed", () => {
-    const working = play(adding(), ...typing("h"), K.enter, ...typing("n"), K.enter).state
-    const added = play(working, { type: "server-added", team: TEAM, notice: { tone: "success", text: "n is connected." } }).state
-    expect(top(added)).toMatchObject({ name: "home" })
-    expect(added.notice).toEqual({ tone: "success", text: "n is connected." })
+  test("when it is done the screen stays, with the server code, until enter or esc; then Home with the new server selected and a line says so; when it fails the details can be fixed", () => {
+    const working = play(
+      adding(),
+      ...typing("h"),
+      K.enter,
+      ...typing("n"),
+      K.enter,
+      { type: "add-started", destination: "h", name: "n", local: false },
+      { type: "add-code", code: "ABCD-EFGH" }
+    ).state
+    const notice = { tone: "success", text: "Connected n and added it to the signed team list." } as const
+    const added = play(working, { type: "server-added", team: TEAM, notice, code: "ABCD-EFGH" }).state
+    // The code is in its panel (FR-013): nothing is said on a line yet.
+    expect(top(added)).toMatchObject({ name: "add-server", step: "done", destination: "h", serverName: "n" })
+    expect(added.adding).toMatchObject({ running: false, serverCode: "ABCD-EFGH" })
+    expect(added.notice).toBeUndefined()
+    // Only enter and esc do anything; ? opens help and esc there comes back to it.
+    expectIgnored(added, [K.enter, K.esc, text("?")])
+    expect(top(play(added, text("?"), K.esc).state)).toMatchObject({ name: "add-server", step: "done" })
+    for (const leave of [K.enter, K.esc]) {
+      const back = play(added, leave).state
+      expect(top(back)).toEqual({ name: "home", pane: "servers", server: TEAM.servers.length - 1, app: 0 })
+      expect(back.notice).toEqual(notice)
+    }
+    // Left with esc while it worked, the panel was not seen: the line on Home gives the code.
+    const left = play(working, K.esc, { type: "server-added", team: TEAM, notice, code: "ABCD-EFGH" }).state
+    expect(top(left)).toMatchObject({ name: "home", server: TEAM.servers.length - 1 })
+    expect(left.notice).toEqual({ tone: "success", text: "Connected n and added it to the signed team list. Server code ABCD-EFGH." })
     const failed = play(working, { type: "failed", notice: { tone: "error", text: "No." } }).state
     expect(top(failed)).toMatchObject({ name: "add-server", step: "destination", destination: "h", serverName: "n" })
   })

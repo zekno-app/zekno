@@ -5,7 +5,7 @@
  */
 import { describe, expect, spyOn, test } from "bun:test"
 import { renderToString } from "ink"
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
 
@@ -16,7 +16,7 @@ import { sshUnreachable } from "../src/session"
 import { secretsWords, type DeployStart } from "../src/ui/deploy"
 import { DeployBlock, type DeployShown } from "../src/ui/deploy-view"
 import { inkUi } from "../src/ui/ink"
-import { plainUi } from "../src/ui/plain"
+import { plainUi, processPlainUi, wantsPlain } from "../src/ui/plain"
 import { COMPOSE_V1, COMPOSE_V2, machine, ready } from "./helpers"
 
 type Machine = ReturnType<typeof machine>
@@ -28,6 +28,46 @@ const strip = (text: string) => text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").repl
 
 /** Every line, with the space at its end taken off. */
 const linesOf = (text: string) => text.split("\n").map((line) => line.trimEnd())
+
+/**
+ * The lines a terminal shows once it has received `raw`, as far as Ink writes
+ * outside the full-screen app: text, line breaks, erasing a line, moving up a
+ * line and back to the first column. Colours and other modes are left out.
+ */
+function screenOf(raw: string): string[] {
+  const rows = [""]
+  let row = 0
+  let column = 0
+  for (const token of raw.split(/(\x1b\[[0-9;?]*[A-Za-z]|\r|\n)/)) {
+    if (token === "") continue
+    if (token === "\n") {
+      row++
+      column = 0
+      rows[row] ??= ""
+      continue
+    }
+    if (token === "\r") {
+      column = 0
+      continue
+    }
+    const csi = /^\x1b\[([0-9;?]*)([A-Za-z])$/.exec(token)
+    if (csi) {
+      const [, count, final] = csi
+      if (final === "K") rows[row] = ""
+      if (final === "A") row = Math.max(0, row - Number(count || 1))
+      if (final === "G") column = 0
+      continue
+    }
+    for (const char of token) {
+      const line = [...(rows[row] ?? "")]
+      while (line.length < column) line.push(" ")
+      line[column] = char
+      rows[row] = line.join("")
+      column++
+    }
+  }
+  return rows.map((line) => line.trimEnd())
+}
 
 /** Nothing is drawn past the window. */
 function fits(text: string, columns: number) {
@@ -224,6 +264,60 @@ describe("status, lists and errors at a terminal (board 'Status, lists, errors a
     expect(lines).toContainEqual(expect.stringMatching(/^worker +deploy 1 +● stopped$/))
   })
 
+  test("status lists the apps as Home does, the latest deploy first, at a terminal and piped; one this machine never deployed comes last", async () => {
+    const m = await ready()
+    for (const app of ["web", "worker", "api", "zoo"]) expect(await m.zekno("deploy", "--app", app, "--server", "dev")).toBe(0)
+    // api again, so it is the latest; zoo as deployed from another machine: this one has no history of it.
+    expect(await m.zekno("deploy", "--app", "api", "--server", "dev")).toBe(0)
+    const serverId = JSON.parse(readFileSync(join(m.home, "profile.json"), "utf8")).servers[0].serverId
+    rmSync(join(m.home, "history", serverId, "zoo.json"))
+    const { text } = await atTerminal(m, 100, "status", "--server", "dev")
+    const rows = linesOf(text).filter((line) => / deploy \d/.test(line))
+    expect(rows.map((line) => line.split(" ")[0])).toEqual(["api", "worker", "web", "zoo"])
+    const plain = piped(m)
+    expect(await m.zekno("status", "--server", "dev")).toBe(0)
+    expect(plain.out().filter((line) => line.includes("\tdeploy ")).map((line) => line.split("\t")[0])).toEqual(["api", "worker", "web", "zoo"])
+  })
+
+  test("a step SSH may write into is drawn once and still, and is gone when it ends: no 'Asking' line stays above the answer", async () => {
+    let raw = ""
+    const stdout = Object.assign(
+      new Writable({
+        write(chunk, _encoding, done) {
+          raw += String(chunk)
+          done()
+        },
+      }),
+      { columns: 100, rows: 40, isTTY: true }
+    )
+    // Drawn as at a terminal: redrawn in place, and erased where Ink erases.
+    const ui = inkUi({ stdout: stdout as unknown as NodeJS.WriteStream, stdin: new PassThrough() as unknown as NodeJS.ReadStream, interactive: true })
+    let during: string[] = []
+    let still = false
+    // As `zekno status` does over SSH, and then main.ts closes the interface once the command has returned.
+    const command = async () => {
+      await ui.step(
+        "Asking prod",
+        async () => {
+          await Bun.sleep(150)
+          during = screenOf(raw)
+          const written = raw.length
+          // Nothing is animated: SSH may be asking for a password on this terminal.
+          await Bun.sleep(300)
+          still = raw.length === written
+        },
+        { quiet: true }
+      )
+      ui.line("prod: team list version 2", ["prod"])
+      ui.table([["demo", "deploy 4"]])
+    }
+    await command()
+    await ui.close()
+    expect(during.filter(Boolean)).toEqual(["  Asking prod…"])
+    expect(still).toBe(true)
+    expect(screenOf(raw).filter(Boolean)).toEqual(["prod", "demo  deploy 4"])
+  })
+
   test("secret ls: names and versions, which are not deployed yet, and that values are never shown", async () => {
     const m = await ready()
     m.typing("one")
@@ -407,6 +501,42 @@ describe("piped, in scripts and CI: plain and stable (contracts/commands.md)", (
     }))
     expect(await m.zekno("server", "update", "dev")).toBe(1)
     expect(err.at(-1)).toBe("There is no terminal to ask on. Add `--yes` to update the runner on dev.")
+  })
+
+  test("plain lines when standard output or standard input is not a terminal, with --json, or with TERM=dumb; the interface otherwise", () => {
+    const tty = { isTTY: true }
+    const notTty = { isTTY: false }
+    expect(wantsPlain(["deploy"], tty, tty, {})).toBe(false)
+    // `zekno deploy < /dev/null` at a terminal, as on the board: the plain line.
+    expect(wantsPlain(["deploy"], tty, notTty, {})).toBe(true)
+    expect(wantsPlain(["deploy"], notTty, tty, {})).toBe(true)
+    expect(wantsPlain(["deploy"], {}, {}, {})).toBe(true)
+    expect(wantsPlain(["deploy", "--json"], tty, tty, {})).toBe(true)
+    expect(wantsPlain(["deploy"], tty, tty, { TERM: "dumb" })).toBe(true)
+  })
+
+  test("piped, a failure goes to standard error as it is, with no colour, and the command ends only once standard error has taken it", async () => {
+    const written: string[] = []
+    // Standard error as a pipe that is full: it takes the text, and says to wait.
+    const write = spyOn(process.stderr, "write").mockImplementation(((chunk: string) => (written.push(String(chunk)), false)) as never)
+    const coloured = spyOn(console, "error")
+    try {
+      const ui = processPlainUi()
+      ui.warn("Careful.")
+      ui.error('No server named "prod". Connected servers: dev.')
+      expect(written).toEqual(["Careful.\n", 'No server named "prod". Connected servers: dev.\n'])
+      expect(coloured).not.toHaveBeenCalled()
+      let closed = false
+      const closing = ui.close().then(() => (closed = true))
+      await Bun.sleep(30)
+      expect(closed).toBe(false)
+      process.stderr.emit("drain")
+      await closing
+      expect(closed).toBe(true)
+    } finally {
+      write.mockRestore()
+      coloured.mockRestore()
+    }
   })
 
   test("`zekno` with no arguments and no terminal prints the help and exits with status 2, as before", async () => {

@@ -13,7 +13,7 @@ keys, and what the canvas does not show.
 | Deploy | A deploy in progress | `d`, or `r` on an earlier deploy | Summary panel, stage row, live line; Docker's output on `o` and on failure |
 | Logs | Live logs | `l` | Time, service, text; following or paused |
 | First run | First run: no team yet | Start, when no team exists | The logo, the three steps, the name question |
-| Add a server | Add a server | `a` on Home, or step 2 of first run | The destination and name, each install step, the two codes with what they are for |
+| Add a server | Add a server | `a` on Home, or step 2 of first run | The destination and name, each install step, the two codes with what they are for; once done, every step ticked and the server code, until `enter` |
 | Set a secret | Set a secret | `s`, or before a deploy when values are missing | The names that are missing, the hidden prompt |
 
 Every app screen has the header with the pixel wordmark (three lines) and the screen's place in
@@ -25,7 +25,7 @@ the app, and a last line listing its keys.
 |-----|-------|------|
 | `↑` `↓` | Lists, logs | Move the selection, or scroll |
 | `←` `→`, `tab` | Home, App | Move between panes |
-| `enter` | Lists, questions | Open, or confirm |
+| `enter` | Lists, questions | Open, or confirm. On Add a server once it is done, go to Home |
 | `esc` | Everywhere but Home | Go back. On Deploy, the deploy carries on. At the hidden prompt before a deploy, back to the list of missing values; on that list, the question "deploy without them?" |
 | `d` | Home, App | Deploy this folder. A linked folder deploys only to its own app on its own server (on a server with no apps, only when that server is its own); with another app or server selected, it says so and deploys nothing. One exception: on its own server, a linked app that has never been deployed there has no row to select, so `d` deploys it as its first deploy whichever row is marked |
 | `r` | Home, App | Roll back: on App to the selected deploy, on Home to the one before the latest |
@@ -101,6 +101,12 @@ keys type into it.
   "Nothing was deployed.".
 - **Leaving and quitting during a deploy**: `esc` returns to the previous screen and the result
   arrives as a line there; `q` shows "waiting for deploy <n> to finish" and closes when it ends.
+- **Adding a server**: when it finishes, the screen stays open with every step ticked and the
+  server code in its panel, above the sentence on what it identifies (FR-013); its last line is
+  `enter done`. `enter` (or `esc`) goes to Home with the new server selected and "✔ Connected
+  &lt;name&gt; and added it to the signed team list." (an outdated runner's warning instead, when
+  it is one). Left with `esc` while it was still working, the add carries on, and the line on
+  Home also gives the server code, since its panel was not seen.
 - **SSH questions**: if SSH has to ask for a password or a host key, the app hands the terminal
   over and takes it back when the connection is up.
 - **Closing**: the terminal is restored as it was, including after an error.

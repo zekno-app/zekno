@@ -90,13 +90,25 @@ async function named(m: Machine, terminal?: Terminal) {
   return app
 }
 
-/** Types a destination and a name into "add a server" and waits for Home. */
-async function added(app: App, destination: string, name: string) {
+/**
+ * Types a destination and a name into "add a server" and waits for it to
+ * end. Once the server is added the screen stays, with the server code in its
+ * panel and `enter done`; enter is pressed there, as a person would, to go to
+ * Home. Returns that finished screen as drawn, or undefined when it failed.
+ */
+async function added(app: App, destination: string, name: string): Promise<string | undefined> {
   app.type(destination)
   app.press({ kind: "enter" })
   app.type(name)
   app.press({ kind: "enter" })
   await app.until(() => top(app.state).name !== "add-server" || app.state.adding?.running === false, `${name} to be added`)
+  const screen = top(app.state)
+  if (screen.name !== "add-server" || screen.step !== "done") return undefined
+  const finished = app.draw()
+  expect(lastLine(finished)).toBe("enter done")
+  expect(panel(finished, "Server code")).toContain(`${app.state.adding!.serverCode} Identifies this server's key. Teammates compare it before they trust the server.`)
+  app.press({ kind: "enter" })
+  return finished
 }
 
 /** The profile's servers, as written. */
@@ -169,20 +181,23 @@ describe("adding the runner on this machine, for trying zekno out", () => {
     const app = await named(m)
     const seen: string[] = []
     app.store.subscribe(() => seen.push(app.draw()))
-    await added(app, THIS_MACHINE, "dev")
+    const finished = await added(app, THIS_MACHINE, "dev")
     expect(app.failures).toEqual([])
     expect(top(app.state)).toMatchObject({ name: "home", server: 0 })
     expect(app.state.team?.servers.map((server) => server.name)).toEqual(["dev"])
     expect(app.state.adding).toMatchObject({ local: true, running: false, steps: { connect: { state: "done" }, set_up: { state: "done" }, added: { state: "done" } } })
-    expect(app.state.notice?.tone).toBe("success")
-    expect(app.state.notice?.text).toContain("Connected dev and added it to the signed team list. Server code ")
+    // The code was read on the finished screen, so Home's line does not repeat it.
+    expect(app.state.notice).toEqual({ tone: "success", text: "Connected dev and added it to the signed team list." })
     expect(profileServers(m)).toEqual([{ name: "dev", serverId: expect.any(String), target: { kind: "local", home: join(m.home, "runner", "dev") } } as never])
-    // While it worked, the server code was shown with its sentence, once setup had finished.
+    // The server code was shown with its sentence once setup had finished, and stayed, every step ticked, until enter.
     const code = app.state.adding?.serverCode
     expect(code).toMatch(/^[0-9A-Z]{4}(-[0-9A-Z]{4})+$/)
     const withCode = seen.find((screen) => screen.includes(code!))
     expect(panel(withCode!, "Server code")).toContain(`${code} Identifies this server's key. Teammates compare it before they trust the server.`)
     expect(withCode).toContain("Runner started on this machine")
+    expect(panel(finished!, "Server code")).toContain(`${code} Identifies this server's key.`)
+    for (const step of ["✔ Runner started on this machine", "✔ Runner set up for your team", "✔ Added dev to the signed team list"]) expect(finished).toContain(step)
+    fits(finished!, 100, 30)
     // A deploy goes to it.
     m.compose(COMPOSE_V1)
     expect(await m.zekno("deploy", "--app", "web", "--server", "dev")).toBe(0)

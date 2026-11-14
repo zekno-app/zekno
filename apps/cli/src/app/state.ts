@@ -210,12 +210,15 @@ export type Screen =
   | { name: "welcome"; value: string; creating: boolean }
   | {
       name: "add-server"
-      step: "destination" | "name" | "working"
+      /** `done`: the server was added; the screen shows its code until enter or esc. */
+      step: "destination" | "name" | "working" | "done"
       destination: string
       serverName: string
       output: boolean
       /** Step 2 of first run: the header shows the three steps. */
       firstRun?: boolean
+      /** Once it is done: the line Home shows when the screen is left. */
+      added?: Notice
     }
   | {
       name: "set-secret"
@@ -312,7 +315,8 @@ export type AppEvent =
   | { type: "team"; team: TeamView }
   /** First run: the key was created; next is adding a server. */
   | { type: "team-created"; team: TeamView }
-  | { type: "server-added"; team: TeamView; notice: Notice }
+  /** A server was added. `code`, its server code, is said on Home only when its panel was not seen. */
+  | { type: "server-added"; team: TeamView; notice: Notice; code?: string }
   | { type: "app-view"; server: string; app: string; deploys: DeployRow[]; secrets: SecretRow[] }
   | { type: "notice"; notice: Notice }
   /**
@@ -426,7 +430,7 @@ export function textQuestionOpen(state: State): boolean {
     case "welcome":
       return !screen.creating
     case "add-server":
-      return screen.step !== "working"
+      return screen.step === "destination" || screen.step === "name"
     case "set-secret":
       return screen.question === "name"
     case "logs":
@@ -894,7 +898,11 @@ function onKey(state: State, key: AppKey): Step {
       if (isText(key, "o")) step = stay(replaceTop(state, { ...screen, output: !screen.output }))
       break
     case "add-server":
-      if (isText(key, "o")) step = stay(replaceTop(state, { ...screen, output: !screen.output }))
+      if (screen.step === "done" && (key.kind === "enter" || key.kind === "escape")) {
+        // Home, where the new server is already selected, with the line that says it was added.
+        const back = pop(state)
+        step = { ...back, state: { ...back.state, notice: screen.added } }
+      } else if (screen.step === "working" && isText(key, "o")) step = stay(replaceTop(state, { ...screen, output: !screen.output }))
       break
     case "logs":
       step = onLogs(state, screen, key)
@@ -1000,11 +1008,16 @@ export function update(state: State, event: AppEvent): Step {
     case "server-added": {
       const adding = state.adding ? { ...state.adding, running: false } : undefined
       const next = clampHome({ ...state, team: event.team, adding })
-      const back = top(next).name === "add-server" ? pop(next).state : next
       // The new server is selected on Home.
       const index = event.team.servers.length - 1
-      const selected = updateScreens(back, "home", (screen) => (index >= 0 ? { ...screen, pane: "servers", server: index, app: 0 } : screen))
-      return stay({ ...selected, notice: event.notice })
+      const selected = updateScreens(next, "home", (screen) => (index >= 0 ? { ...screen, pane: "servers", server: index, app: 0 } : screen))
+      // Its screen stays open, every step ticked and the server code in its panel, until enter or esc (FR-013).
+      if (selected.stack.some((screen) => screen.name === "add-server" && screen.step === "working")) {
+        return stay(updateScreens(selected, "add-server", (screen) => (screen.step === "working" ? { ...screen, step: "done", output: false, added: event.notice } : screen)))
+      }
+      // It was left with esc while it worked, so the panel was not seen: the line on Home gives the code.
+      const code = event.code === undefined ? "" : ` Server code ${event.code}.`
+      return stay({ ...selected, notice: { ...event.notice, text: `${event.notice.text}${code}` } })
     }
     case "add-started":
       // A line about an earlier attempt would now be about the wrong one.

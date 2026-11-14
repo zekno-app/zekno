@@ -79,9 +79,12 @@ describe("edge cases", () => {
       expect(await m.zekno("secret", "set", name, ...where)).toBe(1)
       expect(m.lastErr()).toContain("is reserved")
     }
-    m.typing("x")
-    expect(await m.zekno("secret", "set", "1BAD", ...where)).toBe(1)
-    expect(m.lastErr()).toContain("letters, digits and underscore")
+    // A name that cannot be stored is refused before the value is asked for (no value is queued here),
+    // and what was typed is not repeated: it may be the value itself.
+    for (const name of ["1BAD", "DB_PASSWORD=hunter2", "sk-live-51HxQzY", "A".repeat(LIMITS.secretNameLength + 1)]) {
+      expect(await m.zekno("secret", "set", name, ...where)).toBe(1)
+      expect(m.lastErr()).toBe("A secret name uses letters, digits and underscore, and does not start with a digit.")
+    }
     m.typing("x".repeat(LIMITS.secretValueBytes + 1))
     expect(await m.zekno("secret", "set", "BIG", ...where)).toBe(1)
     expect(m.lastErr()).toContain("64 KiB")

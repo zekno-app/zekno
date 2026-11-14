@@ -15,12 +15,15 @@ import { HINTS } from "./placeholder"
 type HomeScreenState = Extract<Screen, { name: "home" }>
 
 /**
- * Pane widths. At 100 columns and more, as on the board "Home". Below that,
- * as on the board "Home at 80 columns": the servers pane is as wide (196 px
- * of 720), and there is no details pane; the selected app's details are at
- * the foot of the apps pane and its actions are keys on the last line.
+ * Pane widths. At 100 columns and more, as on the board "Home": the servers
+ * pane has its 220 px, which hold `deploy@203.0.113.7` whole after the
+ * marker's indent (eighteen columns, with the pane's border and padding and
+ * that indent six more). Below that, as on the board "Home at 80 columns":
+ * the servers pane is as wide (196 px of 720), and there is no details pane;
+ * the selected app's details are at the foot of the apps pane and its
+ * actions are keys on the last line.
  */
-export const SERVERS_WIDTH = 22
+export const SERVERS_WIDTH = { wide: 24, narrow: 22 }
 export const DETAILS_WIDTH = 28
 /** Below this many columns Home is arranged as on the board "Home at 80 columns". */
 export const HOME_WIDE = 100
@@ -32,8 +35,13 @@ const STATE_WIDTH = 12
 const STATE_FULL_WIDTH = 17
 /** The app name column of the 80-column board (140 px): never made narrower to widen the state column. */
 const MIN_APP_WIDTH = 16
-/** The when column of the boards at 100 and at 80 columns; it widens for a longer time, such as "23 hours ago". */
-const WHEN_WIDTH = { wide: 12, narrow: 11 }
+/**
+ * The when column of the boards at 100 and at 80 columns (96 px at 100: ten
+ * columns and the gap after the state); it widens for a longer time, such as
+ * "23 hours ago". At exactly 100 columns this is what leaves `worker` whole
+ * beside the servers pane's 24.
+ */
+const WHEN_WIDTH = { wide: 11, narrow: 11 }
 
 /**
  * The state column's width: the boards' at 80 and 100 columns, where
@@ -44,7 +52,7 @@ const WHEN_WIDTH = { wide: 12, narrow: 11 }
 export function stateWidth(columns: number, whenWidth: number): number {
   const wide = columns >= HOME_WIDE
   // The window's margins, the panes beside the apps pane and the gaps between them, the pane's border and padding, the marker.
-  const pane = columns - 2 - SERVERS_WIDTH - (wide ? DETAILS_WIDTH + 2 : 1) - 4 - 2
+  const pane = columns - 2 - (wide ? SERVERS_WIDTH.wide : SERVERS_WIDTH.narrow) - (wide ? DETAILS_WIDTH + 2 : 1) - 4 - 2
   return pane - DEPLOY_WIDTH - whenWidth - STATE_FULL_WIDTH >= MIN_APP_WIDTH ? STATE_FULL_WIDTH : STATE_WIDTH
 }
 
@@ -95,7 +103,7 @@ function ServerItem({ server, selected, narrow }: { server: ServerRow; selected:
 
 function ServersPane({ servers, selected, focused, narrow }: { servers: readonly ServerRow[]; selected: number; focused: boolean; narrow: boolean }) {
   return (
-    <Pane title="Servers" focused={focused} width={SERVERS_WIDTH}>
+    <Pane title="Servers" focused={focused} width={narrow ? SERVERS_WIDTH.narrow : SERVERS_WIDTH.wide}>
       <Box flexDirection="column">
         {servers.map((server, index) => (
           <ServerItem key={server.name} server={server} selected={index === selected} narrow={narrow} />
@@ -171,10 +179,14 @@ function AppsFoot({ state, server, said }: { state: State; server: ServerRow; sa
     )
   }
   if (state.linked?.server === server.name && !said) {
+    // Dim pieces beside the names: inside a dim text, Ink cannot draw a part that is not dim.
     lines.push(
-      <Text key="linked" dimColor>
-        This folder is linked to <Text dimColor={false}>{state.linked.app}</Text> on <Text dimColor={false}>{state.linked.server}</Text> by
-        zekno.json.
+      <Text key="linked">
+        <Text dimColor>This folder is linked to </Text>
+        {state.linked.app}
+        <Text dimColor> on </Text>
+        {state.linked.server}
+        <Text dimColor> by zekno.json.</Text>
       </Text>
     )
   }

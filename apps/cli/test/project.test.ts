@@ -362,6 +362,35 @@ describe("flags win over the file, and only a file this machine accepted is used
     expect(thrown(() => withProject(t.project, { app: "demo" }, ["app", "server"], places))?.message).toContain("is not valid JSON.")
   })
 
+  test("given --app and --server, a file that cannot be read is no file: here or above, a link, bad JSON or another user's", () => {
+    const t = tree()
+    const places = { profile: tempDir("profile"), home: t.home }
+    const both = { app: "demo", server: "dev" }
+    const broken: [string, () => void][] = [
+      ["bad JSON here", () => writeFileSync(join(t.sub, "zekno.json"), "{ broken")],
+      ["bad JSON above", () => writeFileSync(join(t.project, "zekno.json"), "{ broken")],
+      ["a link", () => symlinkSync("/etc/hosts", join(t.sub, "zekno.json"))],
+    ]
+    for (const [what, plant] of broken) {
+      rmSync(join(t.sub, "zekno.json"), { force: true })
+      rmSync(join(t.project, "zekno.json"), { force: true })
+      plant()
+      expect({ what, details: withProject<Details>(t.sub, both, ["app", "server", "file"], places) }).toEqual({ what, details: both })
+      // A command that needs a name from it is still stopped, and says why.
+      expect({ what, problem: thrown(() => withProject(t.sub, { app: "demo" }, ["app", "server", "file"], places))?.status }).toEqual({ what, problem: 1 })
+    }
+    // Another user's: where there are user ids, a file that is not this user's is refused the same way.
+    const getuid = spyOn(process, "getuid").mockReturnValue((process.getuid?.() ?? 0) + 1)
+    try {
+      rmSync(join(t.sub, "zekno.json"), { force: true })
+      writeFileSync(join(t.sub, "zekno.json"), json(LINK))
+      expect(withProject<Details>(t.sub, both, ["app", "server", "file"], places)).toEqual(both)
+      expect(thrown(() => withProject(t.sub, {}, ["app", "server"], places))?.message).toContain("belongs to another user")
+    } finally {
+      getuid.mockRestore()
+    }
+  })
+
   test("with no file, what was given is passed on as it is", () => {
     const t = tree()
     expect(withProject(t.sub, { app: "demo" }, ["app", "server"], { profile: tempDir("profile"), home: t.home })).toEqual({ app: "demo" })

@@ -18,6 +18,8 @@ const LABEL_WIDTH = 18
 const DETAIL_WIDTH = 24
 /** At 100 columns and more, the codes' column and the steps' details have the room the board gives them. */
 const WIDE = 100
+/** Once the server was added: the screen stays for its code to be read, and enter leaves it (esc does too). */
+const DONE_HINTS: readonly KeyHint[] = [["enter", "done"]]
 
 /** What each step is called before it starts, while it runs, and once done; the board shows one of each. */
 function wordsOf(step: AddStepName, name: string, local: boolean): { todo: string; doing: string; done: string; found?: string } {
@@ -154,7 +156,9 @@ function Details({ lines, rows, width }: { lines: readonly string[]; rows: numbe
  * Board "Add a server": the destination and the name, each step as it
  * completes with what was found, and the team code and the server code each
  * with what it identifies. `o` shows what the server printed. As step 2 of
- * first run, the header shows the three steps.
+ * first run, the header shows the three steps. Once the server is added the
+ * screen stays, every step ticked and the server code in its panel, until
+ * enter (or esc) goes to Home.
  */
 export function AddServerScreen({
   state,
@@ -174,17 +178,20 @@ export function AddServerScreen({
   const working = screen.step === "working"
   const wide = columns >= WIDE
   const right = wide ? 30 : 28
-  const hints: readonly KeyHint[] = !working
-    ? [
-        ["enter", "continue"],
-        ["esc", "cancel"],
-      ]
-    : screen.output
-      ? [
-          ["o", "hide details"],
-          ["esc", "cancel"],
-        ]
-      : HINTS["add-server"]
+  const hints: readonly KeyHint[] =
+    screen.step === "done"
+      ? DONE_HINTS
+      : !working
+        ? [
+            ["enter", "continue"],
+            ["esc", "cancel"],
+          ]
+        : screen.output
+          ? [
+              ["o", "hide details"],
+              ["esc", "cancel"],
+            ]
+          : HINTS["add-server"]
   // As step 2 of first run the three steps are on the header's right, as on the board; narrower, they open the body.
   const steps = screen.firstRun ? <FirstRunSteps current={2} /> : null
   const header = <Header place={<Trail parts={["add a server"]} />} {...(steps && wide ? { right: steps } : {})} />

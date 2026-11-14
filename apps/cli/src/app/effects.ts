@@ -612,10 +612,16 @@ export function createEffects(
       const team = await openTeam(ops)
       remember(team)
       const runner = runnerOf(result.target, result.mode, result.runner, carried)
+      // The code is in the screen's panel; the reducer adds it to this line only when that screen was left before it was done.
       const text = runner?.outdated
-        ? `Connected ${result.name}. Its runner is older than this zekno: deploys work, and u updates it. Server code ${result.code}.`
-        : `Connected ${result.name} and added it to the signed team list. Server code ${result.code}.`
-      dispatch({ type: "server-added", team: teamView(team, deps.home), notice: { tone: runner?.outdated ? "warning" : "success", text } })
+        ? `Connected ${result.name}. Its runner is older than this zekno: deploys work, and u updates it.`
+        : `Connected ${result.name} and added it to the signed team list.`
+      dispatch({
+        type: "server-added",
+        team: teamView(team, deps.home),
+        notice: { tone: runner?.outdated ? "warning" : "success", text },
+        code: result.code,
+      })
       dispatch({ type: "server-reached", server: result.name, reachable: true, runner })
     } finally {
       adding = false
@@ -672,11 +678,13 @@ export function createEffects(
    *
    * `deliberately`: as the app does when it starts, or after an update. SSH
    * may then ask, and the terminal is handed over (hand-over.ts); there is
-   * no time limit, since SSH may be waiting for a password. Otherwise, in
-   * the background: batch mode only, the terminal never handed over, and
-   * `readLimitMs` for all of it. Where SSH would have asked, the server
-   * counts as not reached and is not connected to in the background again
-   * until the person connects to it on purpose (`asking`).
+   * no time limit while it connects, since SSH may be waiting for a
+   * password, but once the session is open SSH asks nothing more, and the
+   * read over it has `readLimitMs`. Otherwise, in the background: batch mode
+   * only, the terminal never handed over, and `readLimitMs` for all of it.
+   * Where SSH would have asked, the server counts as not reached and is not
+   * connected to in the background again until the person connects to it on
+   * purpose (`asking`).
    */
   async function connect(team: Pick<Team, "trust">, server: Server, deliberately: boolean): Promise<void> {
     const name = server.name
@@ -692,11 +700,13 @@ export function createEffects(
     // What SSH writes on standard error in the background is only looked at to tell whether it would have asked.
     const lines: string[] = []
     const via = deliberately ? ops : { ...deps, connect: batchOnly(deps.connect, lines) }
-    const limit = deliberately ? undefined : timeLimit(entry)
+    let limit = deliberately ? undefined : timeLimit(entry)
     try {
       const session = await openSession(reach(via, server.target), { signal: entry.stop.signal })
       if (session.mode === "session") entry.session = session
       if (!current()) return letGo(entry)
+      // The connection is up. A runner from before sessions connects again for each read, where SSH may ask again.
+      if (session.mode === "session") limit ??= timeLimit(entry)
       const result = await readOver(session, { team, server }, { whole: true })
       if (!current()) return letGo(entry)
       if (session.mode !== "session") {

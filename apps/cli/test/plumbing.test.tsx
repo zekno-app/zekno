@@ -4,7 +4,7 @@
  * C10). Each test fails on the CLI as it was before its fix.
  */
 import { describe, expect, spyOn, test } from "bun:test"
-import { renderToString } from "ink"
+import { renderToString, Static } from "ink"
 import { closeSync, constants, existsSync, openSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
@@ -229,6 +229,31 @@ describe("server text is marked as the server's (C8)", () => {
     expect(lines[0]).toStartWith("remote: word")
     expect(lines.length).toBeGreaterThan(1)
     for (const line of lines.slice(1)) expect(line).toStartWith(" ".repeat(REMOTE_MARK.length + 1))
+  })
+
+  test("at a terminal a word longer than the room left is broken by zekno, so no part of the line reaches the left edge", () => {
+    const path = "/var/folders/6g/x42_qytn6hdfqg3nm_n7h_3r0000gn/T/zekno-server-ej03oY/home"
+    const texts = [
+      `${path}/ssh: line 19: cd: ${path}: No such file or directory`,
+      `cd: ${"x".repeat(250)}`,
+      "y".repeat(300),
+      `${"字".repeat(70)} ${"é".repeat(90)}`,
+    ]
+    for (const columns of [80, 100]) {
+      for (const text of texts) {
+        // As single commands draw it: once, among the lines already written.
+        const drawn = renderToString(<Static items={[text]}>{(line) => <RemoteLine key={line} text={line} columns={columns} />}</Static>, { columns })
+        const lines = drawn.split("\n").filter((line) => line !== "")
+        expect(lines.length).toBeGreaterThan(1)
+        expect(lines[0]).toStartWith(`${REMOTE_MARK} `)
+        for (const line of lines.slice(1)) expect({ columns, line }).toEqual({ columns, line: expect.stringMatching(/^ {8}/) })
+        for (const line of lines) expect(Bun.stringWidth(line)).toBeLessThanOrEqual(columns)
+        // Nothing of the line is lost on the way.
+        expect(lines.map((line, index) => (index === 0 ? line.slice(REMOTE_MARK.length + 1) : line.slice(8))).join("").replace(/ /g, "")).toBe(
+          text.replace(/ /g, "")
+        )
+      }
+    }
   })
 
   test("at a terminal every line is drawn once and in order, also after drawn lines are let go", async () => {

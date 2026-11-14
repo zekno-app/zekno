@@ -53,6 +53,45 @@ function pane(screen: string, title: string): string {
   return words(lines.map((line) => line.slice(left, right + 1).join("")).join("\n"))
 }
 
+/**
+ * The window as a terminal that shows colours receives it. It is drawn in a
+ * process of its own: how much colour Ink writes is fixed when it is loaded.
+ */
+function drawnInColour(state: State, columns = 100, rows = 30): string {
+  const script = [
+    'import { createElement } from "react"',
+    'import { renderToString } from "ink"',
+    `import { AppView } from ${JSON.stringify(join(import.meta.dir, "../src/app/app.tsx"))}`,
+    "const state = JSON.parse(process.argv.at(-1))",
+    `process.stdout.write(renderToString(createElement(AppView, { state, columns: ${columns}, rows: ${rows} }), { columns: ${columns} }))`,
+  ].join("\n")
+  const run = Bun.spawnSync([process.execPath, "-e", script, JSON.stringify(state)], { env: { ...process.env, FORCE_COLOR: "1" } })
+  if (run.exitCode !== 0) throw new Error(run.stderr.toString())
+  return run.stdout.toString()
+}
+
+/** A line's characters, and for each whether it is drawn dim (SGR 2, until SGR 22 or a reset). */
+function faintness(line: string): { text: string; dim: boolean[] } {
+  let text = ""
+  const dim: boolean[] = []
+  let faint = false
+  for (const part of line.split(/(\x1b\[[0-9;]*m)/)) {
+    const codes = /^\x1b\[([0-9;]*)m$/.exec(part)?.[1]
+    if (codes === undefined) {
+      for (const char of part) {
+        text += char
+        dim.push(faint)
+      }
+      continue
+    }
+    for (const code of codes.split(";")) {
+      if (code === "2") faint = true
+      if (code === "22" || code === "0" || code === "") faint = false
+    }
+  }
+  return { text, dim }
+}
+
 /** Nothing is drawn past the window. */
 function fits(screen: string, columns: number, rows: number) {
   const lines = screen.split("\n")
@@ -194,10 +233,45 @@ describe("Home (board 'Home')", () => {
     fits(screen, 100, 30)
   })
 
+  test("the servers pane: at 100 columns and more as on board 'Home', the address whole; below, as on 'Home at 80 columns'", () => {
+    /** The width of the servers pane: its top border, from corner to corner. */
+    const serversWidth = (screen: string) => {
+      const top = [...screen.split("\n").find((line) => line.includes("╭"))!]
+      return top.indexOf("╮") - top.indexOf("╭") + 1
+    }
+    for (const columns of [100, 120]) {
+      const screen = draw(boardHome({ columns, rows: 30 }), columns, 30)
+      expect(screen).toMatch(/│ {3}deploy@203\.0\.113\.7 +│/)
+      expect(serversWidth(screen)).toBe(24)
+      fits(screen, columns, 30)
+    }
+    expect(serversWidth(draw(boardHome({ columns: 80, rows: 24 }), 80, 24))).toBe(22)
+    expect(serversWidth(draw(boardHome({ columns: 99, rows: 24 }), 99, 24))).toBe(22)
+  })
+
   test("says 'This folder is linked' only when it is", () => {
     expect(draw(boardHome())).not.toContain("This folder is linked")
     const linked = initialState({ kind: "team", team: BOARD_TEAM, linked: { server: "prod", app: "demo" } }, { columns: 100, rows: 30 })
     expect(words(draw(linked))).toContain("This folder is linked to demo on prod by zekno.json.")
+  })
+
+  test("in that sentence the app and the server are in the text colour and the rest is dim, as on the board", () => {
+    const linked = initialState({ kind: "team", team: BOARD_TEAM, linked: { server: "prod", app: "demo" } }, { columns: 100, rows: 30 })
+    const line = drawnInColour(linked)
+      .split("\n")
+      .find((row) => row.includes("This folder is linked"))!
+    const shown = faintness(line)
+    const at = shown.text.indexOf("This folder is linked to demo on prod by")
+    expect(at).toBeGreaterThan(0)
+    const dimOf = (words: string, from = at) => {
+      const start = shown.text.indexOf(words, from)
+      return [...words].map((_, index) => shown.dim[start + index])
+    }
+    expect(dimOf("This folder is linked to ").every(Boolean)).toBe(true)
+    expect(dimOf("demo", at + 20).some(Boolean)).toBe(false)
+    expect(dimOf(" on ", at + 20).every(Boolean)).toBe(true)
+    expect(dimOf("prod", at + 30).some(Boolean)).toBe(false)
+    expect(dimOf(" by", at + 30).every(Boolean)).toBe(true)
   })
 
   test("a server that could not be reached is marked, keeps its apps' numbers, and says why; the others are as they were", () => {

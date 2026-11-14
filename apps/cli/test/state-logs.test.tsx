@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, test } from "bun:test"
 import { SESSION_FRAME_BYTES } from "@workspace/core"
-import { renderToString } from "ink"
+import { renderToString, Static } from "ink"
 import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
@@ -320,7 +320,8 @@ describe("whether an app is running (data-model.md)", () => {
     m.docker.ps("web", `${psRow("web", "running")}\n`)
     m.docker.ps("api", `${psRow("api", "running")}\n${psRow("db", "exited")}\n`)
     expect(await m.zekno("status", "--server", "dev")).toBe(0)
-    expect(m.out).toEqual(["dev: team list version 2", "web\tdeploy 1\trunning", "api\tdeploy 1\tpartly running", "worker\tdeploy 1\tstopped"])
+    // In Home's order: the latest deploy first.
+    expect(m.out).toEqual(["dev: team list version 2", "worker\tdeploy 1\tstopped", "api\tdeploy 1\tpartly running", "web\tdeploy 1\trunning"])
     expect(m.err).toEqual([])
 
     m.out.length = 0
@@ -977,6 +978,26 @@ describe("what is running, read again while the app is open", () => {
     expect(app.failures).toEqual([])
   })
 
+  test("the read when the app starts, and after u, has the limit too once the connection is up: a runner that says its version and then nothing", async () => {
+    const m = await deployed("demo")
+    // It answers `version`, then reads every other request and never answers it.
+    const dir = tempDir("silent")
+    const script = join(dir, "runner")
+    writeFileSync(script, `#!/bin/sh\necho $$ > "${dir}/pid"\nwhile IFS= read -r line; do case "$line" in *'"command":"version"'*) printf '%s' '${VERSION.trim()}'; echo ;; esac; done\n`)
+    chmodSync(script, 0o755)
+    m.deps.localRunner = ["sh", script]
+    const app = openApp(m, await loadStart(m.deps), undefined, m.deps, { readLimitMs: 300 })
+    const dev = () => app.state.team!.servers[0]!
+    const asked = Date.now()
+    // The deliberate connection when the app starts: no limit while it connects, the read's limit once it is up.
+    await Promise.race([app.effects.checkServers(), Bun.sleep(2500)])
+    expect(dev()).toMatchObject({ reachable: false, problem: noAnswer("dev", 300) })
+    expect(Date.now() - asked).toBeLessThan(2500)
+    const pid = Number(readFileSync(join(dir, "pid"), "utf8"))
+    await app.until(() => !isAlive(pid), "the silent runner to be stopped", 2000)
+    expect(app.failures).toEqual([])
+  })
+
   test("a runner that answers with more than an answer can hold: the server is not reached, and only apps this machine knows are kept (L3)", async () => {
     const m = await deployed("web")
     const status = await realStatus(m)
@@ -1218,6 +1239,15 @@ describe("`zekno logs`", () => {
     expect(lines[0]).toStartWith(`${logClock(at(3))}  web     word`)
     expect(lines.length).toBeGreaterThan(1)
     for (const line of lines.slice(1)) expect(line).toStartWith(" ".repeat(18))
+    // As `zekno logs` draws it, among the lines already written: a word longer than the room left is broken by zekno, never by the terminal.
+    for (const columns of [80, 100]) {
+      const long = { time: at(3), service: "web", text: `GET ${"/a".repeat(80)} 200` }
+      const drawn = renderToString(<Static items={[long]}>{(line) => <LogItem key={line.text} line={line} serviceWidth={6} columns={columns} />}</Static>, { columns })
+      const rows = drawn.split("\n").filter((line) => line !== "")
+      expect(rows.length).toBeGreaterThan(2)
+      for (const line of rows.slice(1)) expect(line).toMatch(/^ {18}/)
+      for (const line of rows) expect(Bun.stringWidth(line)).toBeLessThanOrEqual(columns)
+    }
   })
 
   test("`zekno logs` is in the help", async () => {

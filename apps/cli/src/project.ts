@@ -376,7 +376,8 @@ export function notAcceptedHere(link: ProjectLink, cwd: string): string {
  * have chosen an app and a server unasked, and handed them a Compose file
  * from a folder nobody here made, with the app's secrets: a command that
  * needs a name from it stops before anything is read from the keychain,
- * signed or sent. Given both `--app` and `--server`, the file is left aside.
+ * signed or sent. Given both `--app` and `--server`, the file is left aside;
+ * so is one that cannot be read, which then counts as no project file.
  *
  * Its Compose file goes with its app: with another app named by `--app`, the
  * Compose file is `-f`, or compose.yaml in the current folder, as without a
@@ -390,7 +391,15 @@ export function withProject<T extends Details>(
 ): T & FromProject {
   const missing = wanted.filter((detail) => given[detail] === undefined)
   if (missing.length === 0) return given
-  const link = findProject(cwd, places.home)
+  const named = !missing.includes("app") && !missing.includes("server")
+  let link: ProjectLink | undefined
+  try {
+    link = findProject(cwd, places.home)
+  } catch (error) {
+    // Given both names, only its Compose file could come from it: one that cannot be read gives none.
+    if (named && error instanceof CliError) return given
+    throw error
+  }
   if (!link) return given
   if (!isAccepted(places.profile, link)) {
     if (missing.includes("app") || missing.includes("server")) throw new UsageError(notAccepted(link))

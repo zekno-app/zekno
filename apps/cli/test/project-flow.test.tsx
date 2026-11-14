@@ -293,6 +293,48 @@ describe("a folder nobody on this machine linked (the reviewer's scenario)", () 
     expect(m.lastErr()).toContain("It was not made or accepted on this machine.")
   })
 
+  test("given --app and --server, a zekno.json that cannot be read is left aside too, and the folder's compose.yaml is deployed", async () => {
+    const m = await ready()
+    symlinkSync("/etc/hosts", join(m.project, "zekno.json"))
+    expect(await m.zekno("deploy", "--app", "web", "--server", "dev")).toBe(0)
+    expect(deployed(m, "web")).toBe(COMPOSE_V1)
+    // A command that would take a name from it still stops, and names it.
+    expect(await m.zekno("deploy", "--app", "web")).toBe(1)
+    expect(m.lastErr()).toContain("is a symbolic link")
+  })
+
+  test("`zekno link` given one name never fills the other from it: it stops with status 2, writes nothing, accepts nothing; with no names it is accepted", async () => {
+    const { m, folder } = await cloned()
+    const sub = join(folder, "services", "api")
+    mkdirSync(sub, { recursive: true })
+    writeFileSync(join(sub, "compose.yaml"), COMPOSE_V1)
+    m.deps.cwd = sub
+    const sentence = `zekno.json in ${realpathSync(folder)} names api on dev. It was not made or accepted on this machine. To use it, run \`zekno link\` in that folder. To leave it aside, give --app and --server.`
+    for (const args of [["--app", "api"], ["--server", "dev"], ["-f", "compose.yaml"], ["--app", "api", "--force"]]) {
+      expect({ args, status: await m.zekno("link", ...args) }).toEqual({ args, status: 2 })
+      expect(m.lastErr()).toStartWith(sentence)
+    }
+    // In its own folder too, where names that are its own would accept it as it is.
+    m.deps.cwd = folder
+    expect(await m.zekno("link", "--app", "api")).toBe(2)
+    expect(existsSync(join(sub, "zekno.json"))).toBe(false)
+    expect(acceptedLinks(m.home)).toEqual([])
+    expect(await m.zekno("deploy")).toBe(2)
+
+    // Both names typed take nothing from it.
+    m.deps.cwd = sub
+    expect(await m.zekno("link", "--app", "api", "--server", "dev")).toBe(0)
+    expect(JSON.parse(readFileSync(join(sub, "zekno.json"), "utf8"))).toEqual({ app: "api", server: "dev", compose: "compose.yaml" })
+    // With no names, `zekno link` is how it is accepted, and says what it accepted; after that one name fills from it.
+    m.deps.cwd = folder
+    expect(await m.zekno("link")).toBe(0)
+    expect(m.lastOut()).toBe("Accepted zekno.json: api on dev, file compose.yaml.")
+    rmSync(join(sub, "zekno.json"))
+    m.deps.cwd = sub
+    expect(await m.zekno("link", "--app", "api")).toBe(0)
+    expect(JSON.parse(readFileSync(join(sub, "zekno.json"), "utf8"))).toEqual({ app: "api", server: "dev", compose: "compose.yaml" })
+  })
+
   test("in the app, Home does not move to its app, says why on the problem line, and d deploys nothing and offers nothing", async () => {
     const { m, folder, started } = await cloned()
     const ups = m.docker.calls().length
