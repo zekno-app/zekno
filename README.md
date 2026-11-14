@@ -178,7 +178,8 @@ A Turborepo monorepo on Bun workspaces. The table shows what exists today.
 | Website | Next.js 16 (App Router), React 19, Tailwind CSS 4 |
 | UI components | shadcn/ui on Base UI |
 | Desktop app (planned) | Electrobun, React, Vite, Tailwind CSS |
-| Runner (planned) | Bun, compiled to a single executable |
+| Command-line tool | Bun, Ink 8 on React 19 for the terminal interface, compiled to a single executable |
+| Runner | Bun, compiled to a single executable |
 
 ## Getting started
 
