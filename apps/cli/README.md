@@ -77,7 +77,7 @@ and `ctrl-c` work there.
 |-----|-------|------|
 | `↑` `↓` | Lists, logs | Move the selection, or scroll |
 | `←` `→`, `tab` | Home, App | Move between panes |
-| `enter` | Lists, questions | Open, or confirm. On a secret, set its new value. On Logs after the connection dropped, connect again. On Add a server once it is done, go to Home with the new server selected |
+| `enter` | Lists, questions | Open, or confirm. On a secret, set its new value. On Logs after the connection dropped, connect again. On Home, on a server marked `!` (SSH needs an answer), connect to it so SSH can ask. On Add a server once it is done, go to Home with the new server selected |
 | `esc` | Everywhere but Home | Go back. On Deploy, the deploy carries on. At the hidden prompt before a deploy, back to the list of missing values; on that list, the question "deploy without them?" |
 | `d` | Home, App | Deploy this folder (see [Deploying from the app](#deploying-from-the-app)) |
 | `r` | Home, App | Roll back: on App to the selected deploy, on Home to the one before the latest |
@@ -104,6 +104,7 @@ keys type into it.
 | Remove `NAME`? | `x` on a secret | `enter` removes it, `esc` cancels |
 | The runner on `<server>` is out of date | `u` | `u` updates now, `esc` leaves it for later |
 | Remember this folder? | `d` in a folder with no `zekno.json` | `enter` writes `zekno.json` and deploys, `n` deploys without it, `esc` cancels |
+| This folder is linked to `<app>` on `<server>` | `d` in a linked folder with another app selected | `y` deploys the folder to the selected app, `n` or `esc` does not deploy |
 | Deploy `<app>` to `<server>` without `NAME`? | `esc` on the list of missing values | `y` deploys, `n` or `esc` does not deploy |
 
 ### What is running, and keeping in touch with servers
@@ -122,9 +123,19 @@ keys type into it.
   keep the deploy numbers this machine has.
 - A server whose session was lost is connected to again in the background, at most once every
   30 seconds, in SSH's batch mode only: it never asks for a password and never takes over the
-  terminal. Where SSH would have had to ask, it is not tried in the background again until you
-  connect to it on purpose (start the app, deploy, roll back, open logs, update or add).
+  terminal.
+- Where SSH would have had to ask (a password, a key passphrase, a host key) and was not
+  answered, the server is marked `!` instead of its dot, with "SSH needs an answer" under its
+  name, and its apps' state is unknown. It is not tried in the background again until you
+  connect to it on purpose: `enter` on it in the servers pane (the hints say `enter connect`),
+  or start the app, deploy, roll back, open logs, update or add. A server that refuses the
+  connection, does not answer in time or does not resolve is shown as not reached (`✖`).
+- `enter connect` tries SSH's batch mode, then hands the terminal over so SSH can ask, checks
+  that it is the server you connected, and keeps the session for the reads that follow. If you
+  cancel at SSH's question, the mark stays.
 - Deploys, rollbacks, secrets and logs use connections of their own, never the kept session.
+- After a server is added from the app, the session it was added over is kept, so SSH does not
+  ask a second time.
 - A runner older than 0.2.0 has no sessions. It is read when the app starts and after `u`, never
   in the background.
 - Every kept session is closed when the app closes, on `q`, an error or a signal.
@@ -134,11 +145,15 @@ keys type into it.
 
 ### Deploying from the app
 
-- A folder linked by a `zekno.json` this machine accepted deploys only to its own app on its own
-  server, and on a server with no apps only when that server is its own. With another app or
-  server selected, `d` says so and deploys nothing. One exception: on its own server, a linked
-  app that has never been deployed there has no row to select yet, so `d` deploys it as its first
-  deploy whichever row is marked. No other app is replaced.
+- A folder linked by a `zekno.json` this machine accepted deploys at once to its own app on its
+  own server, and on its own server with no apps. With another app selected, on its own server
+  or another, `d` first asks: "This folder is linked to web on dev. You selected billing. Deploy
+  this folder to billing? It replaces what billing runs now." Only `y` deploys the folder's
+  Compose file to the selected app; `n` or `esc` ends with "Nothing was deployed.", and `enter`
+  does nothing. Nothing is read from the keychain, signed or sent before `y`, and `zekno.json` is
+  not changed. On another server with no apps, `d` says so and deploys nothing. One exception:
+  on its own server, a linked app that has never been deployed there has no row to select yet,
+  so `d` deploys it as its first deploy whichever row is marked. No other app is replaced.
 - A folder with no `zekno.json` deploys its `compose.yaml` to the selected app. Before the first
   deploy, the app asks whether to remember the folder; yes writes `zekno.json` and accepts it.
   With no app selected, it points you to `zekno link`.

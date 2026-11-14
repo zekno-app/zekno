@@ -684,6 +684,26 @@ describe("the app in a project folder", () => {
     expect(app.failures).toEqual([])
   })
 
+  test("a zekno.json naming a server that is no longer connected supplies nothing: d says so, asks nothing and deploys nothing", async () => {
+    const m = await ready()
+    expect(await m.zekno("deploy", "--app", "demo", "--server", "dev")).toBe(0)
+    // Accepted while prod was connected; prod has since been taken off this machine's profile.
+    expect(await m.zekno("server", "add", "prod", "--local", "--home", tempDir("prod"))).toBe(0)
+    await linkAccepted(m, { app: "web", server: "prod" })
+    m.tamper("profile.json", (profile) => ({ ...profile, servers: profile.servers.filter((server: { name: string }) => server.name !== "prod") }))
+    const ups = m.docker.calls().length
+    const app = openApp(m, await loadStart(m.deps))
+    app.press({ kind: "right" })
+    app.type("d")
+    await app.until(() => app.state.notice?.text.includes("not connected") === true, "the line")
+    expect(app.state.notice).toEqual({ tone: "error", text: `${fileOf(m)} names a server "prod" that is not connected to this machine.` })
+    expect(app.state.question).toBeUndefined()
+    await Bun.sleep(100)
+    expect(app.state.deploy).toBeUndefined()
+    expect(m.docker.calls()).toHaveLength(ups)
+    expect(app.failures).toEqual([])
+  })
+
   test("a folder linked to an app its server does not have yet: d deploys it as a first deploy, whichever row is marked, and replaces nothing", async () => {
     const { m, app } = await onHome(COMPOSE_PLAIN, async (m) => {
       expect(await m.zekno("deploy", "--app", "billing", "--server", "dev")).toBe(0)
@@ -703,34 +723,148 @@ describe("the app in a project folder", () => {
     expect(app.failures).toEqual([])
   })
 
-  test("a linked folder deploys only to its own app: d on another app says so, names how to deploy elsewhere, and deploys nothing", async () => {
-    const { m, app } = await onHome(COMPOSE_PLAIN, async (m) => {
+  /**
+   * A machine with demo and billing on dev, this folder linked to demo, and
+   * the app open on Home with demo selected. Every read of the keychain and
+   * every runner started from then on is counted: the app verifying the
+   * profile when it opened is one read.
+   */
+  async function linkedToDemo(compose = COMPOSE_PLAIN) {
+    let keychain = 0
+    let started = 0
+    const { m, app } = await onHome(compose, async (m) => {
       expect(await m.zekno("deploy", "--app", "billing", "--server", "dev")).toBe(0)
       expect(await m.zekno("link", "--app", "demo", "--server", "dev")).toBe(0)
+      const get = m.keyStore.get
+      m.keyStore.get = (name) => (keychain++, get(name))
+      const reach = m.deps.connect
+      m.deps.connect = (...args) => (started++, reach(...args))
     })
+    return { m, app, keychain: () => keychain, started: () => started }
+  }
+
+  /** Keys at a terminal arrive one event apart: the press before has finished by the next. */
+  const nextKey = () => Bun.sleep(10)
+
+  test("d on another app of a linked folder asks first, naming the link and the app; nothing is read, signed or sent before y", async () => {
+    const { m, app, keychain, started } = await linkedToDemo()
+    const read = keychain()
+    const link = readFileSync(join(m.project, "zekno.json"), "utf8")
+    const accepted = acceptedLinks(m.home)
     const ups = m.docker.calls().length
-    const rows = app.state.team!.servers[0]!.apps.map((row) => row.name)
-    // billing was deployed last, so it is listed first.
-    expect(rows).toEqual(["billing", "demo"])
+    // billing was deployed last, so it is listed first; demo, the folder's own, is selected.
+    expect(app.state.team!.servers[0]!.apps.map((row) => row.name)).toEqual(["billing", "demo"])
     expect(top(app.state)).toMatchObject({ name: "home", pane: "apps", app: 1 })
     app.press({ kind: "up" })
     app.type("d")
-    await app.until(() => app.state.notice !== undefined, "a line")
-    const sentence =
-      "This folder is linked to demo on dev. Select it to deploy this folder. To deploy it elsewhere, run `zekno deploy --app <name> --server <name>` here."
-    expect(app.state.notice).toEqual({ tone: "info", text: sentence })
-    expect(words(app.draw())).toContain(sentence)
-    await Bun.sleep(100)
-    expect(app.state.deploy).toBeUndefined()
-    expect(m.docker.calls()).toHaveLength(ups)
-    // The same from the app screen. Opening it leaves the line behind.
-    app.press({ kind: "enter" })
-    await app.until(() => app.state.appView?.app === "billing", "billing's history")
-    expect(app.state.notice).toBeUndefined()
+    expect(app.state.question).toEqual({ kind: "deploy-elsewhere", server: "dev", app: "billing", linked: { server: "dev", app: "demo" } })
+    const asked = app.draw()
+    expect(asked).toContain("╭─ This folder is linked to demo on dev ─")
+    expect(words(asked)).toContain("You selected billing. Deploy this folder to billing? It replaces what billing runs now.")
+    expect(words(asked)).toContain("y deploy to billing n do not deploy")
+    expect(lastLine(asked)).toBe("y deploy to billing  n do not deploy")
+    await nextKey()
+    // Enter, q and other keys answer nothing.
+    for (const k of [{ kind: "enter" }, { kind: "text", text: "q" }, { kind: "text", text: "d" }, { kind: "down" }] as AppKey[]) app.press(k)
+    expect(app.state.question?.kind).toBe("deploy-elsewhere")
+    expect(app.state.exiting).toBe(false)
+
+    // n: nothing deployed, and said so.
+    app.type("n")
+    expect(app.state.question).toBeUndefined()
+    expect(top(app.state).name).toBe("home")
+    expect(app.state.notice).toEqual({ tone: "info", text: NOT_DEPLOYED })
+    expect(words(app.draw())).toContain(NOT_DEPLOYED)
+    // esc: the same.
     app.type("d")
-    await app.until(() => app.state.notice !== undefined, "a line")
-    expect(app.state.notice?.text).toBe(sentence)
+    expect(app.state.question?.kind).toBe("deploy-elsewhere")
+    await nextKey()
+    app.press({ kind: "escape" })
+    expect(app.state.question).toBeUndefined()
+    expect(app.state.notice).toEqual({ tone: "info", text: NOT_DEPLOYED })
+    await Bun.sleep(150)
+    expect(app.state.deploy).toBeUndefined()
+    expect(keychain()).toBe(read)
+    expect(started()).toBe(0)
     expect(m.docker.calls()).toHaveLength(ups)
+
+    // y: the folder's Compose file, as read when d was pressed, goes to billing; an edit after that is not deployed.
+    const FOLDER = COMPOSE_PLAIN.replace("web:1", "from-this-folder:1")
+    m.compose(FOLDER)
+    app.type("d")
+    expect(app.state.question?.kind).toBe("deploy-elsewhere")
+    m.compose(COMPOSE_PLAIN.replace("web:1", "edited-meanwhile:1"))
+    await nextKey()
+    expect(keychain()).toBe(read)
+    app.type("y")
+    await ended(app)
+    expect(app.state.deploy).toMatchObject({ server: "dev", app: "billing", sequence: 2, outcome: "started" })
+    expect(deployed(m, "billing")).toBe(FOLDER)
+    expect(keychain()).toBeGreaterThan(read)
+    // demo, the link and what this machine accepted are as they were; nothing was written.
+    expect(app.state.team!.servers[0]!.apps.find((row) => row.name === "demo")?.deploy).toBe(1)
+    expect(readFileSync(join(m.project, "zekno.json"), "utf8")).toBe(link)
+    expect(acceptedLinks(m.home)).toEqual(accepted)
+    expect(app.state.linked).toEqual({ server: "dev", app: "demo", compose: "compose.yaml" })
+    expect(app.failures).toEqual([])
+  })
+
+  test("the same question over the app screen; on the folder's own app, d deploys at once", async () => {
+    const { m, app, keychain } = await linkedToDemo()
+    const ups = m.docker.calls().length
+    app.press({ kind: "up" }, { kind: "enter" })
+    await app.until(() => app.state.appView?.app === "billing", "billing's history")
+    // Opening the app screen verified the profile; from here nothing more is read before y.
+    const read = keychain()
+    app.type("d")
+    expect(app.state.question).toEqual({ kind: "deploy-elsewhere", server: "dev", app: "billing", linked: { server: "dev", app: "demo" } })
+    expect(lastLine(app.draw())).toBe("y deploy to billing  n do not deploy")
+    await nextKey()
+    app.press({ kind: "escape" })
+    expect(top(app.state)).toMatchObject({ name: "app", app: "billing" })
+    expect(app.state.notice?.text).toBe(NOT_DEPLOYED)
+    expect(words(app.draw())).toContain(NOT_DEPLOYED)
+    await Bun.sleep(100)
+    expect(m.docker.calls()).toHaveLength(ups)
+    expect(keychain()).toBe(read)
+
+    // demo, the folder's own: no question.
+    app.press({ kind: "escape" }, { kind: "down" })
+    app.type("d")
+    expect(app.state.question).toBeUndefined()
+    await ended(app)
+    expect(app.state.deploy).toMatchObject({ server: "dev", app: "demo", sequence: 2, outcome: "started" })
+    expect(app.failures).toEqual([])
+  })
+
+  test("another server: the question names it, and y deploys the folder to the app selected there, its missing values listed first", async () => {
+    const m = await ready()
+    const stagingHome = tempDir("staging")
+    expect(await m.zekno("server", "add", "staging", "--local", "--home", stagingHome)).toBe(0)
+    expect(await m.zekno("deploy", "--app", "web", "--server", "staging")).toBe(0)
+    expect(await m.zekno("deploy", "--app", "demo", "--server", "dev")).toBe(0)
+    m.compose(COMPOSE_TWO)
+    expect(await m.zekno("link", "--app", "demo", "--server", "dev")).toBe(0)
+    const app = openApp(m, await loadStart(m.deps))
+    expect(top(app.state)).toMatchObject({ name: "home", server: 0, app: 0 })
+    app.press({ kind: "left" }, { kind: "down" }, { kind: "right" })
+    app.type("d")
+    expect(app.state.question).toEqual({ kind: "deploy-elsewhere", server: "staging", app: "web", linked: { server: "dev", app: "demo" } })
+    const asked = app.draw()
+    expect(asked).toContain("╭─ This folder is linked to demo on dev ─")
+    expect(words(asked)).toContain("You selected web on staging. Deploy this folder to web on staging? It replaces what web runs now.")
+    expect(lastLine(asked)).toBe("y deploy to web  n do not deploy")
+    await nextKey()
+    app.type("y")
+    // The values the folder's file expects, for web on staging.
+    await app.until(() => top(app.state).name === "set-secret", "the list")
+    expect(top(app.state)).toMatchObject({ server: "staging", app: "web", missing: ["DATABASE_URL", "SESSION_KEY"], file: "compose.yaml" })
+    skipValues(app)
+    await ended(app)
+    expect(app.state.deploy).toMatchObject({ server: "staging", app: "web", sequence: 2, outcome: "started" })
+    expect(readFileSync(join(stagingHome, "apps", "web", "compose.yaml"), "utf8")).toBe(COMPOSE_TWO)
+    // demo on dev, the folder's own, was not touched.
+    expect(m.docker.calls().filter((call) => call.args.includes("zekno-demo"))).toHaveLength(1)
     expect(app.failures).toEqual([])
   })
 
@@ -821,6 +955,50 @@ describe("the two screens, and the reducer's part", () => {
     for (const key of [{ kind: "text", text: "q" }, { kind: "enter" }, { kind: "down" }, { kind: "text", text: "d" }] as AppKey[]) {
       expect(update(state, { type: "key", key })).toEqual({ state, effects: [] })
     }
+  })
+
+  test("deploy this folder elsewhere?: its words at 100 and 80 columns; only y deploys; enter does nothing; it waits under the too-small rule", () => {
+    const ask = { type: "ask-deploy-elsewhere", server: "prod", app: "demo", linked: { server: "dev", app: "web" } } as const
+    const asked = update(home(), ask).state
+    expect(asked.question).toEqual({ kind: "deploy-elsewhere", server: "prod", app: "demo", linked: { server: "dev", app: "web" } })
+    for (const [columns, rows] of [
+      [100, 30],
+      [80, 24],
+    ] as const) {
+      const screen = draw({ ...asked, size: { columns, rows } }, columns, rows)
+      fits(screen, columns)
+      expect(screen.split("\n").length).toBeLessThanOrEqual(rows)
+      expect(screen).toContain("╭─ This folder is linked to web on dev ─")
+      expect(words(screen)).toContain("You selected demo on prod. Deploy this folder to demo on prod? It replaces what demo runs now.")
+      expect(words(screen)).toContain("y deploy to demo n do not deploy")
+      expect(lastLine(screen)).toBe("y deploy to demo  n do not deploy")
+    }
+    // On the link's own server the sentence names the app alone.
+    const same = update(home(), { ...ask, linked: { server: "prod", app: "web" } }).state
+    expect(words(draw(same))).toContain("You selected demo. Deploy this folder to demo? It replaces what demo runs now.")
+
+    const press = (state: State, k: AppKey) => update(state, { type: "key", key: k })
+    expect(press(asked, { kind: "text", text: "y" })).toEqual({
+      state: { ...asked, question: undefined },
+      effects: [{ kind: "deploy-continue", server: "prod", app: "demo", answer: "deploy-elsewhere" }],
+    })
+    for (const no of [{ kind: "text", text: "n" }, { kind: "escape" }] as AppKey[]) {
+      expect(press(asked, no)).toEqual({ state: { ...asked, question: undefined, notice: { tone: "info", text: NOT_DEPLOYED } }, effects: [] })
+    }
+    for (const k of [{ kind: "enter" }, { kind: "text", text: "q" }, { kind: "text", text: "d" }, { kind: "tab" }] as AppKey[]) {
+      expect(press(asked, k)).toEqual({ state: asked, effects: [] })
+    }
+    expect(press(asked, { kind: "ctrl-c" }).effects).toEqual([{ kind: "exit" }])
+    // Below 80 by 24 it is not drawn and takes no answer; once the window is larger it is there again.
+    const small = update(asked, { type: "resize", columns: 70, rows: 20 }).state
+    expect(draw(small, 70, 20)).not.toContain("This folder is linked")
+    expect(press(small, { kind: "text", text: "y" })).toEqual({ state: small, effects: [] })
+    expect(update(small, { type: "resize", columns: 80, rows: 24 }).state.question).toEqual(asked.question)
+    // Never open with another question: the other stays, and nothing is deployed.
+    const updating = { ...home(), question: { kind: "update-runner", server: "prod" } } as State
+    expect(update(updating, ask).state).toMatchObject({ question: { kind: "update-runner" }, notice: { text: NOT_DEPLOYED } })
+    const listed = update(home(), { type: "missing-values", server: "prod", app: "demo", names: ["A"] }).state
+    expect(update(listed, ask).state.question).toBeUndefined()
   })
 
   test("after a value is stored, the next name not set yet is asked, going round to an earlier one left out", () => {

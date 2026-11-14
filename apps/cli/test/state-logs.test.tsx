@@ -1099,7 +1099,9 @@ exec sh -c "exec $3"
       expect(calls().length).toBe(made)
       clock.now += 1_000
       app.store.dispatch({ type: "tick" })
-      await app.until(() => prod().problem === needsAnswer("deploy@example.test"), "the connection in batch mode to fail")
+      await app.until(() => prod().problem === needsAnswer("deploy@example.test", "prod"), "the connection in batch mode to fail")
+      // Marked as needing an answer, not as a server that could not be reached.
+      expect(prod().asks).toBe(true)
       expect(suspended).toEqual([])
       expect(calls().slice(made)).toEqual([`-o BatchMode=yes -- ${session}`])
       // Where SSH would ask, it is not tried again in the background, however long it has been: no connection at all.

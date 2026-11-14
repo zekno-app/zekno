@@ -7,7 +7,7 @@ import type { KeyHint } from "../../ui/key-hints"
 import { Panel, type PanelTone } from "../../ui/panel"
 import { Stages, type Stage, type StageState } from "../../ui/stages"
 import { Frame, Header, NoticeLine, Trail } from "../frame"
-import { CHOICES, type DeployProgress, type Question, type Screen, type State } from "../state"
+import { CHOICES, elsewhereChoices, elsewhereWords, type DeployProgress, type Question, type Screen, type State } from "../state"
 import { seconds } from "../time"
 import { Fields } from "./parts"
 import { HINTS } from "./placeholder"
@@ -223,6 +223,41 @@ export function DeployScreen({
 
 /** The answers to "remember this folder?", the reducer's own (state.ts `CHOICES`). */
 const REMEMBER_HINTS: readonly KeyHint[] = CHOICES["remember-folder"].map((choice) => [choice.key, choice.does] as const)
+
+/**
+ * `d` in a linked folder with another app selected than the folder's own:
+ * whether to deploy the folder there all the same, in the panel of "Remember
+ * this folder?". The title names the link, the lines the app that would be
+ * replaced, and its server when that is not the link's. Only `y` deploys.
+ */
+export function DeployElsewhereScreen({
+  question,
+  columns,
+  status,
+}: {
+  question: Extract<Question, { kind: "deploy-elsewhere" }>
+  columns: number
+  status?: ReactNode
+}) {
+  const choices = elsewhereChoices(question)
+  const said = elsewhereWords(question)
+  return (
+    <Frame
+      header={<Header place={<Trail parts={[question.server, question.app, "deploy"]} />} />}
+      hints={choices.map((choice) => [choice.key, choice.does] as const)}
+      status={status}
+    >
+      <Box width={Math.min(columns - 2, 76)}>
+        <Confirm title={said.title} tone="focus" choices={choices}>
+          <Box flexDirection="column">
+            <Text>{said.asked}</Text>
+            <Text>{said.replaces}</Text>
+          </Box>
+        </Confirm>
+      </Box>
+    </Frame>
+  )
+}
 
 /**
  * Board "Two questions the app asks", left half: before the first deploy of

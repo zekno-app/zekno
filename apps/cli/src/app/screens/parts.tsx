@@ -109,12 +109,11 @@ export function Rule() {
 }
 
 /**
- * The words of a state cell with `room` columns: `● partly running`, or
- * where it does not fit, its first words that do (`● partly`), never a word
- * cut in the middle.
+ * A short line of plain words in `room` columns: whole, or where it does not
+ * fit, its first words that do, never a word cut in the middle. The first
+ * word is always kept.
  */
-export function stateWords(state: RunState, room?: number): string {
-  const words = `● ${state}`
+export function wordsThatFit(words: string, room?: number): string {
   if (room === undefined || words.length <= room) return words
   const parts = words.split(" ")
   let kept = parts[0]!
@@ -124,6 +123,13 @@ export function stateWords(state: RunState, room?: number): string {
   }
   return kept
 }
+
+/**
+ * The words of a state cell with `room` columns: `● partly running`, or
+ * where it does not fit, its first words that do (`● partly`), never a word
+ * cut in the middle.
+ */
+export const stateWords = (state: RunState, room?: number): string => wordsThatFit(`● ${state}`, room)
 
 /**
  * Whether an app is running, by a word and a symbol as well as a colour

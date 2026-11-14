@@ -25,7 +25,7 @@ import {
 } from "../install"
 import { NAME, type Server } from "../profile"
 import { RUNNER_RELEASE, type RunnerRelease } from "../runner-release"
-import { withSession, type Session, type SessionMode } from "../session"
+import { openSession, type Session, type SessionMode } from "../session"
 import { RUNNER_PATH, SSH_DESTINATION, type RunnerProcess, type Target, type Transport } from "../transport"
 import { locateServer } from "./status"
 
@@ -71,6 +71,19 @@ export type ServerAddResult = {
   outdated: boolean
   /** The installer put the runner there just now. */
   installed: boolean
+  /** With `keep`: the session the server was added over, still open, for the caller to read over and close. */
+  session?: Session
+}
+
+export type AddSessionOptions = {
+  /**
+   * Hands the session the server was added over back open, once the server
+   * is added, instead of closing it: the app keeps it for its reads, so SSH
+   * does not ask a second time. Only a runner that speaks sessions has one.
+   */
+  keep?: boolean
+  /** Stops the session at once, whenever it is signalled, also once it was handed back. */
+  signal?: AbortSignal
 }
 
 const release = (deps: Pick<OpDeps, "release">): RunnerRelease => deps.release ?? RUNNER_RELEASE
@@ -180,8 +193,15 @@ function continuing(transport: Transport, session: RunnerProcess): Transport {
  * over to the session, so a server reached with a published release is
  * reached once. A runner that is already there is used as it is, never
  * replaced without being asked (FR-012); one that is older is reported.
+ * The session is closed at the end, or, with `options.keep`, handed back
+ * open once the server was added; it is closed whenever adding fails.
  */
-export async function addServer(deps: OpDeps, plan: ServerAddPlan, callbacks: ServerAddCallbacks = {}): Promise<ServerAddResult> {
+export async function addServer(
+  deps: OpDeps,
+  plan: ServerAddPlan,
+  callbacks: ServerAddCallbacks = {},
+  options: AddSessionOptions = {}
+): Promise<ServerAddResult> {
   const { team, name } = plan
   const { profile, trust } = team
   let target = plan.target
@@ -204,7 +224,9 @@ export async function addServer(deps: OpDeps, plan: ServerAddPlan, callbacks: Se
     transport = done.session ? continuing(reach(deps, target), done.session) : reach(deps, target)
   }
   const reached = target
-  return withSession(transport, async (session) => {
+  const session = await openSession(transport, { signal: options.signal })
+  let kept = false
+  try {
     if (!plan.install) callbacks.stage?.("connected")
     const answer = await setUp(team, session, callbacks.resumed)
     if (trust.servers.some((server) => server.serverId === answer.serverId)) {
@@ -225,6 +247,7 @@ export async function addServer(deps: OpDeps, plan: ServerAddPlan, callbacks: Se
     team.store.save({ ...profile, rosters, servers: [...profile.servers, { name, serverId: answer.serverId, target: reached }] })
     await session.request("sync", RunnerReportSchema, { input: { rosters } })
     callbacks.stage?.("added")
+    kept = options.keep === true && session.mode === "session"
     return {
       name,
       target: reached,
@@ -234,8 +257,11 @@ export async function addServer(deps: OpDeps, plan: ServerAddPlan, callbacks: Se
       runner: session.runner,
       outdated: reached.kind === "ssh" && isOutdated(session.mode, session.runner, release(deps).version),
       installed,
+      ...(kept ? { session } : {}),
     }
-  })
+  } finally {
+    if (!kept) await session.close()
+  }
 }
 
 /** A runner to replace, checked on this machine. Nothing has been asked of the server yet. */

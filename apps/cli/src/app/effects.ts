@@ -28,9 +28,9 @@ import { profileStore, type Server } from "../profile"
 import { DEFAULT_COMPOSE, findProject, notAcceptedHere, shownPath, tilde, type ProjectLink } from "../project"
 import { RUNNER_RELEASE } from "../runner-release"
 import { sanitize } from "../sanitize"
-import { openSession, type Session, type SessionMode } from "../session"
+import { openSession, SshUnreachable, type Session, type SessionMode } from "../session"
 import type { ErrorLines, Target } from "../transport"
-import { askingConnect, batchOnly, oneAtATime, wouldHaveAsked, type Terminal } from "./hand-over"
+import { askingConnect, batchOnly, oneAtATime, recording, wouldHaveAsked, type Terminal } from "./hand-over"
 import {
   DEPLOY_LINES,
   LOG_LINES,
@@ -81,11 +81,13 @@ export const RETRY_MS = 30_000
 const CLOSE_MS = 1000
 
 /**
- * Said for a server that SSH could not reach without asking something, when
- * the app read it on its own. Only what the person does on purpose may ask.
+ * Said for a server that SSH could not reach without asking something: when
+ * the app read it on its own, or when the question SSH asked was not
+ * answered. Only what the person does on purpose may ask, such as `enter` on
+ * the server on Home.
  */
-export const needsAnswer = (destination: string): string =>
-  `SSH needs an answer to reach ${sanitize(destination)}. zekno asks only when it starts and when you add or update a server, deploy or open logs, never in the background.`
+export const needsAnswer = (destination: string, server: string): string =>
+  `SSH needs an answer to reach ${sanitize(destination)}. Press enter on ${sanitize(server)} to connect. zekno never asks in the background.`
 
 /** Said for a server whose read in the background got no answer within `ms`. */
 export const noAnswer = (server: string, ms = READ_LIMIT_MS): string => `${server} did not answer within ${ms / 1000} seconds.`
@@ -205,7 +207,10 @@ export async function loadStart(deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?
 /** Said when a zekno.json names a server this machine is not connected to: it then chooses nothing. */
 const notConnected = (link: ProjectLink): string => `${shownPath(link.path)} names a server "${link.server}" that is not connected to this machine.`
 
-/** Said when `d` is pressed on an app or server other than the one the folder is linked to. */
+/**
+ * Said when `d` is pressed in a linked folder on a server with no apps that
+ * is not the folder's own: there is no app there to deploy it to.
+ */
 export const linkedElsewhere = (link: Pick<ProjectLink, "app" | "server">): string =>
   `This folder is linked to ${link.app} on ${link.server}. Select it to deploy this folder. ` +
   "To deploy it elsewhere, run `zekno deploy --app <name> --server <name>` here."
@@ -285,9 +290,11 @@ type Watch = {
 /**
  * The Compose file a deploy from the app signs, read when `d` was pressed:
  * its text and path, how the missing-values list names it, the app it
- * deploys, and whether the folder is linked to that app.
+ * deploys, and whether it comes from an accepted zekno.json (then "remember
+ * this folder?" is never asked). `elsewhere`: that zekno.json names another
+ * app or server than the one it would deploy to, so it is asked first.
  */
-type Source = { read: ComposeText; named: string; app: string; linked: boolean }
+type Source = { read: ComposeText; named: string; app: string; linked: boolean; elsewhere?: { server: string; app: string } }
 
 /** A size in bytes as the board writes it: "27 MB". */
 export const megabytes = (bytes: number): string => `${Math.max(1, Math.round(bytes / 1_000_000))} MB`
@@ -385,16 +392,38 @@ export function createEffects(
 
   /**
    * The deploy from the app that waits on a question: "remember this
-   * folder?" (`link`) or the values the Compose file expects (`values`). Its
-   * answer comes back as `deploy-continue` for the same server and app. Only
-   * names and the Compose file's text are kept while the question is open,
-   * never the team or its key: the text that was read when `d` was pressed
-   * is the text whose names were listed and the text that is signed, and the
-   * file is not read again.
+   * folder?" (`link`), the values the Compose file expects (`values`), or
+   * whether to deploy a linked folder to the app selected instead of its own
+   * (`elsewhere`). Its answer comes back as `deploy-continue` for the same
+   * server and app. Only names and the Compose file's text are kept while the
+   * question is open, never the team or its key: the text that was read when
+   * `d` was pressed is the text whose names were listed and the text that is
+   * signed, and the file is not read again.
    */
-  let waiting: { server: string; app: string; on: "link" | "values"; source: Source } | undefined
+  let waiting: { server: string; app: string; on: "link" | "values" | "elsewhere"; source: Source } | undefined
   /** "n" to "remember this folder?": it is not asked again while the app is open. */
   let linkSkipped = false
+
+  /**
+   * The servers of the profile: as last verified in this run, or, before
+   * that, as the profile stands. Only used to tell a first deploy from a
+   * later one and whether a zekno.json names a connected server: the deploy
+   * itself verifies everything before it signs.
+   */
+  function serversOnRecord(): readonly Server[] {
+    if (known) return known.servers
+    try {
+      return profileStore(deps.home).load().servers
+    } catch {
+      return []
+    }
+  }
+
+  /** The apps this machine has a deploy on record for, on the server of that name. */
+  function appsDeployedTo(server: string): string[] {
+    const entry = serversOnRecord().find((item) => item.name === server)
+    return entry ? appNames(deps.home, entry) : []
+  }
 
   /**
    * Where a deploy from the app takes its service definition, read once
@@ -405,35 +434,20 @@ export function createEffects(
    *
    * - the zekno.json was not made or accepted on this machine: it is never
    *   used, and no other is offered in its place;
-   * - the folder is linked to another app or server than the one selected:
-   *   it deploys only to its own, and on a server with no apps only when
-   *   that server is its own (a zekno.json naming a server that is not
-   *   connected supplies nothing). One case is let through: on the folder's
-   *   own server, an app the folder is linked to that has never been
-   *   deployed there cannot be selected, so `d` deploys it whichever row is
-   *   marked. It is a first deploy: no other app is replaced.
+   * - it names a server that is not connected: it supplies nothing;
+   * - it names another server, and the selected server has no apps: there
+   *   is no app to deploy it to;
    * - there is no Compose file, or no app is selected in a folder that is
    *   not linked.
+   *
+   * A linked folder deploys to its own app on its own server at once, and on
+   * its own server with no apps too. On its own server, an app the folder is
+   * linked to that has never been deployed there cannot be selected, so `d`
+   * deploys it whichever row is marked: a first deploy, no other app is
+   * replaced. With any other app selected, its own server's or another's,
+   * the source says so (`elsewhere`), and `plan` asks before anything is
+   * signed (the question the maintainer approved on 2026-11-14).
    */
-  /**
-   * The apps this machine has a deploy on record for, on the server of that
-   * name. Only used to tell a first deploy from a later one, so the servers
-   * are read from the profile as it stands when it has not been verified in
-   * this run yet: the deploy itself verifies everything before it signs.
-   */
-  function appsDeployedTo(server: string): string[] {
-    let servers = known?.servers
-    if (!servers) {
-      try {
-        servers = profileStore(deps.home).load().servers
-      } catch {
-        return []
-      }
-    }
-    const entry = servers.find((item) => item.name === server)
-    return entry ? appNames(deps.home, entry) : []
-  }
-
   function composeOf(server: string, selected: string | undefined): Source | undefined {
     const link = findProject(ops.cwd)
     if (link) {
@@ -441,13 +455,21 @@ export function createEffects(
         notice("error", notAcceptedHere(link, ops.cwd))
         return undefined
       }
-      const first = link.server === server && !appsDeployedTo(server).includes(link.app)
-      if (link.server !== server || (selected !== undefined && selected !== link.app && !first)) {
-        const connected = known === undefined || known.servers.some((entry) => entry.name === link.server)
-        notice(connected ? "info" : "error", connected ? linkedElsewhere(link) : notConnected(link))
+      const named = sanitize(link.compose)
+      const own = link.server === server
+      const first = own && !appsDeployedTo(server).includes(link.app)
+      if (own && (selected === undefined || selected === link.app || first)) {
+        return { read: readCompose({ kind: "project", link }), named, app: link.app, linked: true }
+      }
+      if (!serversOnRecord().some((entry) => entry.name === link.server)) {
+        notice("error", notConnected(link))
         return undefined
       }
-      return { read: readCompose({ kind: "project", link }), named: sanitize(link.compose), app: link.app, linked: true }
+      if (selected === undefined) {
+        notice("info", linkedElsewhere(link))
+        return undefined
+      }
+      return { read: readCompose({ kind: "project", link }), named, app: selected, linked: true, elsewhere: { server: link.server, app: link.app } }
     }
     if (!existsSync(resolve(ops.cwd, COMPOSE_FILE))) {
       notice("error", `There is no ${COMPOSE_FILE} in ${shownPath(ops.cwd)}, and no zekno.json names another. Run zekno link -f <file> here to name one.`)
@@ -463,10 +485,12 @@ export function createEffects(
   /**
    * Checks a deploy or rollback on this machine, or says why it cannot go
    * ahead. A deploy of a folder that is not linked first asks whether to
-   * remember it (board "Two questions the app asks"); then the values its
-   * Compose file expects that have no secret are listed (board "Set a
-   * secret"). Each question ends this plan; its answer starts the next part
-   * (`after`), with everything checked again.
+   * remember it (board "Two questions the app asks"); one of a linked folder
+   * to another app than its own first asks whether to deploy it there all
+   * the same; then the values its Compose file expects that have no secret
+   * are listed (board "Set a secret"). Each question ends this plan, before
+   * the keychain is read; its answer starts the next part (`after`), with
+   * everything checked again.
    */
   async function plan(
     effect: Extract<Effect, { kind: "deploy" | "rollback" }>,
@@ -487,6 +511,12 @@ export function createEffects(
       dispatch({ type: "ask-remember-folder", server: effect.server, app, compose: COMPOSE_FILE })
       return undefined
     }
+    // Only `y` deploys a linked folder to another app; zekno.json itself is left as it is.
+    if (source.elsewhere && after === undefined) {
+      waiting = { server: effect.server, app, on: "elsewhere", source }
+      dispatch({ type: "ask-deploy-elsewhere", server: effect.server, app, linked: source.elsewhere })
+      return undefined
+    }
     const planned = await prepareDeploy(ops, { app, server: effect.server, read: source.read })
     if (after?.on !== "values") {
       // Names only: the secrets' values are never opened here.
@@ -504,13 +534,15 @@ export function createEffects(
   /**
    * Goes on with the deploy that waited on a question, with its answer: for
    * "remember this folder?", zekno.json is written (never over an existing
-   * one) or not; for the missing values, they were set or skipped. An answer
-   * nothing waits for is ignored.
+   * one) or not; for the missing values, they were set or skipped; for a
+   * linked folder and another app, it is deployed there. An answer nothing
+   * waits for is ignored.
    */
   async function goOn(effect: Extract<Effect, { kind: "deploy-continue" }>): Promise<void> {
     const asked = waiting
     if (!asked || asked.server !== effect.server || asked.app !== effect.app) return
-    const about = effect.answer === "write-link" || effect.answer === "skip-link" ? "link" : "values"
+    const about =
+      effect.answer === "write-link" || effect.answer === "skip-link" ? "link" : effect.answer === "deploy-elsewhere" ? "elsewhere" : "values"
     if (asked.on !== about) return
     waiting = undefined
     if (effect.answer === "write-link") {
@@ -577,7 +609,12 @@ export function createEffects(
    * Adds a server from the app, each step as an event: over SSH the
    * installer checks Docker and finds or installs the runner, then the
    * runner is set up and the server added to the signed team list. What the
-   * server prints on standard error is kept for `o`.
+   * server prints on standard error while it is added is kept for `o`.
+   *
+   * The session it was added over is then kept as the server's session for
+   * the reads that follow (`adopt`), as the one opened when the app starts:
+   * where SSH asked for a password to add it, it does not ask again, and a
+   * read in the background, which never asks, finds the session open.
    */
   async function add(effect: Extract<Effect, { kind: "add-server" }>): Promise<void> {
     // The reducer reopens a running one rather than starting another; this holds even if it did not.
@@ -585,7 +622,9 @@ export function createEffects(
     adding = true
     try {
       const local = effect.destination === THIS_MACHINE
-      const lines = routeErrorLines(purposeful, (line) => dispatch({ type: "add-line", line }))
+      // Once the server is added, what its kept session's runner writes is shown as any other runner's.
+      let added = false
+      const lines = routeErrorLines(purposeful, (line) => dispatch(added ? { type: "runner-line", line } : { type: "add-line", line }))
       const plan = await prepareServerAdd(lines, effect.name, local ? { local: true } : { ssh: effect.destination })
       const started = Date.now()
       dispatch({ type: "add-started", destination: local ? THIS_MACHINE : effect.destination, name: plan.name, local })
@@ -598,18 +637,32 @@ export function createEffects(
         else if (event.kind === "download") bytes = event.bytes
         else if (event.kind === "install") step("runner", `${bytes === undefined ? "" : `${megabytes(bytes)}, `}checksum verified`)
       }
-      const result = await addServer(lines, plan, {
-        stage(stage) {
-          if (stage === "connected") step("connect", local ? undefined : seconds(Date.now() - started))
-          else if (stage === "set_up") step("set_up", resumed ? "carried on from an earlier attempt" : undefined)
-          else step("added")
+      // Stops the session at once when the app closes on a signal, also once it is kept.
+      const stop = new AbortController()
+      const result = await addServer(
+        lines,
+        plan,
+        {
+          stage(stage) {
+            if (stage === "connected") step("connect", local ? undefined : seconds(Date.now() - started))
+            else if (stage === "set_up") step("set_up", resumed ? "carried on from an earlier attempt" : undefined)
+            else step("added")
+          },
+          install: installed,
+          detail: (line) => dispatch({ type: "add-line", line }),
+          resumed: () => (resumed = true),
+          code: (code) => dispatch({ type: "add-code", code }),
         },
-        install: installed,
-        detail: (line) => dispatch({ type: "add-line", line }),
-        resumed: () => (resumed = true),
-        code: (code) => dispatch({ type: "add-code", code }),
-      })
-      const team = await openTeam(ops)
+        { keep: true, signal: stop.signal }
+      )
+      added = true
+      let team: Team
+      try {
+        team = await openTeam(ops)
+      } catch (error) {
+        void result.session?.close()
+        throw error
+      }
       remember(team)
       const runner = runnerOf(result.target, result.mode, result.runner, carried)
       // The code is in the screen's panel; the reducer adds it to this line only when that screen was left before it was done.
@@ -623,9 +676,36 @@ export function createEffects(
         code: result.code,
       })
       dispatch({ type: "server-reached", server: result.name, reachable: true, runner })
+      // Read over in the background: another server can be added meanwhile.
+      const server = team.profile.servers.find((entry) => entry.name === result.name)
+      if (result.session && server) void adopt(team, server, result.session, stop).catch(fail)
+      else void result.session?.close()
     } finally {
       adding = false
     }
+  }
+
+  /**
+   * Keeps a session that was opened on purpose elsewhere, the one a server
+   * was just added over, as that server's kept session, and reads over it
+   * at once. The read checks, as `connect` does, that it is the server that
+   * was connected and on this team. `stop` stops it at once.
+   */
+  async function adopt(team: Pick<Team, "trust">, server: Server, session: Session, stop: AbortController): Promise<void> {
+    if (closed) {
+      stop.abort()
+      return void session.close()
+    }
+    const before = watches.get(server.name)
+    if (before) {
+      watches.delete(server.name)
+      letGo(before)
+    }
+    const entry: Watch = { stop, session, busy: false }
+    watches.set(server.name, entry)
+    oneShot.delete(server.name)
+    retryAt.delete(server.name)
+    await readKept(team, server, entry, session)
   }
 
   /** What a server answered, for the reducer: reached, its runner's version, and its apps' state and last deploy numbers. */
@@ -676,15 +756,20 @@ export function createEffects(
    * the reads that follow. The identity is checked here, once per session;
    * each later read checks the status it gets against it again.
    *
-   * `deliberately`: as the app does when it starts, or after an update. SSH
-   * may then ask, and the terminal is handed over (hand-over.ts); there is
-   * no time limit while it connects, since SSH may be waiting for a
-   * password, but once the session is open SSH asks nothing more, and the
-   * read over it has `readLimitMs`. Otherwise, in the background: batch mode
-   * only, the terminal never handed over, and `readLimitMs` for all of it.
-   * Where SSH would have asked, the server counts as not reached and is not
-   * connected to in the background again until the person connects to it on
-   * purpose (`asking`).
+   * `deliberately`: as the app does when it starts, after an update, or on
+   * `enter` on a server where SSH needs an answer. SSH may then ask, and the
+   * terminal is handed over (hand-over.ts); there is no time limit while it
+   * connects, since SSH may be waiting for a password, but once the session
+   * is open SSH asks nothing more, and the read over it has `readLimitMs`.
+   * Otherwise, in the background: batch mode only, the terminal never handed
+   * over, and `readLimitMs` for all of it.
+   *
+   * Where SSH stopped at a question it could not ask (in batch mode), or one
+   * that was not answered (on the terminal handed over), the server is shown
+   * as needing an answer and is not connected to in the background again
+   * until the person connects to it on purpose (`asking`). Only SSH's own
+   * failure counts: its status, before the runner said a word, and its own
+   * closing line last on standard error (hand-over.ts `wouldHaveAsked`).
    */
   async function connect(team: Pick<Team, "trust">, server: Server, deliberately: boolean): Promise<void> {
     const name = server.name
@@ -697,9 +782,11 @@ export function createEffects(
     const entry: Watch = { stop: new AbortController(), busy: true }
     watches.set(name, entry)
     const current = () => !closed && watches.get(name) === entry
-    // What SSH writes on standard error in the background is only looked at to tell whether it would have asked.
+    // What SSH writes on standard error is looked at only to tell whether it stopped at a question; on purpose, it is also kept for showing.
     const lines: string[] = []
-    const via = deliberately ? ops : { ...deps, connect: batchOnly(deps.connect, lines) }
+    const via = deliberately
+      ? routeErrorLines(purposeful, recording(lines, (line) => dispatch({ type: "runner-line", line })))
+      : { ...deps, connect: batchOnly(deps.connect, lines) }
     let limit = deliberately ? undefined : timeLimit(entry)
     try {
       const session = await openSession(reach(via, server.target), { signal: entry.stop.signal })
@@ -723,14 +810,30 @@ export function createEffects(
       if (reason === undefined) throw error
       if (!current()) return letGo(entry)
       lose(name, entry)
-      const asks = !deliberately && destination !== undefined && wouldHaveAsked(lines)
-      if (asks) asking.add(destination)
-      const problem = asks ? needsAnswer(destination) : limit?.late ? noAnswer(name, readLimitMs) : sanitize(reason)
+      const asks = destination !== undefined && error instanceof SshUnreachable && wouldHaveAsked(lines)
+      if (asks) {
+        asking.add(destination)
+        return dispatch({ type: "server-reached", server: name, reachable: false, problem: needsAnswer(destination, name), asks: true })
+      }
+      const problem = limit?.late ? noAnswer(name, readLimitMs) : sanitize(reason)
       dispatch({ type: "server-reached", server: name, reachable: false, problem })
     } finally {
       limit?.clear()
       entry.busy = false
     }
+  }
+
+  /**
+   * `enter` on a server where SSH needs an answer: the profile is verified
+   * again, and the server connected to on purpose, as when the app starts.
+   * SSH may ask, on the terminal handed over; the session is kept. While a
+   * connection to it is being made, another is not started.
+   */
+  async function connectOnPurpose(name: string): Promise<void> {
+    const { team, server } = await locateServer(ops, name)
+    remember(team)
+    if (closed || watches.get(server.name)?.busy) return
+    await connect(team, server, true)
   }
 
   /** Reads what a server holds and runs over its kept session, within `readLimitMs`. A read that fails or takes too long loses the session. */
@@ -917,6 +1020,9 @@ export function createEffects(
           return
         case "update-runner":
           void perform(() => update(effect))
+          return
+        case "connect":
+          void perform(() => connectOnPurpose(effect.server))
           return
         case "remove-secret":
           void perform(async () => {

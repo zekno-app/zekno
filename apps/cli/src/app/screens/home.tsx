@@ -9,7 +9,7 @@ import { useTheme } from "../../ui/theme"
 import { Frame, Header, PRE_ALPHA } from "../frame"
 import { CHOICES, selectedApp, selectedServer, type AppRow, type Screen, type ServerRow, type State } from "../state"
 import { relativeTime } from "../time"
-import { Cell, Fields, Marker, Pane, Rule, StateCell } from "./parts"
+import { Cell, Fields, Marker, Pane, Rule, StateCell, wordsThatFit } from "./parts"
 import { HINTS } from "./placeholder"
 
 type HomeScreenState = Extract<Screen, { name: "home" }>
@@ -62,17 +62,29 @@ export const OUTCOME_WORDS = { started: "started", start_failed: "did not start"
 /** How Home names a runner's version beside its server: `runner 0.1.0`, or `old runner` when it does not say. */
 export const runnerWords = (version: string | undefined): string => (version === undefined ? "old runner" : `runner ${version}`)
 
+/** The line under a server's name while SSH needs an answer to reach it (`ServerRow.asks`). */
+export const ASKS_LINE = "SSH needs an answer"
+
+/** SSH needs an answer to reach it: not reached, and read again only once the person connects to it on purpose. */
+export const needsAnswerHere = (server: ServerRow | undefined): boolean => server?.reachable === false && server.asks === true
+
 /**
- * One server: the marker, its name, ● once it answered or ✖ when it could not
- * be reached, and its address below. A server whose runner is older than this
- * zekno shows `! runner 0.1.0` until it is updated, as on the board "Two
- * questions the app asks": on a line of its own under the name, because the
- * servers pane is narrower than the board's. Below 100 columns the address
- * is left out, as on the board "Home at 80 columns".
+ * One server: the marker, its name, ● once it answered, ✖ when it could not
+ * be reached, or `!` when SSH needs an answer to reach it, and its address
+ * below. A server whose runner is older than this zekno shows `! runner
+ * 0.1.0` until it is updated, as on the board "Two questions the app asks":
+ * on a line of its own under the name, because the servers pane is narrower
+ * than the board's. A server where SSH needs an answer has `SSH needs an
+ * answer` on that line instead, cut at a word where the pane is too narrow
+ * for it; its runner cannot be known then. Below 100 columns the address is
+ * left out, as on the board "Home at 80 columns".
  */
 function ServerItem({ server, selected, narrow }: { server: ServerRow; selected: boolean; narrow: boolean }) {
   const theme = useTheme()
+  const asks = needsAnswerHere(server)
   const outdated = server.reachable !== false && server.runner?.outdated === true
+  // The pane's border and padding, and the indent under the name.
+  const room = (narrow ? SERVERS_WIDTH.narrow : SERVERS_WIDTH.wide) - 4 - 2
   return (
     <Box flexDirection="column">
       <Box>
@@ -81,8 +93,16 @@ function ServerItem({ server, selected, narrow }: { server: ServerRow; selected:
           <Text bold={selected}>{server.name}</Text>
         </Cell>
         {server.reachable === true && !outdated ? <Text color={theme.success}> ●</Text> : null}
-        {server.reachable === false ? <Text color={theme.danger}> ✖</Text> : null}
+        {server.reachable === false && !asks ? <Text color={theme.danger}> ✖</Text> : null}
+        {asks ? <Text color={theme.warning}> !</Text> : null}
       </Box>
+      {asks ? (
+        <Box paddingLeft={2}>
+          <Text color={theme.warning} wrap="truncate-end">
+            {wordsThatFit(ASKS_LINE, room)}
+          </Text>
+        </Box>
+      ) : null}
       {outdated ? (
         <Box paddingLeft={2}>
           <Text color={theme.warning} wrap="truncate-end">
@@ -161,18 +181,20 @@ function AppTable({ apps, selected, now, columns }: { apps: readonly AppRow[]; s
 
 /**
  * The foot of the apps pane: whether the server could be reached, and
- * whether this folder is linked. Below 100 columns the selected app's
- * details say "this folder is linked" for the app it is linked to, so the
- * sentence is left out while that app is selected.
+ * whether this folder is linked. A server where SSH needs an answer is
+ * marked `!` here too, as beside its name. Below 100 columns the selected
+ * app's details say "this folder is linked" for the app it is linked to, so
+ * the sentence is left out while that app is selected.
  */
 function AppsFoot({ state, server, said }: { state: State; server: ServerRow; said: boolean }) {
   const theme = useTheme()
   const lines: ReactNode[] = []
   if (server.reachable === false) {
+    const asks = needsAnswerHere(server)
     lines.push(
       <Box key="unreachable" flexDirection="column">
         <Text>
-          <Text color={theme.danger}>✖</Text> {server.name} could not be reached. Numbers are from this machine's history.
+          <Text color={asks ? theme.warning : theme.danger}>{asks ? "!" : "✖"}</Text> {server.name} could not be reached. Numbers are from this machine's history.
         </Text>
         {server.problem ? <Text dimColor>{server.problem}</Text> : null}
       </Box>
@@ -332,9 +354,15 @@ export const NARROW_HOME_HINTS: readonly KeyHint[] = [
   ["q", "quit"],
 ]
 
-/** Home's key hints: the board's for the width, and `u` while the selected server's runner is out of date (contracts/app.md). */
-export function homeHints(server: ServerRow | undefined, narrow = false): readonly KeyHint[] {
-  const hints = narrow ? NARROW_HOME_HINTS : HINTS.home
+/**
+ * Home's key hints: the board's for the width; `u` while the selected
+ * server's runner is out of date (contracts/app.md); and `enter connect` in
+ * place of `enter open` while the servers pane has the keys and its marked
+ * server is one SSH needs an answer to reach.
+ */
+export function homeHints(server: ServerRow | undefined, narrow = false, pane: "servers" | "apps" = "apps"): readonly KeyHint[] {
+  const board = narrow ? NARROW_HOME_HINTS : HINTS.home
+  const hints = pane === "servers" && needsAnswerHere(server) ? board.map((hint): KeyHint => (hint[0] === "enter" ? ["enter", "connect"] : hint)) : board
   if (!server?.runner?.outdated) return hints
   const at = hints.findIndex(([key]) => key === "?")
   return [...hints.slice(0, at), ["u", "update runner"], ...hints.slice(at)]
@@ -409,7 +437,7 @@ export function HomeScreen({ state, screen, columns, status }: { state: State; s
     )
   }
   return (
-    <Frame header={<Header place={place} right={right} />} hints={homeHints(server, !wide)} status={status}>
+    <Frame header={<Header place={place} right={right} />} hints={homeHints(server, !wide, screen.pane)} status={status}>
       <Box flexGrow={1} columnGap={1}>
         <ServersPane servers={servers} selected={screen.server} focused={screen.pane === "servers"} narrow={!wide} />
         <AppsPane

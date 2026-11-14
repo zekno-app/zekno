@@ -117,7 +117,7 @@ export function oneAtATime(terminal: Terminal): Terminal {
 }
 
 /** Keeps the last lines an attempt wrote, and passes every line on. */
-function recording(lines: string[], out: ErrorLines | undefined): ErrorLines {
+export function recording(lines: string[], out: ErrorLines | undefined): ErrorLines {
   return (line) => {
     lines.push(line)
     if (lines.length > KEPT_LINES) lines.shift()
@@ -247,6 +247,8 @@ export function askingConnect(connect: Deps["connect"], terminal: Terminal): Dep
     const note = handOverNote(target.destination)
     return {
       firstAnswerMs: first.firstAnswerMs,
+      // So that SSH's own failure, where it was not answered, is still told from the runner's (session.ts `SshUnreachable`).
+      destination: first.destination,
       async run(command, input) {
         const lines: string[] = []
         const answer = await attempt(true, lines).run(command, input)

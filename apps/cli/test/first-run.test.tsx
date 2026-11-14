@@ -6,11 +6,12 @@ import { join } from "node:path"
 
 import { runner, waitFor } from "../../runner/test/helpers"
 import { AppView, createStore } from "../src/app/app"
-import { createEffects, foundDetail, loadStart, megabytes, THIS_MACHINE } from "../src/app/effects"
+import { createEffects, foundDetail, loadStart, megabytes, needsAnswer, THIS_MACHINE } from "../src/app/effects"
 import { handOverNote, needsAnswers, oneAtATime, type Terminal } from "../src/app/hand-over"
 import type { AppKey } from "../src/app/keys"
 import { addRows } from "../src/app/screens/add-server"
 import { homeHints } from "../src/app/screens/home"
+import { wordsThatFit } from "../src/app/screens/parts"
 import { initialState, top, update, type AppEvent, type State, type TeamView } from "../src/app/state"
 import { openTeam, type OpDeps } from "../src/context"
 import { NO_RELEASE, RUNNER_PATHS } from "../src/install"
@@ -56,19 +57,29 @@ afterEach(async () => {
   await Promise.all(opened.splice(0).map((effects) => effects.close()))
 })
 
-/** The app on a test machine, without a terminal: the reducer, the effects, and the window drawn on request. */
+/**
+ * The app on a test machine, without a terminal unless one is given: the
+ * reducer, the effects, and the window drawn on request. `events` holds
+ * every event the effects sent, in order.
+ */
 function openApp(m: Machine, start: Awaited<ReturnType<typeof loadStart>>, terminal?: Terminal, deps: OpDeps = m.deps) {
   const failures: unknown[] = []
+  const events: AppEvent[] = []
   let effects: ReturnType<typeof createEffects> | undefined
   const store = createStore(initialState(start, SIZE), (effect) => {
     if (effect.kind !== "exit") effects!.run(effect)
   })
-  effects = createEffects(deps, store.dispatch, (error) => failures.push(error), terminal)
+  const dispatch = (event: AppEvent) => {
+    events.push(event)
+    store.dispatch(event)
+  }
+  effects = createEffects(deps, dispatch, (error) => failures.push(error), terminal)
   opened.push(effects)
   return {
     store,
     effects,
     failures,
+    events,
     get state() {
       return store.get()
     },
@@ -456,6 +467,141 @@ describe("SSH questions inside the app (research R10)", () => {
     expect(ssh.calls()[0]).toStartWith("-o BatchMode=yes -- deploy@203.0.113.7 sh -s -- add")
   }, 60_000)
 
+  /** A stand-in server reached over the stand-in `ssh`, added from the app with a key that needs nothing typed; that app is closed again. */
+  async function addedEarlier(m: Machine) {
+    const server = standInServer()
+    m.deps.release = releaseOf(server, realRunner(m.docker.path))
+    const ssh = sshStandIn(server)
+    await withSsh(ssh, async () => {
+      const first = await named(m)
+      await added(first, "deploy@203.0.113.7", "prod")
+      await first.effects.close()
+    })
+    return ssh
+  }
+  const SESSION = `deploy@203.0.113.7 ${RUNNER_PATHS.user} session`
+  /** A terminal that notes each hand-over, and gives the terminal back at once. */
+  const noting = (suspended: string[]): Terminal => ({ suspend: async (note) => (suspended.push(note), async () => {}) })
+  const count = (app: App, type: AppEvent["type"]) => app.events.filter((event) => event.type === type).length
+  /** One tick, and the read it starts over the kept session. */
+  async function tick(app: App) {
+    const before = count(app, "app-states")
+    app.store.dispatch({ type: "tick" })
+    await app.until(() => count(app, "app-states") > before, "a read")
+  }
+
+  test("SSH's question not answered: the server needs an answer, and nothing connects in the background; enter hands over again, and once answered the session is kept", async () => {
+    const m = machine()
+    const ssh = await addedEarlier(m)
+    // SSH now needs a password, and the question it asks on the terminal handed over is not answered.
+    ssh.ask()
+    ssh.unanswered()
+    const suspended: string[] = []
+    await withSsh(ssh, async () => {
+      const app = openApp(m, await loadStart(m.deps), noting(suspended))
+      const prod = () => app.state.team!.servers[0]!
+      let made = ssh.calls().length
+      await app.effects.checkServers()
+      expect(ssh.calls().slice(made)).toEqual([`-o BatchMode=yes -- ${SESSION}`, `-- ${SESSION}`])
+      expect(suspended).toEqual([handOverNote("deploy@203.0.113.7")])
+      expect(prod()).toMatchObject({ reachable: false, asks: true, problem: needsAnswer("deploy@203.0.113.7", "prod") })
+      let screen = app.draw()
+      expect(screen).toMatch(/❯ prod +! │/)
+      expect(screen).toMatch(/│ {3}SSH needs an +│/)
+      expect(lastLine(screen)).toStartWith("↑↓ move  ←→ pane  enter connect  ")
+
+      // In the background it is not connected to, however many ticks pass.
+      made = ssh.calls().length
+      for (let n = 0; n < 3; n++) app.store.dispatch({ type: "tick" })
+      await Bun.sleep(300)
+      expect(ssh.calls()).toHaveLength(made)
+      expect(suspended).toHaveLength(1)
+
+      // enter connects on purpose: batch mode, then the terminal handed over. Cancelled again, the mark stays.
+      const reached = count(app, "server-reached")
+      app.press({ kind: "enter" })
+      await app.until(() => count(app, "server-reached") > reached, "the connection to end")
+      expect(ssh.calls().slice(made)).toEqual([`-o BatchMode=yes -- ${SESSION}`, `-- ${SESSION}`])
+      expect(suspended).toHaveLength(2)
+      expect(prod()).toMatchObject({ reachable: false, asks: true, problem: needsAnswer("deploy@203.0.113.7", "prod") })
+      expect(top(app.state)).toMatchObject({ name: "home", pane: "servers", server: 0 })
+
+      // Answered this time: the row turns ●, and state is read.
+      ssh.unanswered(false)
+      made = ssh.calls().length
+      app.press({ kind: "enter" })
+      await app.until(() => prod().reachable === true, "the connection")
+      expect(ssh.calls().slice(made)).toEqual([`-o BatchMode=yes -- ${SESSION}`, `-- ${SESSION}`])
+      expect(suspended).toHaveLength(3)
+      expect(prod().asks).toBeUndefined()
+      expect(prod().problem).toBeUndefined()
+      screen = app.draw()
+      expect(screen).toMatch(/❯ prod +● │/)
+      expect(screen).not.toContain("SSH needs an")
+      expect(lastLine(screen)).toStartWith("↑↓ move  ←→ pane  enter open  ")
+
+      // The session is kept: ticks read over it, and ssh, with the runner behind it, is not started again.
+      made = ssh.calls().length
+      for (let n = 0; n < 3; n++) await tick(app)
+      expect(ssh.calls()).toHaveLength(made)
+      expect(suspended).toHaveLength(3)
+      expect(app.failures).toEqual([])
+    })
+  }, 60_000)
+
+  test("a server that is simply down is not reached (✖) with SSH's reason: it needs no answer, and nothing is handed over", async () => {
+    const m = machine()
+    const ssh = await addedEarlier(m)
+    ssh.down()
+    const suspended: string[] = []
+    await withSsh(ssh, async () => {
+      const app = openApp(m, await loadStart(m.deps), noting(suspended))
+      await app.effects.checkServers()
+      const prod = app.state.team!.servers[0]!
+      expect(prod).toMatchObject({ reachable: false, problem: "deploy@203.0.113.7 could not be reached over SSH. Check with: `ssh deploy@203.0.113.7 true`" })
+      expect(prod.asks).toBeUndefined()
+      expect(suspended).toEqual([])
+      const screen = app.draw()
+      expect(screen).toMatch(/❯ prod +✖ │/)
+      expect(screen).not.toContain("SSH needs an")
+      expect(lastLine(screen)).toStartWith("↑↓ move  ←→ pane  enter open  ")
+      // enter moves to its apps, as on any server: it does not connect.
+      const made = ssh.calls().length
+      app.press({ kind: "enter" })
+      await Bun.sleep(200)
+      expect(ssh.calls()).toHaveLength(made)
+      expect(top(app.state)).toMatchObject({ pane: "apps" })
+    })
+  }, 60_000)
+
+  test("adding a server where SSH asks: the session it was added over is kept, so SSH does not ask again, and no ✖ follows", async () => {
+    const m = machine()
+    const server = standInServer()
+    m.deps.release = releaseOf(server, realRunner(m.docker.path))
+    const ssh = sshStandIn(server)
+    ssh.ask()
+    const suspended: string[] = []
+    await withSsh(ssh, async () => {
+      const app = await named(m, noting(suspended))
+      await added(app, "deploy@203.0.113.7", "prod")
+      expect(top(app.state).name).toBe("home")
+      const install = `deploy@203.0.113.7 sh -s -- add 0.2.0 release x64 ${m.deps.release!.files["linux-x64"].sha256}`
+      expect(ssh.calls()).toEqual([`-o BatchMode=yes -- ${install}`, `-- ${install}`])
+      expect(suspended).toHaveLength(1)
+      // Read over the session it was added over, which checked it is the server that was added, on this team.
+      await app.until(() => count(app, "app-states") > 0, "the first read")
+      const prod = () => app.state.team!.servers[0]!
+      expect(prod()).toMatchObject({ name: "prod", reachable: true })
+      for (let n = 0; n < 3; n++) await tick(app)
+      expect(ssh.calls()).toHaveLength(2)
+      expect(suspended).toHaveLength(1)
+      expect(prod()).toMatchObject({ reachable: true })
+      expect(prod().asks).toBeUndefined()
+      expect(app.draw()).toMatch(/❯ prod +● │/)
+      expect(app.failures).toEqual([])
+    })
+  }, 60_000)
+
   test("one hand-over at a time", async () => {
     const order: string[] = []
     let open = 0
@@ -703,5 +849,64 @@ describe("what the screens say", () => {
     const gone = update(home, { type: "server-reached", server: "prod", reachable: false, problem: "gone" }).state
     expect(gone.team?.servers[0]?.runner).toBeUndefined()
     expect(draw(gone)).toMatch(/❯ prod +✖/)
+  })
+
+  test("Home: `!` and `SSH needs an answer` for a server SSH needs an answer to reach, at 100 and 80 columns; enter connects to it", () => {
+    const team: TeamView = {
+      member: "ada",
+      version: 2,
+      servers: [
+        { name: "prod", destination: "deploy@203.0.113.7", reachable: true, apps: [{ name: "demo", deploy: 4, state: "running" }] },
+        // Out of date as well: once SSH needs an answer, its runner cannot be known, and the SSH line is shown.
+        { name: "staging", destination: "staging-box", reachable: true, runner: { version: "0.1.0", outdated: true }, apps: [{ name: "web", deploy: 7, state: "running" }] },
+      ],
+    }
+    const sentence = needsAnswer("staging-box", "staging")
+    expect(sentence).toBe("SSH needs an answer to reach staging-box. Press enter on staging to connect. zekno never asks in the background.")
+    const asking = update(initialState({ kind: "team", team }, SIZE), { type: "server-reached", server: "staging", reachable: false, asks: true, problem: sentence }).state
+    expect(asking.team?.servers[1]).toMatchObject({ reachable: false, asks: true, problem: sentence, runner: undefined })
+    expect(asking.team?.servers[1]?.apps[0]?.state).toBe("unknown")
+    const onStaging = update(asking, key({ kind: "down" })).state
+    for (const [columns, rows] of [
+      [100, 30],
+      [80, 24],
+    ] as const) {
+      const screen = draw({ ...onStaging, size: { columns, rows } }, columns, rows)
+      fits(screen, columns, rows)
+      expect(screen).toMatch(/│ ❯ staging +! │/)
+      expect(screen).not.toContain("✖")
+      expect(screen).not.toContain("runner 0.1.0")
+      // The line under the name, cut at a word where the pane is too narrow for all of it: 18 columns at 100, 16 at 80.
+      expect(wordsThatFit("SSH needs an answer", 18)).toBe("SSH needs an")
+      expect(screen).toMatch(/│ {3}SSH needs an +│/)
+      expect(screen).not.toMatch(/│ {3}SSH needs an ?(a|…)/)
+      expect(screen).toMatch(/❯ web +7 +● unknown/)
+      expect(words(screen)).toContain(`! staging could not be reached. Numbers are from this machine's history. ${sentence}`)
+      // The key hints, on two lines at 80 columns.
+      expect(words(screen)).toContain("↑↓ move ←→ pane enter connect ")
+      // With the apps pane in front, enter opens the app as ever.
+      expect(words(draw(update({ ...onStaging, size: { columns, rows } }, key({ kind: "right" })).state, columns, rows))).toContain("↑↓ move ←→ pane enter open ")
+    }
+    expect(homeHints(onStaging.team!.servers[1], false, "servers").find(([k]) => k === "enter")).toEqual(["enter", "connect"])
+    expect(homeHints(onStaging.team!.servers[0], false, "servers").find(([k]) => k === "enter")).toEqual(["enter", "open"])
+    expect(homeHints(onStaging.team!.servers[1], false, "apps").find(([k]) => k === "enter")).toEqual(["enter", "open"])
+
+    // enter connects to it on purpose and stays where it is; on a server that answers, enter moves to its apps.
+    expect(update(onStaging, key({ kind: "enter" }))).toEqual({ state: onStaging, effects: [{ kind: "connect", server: "staging" }] })
+    const onProd = update(asking, key({ kind: "enter" }))
+    expect(onProd.effects).toEqual([])
+    expect(top(onProd.state)).toMatchObject({ pane: "apps", server: 0 })
+    // Nothing is read in the background while it shows (effects.ts), and nothing but a connection made on purpose clears it.
+    const reached = update(onStaging, { type: "server-reached", server: "staging", reachable: true }).state
+    expect(reached.team?.servers[1]?.asks).toBeUndefined()
+    expect(draw(reached)).toMatch(/❯ staging +●/)
+    expect(draw(reached)).not.toContain("SSH needs an")
+    // A server that is simply down is not reached, with ✖, and asks nothing.
+    const down = update(onStaging, { type: "server-reached", server: "staging", reachable: false, problem: "staging-box could not be reached over SSH." }).state
+    expect(down.team?.servers[1]?.asks).toBeUndefined()
+    expect(draw(down)).toMatch(/❯ staging +✖/)
+    expect(draw(down)).not.toContain("SSH needs an")
+    expect(lastLine(draw(down))).toStartWith("↑↓ move  ←→ pane  enter open  ")
+    expect(update(down, key({ kind: "enter" })).effects).toEqual([])
   })
 })

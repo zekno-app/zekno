@@ -270,6 +270,8 @@ export function sshStandIn(server: StandInServer) {
   const log = join(dir, "ssh.log")
   const asks = join(dir, "ask")
   const tty = join(dir, "tty")
+  const unanswered = join(dir, "unanswered")
+  const down = join(dir, "down")
   const path = join(dir, "ssh")
   const env = server.env()
   write(
@@ -284,8 +286,10 @@ done
 [ "$1" = -- ] || exit 255
 dest=$2
 command=$3
+if [ -f "${down}" ]; then echo "ssh: connect to host $dest port 22: Connection refused" >&2; exit 255; fi
 if [ -f "${asks}" ]; then
   if [ -n "$batch" ]; then echo "$dest: Permission denied (publickey,password)." >&2; exit 255; fi
+  if [ -f "${unanswered}" ]; then echo "$dest: Permission denied (publickey,password)." >&2; exit 255; fi
   if [ -f "${tty}" ]; then
     printf '%s' "$dest's password: " > /dev/tty
     IFS= read -r answer < /dev/tty
@@ -304,6 +308,14 @@ exec env -i HOME="${env.HOME}" PATH="${env.PATH}" TMPDIR="${env.TMPDIR}" LC_ALL=
     ask: () => writeFileSync(asks, ""),
     /** Without batch mode, the stand-in asks for a password on the terminal, and wants "open sesame". */
     askOnTerminal: () => writeFileSync(tty, ""),
+    /**
+     * With `ask()`, SSH's question is not answered (cancelled, or a wrong
+     * password), without touching any terminal: a call without batch mode
+     * fails as SSH does then. `false` answers it again.
+     */
+    unanswered: (yes = true) => (yes ? writeFileSync(unanswered, "") : rmSync(unanswered, { force: true })),
+    /** The host refuses connections: every call fails with SSH's own status, as SSH does then, asking nothing. */
+    down: () => writeFileSync(down, ""),
   }
 }
 

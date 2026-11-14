@@ -78,6 +78,13 @@ export type ServerRow = {
   /** Why it could not be reached, as a sentence. */
   problem?: string
   /**
+   * Not reached because SSH would have had to ask something (a password, a
+   * passphrase, a host key), as SSH's own closing line said. It is not read
+   * in the background again until the person connects to it on purpose:
+   * `enter` on it on Home.
+   */
+  asks?: boolean
+  /**
    * The runner's version, and whether it is older than the one this CLI
    * carries. `version` is undefined for a runner from before 0.2.0, which
    * does not say.
@@ -247,8 +254,18 @@ export type Question =
   | { kind: "remember-folder"; server: string; app: string; compose: string }
   /** Esc on the list before a deploy: go ahead without the values in `names`, which are not set? */
   | { kind: "skip-values"; server: string; app: string; names: readonly string[] }
+  /**
+   * `d` with an app selected other than the one this folder's accepted
+   * zekno.json names (`linked`): deploy the folder to the selected app on the
+   * selected server all the same?
+   */
+  | { kind: "deploy-elsewhere"; server: string; app: string; linked: { server: string; app: string } }
 
-/** The answers to each question and their keys. The boards give the words for the last two. */
+/**
+ * The answers to each question and their keys. The boards give the words for
+ * the two before `deploy-elsewhere`, whose words the maintainer approved on
+ * 2026-11-14 (contracts/app.md, "Deploy from the app").
+ */
 export const CHOICES = {
   "remove-secret": [
     { key: "enter", answer: "yes", does: "remove it" },
@@ -268,15 +285,40 @@ export const CHOICES = {
     { key: "y", answer: "yes", does: "deploy" },
     { key: "n", answer: "no", does: "do not deploy" },
   ],
+  // Esc answers no as well, and enter answers nothing: only `y` deploys. The screen names the app after "deploy to" (`elsewhereChoices`).
+  "deploy-elsewhere": [
+    { key: "y", answer: "yes", does: "deploy to" },
+    { key: "n", answer: "no", does: "do not deploy" },
+  ],
 } as const satisfies Record<Question["kind"], readonly Choice<string>[]>
 
-/** Said when a deploy that waited on the list of missing values was not made. */
+/** Said when a deploy that waited on a question was not made. */
 export const NOT_DEPLOYED = "Nothing was deployed."
 
 /** The question esc on that list asks: deploy without the values not set yet? */
 export function skipValuesTitle(question: Extract<Question, { kind: "skip-values" }>): string {
   const without = question.names.length === 1 ? question.names[0]! : `${question.names.length} values`
   return `Deploy ${question.app} to ${question.server} without ${without}?`
+}
+
+type ElsewhereQuestion = Extract<Question, { kind: "deploy-elsewhere" }>
+
+/** The answers to "deploy this folder elsewhere?", the first naming the app it would replace. */
+export function elsewhereChoices(question: ElsewhereQuestion): Choice<string>[] {
+  return CHOICES["deploy-elsewhere"].map((choice) => (choice.answer === "yes" ? { ...choice, does: `deploy to ${question.app}` } : choice))
+}
+
+/**
+ * The words of "deploy this folder elsewhere?": its title names the link,
+ * its lines the selected app, and its server too when that is not the link's.
+ */
+export function elsewhereWords(question: ElsewhereQuestion): { title: string; asked: string; replaces: string } {
+  const target = question.server === question.linked.server ? question.app : `${question.app} on ${question.server}`
+  return {
+    title: `This folder is linked to ${question.linked.app} on ${question.linked.server}`,
+    asked: `You selected ${target}. Deploy this folder to ${target}?`,
+    replaces: `It replaces what ${question.app} runs now.`,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -291,9 +333,15 @@ export type Effect =
   | { kind: "deploy"; server: string; app?: string }
   /**
    * Go ahead with the deploy that was waiting on a question, with its answer:
-   * write zekno.json or not, or the missing values were set or skipped.
+   * write zekno.json or not, the missing values were set or skipped, or deploy
+   * a linked folder to the app selected instead of its own.
    */
-  | { kind: "deploy-continue"; server: string; app: string; answer: "write-link" | "skip-link" | "values-set" | "skip-values" }
+  | {
+      kind: "deploy-continue"
+      server: string
+      app: string
+      answer: "write-link" | "skip-link" | "values-set" | "skip-values" | "deploy-elsewhere"
+    }
   /** `to` undefined: the deploy before the latest. */
   | { kind: "rollback"; server: string; app: string; to?: number }
   | { kind: "logs"; server: string; app: string }
@@ -305,6 +353,12 @@ export type Effect =
   | { kind: "refresh"; server?: string }
   | { kind: "remove-secret"; server: string; app: string; name: string }
   | { kind: "update-runner"; server: string }
+  /**
+   * Connect to a server on purpose, where SSH needs an answer (`asks`): SSH
+   * may ask, on the terminal handed over, and the session is kept for the
+   * reads that follow, as the one opened when the app starts.
+   */
+  | { kind: "connect"; server: string }
 
 // ---------------------------------------------------------------------------
 // Events
@@ -327,8 +381,19 @@ export type AppEvent =
   | { type: "failed"; notice: Notice; from?: "add-server" }
   /** A line a runner or SSH wrote on standard error, already cleaned. */
   | { type: "runner-line"; line: string }
-  /** A server answered, or could not be reached and why; and, when it answered, its runner's version. */
-  | { type: "server-reached"; server: string; reachable: boolean; problem?: string; runner?: { version?: string; outdated: boolean } }
+  /**
+   * A server answered, or could not be reached and why; and, when it
+   * answered, its runner's version. `asks`: it could not be reached because
+   * SSH would have had to ask something (`ServerRow.asks`).
+   */
+  | {
+      type: "server-reached"
+      server: string
+      reachable: boolean
+      problem?: string
+      asks?: boolean
+      runner?: { version?: string; outdated: boolean }
+    }
   /** Adding a server began: its details were found valid. */
   | { type: "add-started"; destination: string; name: string; local: boolean }
   /** A step of adding a server ended. */
@@ -356,6 +421,8 @@ export type AppEvent =
   | { type: "missing-values"; server: string; app: string; names: string[]; file?: string }
   /** Before the first deploy of a folder that is not linked. */
   | { type: "ask-remember-folder"; server: string; app: string; compose: string }
+  /** `d` in a linked folder with another app selected than the folder's own (`linked`). */
+  | { type: "ask-deploy-elsewhere"; server: string; app: string; linked: { server: string; app: string } }
   /** zekno.json was written: this folder is now linked to that app on that server. */
   | { type: "linked"; linked: Linked }
   /** The hidden prompt stored a value, or refused one; it is closed either way. */
@@ -611,10 +678,16 @@ function inputOf(key: AppKey): [string, { return?: boolean; escape?: boolean; ba
 function onQuestion(state: State, question: Question, key: AppKey): Step {
   if (key.kind === "ctrl-c") return quit(state)
   const [input, flags] = inputOf(key)
-  const answer = applyConfirmKey<string>(CHOICES[question.kind], input, flags) ?? (question.kind === "skip-values" && flags.escape ? "no" : undefined)
+  // Where esc is not one of the answers, it is no: neither question deploys on it.
+  const escapeIsNo = (question.kind === "skip-values" || question.kind === "deploy-elsewhere") && flags.escape
+  const answer = applyConfirmKey<string>(CHOICES[question.kind], input, flags) ?? (escapeIsNo ? "no" : undefined)
   if (answer === undefined) return stay(state)
   const closed = { ...state, question: undefined }
   if (question.kind === "skip-values") return skipValues(closed, question, answer === "yes")
+  if (question.kind === "deploy-elsewhere") {
+    if (answer !== "yes") return stay({ ...closed, notice: { tone: "info", text: NOT_DEPLOYED } })
+    return go(closed, { kind: "deploy-continue", server: question.server, app: question.app, answer: "deploy-elsewhere" })
+  }
   if (answer === "no") return stay(closed)
   switch (question.kind) {
     case "remove-secret":
@@ -733,6 +806,9 @@ function onHome(state: State, screen: Extract<Screen, { name: "home" }>, key: Ap
       if (moved.kind === "moved") return stay(replaceTop(state, { ...screen, server: moved.index, app: 0 }))
       if (moved.kind === "chosen") {
         if (moved.index === servers.length) return openAddServer(state)
+        // Where SSH needs an answer, enter connects on purpose: the only way SSH may ask while the app is open.
+        const chosen = servers[moved.index]
+        if (chosen?.asks) return go(state, { kind: "connect", server: chosen.name })
         return stay(replaceTop(state, { ...screen, pane: "apps" }))
       }
       return stay(state)
@@ -1062,7 +1138,9 @@ export function update(state: State, event: AppEvent): Step {
       if (!state.team) return stay(state)
       const reached = (server: ServerRow): ServerRow => {
         if (server.name !== event.server) return server
-        const next: ServerRow = { ...server, reachable: event.reachable, problem: event.reachable ? undefined : event.problem }
+        // Only a server that was not reached can be waiting on SSH's question, and only when the effects say SSH said so.
+        const asks = !event.reachable && event.asks === true ? true : undefined
+        const next: ServerRow = { ...server, reachable: event.reachable, problem: event.reachable ? undefined : event.problem, asks }
         // A server that cannot be reached has a runner nobody can tell the version of now, and apps whose state is not known:
         // their deploy numbers are this machine's again.
         if (!event.reachable) return { ...next, runner: undefined, apps: server.apps.map((app) => ({ ...app, state: "unknown", accepted: undefined })) }
@@ -1107,6 +1185,12 @@ export function update(state: State, event: AppEvent): Step {
       return push(state, { ...setSecretScreen(event.server, event.app), missing: event.names, file: event.file, question: "value" })
     case "ask-remember-folder":
       return stay({ ...state, question: { kind: "remember-folder", server: event.server, app: event.app, compose: event.compose } })
+    case "ask-deploy-elsewhere":
+      // Asked over Home or the app screen, where `d` was pressed, and never over another question.
+      if (!["home", "app"].includes(top(state).name) || state.question || textQuestionOpen(state) || hiddenPromptOpen(state)) {
+        return stay({ ...state, notice: { tone: "info", text: NOT_DEPLOYED } })
+      }
+      return stay({ ...state, question: { kind: "deploy-elsewhere", server: event.server, app: event.app, linked: event.linked } })
     case "linked":
       return stay({ ...state, linked: event.linked })
     case "secret-saved": {
