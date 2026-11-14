@@ -346,8 +346,8 @@ describe("the script, run with sh against stand-ins", () => {
     expect(text.startsWith("{\n")).toBe(true)
     expect(text.endsWith("\n}\n")).toBe(true)
     // The address it downloads from is the one this CLI names, with nothing but the version and the architecture varying.
-    expect(text).toContain("url=https://github.com/zekno-app/zekno-monorepo/releases/download/runner-v$version/zekno-runner-linux-$arch.gz")
-    expect(releaseUrl("1.2.3", "arm64")).toBe("https://github.com/zekno-app/zekno-monorepo/releases/download/runner-v1.2.3/zekno-runner-linux-arm64.gz")
+    expect(text).toContain("url=https://github.com/zekno-app/zekno/releases/download/runner-v$version/zekno-runner-linux-$arch.gz")
+    expect(releaseUrl("1.2.3", "arm64")).toBe("https://github.com/zekno-app/zekno/releases/download/runner-v1.2.3/zekno-runner-linux-arm64.gz")
   })
 })
 

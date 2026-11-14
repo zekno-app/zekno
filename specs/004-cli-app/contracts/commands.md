@@ -128,7 +128,7 @@ first that fails. Nothing is installed unless every check before it passed.
 | 8. Create the runner's folder with mode 700 if it is missing | |
 
 The release address is
-`https://github.com/zekno-app/zekno-monorepo/releases/download/runner-v<version>/zekno-runner-linux-<arch>.gz`.
+`https://github.com/zekno-app/zekno/releases/download/runner-v<version>/zekno-runner-linux-<arch>.gz`.
 
 `server update` replaces only a file named `zekno-runner`. The runner's path is kept in the
 profile file, which is not signed, so any other path is refused before anything is asked or

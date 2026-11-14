@@ -518,7 +518,7 @@ The runner then sets itself up for your team over the same connection.
 The script never uses `sudo`. The server needs `sh`, `uname`, `curl` or `wget`, `gzip`,
 `sha256sum` or `shasum`, Docker with Compose, and to reach github.com over HTTPS. The release
 address is
-`https://github.com/zekno-app/zekno-monorepo/releases/download/runner-v<version>/zekno-runner-linux-<arch>.gz`.
+`https://github.com/zekno-app/zekno/releases/download/runner-v<version>/zekno-runner-linux-<arch>.gz`.
 
 **Today no release is published.** `src/runner-release.json` holds no checksums, so a server with
 no runner stops at the install step with "This build of zekno has no published runner to

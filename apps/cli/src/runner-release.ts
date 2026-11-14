@@ -30,5 +30,5 @@ export function expectedSha256(arch: RunnerArch): string | null {
 
 /** Where a release file is published. Nothing in the address varies but the version and the architecture. */
 export function releaseUrl(version: string, arch: RunnerArch): string {
-  return `https://github.com/zekno-app/zekno-monorepo/releases/download/runner-v${version}/zekno-runner-linux-${arch}.gz`
+  return `https://github.com/zekno-app/zekno/releases/download/runner-v${version}/zekno-runner-linux-${arch}.gz`
 }

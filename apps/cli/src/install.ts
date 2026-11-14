@@ -233,7 +233,7 @@ if [ "$install" = yes ]; then
     say ready
     head -c 268435457 > "$tmp/zekno-runner" || fail download
   else
-    url=https://github.com/zekno-app/zekno-monorepo/releases/download/runner-v$version/zekno-runner-linux-$arch.gz
+    url=https://github.com/zekno-app/zekno/releases/download/runner-v$version/zekno-runner-linux-$arch.gz
     fetch "$url" "$tmp/zekno-runner.gz" || fail download
     gzip -t "$tmp/zekno-runner.gz" </dev/null >&2 || fail download
     gzip -dc "$tmp/zekno-runner.gz" </dev/null | head -c 268435457 > "$tmp/zekno-runner" || fail download
