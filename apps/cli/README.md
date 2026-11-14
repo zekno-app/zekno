@@ -20,9 +20,13 @@ single command, for scripts.
 - **State and logs come from your server.** Whether an app is running, and its logs, are read
   from the runner over SSH when you look. They never pass through Zekno, and this machine keeps
   none of it.
-- **No runner release is published yet.** `zekno server add` can install the runner on a server
-  by itself, but only once a release exists. Until then, a server needs a runner you installed by
-  hand, or `--runner-file` for development. See [Installing the runner](#installing-the-runner).
+- **The runner comes from a release.** `zekno server add` installs on a server the one runner
+  version this build of zekno carries, and only when it matches the checksum this build holds. A
+  zekno built from `main` installs a prod release, such as `0.1.0`; one built from `dev` installs
+  a development release, such as `0.1.0-dev.1`. See [Installing the runner](#installing-the-runner).
+- **The first runner release is not recorded yet.** The zekno on this branch holds no checksums,
+  so it has no published runner to install: a server needs a runner already on it, or
+  `--runner-file` for development.
 - **Docker's messages are shown as they are.** An error from Docker can repeat a value that was
   filled in from a secret.
 - Made for macOS and Linux with a system keychain. Windows is not tested.
@@ -33,7 +37,7 @@ The internal reviews say what was checked and what was not:
 
 ## Build from source
 
-zekno is not packaged for installation yet. It needs [Bun](https://bun.sh) 1.4.2, the version
+zekno is not packaged for installation yet. It needs [Bun](https://bun.sh) 1.4.4, the version
 pinned in the repository.
 
 ```bash
@@ -41,6 +45,12 @@ bun install                  # at the repository root
 bun apps/cli/src/main.ts     # runs zekno from the checkout
 cd apps/cli && bun run compile   # dist/zekno: one file, for the system you are on
 ```
+
+Run from the checkout, zekno reads `.env` and `bunfig.toml` from the folder you start it in,
+because that is how Bun runs a script, and a `bunfig.toml` can make it load other code first. The
+runner it starts from `apps/runner` for `--local` does the same. So run it from source only inside
+folders you trust, and use the compiled `zekno` anywhere else: it is built with both turned off,
+and `test/compiled.test.ts` checks that it reads neither.
 
 From a checkout, `zekno server add --local` starts the runner from `apps/runner` next door. The
 compiled `zekno` starts `zekno-runner` from your `PATH` instead.
@@ -250,8 +260,9 @@ updated unasked. It replaces only a file named `zekno-runner`, never replaces a 
 the new runner must answer with its version before it replaces the old one. The runner's folder,
 key and state are not touched. A runner on this machine has nothing to update.
 
-Until a runner release is published, this stops with "This build of zekno has no published
-runner to install", unless the runner already has this version.
+A runner newer than the one this zekno carries is left as it is, and you are told to update zekno
+instead. A build of zekno that holds no checksum for its runner stops with "This build of zekno
+has no published runner to install", unless the runner already has this version.
 
 ```bash
 zekno server update prod --yes
@@ -319,7 +330,7 @@ zekno rollback --app api --server prod --to 3
 
 Reads what a server holds: its team list version, each app's last deploy and whether it is
 running, and each secret's version. Never a value. When the runner is older than this zekno, a
-warning says so; deploys still work, and running state and logs need `zekno server update`.
+warning says so and how to bring it up to date with `zekno server update`. Deploys still work.
 
 ```bash
 zekno status --server prod
@@ -497,16 +508,23 @@ check before it passed:
 1. Connect.
 2. `docker compose version` must work.
 3. Look for a runner: at `/usr/local/bin/zekno-runner` (root) or `~/.local/bin/zekno-runner`
-   (any other user), then on the `PATH`. One that is found is used as it is; skip to step 7.
+   (any other user), then on the `PATH`. One that is found is used as it is; skip to step 8.
 4. The server must be Linux on x86-64 or ARM64.
-5. Download the release file with `curl` or `wget`, over HTTPS only, into a new private
-   temporary folder, and unpack it.
-6. Its SHA-256 must equal the value this zekno holds in `src/runner-release.json`. The value
-   never comes from the download. The new runner must then answer `version` with the expected
-   version from the temporary folder. Only then is it moved into place, with mode 755.
-7. `zekno-runner version` must answer with the expected version, when it was just installed or
+5. The server must have a C library the runner can use. When `getconf GNU_LIBC_VERSION` names
+   glibc older than 2.17, or `ldd --version` names musl, it stops here. A server that answers
+   neither goes on, and step 7 catches a runner that cannot start.
+6. `sha256sum` or `shasum` must be there. Then the release file is downloaded with `curl` or
+   `wget` into a new private temporary folder beside where the runner goes, and unpacked. The
+   download goes over HTTPS only, and follows a redirect only to another HTTPS address. With
+   `--runner-file`, the file zekno sends is read instead, and step 7 checks it against the
+   SHA-256 zekno computed before sending it.
+7. Its SHA-256 must equal the value this zekno holds in `src/runner-release.json`. The value
+   never comes from the download or from the server. The new runner must then answer `version`
+   with the expected version from the temporary folder. Only then is it moved into place, with
+   mode 755.
+8. `zekno-runner version` must answer with the expected version, when it was just installed or
    was found at this version.
-8. Create the runner's folder with mode 700 if it is missing.
+9. Create the runner's folder with mode 700 if it is missing.
 
 The runner then sets itself up for your team over the same connection.
 
@@ -520,9 +538,93 @@ The script never uses `sudo`. The server needs `sh`, `uname`, `curl` or `wget`, 
 address is
 `https://github.com/zekno-app/zekno/releases/download/runner-v<version>/zekno-runner-linux-<arch>.gz`.
 
-**Today no release is published.** `src/runner-release.json` holds no checksums, so a server with
-no runner stops at the install step with "This build of zekno has no published runner to
-install." Until a release is published, use one of these:
+### Which runner it installs
+
+A build of zekno installs exactly one runner version: the one `src/runner-release.json` names,
+with the SHA-256 of the runner for each kind of server. Which one depends on the branch that build
+of zekno came from. You never choose it.
+
+| zekno built from | Installs | Its version | On GitHub |
+|------------------|----------|-------------|-----------|
+| `main` | a prod release | three numbers, such as `0.1.0` | a release |
+| `dev` | a development release, for trying a runner on a real server before the prod release | three numbers and `-dev.<n>`, such as `0.1.0-dev.1` | a pre-release, never shown as the latest |
+
+A development version is older than the prod version with the same three numbers. So a zekno
+built from `main` brings a server that runs `0.1.0-dev.1` up to `0.1.0` with
+`zekno server update`, and a zekno built from `dev` never replaces that `0.1.0` with a
+development release of the same numbers.
+
+When you work on zekno itself, your build installs the release your branch's
+`src/runner-release.json` names, not the runner in your checkout. To try a runner you changed,
+build it and send it with `--runner-file` (below); it must answer with the version your zekno
+carries.
+
+### How a release is trusted
+
+The checksums in `src/runner-release.json` are written by one command only: the maintainer's
+second build ([RELEASING.md](../runner/RELEASING.md), part 7). After GitHub's workflow has built
+and published a release, the maintainer builds the same commit again on their own machine, with
+the same Bun version, and compares each runner three ways: their own build, the file GitHub
+published, and the release's `SHA256SUMS`. Only when all three agree are the checksums written,
+and committed on the branch of that release. Development releases are checked the same way.
+
+The second build proves that the published file is what this source and this build tool
+produce, so GitHub's build service did not change it. It does not prove that the build tool or
+the dependencies are good: both builds use the same Bun version, the same npm packages (pinned by
+`bun.lock`) and the same Bun runtimes for Linux, so a fault in those would be in both.
+
+Releases are not signed, and no record of how they were built (build provenance) is published
+yet. What a server relies on is the checksum this zekno holds: it installs a download only when
+its SHA-256 equals that value.
+
+### Supported servers
+
+The runner is built for:
+
+- Linux on x86-64, with a processor that has SSE4.2: Intel Nehalem, AMD Bulldozer or newer.
+- Linux on 64-bit ARM (ARM64).
+- The GNU C library (glibc) 2.17 or newer: Debian, Ubuntu, RHEL and similar. Alpine and other
+  systems with the musl C library are not supported yet.
+
+The download is about 52 MB, and the runner about 110 MB on disk. While it installs, both are
+side by side where the runner goes, so keep at least 256 MiB free there.
+
+What was tried, and what was only read: on 2026-11-14 the install script ran in local containers,
+as root, with the runner file sent after it as `--runner-file` does. The runner started on
+Debian 12 on ARM64 and on x86-64 (emulated), and on CentOS 7, which has glibc 2.17, on both. On
+Alpine the install stopped before the file was read, as it should. Containers stand in for the C
+library and the kind of processor only. The processor floor (SSE4.2) comes from Bun's documents
+and was not tried, and no old kernel was tried. What each release was tried on is added to its
+release notes.
+
+### When it stops
+
+Each way the install can stop says what happened, and leaves the server as it was:
+
+| When | zekno says |
+|------|------------|
+| No Docker with Compose | Docker with Compose was not found on the server. Install Docker with its Compose plugin there, then try again. |
+| Not Linux on x86-64 or ARM64 | This kind of server is not supported yet. The runner is built for Linux on x86-64 and ARM64. |
+| glibc older than 2.17, or musl; or the new runner cannot find its C library | This server does not have the GNU C library (glibc) 2.17 or newer that the runner needs. Alpine and other Linux systems with musl are not supported yet. Nothing was installed. |
+| This zekno holds no checksum for that kind of server | This build of zekno has no published runner to install. It goes on to name the two ways in [If this zekno holds no checksum](#if-this-zekno-holds-no-checksum). |
+| Neither `sha256sum` nor `shasum` | The server has neither sha256sum nor shasum to check the runner with, so nothing was downloaded or installed. |
+| The download or unpacking failed, with less than 256 MiB free | The server ran out of disk space for the runner. It needs at least 256 MiB free in /usr/local/bin as root, or in ~/.local/bin for another user. Nothing was installed. |
+| The download or unpacking failed otherwise | The server could not download the runner. It needs curl or wget, gzip, and to reach github.com over HTTPS. |
+| The SHA-256 differs | The downloaded runner did not match the checksum this zekno holds. It was deleted and nothing was installed. |
+| The new runner was stopped by an instruction the processor lacks | This server's processor cannot run the runner. On x86-64 it needs SSE4.2: Intel Nehalem, AMD Bulldozer or newer. Nothing was installed. |
+| The new runner did not answer for another reason | The runner did not start on the server: it did not answer with version `<version>`. |
+
+In `zekno server update`, the four for glibc, `sha256sum`, disk space and the processor end with
+"The runner that was there is still in place." instead. When the new runner wrote something
+before it failed, its first line is shown too, as a line from the server: after `remote:` in a
+single command, and in the full output in the app.
+
+### If this zekno holds no checksum
+
+A zekno whose `src/runner-release.json` holds no checksums has no published runner to install.
+That is so between a release and its second build, after a release was withdrawn, and before a
+branch's first release is recorded. `zekno server add` still uses a runner already on the
+server. Otherwise, use one of these:
 
 - Install the runner by hand, as the [runner's README](../runner/README.md#install-on-a-server)
   describes. At the places in step 3 it is found and used; anywhere else, add the server with
@@ -531,10 +633,13 @@ install." Until a release is published, use one of these:
   and checked on arrival, and it must answer with the version this zekno carries. A runner
   already on the server is used as it is, also with `--runner-file`.
 
-Limits of this route, from the reviews:
+### Limits of this route
 
-- The checksums of a release will come from the same job that builds the files. Whether the
-  build can be reproduced, so that someone else gets the same checksum, was not checked.
+From the reviews:
+
+- A release is trusted through the checksum this zekno holds, not through a signature. The
+  second build shows that GitHub's build service changed nothing; it does not check Bun or the
+  npm packages both builds use.
 - With `wget`, the download has no size limit, and `curl` before 8.4 does not stop a download of
   unknown length. Only whoever serves the release address over TLS could use that to fill the
   disk.
@@ -545,7 +650,11 @@ Limits of this route, from the reviews:
   log in as could put a `zekno-runner` there, and it would be used.
 - `--runner-file` checks the file, then reads it. A file swapped in between is read without the
   size limit. It is a development option.
-- Installing as root has no automated test yet.
+- Installing as root has no automated test yet. It was tried by hand in the local containers
+  above.
+- An x86-64 processor without SSE4.2 was not tried. The installer reads a runner stopped by an
+  illegal instruction as the processor's lack; whether the runner stops that way on such a
+  processor is not known.
 
 ## What is kept where
 

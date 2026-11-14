@@ -92,7 +92,10 @@ processor (SSE4.2) or for an old kernel.
 ## 7. A real server (maintainer step 5)
 
 With a CLI run from `dev` after step 4 (`bun apps/cli/src/main.ts`), a throwaway team, and the
-maintainer's server (Linux x86-64, root, Docker with Compose, no runner):
+maintainer's server (Linux x86-64, root, Docker with Compose, no runner). Run from source, the CLI
+reads `.env` and `bunfig.toml` from the folder it is started in, as Bun does for any script: start
+it that way only inside folders you trust, and use the compiled `zekno`
+(`cd apps/cli && bun run compile`) anywhere else.
 
 1. `zekno server add proof --ssh root@<server>`, no development option. Expected: the runner is
    downloaded from `runner-v0.1.0-dev.1`, checked, installed at `/usr/local/bin/zekno-runner`; the
@@ -115,8 +118,8 @@ the record says they were not, and points to section 5.
 - Unaudited. Pre-alpha.
 - The second build shows that GitHub's build service changed nothing. Both builds fetch the same
   packages and the same Bun runtimes, so it says nothing about those.
-- A server downloads about 49 MB and needs about 160 MB free while installing, and must reach
-  github.com over HTTPS.
+- A server downloads about 52 MB (49 MiB) and needs about 160 MB free while installing, and must
+  reach github.com over HTTPS.
 - Linux with glibc 2.17 or newer only; x86-64 with SSE4.2, or ARM64. Not Alpine.
 
 ## Results

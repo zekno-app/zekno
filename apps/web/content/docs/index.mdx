@@ -57,7 +57,7 @@ secrets and no ability to run code on customer servers.
 | --- | --- |
 | A team member's machine is compromised | That machine holds a signing key |
 | One of your servers is compromised | Secrets are plaintext in memory where the app runs |
-| A Zekno app or runner release is tampered with | The client is the trust anchor. Mitigated by public code and signed releases |
+| A Zekno app or runner release is tampered with | The client is the trust anchor. A server installs a runner only when it matches the checksum the command-line tool holds, recorded after a second build of the same source gave the same file. Runner releases are not signed |
 
 <Callout title="Metadata">
   The control plane still sees metadata: server addresses, app names, deploy
@@ -70,8 +70,8 @@ secrets and no ability to run code on customer servers.
 | --- | --- |
 | Website (`apps/web`) | Landing page and these docs; the signed-in dashboard is planned |
 | Core library (`packages/core`): encryption, signing, team lists, message formats | First version built; internal review only |
-| Command-line tool (`apps/cli`) | Second version built: a full-screen terminal app and single commands for scripts, running state and logs read from your server, and a project file. One developer, deploying directly over SSH. It can install the runner on a server, but no runner release is published yet. Internal reviews only. See [Command-line tool](/docs/cli) |
-| Server runner (`apps/runner`) | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything. One connection per command. Internal reviews only. See [Server runner](/docs/runner) |
+| Command-line tool (`apps/cli`) | Second version built: a full-screen terminal app and single commands for scripts, running state and logs read from your server, and a project file. One developer, deploying directly over SSH. It installs on a server the runner release its build carries, checked against a checksum it holds. The first runner release is not recorded yet. Internal reviews only. See [Command-line tool](/docs/cli) |
+| Server runner (`apps/runner`) | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything. One connection per command. Built for Linux on x86-64 and ARM64 with glibc 2.17 or newer. Internal reviews only. See [Server runner](/docs/runner) |
 | Desktop app (`apps/desktop`) | Planned |
 | Control plane | Hosted by Zekno, closed source |
 

@@ -140,14 +140,19 @@ or other detail of the server.
 
 ## Install on a server
 
-The server needs Linux on x86-64 or ARM64, and Docker with Compose. `ZEKNO_DOCKER` names the
+The server needs Docker with Compose, and Linux on x86-64 (a processor with SSE4.2: Intel
+Nehalem, AMD Bulldozer or newer) or on ARM64, with the GNU C library (glibc) 2.17 or newer. Alpine
+and other systems with musl are not supported yet. The rest of what a server needs, and what was
+tried, is in the [CLI's README](../cli/README.md#supported-servers). `ZEKNO_DOCKER` names the
 Docker command if it is not `docker`.
 
-### With `zekno server add`, once a release is published
+### With `zekno server add`
 
-`zekno server add <name> --ssh <user@host>` installs the runner by itself: the server downloads a
-published release, checks its SHA-256 against the value the CLI holds, checks that it starts, and
-only then puts it in place. The steps and their limits are in the
+`zekno server add <name> --ssh <user@host>` installs the runner by itself: the server downloads
+the runner release that build of zekno carries, checks its SHA-256 against the value zekno holds,
+checks that it starts, and only then puts it in place. A zekno built from `main` installs a prod
+release, such as `0.1.0`; one built from `dev` installs a development release, such as
+`0.1.0-dev.1`. The steps and their limits are in the
 [CLI's README](../cli/README.md#installing-the-runner).
 
 | Who the CLI logs in as | Runner | Its folder |
@@ -155,10 +160,9 @@ only then puts it in place. The steps and their limits are in the
 | root | `/usr/local/bin/zekno-runner` | `/var/lib/zekno` |
 | any other user | `~/.local/bin/zekno-runner` | `~/.local/state/zekno` |
 
-**No runner release has been published yet.** `apps/cli/src/runner-release.json` holds no
-checksums, so today a server with no runner stops at the install step with "This build of zekno
-has no published runner to install." Install the runner by hand, or use `--runner-file` for
-development.
+**The first runner release is not recorded yet.** `apps/cli/src/runner-release.json` on this
+branch holds no checksums, so a zekno built from it has no published runner to install. Install
+the runner by hand, or use `--runner-file` for development.
 
 ### By hand
 
@@ -175,7 +179,8 @@ xz -T0 -c dist/zekno-runner-linux-x64 | ssh deploy@server 'mkdir -p ~/.local/bin
 ssh deploy@server '~/.local/bin/zekno-runner status'
 ```
 
-The file is about 80 MB; compressed with `xz` it is under 30 MB. The last command prints
+`compile:linux-x64` and `compile:linux-arm64` are the scripts a release is built with. The file
+is about 110 MB; compressed with `xz` it is about 40 MB. The last command prints
 `{"outcome":"refused","reason":"not_set_up"}` on a fresh install. Then run `zekno server add` from
 your machine: a runner at the place the installer uses, or on the `PATH`, is found and used as it
 is. A runner anywhere else is added with `--runner-path <path>`. The folder must belong to the
@@ -191,14 +196,41 @@ runner you built over SSH. Its SHA-256 is computed on your machine and checked o
 it arrives; it must answer with the version the CLI carries; then it is put in place as the
 installer would. A runner already on the server is used as it is.
 
-### The release workflow
+### Releases
 
-`.github/workflows/runner-release.yml` runs when a tag `runner-v<version>` is pushed. It checks
-that the tag matches `apps/runner/package.json`, builds the runner for Linux on x86-64 and ARM64,
-compresses each with gzip, writes `SHA256SUMS` for the unpacked files, and attaches them to a
-GitHub Release. Its actions are pinned to full commits, and it uses no secret beyond the token
-GitHub gives every workflow. Recording the checksums in `apps/cli/src/runner-release.json` is a
-separate commit, made by a person.
+A runner release is a GitHub Release of this repository, started by pushing a tag
+`runner-v<version>`. There are two kinds, called environments:
+
+| | dev | prod |
+|---|---|---|
+| Tag | `runner-v<x.y.z>-dev.<n>`, such as `runner-v0.1.0-dev.1` | `runner-v<x.y.z>`, such as `runner-v0.1.0` |
+| Cut from | a commit on `dev` | a commit on `main` |
+| On GitHub | a pre-release, never shown as the latest | a release |
+| Approval | none | waits for the maintainer in the GitHub Environment `prod` before anything is built |
+| Installed by | a zekno built from `dev` | a zekno built from `main` |
+
+`.github/workflows/runner-release.yml` runs on such a tag. Its first job, `check`, runs
+`scripts/release.ts check`, which stops the release when the tag is not a version, when the
+tagged commit is not on the branch for its kind, when `package.json` here says another version,
+when the root `package.json` pins no Bun version, or, for prod, when
+`apps/cli/src/runner-release.json` names a development version. Then `release-dev` or
+`release-prod` builds the runner for Linux on x86-64 and ARM64 with the pinned Bun, checks that the
+x86-64 runner answers with the tag's version, and publishes four files:
+
+- `zekno-runner-linux-x64.gz` and `zekno-runner-linux-arm64.gz`: the two runners, compressed with
+  gzip;
+- `SHA256SUMS`: the SHA-256 of each unpacked runner;
+- `RELEASE-NOTES.md`, which is also the release's text: the commit, the Bun version, what the
+  runner is built for, the checksums, and the second build's record once it is made.
+
+A tag that already has a release gets no second one. The actions are pinned to full commits, and
+the workflow uses no secret beyond the token GitHub gives every workflow, and that token only in
+the step that publishes. Another workflow, `.github/workflows/main-versions.yml`, fails on a push
+to `main`, or a pull request into it, that carries a development version.
+
+The workflow does not record checksums in zekno. Only the maintainer's second build does, once a
+build of the same commit on their own machine gave the same files
+([CLI's README](../cli/README.md#how-a-release-is-trusted)).
 
 How to cut a release, from start to end, and how to withdraw one: [RELEASING.md](./RELEASING.md).
 
@@ -216,15 +248,25 @@ How to cut a release, from start to end, and how to withdraw one: [RELEASING.md]
 - **The runner believes its environment.** `ZEKNO_RUNNER_HOME`, `ZEKNO_DOCKER` and `PATH` decide
   where its state lives and which program receives the secrets. Do not let a less-trusted user
   start it with their own environment: no `PermitUserEnvironment`, no `AcceptEnv ZEKNO_*`, no
-  sudo rule that keeps those variables.
+  sudo rule that keeps those variables. The compiled runner does not load `.env` or `bunfig.toml`
+  from the folder it is started in, which over SSH is the login user's home folder: it is built
+  with both turned off. Like any program built with Bun, it still reads `BUN_OPTIONS` from its
+  environment.
 - **Signing a deploy is equal to root on the server.** A Compose file can mount anything Docker
   can reach. The signature decides who may do that; the runner does not limit what they deploy.
 - **Docker's messages are passed back as they are.** An error from Docker can repeat a value
   that was filled in from a secret, such as a malformed port.
-- **A release is only as good as its checksums.** The checksums in `SHA256SUMS` come from the
-  same job that builds the files, and whether the build can be reproduced was not checked. Build
-  the runner again somewhere else and compare before recording them. Any `runner-v*` tag on any
-  commit starts a release; restricting who can push such tags is left to the maintainer.
+- **A release is trusted through its checksums, not a signature.** zekno installs a runner only
+  when its SHA-256 equals the value zekno holds, and that value is written only by the
+  maintainer's second build, once a build of the same commit on their own machine gave the same
+  files as the release. That proves the published files are what this source and this build tool
+  produce. It does not prove that Bun or the npm packages are good: both builds use the same ones.
+  Releases are not signed, and no build provenance is published yet.
+- **Who may start a release.** Whoever can push a `runner-v*` tag starts a release, and chooses
+  the workflow that runs for it. The release procedure sets a tag ruleset on GitHub before the
+  first release, so that only the repository's admins can push such tags
+  ([RELEASING.md](./RELEASING.md), part 1). A release started by anyone else is still installed by
+  no zekno until the second build records its checksums.
 
 The reviews these come from are
 [`specs/003-cli-runner/security-review.md`](../../specs/003-cli-runner/security-review.md) and
@@ -237,3 +279,6 @@ bun test            # runs the runner as a real process against a stand-in docke
 bun run typecheck
 bun run compile     # dist/zekno-runner, for the machine you are on
 ```
+
+`scripts/` holds the release scripts: `release.ts`, which the release workflow runs, and
+`second-build.ts`, which the maintainer runs. [RELEASING.md](./RELEASING.md) says how each is used.

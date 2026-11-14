@@ -114,7 +114,7 @@ The mechanism is end-to-end encryption plus digital signatures. Zekno does not u
 | --- | --- |
 | A team member's machine is compromised | That machine holds a signing key |
 | One of your servers is compromised | Secrets are plaintext in memory where the app runs |
-| A Zekno app or runner release is tampered with | The client is the trust anchor. Mitigated by public code and signed releases |
+| A Zekno app or runner release is tampered with | The client is the trust anchor. A server installs a runner only when it matches the checksum the CLI holds, recorded after a second build of the same source gave the same file. Runner releases are not signed |
 
 > [!NOTE]
 > The control plane still sees metadata: server addresses, app names, deploy times and team membership.
@@ -149,7 +149,7 @@ These protect the security promise. Changes that break them need a very good rea
 
 ### Reporting a vulnerability
 
-Please do not open public issues for security problems. Report them privately to the maintainers. A dedicated contact address will be listed here before the first release.
+Please do not open public issues for security problems. Report them privately with GitHub's private vulnerability reporting: the **Report a vulnerability** button on the repository's [Security](https://github.com/zekno-app/zekno/security) tab.
 
 ## Repository
 
@@ -162,8 +162,8 @@ A Turborepo monorepo on Bun workspaces. The table shows what exists today.
 | `packages/eslint-config` | Shared ESLint configuration | Available |
 | `packages/typescript-config` | Shared TypeScript configuration | Available |
 | `packages/core` | Key generation, secret encryption, signed deploys, team membership and protocol types | First version built; unaudited. The control-plane client is not written yet |
-| `apps/cli` | Command-line tool: your key, servers, secrets, deploys, running state and logs. Running `zekno` opens a full-screen terminal app built with Ink; single commands stay for scripts | Second version built: the terminal app, running state and logs read from your server, a project file (`zekno.json`), and installing the runner over SSH. No runner release is published yet, so a server still needs a runner installed by hand. One developer, deploying directly over SSH. Internal reviews only; unaudited |
-| `apps/runner` | Program that runs on your servers | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything, over one connection per command. Internal reviews only; unaudited |
+| `apps/cli` | Command-line tool: your key, servers, secrets, deploys, running state and logs. Running `zekno` opens a full-screen terminal app built with Ink; single commands stay for scripts | Second version built: the terminal app, running state and logs read from your server, a project file (`zekno.json`), and installing over SSH the runner release its build carries, checked against a checksum it holds. The first runner release is not recorded yet, so a server still needs a runner installed by hand, or `--runner-file` for development. One developer, deploying directly over SSH. Internal reviews only; unaudited |
+| `apps/runner` | Program that runs on your servers | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything, over one connection per command. Built for Linux on x86-64 and ARM64 with glibc 2.17 or newer. How a release is made and checked: [`apps/runner/RELEASING.md`](apps/runner/RELEASING.md). Internal reviews only; unaudited |
 | `apps/desktop` | Desktop app (Electrobun: React UI + Bun main process) | Planned |
 
 - `packages/core` contains no framework code. The desktop app and the runner both depend on it, so they encrypt and verify in exactly the same way.
