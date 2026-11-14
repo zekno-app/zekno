@@ -150,3 +150,54 @@ wrapping of three sentences in `apps/cli/README.md` and the docs pages, and two 
   are of builds that found them there. A build that has to download them was not timed.
 - This shows two builds on one machine agree. Whether GitHub's Linux build agrees with a macOS
   build is known only at maintainer step 4 (plan.md, "If GitHub's build differs").
+
+### The Linux runners (T028, 2026-11-14)
+
+Built on this machine (macOS, Apple silicon) with Bun 1.4.4, from `0158605` (the runner's sources,
+`packages/core`, the root `package.json` and `bun.lock` are the same as in the commit built for
+T017): `cd apps/runner && bun run compile:linux-x64 && bun run compile:linux-arm64`. Bun named the
+runtimes it used `bun-linux-x64-baseline-v1.4.4` and `bun-linux-aarch64-v1.4.4`.
+
+| | `zekno-runner-linux-x64` | `zekno-runner-linux-arm64` |
+|---|---|---|
+| Size | 109,824,176 bytes | 109,890,552 bytes |
+| After `gzip -9 -n` | 51,845,154 bytes (49.4 MiB) | 51,767,220 bytes (49.4 MiB) |
+| `file` | ELF 64-bit LSB executable, x86-64, dynamically linked, interpreter `/lib64/ld-linux-x86-64.so.2`, for GNU/Linux 3.2.0 | ELF 64-bit LSB executable, ARM aarch64, dynamically linked, interpreter `/lib/ld-linux-aarch64.so.1`, for GNU/Linux 3.7.0 |
+| Highest `GLIBC_` (`strings -a … \| grep -oE '^GLIBC_[0-9.]+$' \| sort -V \| tail -1`) | `GLIBC_2.17` | `GLIBC_2.17` |
+| Libraries it needs (`llvm-objdump -p`, `NEEDED`) | `libc.so.6`, `ld-linux-x86-64.so.2`, `libpthread.so.0`, `libdl.so.2`, `libm.so.6` | `libc.so.6`, `ld-linux-aarch64.so.1`, `libpthread.so.0`, `libdl.so.2`, `libm.so.6` |
+| SHA-256 | `fb68d252cb89956750c558123449954ff07f043b893a81efef3517aeb94463f6` | `5829b647353f7b71d5f99be61dbba0c9f946cbd0f1c773656cdc7ef9692c51b5` |
+
+- The highest symbol version is `GLIBC_2.17` in both, by `strings` as the task names it and by the
+  version references `llvm-objdump -p` lists. "glibc 2.17 or newer" in the release notes and the
+  installer's 2.17 hold for these builds.
+- Each file is under the installer's 256 MiB (268,435,456 bytes) and so is each `.gz`. The `.gz`
+  files are 51.8 MB, which is 49.4 MiB: "about 49 MB" in the decisions is MiB.
+- The SHA-256 values are those T017 recorded for its two builds.
+
+### Supported servers, in local containers (T029, 2026-11-14)
+
+Docker Desktop on this machine (engine 29.6.1, its Linux virtual machine on kernel
+6.12.76-linuxkit, ARM64; `linux/amd64` containers are emulated). The script was run as the CLI runs
+it, in `file` mode: `docker run -i --rm --platform <platform> <image> sh -s -- add 0.1.0-dev.1 file <sha256>`,
+with `INSTALL_SCRIPT` on standard input and the runner file of T028 sent only after `ready`, and a
+stand-in `docker` that answers `docker compose version` mounted first on `PATH`. Each container
+runs as root, so the runner goes to `/usr/local/bin/zekno-runner`.
+
+| Image (digest) | Platform | What the image says | Runner sent | Result |
+|----------------|----------|---------------------|-------------|--------|
+| `debian:12` (`sha256:268fb24c…3ff8`), Debian 12 | `linux/arm64` | `getconf GNU_LIBC_VERSION`: `glibc 2.36` | arm64 | the runner answered `version` from the temporary folder and again in place: `install ok`, `version ok`, `done system` (1.2 s) |
+| `debian:12` | `linux/amd64` | `glibc 2.36` | x64 | the same (2.9 s) |
+| `centos:7` (`sha256:be65f488…18ea4`), CentOS 7.9.2009 | `linux/arm64` | `glibc 2.17` | arm64 | the same (1.0 s) |
+| `centos:7` | `linux/amd64` (added: the x86-64 file on glibc 2.17) | `glibc 2.17` | x64 | the same (2.7 s) |
+| `alpine:3` (`sha256:f59abe65…71bf`), Alpine 3.24.4 | `linux/arm64` | `getconf`: `getconf: GNU_LIBC_VERSION: unknown variable`; `ldd --version`: `musl libc (aarch64)` | arm64 | `fail libc` straight after `platform ok arm64`: before `ready`, so the file was never read, and nothing was created (0.2 s) |
+| `alpine:3`, with stand-in `getconf` and `ldd` that answer nothing (added: the check after the download) | `linux/arm64` | no answer | arm64 | `ready`, `download ok 109890552`, `checksum ok`, then `fail libc`; on standard error, passed on: `sh: /usr/local/bin/.zekno-install.HMdglC/zekno-runner: not found` (the runner exited with status 127) (1.7 s) |
+
+- Run directly in `alpine:3`, the ARM64 runner exits with status 127 and the shell writes
+  `sh: /r/zekno-runner: not found`: there is no `/lib/ld-linux-aarch64.so.1` on a musl system. This
+  is what the installer reads as `libc` after the checksum.
+- These containers stand in for the C library and the kind of processor only. They do not stand
+  in for the oldest processor: the emulated x86-64 processor reports `sse4_2`, so `fail cpu` was not
+  met. They do not stand in for an old kernel either: every container ran on the same 6.12 kernel
+  (SC-007).
+- The driver used is a script outside the repository; it imports `INSTALL_SCRIPT` from
+  `apps/cli/src/install.ts` and adds nothing to it.

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { createTeam as startTeam, createSigner, generateMemberKeyPair } from "@workspace/core"
+import { compareRunnerVersions, createTeam as startTeam, createSigner, generateMemberKeyPair, RUNNER_PROTOCOL } from "@workspace/core"
 import { renderToString } from "ink"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -15,11 +15,12 @@ import { wordsThatFit } from "../src/app/screens/parts"
 import { initialState, top, update, type AppEvent, type State, type TeamView } from "../src/app/state"
 import { openTeam, type OpDeps } from "../src/context"
 import { NO_RELEASE, RUNNER_PATHS } from "../src/install"
-import { compareVersions, isOutdated } from "../src/ops/server"
+import { compareVersions, runnerRelation } from "../src/ops/server"
 import { RUNNER_RELEASE, type RunnerRelease } from "../src/runner-release"
 import runnerPackage from "../../runner/package.json"
 import { plainUi } from "../src/ui/plain"
 import { yesOrNo } from "../src/ui/ink"
+import { ORDERED_VERSIONS } from "../../../packages/core/test/fixtures/versions"
 import { COMPOSE_V1, filesUnder, machine } from "./helpers"
 import { fakeRunner, olderRunner, realRunner, releasedRunner, sha256, sshStandIn, standInServer, withSsh, type StandInServer } from "./stand-in-server"
 
@@ -701,14 +702,22 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
     const older = olderRunner(m.docker.path)
     server.installed(older)
     const ssh = sshStandIn(server)
+    // An older runner is said exactly once on standard error, by server add and by status, also with --json.
+    const said = (from: number) => m.err.slice(from).filter((line) => line.startsWith("The runner on prod "))
+    const w1 = `The runner on prod does not report its version, so it is older than this zekno's ${OWN}. Deploys still work. Running state and logs need the newer runner: run \`zekno server update prod\`.`
     await withSsh(ssh, async () => {
+      let from = m.err.length
       expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")).toBe(0)
       expect(m.out).toContain(`Using the runner already at ${RUNNER_PATHS.user}.`)
-      expect(m.lastErr()).toBe(
-        `The runner on prod does not report its version, so it is older than this zekno's ${OWN}. Deploys still work. Running state and logs need the newer runner: run \`zekno server update prod\`.`
-      )
+      expect(said(from)).toEqual([w1])
+      from = m.err.length
       expect(await m.zekno("status", "--server", "prod")).toBe(0)
-      expect(m.lastErr()).toContain("The runner on prod does not report its version")
+      expect(said(from)).toEqual([w1])
+      from = m.err.length
+      const out = m.out.length
+      expect(await m.zekno("status", "--server", "prod", "--json")).toBe(0)
+      expect(m.out.slice(out).join("\n")).not.toContain("older")
+      expect(said(from)).toEqual([w1])
 
       // No terminal: it never asks, and names --yes.
       expect(await m.zekno("server", "update", "prod")).toBe(1)
@@ -732,8 +741,10 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
       expect(await m.zekno("server", "update", "prod", "--yes")).toBe(0)
       expect(m.lastOut()).toBe(`The runner on prod already has version ${OWN}. Nothing was changed.`)
       expect(server.calls("curl")).toHaveLength(1)
-      // And it answers as the same server, now with sessions.
+      // And it answers as the same server, now with sessions, at this zekno's version: nothing more is said.
+      from = m.err.length
       expect(await m.zekno("status", "--server", "prod")).toBe(0)
+      expect(m.err.slice(from)).toEqual([])
     })
     // A runner on this machine is not updated this way.
     expect(await m.zekno("server", "add", "dev", "--local")).toBe(0)
@@ -757,6 +768,46 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
     expect(m.lastErr()).toBe("zekno only replaces a runner whose file is named zekno-runner. The runner for prod is at /usr/sbin/sshd. Replace that one by hand.")
     expect(asked).toEqual([])
     expect(ssh.calls()).toHaveLength(calls)
+  }, 90_000)
+
+  test("server update replaces an older runner and leaves every file of its folder, and their modes, as they were; a newer runner is not touched", async () => {
+    const m = machine()
+    expect(await m.zekno("init", "--name", "Ada")).toBe(0)
+    m.compose(COMPOSE_V1)
+    const server = standInServer()
+    m.deps.release = releaseOf(server, realRunner(m.docker.path))
+    server.installed(olderRunner(m.docker.path))
+    const ssh = sshStandIn(server)
+    const where = ["--app", "web", "--server", "prod"]
+    await withSsh(ssh, async () => {
+      expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")).toBe(0)
+      // The older runner holds a team, a deploy and a secret.
+      m.typing("hello")
+      expect(await m.zekno("secret", "set", "GREETING", ...where)).toBe(0)
+      expect(await m.zekno("deploy", ...where)).toBe(0)
+      const folder = filesUnder(server.folder)
+      expect(folder.length).toBeGreaterThan(0)
+      const folderMode = server.mode(server.folder)
+
+      expect(await m.zekno("server", "update", "prod", "--yes")).toBe(0)
+      expect(m.lastOut()).toBe(`Updated the runner on prod to ${OWN}. It matched the checksum this zekno holds.`)
+      expect(readFileSync(server.runnerPath, "utf8")).toBe(realRunner(m.docker.path))
+      expect(filesUnder(server.folder)).toEqual(folder)
+      expect(server.mode(server.folder)).toBe(folderMode)
+      expect(server.leftovers()).toEqual([])
+
+      // A zekno that carries an older version than the runner there now: the runner is newer, and nothing is changed.
+      const older = ORDERED_VERSIONS.filter((version) => compareRunnerVersions(version, OWN) < 0).at(-1)!
+      m.deps.release = { version: older, files: { "linux-x64": { sha256: server.release(releasedRunner(m.docker.path, older)) }, "linux-arm64": { sha256: null } } }
+      const downloads = server.calls("curl").length
+      expect(await m.zekno("server", "update", "prod", "--yes")).toBe(1)
+      expect(m.lastErr()).toBe(`The runner on prod is newer than the ${older} this zekno carries, so it was left as it is. Update zekno instead.`)
+      expect(readFileSync(server.runnerPath, "utf8")).toBe(realRunner(m.docker.path))
+      expect(server.mode(server.runnerPath)).toBe(0o755)
+      expect(filesUnder(server.folder)).toEqual(folder)
+      expect(server.calls("curl")).toHaveLength(downloads)
+      expect(server.leftovers()).toEqual([])
+    })
   }, 90_000)
 
   test("a yes-or-no question at a terminal is no unless y", () => {
@@ -834,12 +885,32 @@ describe("what the screens say", () => {
     expect(compareVersions("0.1.0-dev.10", "0.1.0")).toBeLessThan(0)
     expect(compareVersions("1.0.0-dev.1", "0.10.0")).toBeGreaterThan(0)
     expect(compareVersions("0.1.0-dev.1", "0.1.0-dev.1")).toBe(0)
-    expect(isOutdated("one-shot", undefined, "0.1.0")).toBe(true)
-    expect(isOutdated("session", { version: "0.0.9", protocol: 2 }, "0.1.0")).toBe(true)
-    expect(isOutdated("session", { version: "0.1.0-dev.1", protocol: 2 }, "0.1.0")).toBe(true)
-    expect(isOutdated("session", { version: "0.1.0", protocol: 2 }, "0.1.0")).toBe(false)
-    expect(isOutdated("session", { version: "0.1.0", protocol: 2 }, "0.1.0-dev.2")).toBe(false)
-    expect(isOutdated("session", { version: "1.0.0", protocol: 3 }, "0.1.0")).toBe(false)
+  })
+
+  test("a runner's relation to the one this zekno carries, for each row of contracts/versions.md, 'The relation'", () => {
+    const P = RUNNER_PROTOCOL
+    // Does not speak sessions, so reports no version: older, and state and logs need it updated.
+    expect(runnerRelation("one-shot", undefined, "0.1.0")).toEqual({ relation: "older", missing: "state and logs", newerProtocol: false })
+    // Reports a version before this zekno's: with a lower protocol some of what this zekno does needs it; with the same, nothing.
+    expect(runnerRelation("session", { version: "0.0.9", protocol: P - 1 }, "0.1.0")).toEqual({ relation: "older", missing: "some", newerProtocol: false })
+    expect(runnerRelation("session", { version: "0.0.9", protocol: P }, "0.1.0")).toEqual({ relation: "older", missing: "nothing", newerProtocol: false })
+    // Exactly this zekno's.
+    expect(runnerRelation("session", { version: "0.1.0", protocol: P }, "0.1.0")).toEqual({ relation: "same", missing: "nothing", newerProtocol: false })
+    // After this zekno's: it works with the same protocol; with a higher one, zekno is updated before deploying.
+    expect(runnerRelation("session", { version: "0.1.1", protocol: P }, "0.1.0")).toEqual({ relation: "newer", missing: "nothing", newerProtocol: false })
+    expect(runnerRelation("session", { version: "1.0.0", protocol: P + 1 }, "0.1.0")).toEqual({ relation: "newer", missing: "nothing", newerProtocol: true })
+    // A dev version is older than the plain one with the same three numbers, and the plain one newer than it.
+    expect(runnerRelation("session", { version: "0.1.0-dev.1", protocol: P }, "0.1.0").relation).toBe("older")
+    expect(runnerRelation("session", { version: "0.1.0", protocol: P }, "0.1.0-dev.1").relation).toBe("newer")
+    expect(runnerRelation("session", { version: "0.1.0-dev.2", protocol: P }, "0.1.0-dev.10").relation).toBe("older")
+    // Every pair of the ordered list: the relation is the order of packages/core.
+    for (const there of ORDERED_VERSIONS) {
+      for (const carried of ORDERED_VERSIONS) {
+        const order = compareRunnerVersions(there, carried)
+        const relation = runnerRelation("session", { version: there, protocol: P }, carried).relation
+        expect({ there, carried, relation }).toEqual({ there, carried, relation: order < 0 ? "older" : order > 0 ? "newer" : "same" })
+      }
+    }
   })
 
   test("Home: `! runner 0.1.0` beside a server that is out of date, and `u` in the hints only then", () => {

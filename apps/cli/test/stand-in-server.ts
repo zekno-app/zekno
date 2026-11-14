@@ -35,6 +35,8 @@ const TOOLS = [
   "sh",
   "sleep",
   "tail",
+  // Not the script's: the runner's stand-in Docker uses it when a test deploys over the stand-in `ssh`.
+  "touch",
   "tr",
   "wc",
 ]

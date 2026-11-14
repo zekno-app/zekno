@@ -200,6 +200,8 @@ GitHub Release. Its actions are pinned to full commits, and it uses no secret be
 GitHub gives every workflow. Recording the checksums in `apps/cli/src/runner-release.json` is a
 separate commit, made by a person.
 
+How to cut a release, from start to end, and how to withdraw one: [RELEASING.md](./RELEASING.md).
+
 ## What to know before you rely on it
 
 - **The first setup wins.** Until `zekno server add` has run, whoever can start the runner

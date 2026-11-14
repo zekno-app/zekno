@@ -55,6 +55,18 @@ export const RUNNER_FILE_LIMIT = 256 * 1024 * 1024
  * folder, so one that cannot run on this server never replaces one that can.
  * An update replaces only a file named `zekno-runner`, and never a runner
  * newer than the one it carries.
+ *
+ * What the server lacks is said before anything is downloaded or created
+ * (`old_libc`): `getconf GNU_LIBC_VERSION` naming glibc below 2.17, or, when
+ * it names none, `ldd --version` naming musl. What those print is the
+ * server's text: its first line, cut to 64 characters, is only matched
+ * against a strict shape (`glibc <x>.<y>`, numbers as the version's), never
+ * run, never a path or a command, and anything of another shape is no
+ * answer. Then the runner's own answer after the checksum decides
+ * (`not_started`): exit status 127 or `GLIBC_` in what it wrote is the C
+ * library, 132 an instruction the processor lacks, anything else `version`;
+ * the first line it wrote, cut to 200 characters, is passed on on standard
+ * error, which the CLI cleans as all of it.
  * Written with no `${` and no backquote, so the template below cannot
  * interpolate anything.
  */
@@ -120,6 +132,34 @@ pick() {
     shift 2
   done
   return 1
+}
+old_libc() {
+  if command -v getconf >/dev/null 2>&1; then
+    libc=$(getconf GNU_LIBC_VERSION </dev/null 2>/dev/null | head -n 1 | cut -c 1-64) || libc=
+    case $libc in
+      'glibc '*)
+        libc=$(printf '%s' "$libc" | cut -c 7-)
+        case $libc in *[!0-9.]*|*.*.*) return 1 ;; ?*.?*) ;; *) return 1 ;; esac
+        major=$(printf '%s' "$libc" | cut -d . -f 1)
+        minor=$(printf '%s' "$libc" | cut -d . -f 2)
+        is_number "$major" && is_number "$minor" || return 1
+        [ "$major" -lt 2 ] && return 0
+        [ "$major" -eq 2 ] && [ "$minor" -lt 17 ] && return 0
+        return 1 ;;
+    esac
+  fi
+  command -v ldd >/dev/null 2>&1 || return 1
+  libc=$(ldd --version </dev/null 2>&1 | head -n 1 | cut -c 1-64) || libc=
+  case $libc in 'musl libc'*) return 0 ;; esac
+  return 1
+}
+not_started() {
+  said=$(head -n 1 "$tmp/err" | cut -c 1-200) || said=
+  if [ -n "$said" ]; then printf '%s\n' "$said" >&2; fi
+  rm -f "$tmp/zekno-runner"
+  case $1 in 127) fail libc ;; 132) fail cpu ;; esac
+  case $(head -c 4096 "$tmp/err" | tr '\n' ' ') in *GLIBC_*) fail libc ;; esac
+  fail version
 }
 lost() {
   if command -v df >/dev/null 2>&1; then
@@ -253,6 +293,7 @@ if [ "$install" = yes ]; then
     *) fail platform ;;
   esac
   say "platform ok $arch"
+  if old_libc; then fail libc; fi
   if [ "$source" = release ]; then expected=$(pick "$arch" "$@") || fail release; fi
   if command -v sha256sum >/dev/null 2>&1; then
     hasher=sha256sum
@@ -289,8 +330,10 @@ if [ "$install" = yes ]; then
   fi
   say checksum ok
   chmod 755 "$tmp/zekno-runner" || fail install
-  answer=$("$tmp/zekno-runner" version </dev/null 2>/dev/null | head -n 1 | cut -c 1-200) || answer=
-  case $answer in "{\"version\":\"$version\","*) ;; *) rm -f "$tmp/zekno-runner"; fail version ;; esac
+  started=0
+  "$tmp/zekno-runner" version </dev/null >"$tmp/out" 2>"$tmp/err" || started=$?
+  answer=$(head -n 1 "$tmp/out" | cut -c 1-200) || answer=
+  case $answer in "{\"version\":\"$version\","*) ;; *) not_started "$started" ;; esac
   mv -f "$tmp/zekno-runner" "$dest" || fail install
   cleanup
   final=$dest
@@ -422,6 +465,8 @@ export type InstallFailure =
   | "download"
   | "tools"
   | "space"
+  | "libc"
+  | "cpu"
   | "checksum"
   | "install"
   | "version"
@@ -459,6 +504,8 @@ const FAILURES: readonly string[] = [
   "download",
   "tools",
   "space",
+  "libc",
+  "cpu",
   "checksum",
   "install",
   "version",
@@ -580,10 +627,12 @@ const STILL_THERE = "The runner that was there is still in place."
 
 /**
  * The sentence for each way the install can stop (specs/004-cli-app/contracts/commands.md,
- * "Installing the runner over SSH"; `tools` and `space` from specs/005-runner-release/contracts/versions.md).
+ * "Installing the runner over SSH"; `tools`, `space`, `libc` and `cpu` from
+ * specs/005-runner-release/contracts/versions.md).
  */
 export function installFailure(reason: InstallFailure, request: InstallRequest, where: { destination: string; server?: string }): string {
   const file = request.source.kind === "file"
+  const nothing = request.mode === "update" ? STILL_THERE : "Nothing was installed."
   switch (reason) {
     case "docker":
       return "Docker with Compose was not found on the server. Install Docker with its Compose plugin there, then try again."
@@ -602,7 +651,11 @@ export function installFailure(reason: InstallFailure, request: InstallRequest, 
     case "tools":
       return `The server has neither sha256sum nor shasum to check the runner with, so nothing was downloaded or installed.${request.mode === "update" ? ` ${STILL_THERE}` : ""}`
     case "space":
-      return `The server ran out of disk space for the runner. It needs at least 256 MiB free in /usr/local/bin as root, or in ~/.local/bin for another user. ${request.mode === "update" ? STILL_THERE : "Nothing was installed."}`
+      return `The server ran out of disk space for the runner. It needs at least 256 MiB free in /usr/local/bin as root, or in ~/.local/bin for another user. ${nothing}`
+    case "libc":
+      return `This server does not have the GNU C library (glibc) 2.17 or newer that the runner needs. Alpine and other Linux systems with musl are not supported yet. ${nothing}`
+    case "cpu":
+      return `This server's processor cannot run the runner. On x86-64 it needs SSE4.2: Intel Nehalem, AMD Bulldozer or newer. ${nothing}`
     case "checksum":
       return file
         ? "The runner file that arrived did not match the one sent. It was deleted and nothing was installed."

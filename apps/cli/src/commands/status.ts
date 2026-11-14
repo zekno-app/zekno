@@ -1,6 +1,6 @@
 import { appsOf, latestFirst } from "../app/views"
 import { remoteThroughUi, type Deps } from "../context"
-import { isOutdated } from "../ops/server"
+import { runnerRelation } from "../ops/server"
 import { locateServer, readStatus, stateOf, type RunState } from "../ops/status"
 import { RUNNER_RELEASE } from "../runner-release"
 import { plainCell, quiet, strong, type MarkedCell } from "../ui/types"
@@ -23,7 +23,7 @@ export async function status(deps: Deps, options: { server?: string; serverFrom?
   })
   // An older runner is said once, on standard error, and changes nothing else.
   const carried = (deps.release ?? RUNNER_RELEASE).version
-  if (server.target.kind === "ssh" && isOutdated(mode, runner, carried)) deps.ui.warn(outdatedWarning(server.name, runner?.version, carried))
+  if (server.target.kind === "ssh" && runnerRelation(mode, runner, carried).relation === "older") deps.ui.warn(outdatedWarning(server.name, runner?.version, carried))
   // In Home's order: the latest deploy from this machine's verified history first; an app it has none of last, by name.
   const at = new Map(appsOf(located.team, server, deps.home).map((row) => [row.name, row.at]))
   const apps = Object.keys(answer.lastSequence).sort((a, b) => latestFirst({ name: a, at: at.get(a) }, { name: b, at: at.get(b) }))

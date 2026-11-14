@@ -2,6 +2,7 @@ import {
   compareRunnerVersions,
   CoreError,
   proposeRoster,
+  RUNNER_PROTOCOL,
   RunnerReportSchema,
   RunnerSetupResponseSchema,
   RunnerStatusSchema,
@@ -68,8 +69,8 @@ export type ServerAddResult = {
   mode: SessionMode
   /** The runner's version, when it says. A runner from before sessions does not. */
   runner?: RunnerVersion
-  /** Older than the runner this CLI carries. Deploys work; state and logs need it updated. */
-  outdated: boolean
+  /** The runner against the one this CLI carries. Undefined for a runner on this machine, which is never compared. */
+  relation?: RunnerRelation
   /** The installer put the runner there just now. */
   installed: boolean
   /** With `keep`: the session the server was added over, still open, for the caller to read over and close. */
@@ -95,12 +96,35 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /**
- * Whether a runner is older than the one this CLI carries. One that does not
- * speak sessions is from before them, so it is.
+ * A runner against the one this CLI carries (specs/005-runner-release/contracts/versions.md,
+ * "The relation"): older, the same or newer, and what does not work until it is updated.
  */
-export function isOutdated(mode: SessionMode, runner: RunnerVersion | undefined, version: string): boolean {
-  if (mode === "one-shot" || runner === undefined) return true
-  return compareVersions(runner.version, version) < 0
+export type RunnerRelation = {
+  relation: "older" | "same" | "newer"
+  /**
+   * What needs the runner this CLI carries: with no sessions, running state
+   * and logs; with sessions of a lower protocol, some of what this CLI does;
+   * otherwise nothing.
+   */
+  missing: "state and logs" | "some" | "nothing"
+  /** It speaks a newer protocol than this CLI: this CLI is updated before it deploys there. */
+  newerProtocol: boolean
+}
+
+/**
+ * How a runner stands to the version this CLI carries. One that does not
+ * speak sessions does not report its version, and sessions came before every
+ * release, so it is older. Otherwise the versions are compared by the one
+ * order of packages/core, and the protocols say what works in between.
+ */
+export function runnerRelation(mode: SessionMode, runner: RunnerVersion | undefined, carried: string): RunnerRelation {
+  if (mode === "one-shot" || runner === undefined) return { relation: "older", missing: "state and logs", newerProtocol: false }
+  const order = compareRunnerVersions(runner.version, carried)
+  return {
+    relation: order < 0 ? "older" : order > 0 ? "newer" : "same",
+    missing: runner.protocol < RUNNER_PROTOCOL ? "some" : "nothing",
+    newerProtocol: runner.protocol > RUNNER_PROTOCOL,
+  }
 }
 
 /** Checks the name and how to reach the server; reads `--runner-file` once, here. */
@@ -250,7 +274,7 @@ export async function addServer(
       code,
       mode: session.mode,
       runner: session.runner,
-      outdated: reached.kind === "ssh" && isOutdated(session.mode, session.runner, release(deps).version),
+      ...(reached.kind === "ssh" ? { relation: runnerRelation(session.mode, session.runner, release(deps).version) } : {}),
       installed,
       ...(kept ? { session } : {}),
     }

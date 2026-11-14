@@ -47,7 +47,7 @@ export async function serverAdd(
   if (result.target.kind === "ssh") {
     deps.ui.info("You reached this server over SSH, so its identity rests on SSH's host verification.")
   }
-  if (result.outdated) deps.ui.warn(outdatedWarning(result.name, result.runner?.version, (deps.release ?? RUNNER_RELEASE).version))
+  if (result.relation?.relation === "older") deps.ui.warn(outdatedWarning(result.name, result.runner?.version, (deps.release ?? RUNNER_RELEASE).version))
 }
 
 /**

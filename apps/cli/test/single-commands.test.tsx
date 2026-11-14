@@ -4,6 +4,7 @@
  * success and failure" and "Status, lists, errors and piped output").
  */
 import { describe, expect, spyOn, test } from "bun:test"
+import { compareRunnerVersions } from "@workspace/core"
 import { renderToString } from "ink"
 import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
@@ -17,7 +18,10 @@ import { secretsWords, type DeployStart } from "../src/ui/deploy"
 import { DeployBlock, type DeployShown } from "../src/ui/deploy-view"
 import { inkUi } from "../src/ui/ink"
 import { plainUi, processPlainUi, wantsPlain } from "../src/ui/plain"
+import { ORDERED_VERSIONS } from "../../../packages/core/test/fixtures/versions"
+import runnerPackage from "../../runner/package.json"
 import { COMPOSE_V1, COMPOSE_V2, machine, ready } from "./helpers"
+import { realRunner, sshStandIn, standInServer, withSsh } from "./stand-in-server"
 
 type Machine = ReturnType<typeof machine>
 
@@ -560,6 +564,50 @@ describe("piped, in scripts and CI: plain and stable (contracts/commands.md)", (
     expect(err).toBe("")
     expect(out).not.toContain("\x1b")
   })
+})
+
+describe("a zekno and a runner one release apart still deploy (FR-021)", () => {
+  /** The version the repository's runner reports, and the versions of the ordered list just after and just before it. */
+  const own = runnerPackage.version
+  const after = ORDERED_VERSIONS.find((version) => compareRunnerVersions(version, own) > 0)!
+  const before = ORDERED_VERSIONS.filter((version) => compareRunnerVersions(version, own) < 0).at(-1)!
+  const at = ["--app", "web", "--server", "prod"]
+
+  test(`a zekno that carries ${after} (the runner is older) and one that carries ${before} (the runner is newer) each deploy to a runner of ${own}`, async () => {
+    expect(after).toBeDefined()
+    expect(before).toBeDefined()
+    const m = machine()
+    expect(await m.zekno("init", "--name", "Ada")).toBe(0)
+    m.compose(COMPOSE_V1)
+    const server = standInServer()
+    // The real runner process, with the stand-in Docker, already on the server: it is used as it is.
+    server.installed(realRunner(m.docker.path))
+    const carrying = (version: string) => (m.deps.release = { version, files: { "linux-x64": { sha256: null }, "linux-arm64": { sha256: null } } })
+    const said = (from: number) => m.err.slice(from).filter((line) => line.startsWith("The runner on prod "))
+    const escaped = (version: string) => version.replaceAll(".", "\\.")
+    await withSsh(sshStandIn(server), async () => {
+      carrying(after)
+      expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")).toBe(0)
+      m.typing("hello")
+      expect(await m.zekno("secret", "set", "GREETING", ...at)).toBe(0)
+      expect(await m.zekno("deploy", ...at)).toBe(0)
+      let out = m.out.length
+      let err = m.err.length
+      expect(await m.zekno("status", "--server", "prod")).toBe(0)
+      expect(m.out.slice(out)).toContainEqual(expect.stringMatching(/^web\tdeploy 1\t/))
+      // W2 of contracts/versions.md comes whole with task T023, once its wording is approved; this part of it is said today.
+      expect(said(err)).toEqual([expect.stringMatching(new RegExp(`^The runner on prod is version ${escaped(own)}, older than this zekno's ${escaped(after)}\\. `))])
+
+      carrying(before)
+      expect(await m.zekno("deploy", ...at)).toBe(0)
+      out = m.out.length
+      err = m.err.length
+      expect(await m.zekno("status", "--server", "prod")).toBe(0)
+      expect(m.out.slice(out)).toContainEqual(expect.stringMatching(/^web\tdeploy 2\t/))
+      // W4 for a newer runner comes with task T023 too.
+      expect(m.docker.calls().map((call) => call.env.GREETING)).toEqual(["hello", "hello"])
+    })
+  }, 60_000)
 })
 
 describe("one connection per command (FR-034)", () => {

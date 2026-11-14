@@ -7,7 +7,7 @@
  * Ink's back, so what a runner, Docker or SSH write on standard error comes
  * back as events too, never straight to the terminal.
  */
-import { CoreError, type RunnerStatus, type RunnerVersion, type TeamTrust } from "@workspace/core"
+import { CoreError, RUNNER_PROTOCOL, type RunnerStatus, type RunnerVersion, type TeamTrust } from "@workspace/core"
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 
@@ -22,7 +22,7 @@ import { createTeam } from "../ops/init"
 import { writeLink } from "../ops/link"
 import { followLogs, LOG_TAIL, prepareLogs, type LogLine } from "../ops/logs"
 import { prepareSecretSet, removeSecret, setSecret } from "../ops/secret"
-import { addServer, isOutdated, prepareServerAdd, prepareServerUpdate, updateRunner } from "../ops/server"
+import { addServer, prepareServerAdd, prepareServerUpdate, runnerRelation, updateRunner } from "../ops/server"
 import { locateServer, readOver, stateOf, type AppStates, type RunState, type StatusResult } from "../ops/status"
 import { profileStore, type Server } from "../profile"
 import { aboveOf, DEFAULT_COMPOSE, findProject, notSignedHere, shownPath, standingOf, tilde, type ProjectLink, type Standing } from "../project"
@@ -239,7 +239,7 @@ export function foundDetail(version: string | undefined, carried: string): strin
   return version === carried ? `version ${version}` : `version ${version}${compareOlder(version, carried) ? ", out of date" : ""}`
 }
 
-const compareOlder = (version: string, carried: string): boolean => isOutdated("session", { version, protocol: 2 }, carried)
+const compareOlder = (version: string, carried: string): boolean => runnerRelation("session", { version, protocol: RUNNER_PROTOCOL }, carried).relation === "older"
 
 /** The sentence for a failure a person can act on, or undefined for one nobody planned for. */
 function reasonOf(error: unknown): string | undefined {
@@ -320,7 +320,7 @@ export const megabytes = (bytes: number): string => `${Math.max(1, Math.round(by
 /** The runner's version and whether it is older than the one this zekno carries, for Home. Undefined for a runner on this machine. */
 function runnerOf(target: Target, mode: SessionMode, runner: RunnerVersion | undefined, carried: string) {
   if (target.kind !== "ssh") return undefined
-  return { version: runner?.version, outdated: isOutdated(mode, runner, carried) }
+  return { version: runner?.version, outdated: runnerRelation(mode, runner, carried).relation === "older" }
 }
 
 /**

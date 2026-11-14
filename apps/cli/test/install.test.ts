@@ -500,6 +500,137 @@ describe("the script, run with sh against stand-ins", () => {
         expect(readFileSync(server.runnerPath, "utf8")).toBe(prod)
         expect(server.calls("curl")).toHaveLength(1)
       })
+
+      test("a C library older than glibc 2.17, or musl, is said before anything is downloaded or put in place", async () => {
+        const stopped = ["connected", "docker ok 2.40.3", "runner none", "platform ok x64", "fail libc"]
+        const servers = {
+          old: standInServer(),
+          older: standInServer(),
+          musl: standInServer(),
+          muslOut: standInServer(),
+        }
+        servers.old.getconf("glibc 2.16")
+        servers.older.getconf("glibc 1.99")
+        // As on Alpine: getconf knows no GNU_LIBC_VERSION, and musl's ldd says what it is on standard error.
+        servers.musl.ldd("musl libc (x86_64)\nVersion 1.2.5\nDynamic Program Path: /lib/ld-musl-x86_64.so.1")
+        servers.muslOut.ldd("musl libc (aarch64)", "stdout")
+        const runs = await Promise.all(
+          Object.values(servers).map((server) => server.run(["add", VERSION, "release", "x64", server.release(fakeRunner(VERSION))], { shell }))
+        )
+        for (const [at, [name, server]] of Object.entries(servers).entries()) {
+          expect({ name, lines: runs[at]!.lines }).toEqual({ name, lines: stopped })
+          expect(server.calls("curl")).toEqual([])
+          expect(existsSync(server.runnerPath)).toBe(false)
+          expect(existsSync(join(server.home, ".local"))).toBe(false)
+          expect(server.leftovers()).toEqual([])
+        }
+        // A runner file is never asked for.
+        const bytes = new TextEncoder().encode(fakeRunner(VERSION))
+        const file = await servers.old.run(["add", VERSION, "file", sha256(bytes)], { shell, file: bytes })
+        expect(file.lines).toEqual(stopped)
+        // An update leaves the runner that was there, and it still answers.
+        const working = fakeRunner(OLDER)
+        servers.musl.installed(working)
+        const update = await servers.musl.run(["update", VERSION, servers.musl.runnerPath, "release", "x64", sha256("x")], { shell })
+        expect(update.lines).toEqual(["connected", "docker ok 2.40.3", `runner found target ${OLDER}`, "platform ok x64", "fail libc"])
+        expect(readFileSync(servers.musl.runnerPath, "utf8")).toBe(working)
+        expect(servers.musl.calls("curl")).toEqual([])
+        expect(servers.musl.leftovers()).toEqual([])
+      })
+
+      test("glibc 2.17 or newer goes on; so does a server where neither getconf nor ldd answers, or answers in another shape", async () => {
+        const cases: [string, (server: StandInServer) => void][] = [
+          ["glibc 2.17", (server) => server.getconf("glibc 2.17")],
+          ["glibc 2.39", (server) => server.getconf("glibc 2.39")],
+          ["glibc 3.0", (server) => server.getconf("glibc 3.0")],
+          ["glibc's ldd", (server) => server.ldd("ldd (Debian GLIBC 2.36-9+deb12u4) 2.36", "stdout")],
+          ["neither", () => {}],
+          // Not the strict shape `glibc <x>.<y>`: no answer, so it is left to the runner itself to answer with its version.
+          ...["glibc 2.16.1", "glibc 02.16", "glibc 2", "glibc 2.16x", "glibc 2.16 2.16", " glibc 2.16", "GLIBC 2.16", "glibc 2.1000000000", "musl 2.16"].map(
+            (line): [string, (server: StandInServer) => void] => [line, (server) => server.getconf(line)]
+          ),
+          ["ldd that only mentions musl", (server) => server.ldd("ldd: this is not musl libc")],
+        ]
+        const servers = cases.map(([, setUp]) => {
+          const server = standInServer()
+          setUp(server)
+          return server
+        })
+        const runner = fakeRunner(VERSION)
+        const runs = await Promise.all(servers.map((server) => server.run(["add", VERSION, "release", "x64", server.release(runner)], { shell })))
+        for (const [at, run] of runs.entries()) {
+          expect({ answer: cases[at]![0], lines: run.lines }).toEqual({ answer: cases[at]![0], lines: [...freshInstall(runner.length), "session"] })
+        }
+      })
+
+      test("what getconf and ldd say is only matched, never run or used: shell syntax in it does nothing", async () => {
+        const marker = join(tempDir("marker"), "pwned")
+        // Each is no answer of the expected shape, so the install goes on, and nothing in it is ever run.
+        const lines = [`glibc $(touch ${marker})`, `glibc \`touch ${marker}\``, `glibc 2.16;touch ${marker}`, "glibc %s%n%s", `glibc ${"9".repeat(5000)}.1`]
+        const cases: [string, (server: StandInServer) => void, string][] = [
+          ...lines.map((line): [string, (server: StandInServer) => void, string] => [line, (server) => server.getconf(line), "session"]),
+          // musl's own words come first, so this one says libc; what follows them is still never run.
+          [`musl libc $(touch ${marker})`, (server) => server.ldd(`musl libc $(touch ${marker})`), "fail libc"],
+        ]
+        const runs = await Promise.all(
+          cases.map(([, setUp]) => {
+            const server = standInServer()
+            setUp(server)
+            return server.run(["add", VERSION, "release", "x64", server.release(fakeRunner(VERSION))], { shell })
+          })
+        )
+        for (const [at, [line, , last]] of cases.entries()) {
+          expect({ line: line.slice(0, 40), last: runs[at]!.lines.at(-1) }).toEqual({ line: line.slice(0, 40), last })
+        }
+        expect(existsSync(marker)).toBe(false)
+      })
+
+      test("a runner that matched its checksum but does not start: why is said from how it ended, and nothing is put in place", async () => {
+        const glibc = "zekno-runner: /lib/x86_64-linux-gnu/libc.so.6: version 'GLIBC_2.99' not found (required by zekno-runner)"
+        const cases = [
+          // No loader for the C library it is built for: the shell cannot start it at all.
+          { name: "127", runner: "#!/bin/sh\necho 'zekno-runner: not found' >&2\nexit 127\n", reason: "libc", said: "zekno-runner: not found" },
+          { name: "GLIBC_", runner: `#!/bin/sh\necho "${glibc}" >&2\nexit 1\n`, reason: "libc", said: glibc },
+          // The loader's line may come after another, or past what is passed on: it is still found.
+          { name: "GLIBC_ later", runner: `#!/bin/sh\necho "${"x".repeat(300)}" >&2\necho "${glibc}" >&2\nexit 1\n`, reason: "libc", said: "x".repeat(200) },
+          // An instruction this processor does not have.
+          { name: "illegal instruction", runner: "#!/bin/sh\nkill -ILL $$\n", reason: "cpu", said: undefined },
+          { name: "silent", runner: "#!/bin/sh\nexit 1\n", reason: "version", said: undefined },
+        ] as const
+        const servers = cases.map(() => standInServer())
+        const runs = await Promise.all(cases.map(({ runner }, at) => servers[at]!.run(["add", VERSION, "release", "x64", servers[at]!.release(runner)], { shell })))
+        for (const [at, { name, runner, reason, said }] of cases.entries()) {
+          const run = runs[at]!
+          const server = servers[at]!
+          expect({ name, lines: run.lines }).toEqual({
+            name,
+            lines: ["connected", "docker ok 2.40.3", "runner none", "platform ok x64", `download ok ${runner.length}`, "checksum ok", `fail ${reason}`],
+          })
+          // Its first line, cut to 200 characters, is passed on before the script stops; nothing more of it.
+          const passed = run.stderr.split("\n").filter((line) => line.startsWith("zekno-runner") || line.startsWith("xxx"))
+          expect({ name, passed }).toEqual({ name, passed: said === undefined ? [] : [said] })
+          expect(existsSync(server.runnerPath)).toBe(false)
+          expect(existsSync(server.folder)).toBe(false)
+          expect(server.leftovers()).toEqual([])
+        }
+
+        // In an update the runner that was there stays, and still answers.
+        const working = fakeRunner(OLDER)
+        const updated = cases.map(() => standInServer())
+        const updates = await Promise.all(
+          cases.map(({ runner }, at) => {
+            const server = updated[at]!
+            server.installed(working)
+            return server.run(["update", VERSION, server.runnerPath, "release", "x64", server.release(runner)], { shell })
+          })
+        )
+        expect(updates.map((run) => run.lines.at(-1))).toEqual(cases.map(({ reason }) => `fail ${reason}`))
+        for (const server of updated) {
+          expect(readFileSync(server.runnerPath, "utf8")).toBe(working)
+          expect(Bun.spawnSync([server.runnerPath, "version"]).stdout.toString()).toBe(`{"version":"${OLDER}","protocol":2}\n`)
+          expect(server.leftovers()).toEqual([])
+        }
+      })
     })
   }
 
@@ -665,6 +796,38 @@ describe("what a person is told when the install stops", () => {
     )
     expect(parseInstallLine("fail space")).toEqual({ kind: "fail", reason: "space" })
     expect(parseInstallLine("fail tools")).toEqual({ kind: "fail", reason: "tools" })
+  })
+
+  test("what the server lacks to run the runner: the C library or the processor, in the sentences of contracts/versions.md", () => {
+    expect(installFailure("libc", add, where)).toBe(
+      "This server does not have the GNU C library (glibc) 2.17 or newer that the runner needs. Alpine and other Linux systems with musl are not supported yet. Nothing was installed."
+    )
+    expect(installFailure("libc", update, where)).toBe(
+      "This server does not have the GNU C library (glibc) 2.17 or newer that the runner needs. Alpine and other Linux systems with musl are not supported yet. The runner that was there is still in place."
+    )
+    expect(installFailure("cpu", add, where)).toBe(
+      "This server's processor cannot run the runner. On x86-64 it needs SSE4.2: Intel Nehalem, AMD Bulldozer or newer. Nothing was installed."
+    )
+    expect(installFailure("cpu", update, where)).toBe(
+      "This server's processor cannot run the runner. On x86-64 it needs SSE4.2: Intel Nehalem, AMD Bulldozer or newer. The runner that was there is still in place."
+    )
+    expect(parseInstallLine("fail libc")).toEqual({ kind: "fail", reason: "libc" })
+    expect(parseInstallLine("fail cpu")).toEqual({ kind: "fail", reason: "cpu" })
+  })
+
+  test("the line a runner that did not start wrote reaches the person cleaned, as any line from the server, then the sentence", async () => {
+    const server = standInServer()
+    const runner = "#!/bin/sh\nprintf 'zekno-runner: \\033[31mversion GLIBC_2.99 not found\\n' >&2\nexit 1\n"
+    const sha = server.release(runner)
+    const lines: string[] = []
+    await withSsh(sshStandIn(server), async () => {
+      const transport = connect({ kind: "ssh", destination: "deploy@example.test", runnerPath: "zekno-runner" }, [], { errorLines: (line) => void lines.push(line) })
+      await expect(runInstaller(transport, release({ kind: "release", files: [{ arch: "x64", sha256: sha }] }), where)).rejects.toThrow(
+        installFailure("libc", add, where)
+      )
+    })
+    expect(lines).toContain("zekno-runner: version GLIBC_2.99 not found")
+    expect(existsSync(server.runnerPath)).toBe(false)
   })
 })
 
