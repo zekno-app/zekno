@@ -43,9 +43,10 @@ export function shownFile(cwd: string, path: string): string {
  * the stage row and the result (board "zekno deploy: success and failure");
  * in plain output the result line, and Docker's lines when the app did not
  * start. With `--json`, only the JSON object on standard output, and those
- * lines on standard error when the app did not start.
+ * lines on standard error when the app did not start. `zekno deploy` at a
+ * terminal sends through it too (asking/first-deploy.ts).
  */
-async function send(deps: Deps, plan: DeployPlan, options: Options, start: DeployStart): Promise<number> {
+export async function send(deps: Deps, plan: DeployPlan, options: Options, start: DeployStart): Promise<number> {
   const view = options.json ? plainDeployView(deps.ui, false) : deps.ui.deploy(start)
   const began = Date.now()
   let result

@@ -20,10 +20,11 @@ $ zekno deploy
 ? A name for it › prod
 ✔ Connected over SSH
 ✔ Docker with Compose found
-✔ Runner installed   52 MB, checksum verified
+✔ Runner installed  52 MB, checksum verified
 ✔ Added prod to the signed team list
   Server code  MM4G-GPD7-M9VM-ACGJ-Y48R
   Identifies this server's key. Teammates compare it before they trust the server.
+  You reached this server over SSH, so its identity rests on SSH's host verification.
 
 ? Name for this app › demo
 ? Remember this folder? It writes zekno.json, so it always deploys demo to prod. (y/N)
@@ -36,11 +37,14 @@ $ zekno deploy
 ```
 
 Each block is drawn only when its step runs; an empty line (`Ui.gap`) comes before each block
-after the first. How each line is drawn:
+after the first, except the deploy, whose panel has an empty line above it of its own. How each
+line is drawn (the board "zekno deploy from nothing" decides the look, 2026-11-15: where this
+table said `info` for the opening line and the SSH line, the board draws them dim, so they are
+`note`; it draws the runner's size dim, two spaces after `Runner installed`):
 
 | Line | `Ui` call | Words |
 |------|-----------|-------|
-| Opening | `info` | F1 |
+| Opening | `note` (dim, set in by two columns) | F1 |
 | `? Your name ›` | `ask`, `fill` none, check A6 | mock-up |
 | `✔ Key created. It is in your system keychain.` | `success` | mock-up |
 | Team code and what it is for | `code("Team code", <code>, F2)` | mock-up |
@@ -48,11 +52,11 @@ after the first. How each line is drawn:
 | `? A name for it ›` | `ask`, checks A8; not asked when `--server` was given | mock-up |
 | `✔ Connected over SSH` | `success`, on the installer's `connected` | mock-up (the app's step word) |
 | `✔ Docker with Compose found` | `success`, on `docker` | mock-up |
-| `✔ Runner installed   <size>, checksum verified` | `success`, on `install`; `<size>` is `megabytes(bytes)` (`app/effects.ts`) of the `download` line; three spaces before it | mock-up |
-| `✔ Runner found   <detail>` | `success`, on `runner` (a runner already there); `<detail>` is `foundDetail(version, carried)` (`app/effects.ts`) | needs approval (the app's words) |
+| `✔ Runner installed  <size>, checksum verified` | `success("Runner installed", "<size>, checksum verified")`, on `install`: the detail dim, two spaces after the words (the board; design.md writes three spaces); `<size>` is `megabytes(bytes)` of the `download` line, the words of `megabytes` in `app/effects.ts` | mock-up |
+| `✔ Runner found  <detail>` | `success("Runner found", <detail>)`, on `runner` (a runner already there), drawn as the line above; `<detail>` is the words of `foundDetail(version, carried)` in `app/effects.ts` | needs approval (the app's words) |
 | `✔ Added <server> to the signed team list` | `success`, on the stage `added` | mock-up |
 | Server code and what it is for | `code("Server code", <code>, F3)` | mock-up |
-| SSH line | `info`, F4 | research Q5 |
+| SSH line | `note`, F4 (dim, as the board draws it) | research Q5 |
 | A runner of another version | `warn`, `runnerWarning(...)` (W1 to W5 of feature 005), as `server add` says it | existing |
 | `? Name for this app ›` | `ask`, `fill` the folder's name, check A11 | mock-up |
 | `? Remember this folder? ...` | `confirm(F5, …, { leave: true })` | mock-up |
@@ -71,7 +75,8 @@ edge cases). The `✔` lines are drawn as the installer's lines arrive.
 ## The steps, each complete before the next question
 
 1. **Before anything is asked** (FR-014). With no profile, a `zekno.json` that applies here cannot
-   be used (there is no team to have signed it): F7 is drawn as a warning if one is found. With a
+   be used (there is no team to have signed it): F7 is drawn as a warning if one is found (given
+   both `--app` and `--server`, it is left aside without a word, as `withProject` does). With a
    profile, `withProject(cwd, flags, ["app", "server", "file"], …)` runs as for every command,
    with `leaveAside` (questions.md): the first-use question comes first when it applies. Then the
    Compose file is read once with `readCompose` (`-f`, else the used zekno.json's file, else
@@ -85,7 +90,11 @@ edge cases). The `✔` lines are drawn as the installer's lines arrive.
    `teamOnce` instead.
 4. **Server**, when the profile has no server:
    `ask` the destination, `ask` the name unless `--server` gave it, then `prepareServerAdd(deps',
-   name, { ssh })` and `addServer` with the callbacks above. When the profile has servers: the
+   name, { ssh })` and `addServer` with the callbacks above. `addServer` writes the next team list
+   and the server into the profile, so the team is then read again from the profile folder and
+   proved again (`reopenTeam` in `context.ts`, the checks of `openTeam`) against the team code read
+   with the key; the keychain is not read a second time. A `--server` that is not a server name
+   stops before anything is asked, with A8's first sentence and status 2. When the profile has servers: the
    server is `--server`, else the zekno.json's, else the one server (A1), else `choose` (Which
    server?). `--server` naming no connected server stops with today's sentence.
 5. **App**: `--app`, else the zekno.json's, else `choose` (Which app on `<server>`?, with
@@ -130,6 +139,9 @@ edge cases). The `✔` lines are drawn as the installer's lines arrive.
 | The deploy is refused or fails | key, server, the values; the deploy number used is recorded as today | as any `zekno deploy` |
 
 F9 is added only when something was made in this run; otherwise the sentence is said alone.
+"Made in this run" is any of the key, a server (also one the profile names after a failed
+`sync`), zekno.json, or a value stored: after any of them "Nothing was done." would not be true,
+so leaving says F8.
 
 ## Sentences
 

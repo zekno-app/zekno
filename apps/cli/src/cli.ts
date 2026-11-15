@@ -1,6 +1,7 @@
 import { CoreError, LIMITS, SECRET_NAME } from "@workspace/core"
 import { parseArgs } from "node:util"
 
+import { deployAtTerminal } from "./asking/first-deploy"
 import { deploy, rollback } from "./commands/deploy"
 import { init } from "./commands/init"
 import { link } from "./commands/link"
@@ -160,6 +161,8 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         await secretList(deps, await project(["app", "server"]))
         return 0
       case "deploy":
+        // At a terminal it sets up what is missing and asks for what was not given (contracts/first-deploy.md); in a script it is as it always was.
+        if (deps.ui.asks) return await deployAtTerminal(deps, team, { app: values.app, server: values.server, file: values.file })
         return await deploy(deps, { ...(await project(["app", "server", "file"])), typed: { app: values.app, server: values.server } })
       case "rollback":
         return await rollback(deps, { ...(await project(["app", "server"])), typed: { app: values.app, server: values.server } })

@@ -81,7 +81,7 @@ export function plainUi(
 ): Ui {
   const ui: Ui = {
     info: out,
-    success: out,
+    success: (text, detail) => out(detail === undefined ? text : `${text}  ${detail}`),
     warn: err,
     error: err,
     note: out,

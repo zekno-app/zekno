@@ -133,8 +133,27 @@ export async function openTeam(deps: Pick<Deps, "home" | "keyStore">): Promise<T
   const store = profileStore(deps.home)
   const profile = store.load()
   const identity = await readIdentity(deps.keyStore, profile.keyName)
+  return {
+    ...verifiedProfile(store, profile, identity.teamCode),
+    async withSigner(work) {
+      const signer = createSigner(identity.secretKey)
+      try {
+        return await work(signer)
+      } finally {
+        signer.destroy()
+      }
+    },
+  }
+}
 
-  const founding = trustFoundingRoster(profile.rosters[0], identity.teamCode)
+/**
+ * Proves a profile against the team code kept in the keychain: the founding
+ * list must match it, every later list must be signed by an admin of the one
+ * before, and every server the profile names must be in the signed list
+ * under that name.
+ */
+function verifiedProfile(store: ProfileStore, profile: Profile, teamCode: string): Omit<Team, "withSigner"> {
+  const founding = trustFoundingRoster(profile.rosters[0], teamCode)
   if (!founding.ok) throw new CliError(`The team list in the profile is not the one this machine's key belongs to. ${TAMPERED}`)
   const chain = [founding.value]
   for (const envelope of profile.rosters.slice(1)) {
@@ -150,22 +169,22 @@ export async function openTeam(deps: Pick<Deps, "home" | "keyStore">): Promise<T
       throw new CliError(`The profile names a server "${server.name}" that is not in the signed team list. ${TAMPERED}`)
     }
   }
+  return { store, profile, trust, chain, teamCode }
+}
 
-  return {
-    store,
-    profile,
-    trust,
-    chain,
-    teamCode: identity.teamCode,
-    async withSigner(work) {
-      const signer = createSigner(identity.secretKey)
-      try {
-        return await work(signer)
-      } finally {
-        signer.destroy()
-      }
-    },
-  }
+/**
+ * The same team, read again from the profile folder after an operation of
+ * this run changed it (the first deploy adds a server, and with it a team
+ * list), and proved again as `openTeam` proves it, against the team code
+ * read from the keychain when `team` was opened. The keychain is not read a
+ * second time: the key stays where it was, inside `team.withSigner`, so one
+ * run reads it once (specs/006-cli-small-features, research R7). A profile
+ * that now names another key is not this team's.
+ */
+export function reopenTeam(team: Team): Team {
+  const profile = team.store.load()
+  if (profile.keyName !== team.profile.keyName) throw new CliError(`The profile names another signing key than it did a moment ago. ${TAMPERED}`)
+  return { ...verifiedProfile(team.store, profile, team.teamCode), withSigner: team.withSigner }
 }
 
 /** The verified team an operation works with: the one this run of a command opened already, or opened now. */

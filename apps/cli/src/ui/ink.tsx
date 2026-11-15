@@ -14,7 +14,9 @@ import { discardTypedAhead } from "./type-ahead"
 import { REMOTE_MARK, type Cell, type ListRow, type LogOutput, type Ui } from "./types"
 
 type Item =
-  | { id: number; kind: "info" | "success" | "error" | "remote" | "note"; text: string }
+  | { id: number; kind: "info" | "error" | "remote" | "note"; text: string }
+  /** `detail`: dim, two spaces after the words (`✔ Runner installed  52 MB, checksum verified`, board "zekno deploy from nothing"). */
+  | { id: number; kind: "success"; text: string; detail?: string }
   /** `firstBold`: the first sentence in bold (`zekno version`'s newer release, board "The version, and a newer release"). */
   | { id: number; kind: "warn"; text: string; firstBold?: boolean }
   | { id: number; kind: "field"; label: string; value: string }
@@ -317,7 +319,17 @@ function Line({ item, columns }: { item: Item; columns: number }) {
       <Box flexShrink={0} marginRight={1}>
         <Text color={COLOR[item.kind]}>{MARK[item.kind]}</Text>
       </Box>
-      {item.kind === "warn" && item.firstBold ? <QuestionWords text={item.text} /> : <Text>{item.text}</Text>}
+      {item.kind === "warn" && item.firstBold ? (
+        <QuestionWords text={item.text} />
+      ) : item.kind === "success" && item.detail !== undefined ? (
+        <Text>
+          {item.text}
+          {"  "}
+          <Text dimColor>{item.detail}</Text>
+        </Text>
+      ) : (
+        <Text>{item.text}</Text>
+      )}
     </Box>
   )
 }
@@ -544,7 +556,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
 
   return {
     info: (text) => add({ kind: "info", text }),
-    success: (text) => add({ kind: "success", text }),
+    success: (text, detail) => add({ kind: "success", text, ...(detail === undefined ? {} : { detail }) }),
     warn: (text, options) => add({ kind: "warn", text, ...(options?.firstBold ? { firstBold: true } : {}) }),
     error: (text) => add({ kind: "error", text }),
     note: (text) => add({ kind: "note", text }),

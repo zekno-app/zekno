@@ -2,6 +2,9 @@ import { remoteThroughUi, type Deps } from "../context"
 import { addServer, listServers, prepareServerAdd, prepareServerUpdate, runnerWarning, updateRunner } from "../ops/server"
 import { RUNNER_RELEASE } from "../runner-release"
 
+/** Said after a server reached over SSH is added: where its identity rests. The first deploy says it too (asking/first-deploy.ts, F4). */
+export const SSH_IDENTITY = "You reached this server over SSH, so its identity rests on SSH's host verification."
+
 /**
  * Connects a server: over SSH with no runner path, the runner is found or
  * installed first; then the runner sets itself up for this team and an admin
@@ -40,7 +43,7 @@ export async function serverAdd(
   deps.ui.success(`Connected "${result.name}" and added it to the team list.`)
   deps.ui.field("Server code", result.code)
   if (result.target.kind === "ssh") {
-    deps.ui.info("You reached this server over SSH, so its identity rests on SSH's host verification.")
+    deps.ui.info(SSH_IDENTITY)
   }
   // A runner of another version than this zekno's is said once, on standard error.
   const warning = result.relation && runnerWarning(result.name, result.runner?.version, result.relation, (deps.release ?? RUNNER_RELEASE).version)

@@ -67,7 +67,6 @@ export type LogOutput = { time: string; service: string; text: string }
  */
 export interface Ui {
   info(text: string): void
-  success(text: string): void
   /**
    * Something the person should notice. Goes to standard error in plain
    * output. At a terminal, with `firstBold`, its first sentence is bold and
@@ -76,6 +75,13 @@ export interface Ui {
    * drawn in the text colour whole. Plain output is the same either way.
    */
   warn(text: string, options?: { firstBold?: boolean }): void
+  /**
+   * A result: `✔` and its words at a terminal. `detail`, when given, is drawn
+   * dim after two spaces, as the board "zekno deploy from nothing" draws
+   * `✔ Runner installed  52 MB, checksum verified`; plain output prints the
+   * same words, two spaces apart.
+   */
+  success(text: string, detail?: string): void
   /** Why a command failed. Goes to standard error in plain output. */
   error(text: string): void
   /**

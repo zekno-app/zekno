@@ -354,6 +354,58 @@ The deploy number is used either way.
 zekno deploy --app api --server prod -f compose.yaml
 ```
 
+At a terminal, `zekno deploy` run in a project folder first sets up what is
+missing, in this order. Each thing is kept as soon as it is made.
+
+1. Your key. It asks your name, creates the key in the system keychain as
+   `zekno init` does, and shows the team code.
+2. A server. It asks where the server is (`user@host`) and a name for it,
+   installs the runner as `zekno server add` installs it, and shows the server
+   code. With one server it uses that one and says so. With several it asks
+   which.
+3. The app. It offers the apps on that server, and `+ a new app` with the
+   folder's name filled in. When it asked for the server or the app, it asks
+   whether to remember this folder: yes writes a signed `zekno.json`, as
+   `zekno link` does.
+4. The values the Compose file expects that have no secret yet. Each is asked
+   with nothing shown as you type. Esc skips one, and the next run asks for it
+   again.
+5. Then the deploy.
+
+```text
+$ zekno deploy
+  Nothing is set up on this machine yet. Three things first: your key, a server, this app.
+
+? Your name › ada
+✔ Key created. It is in your system keychain.
+  Team code    J4QF-AM29-F01W-PYWM-CS8P
+  Identifies your team. A server checks it before it agrees to obey your team.
+
+? Where is the server? › deploy@203.0.113.7
+? A name for it › prod
+✔ Connected over SSH
+✔ Docker with Compose found
+✔ Runner installed  52 MB, checksum verified
+✔ Added prod to the signed team list
+  Server code  MM4G-GPD7-M9VM-ACGJ-Y48R
+  Identifies this server's key. Teammates compare it before they trust the server.
+  You reached this server over SSH, so its identity rests on SSH's host verification.
+
+? Name for this app › demo
+? Remember this folder? It writes zekno.json, so it always deploys demo to prod. (y/N) yes
+
+! compose.yaml expects 1 value that has no secret yet.
+? Value for DATABASE_URL (demo on prod): (hidden)
+
+  (the deploy panel and stages, as for any deploy)
+✔ demo is live on prod in 6.1s
+```
+
+Esc or Ctrl-C leaves any question. What was made before it is kept, and running
+`zekno deploy` again carries on from there. A detail given by a flag or by a
+linked folder is never asked for. With no terminal, `zekno deploy` asks nothing
+and stops as before.
+
 ### zekno rollback
 
 Deploys an earlier service definition again, under the next number, with the

@@ -15,6 +15,7 @@ import { inkUi } from "../../src/ui/ink"
 import { plainUi } from "../../src/ui/plain"
 import type { ListRow } from "../../src/ui/types"
 import { machine, screenOf } from "../helpers"
+import { shows, terminal, until } from "./terminal"
 
 const UP = "\x1b[A"
 const DOWN = "\x1b[B"
@@ -22,59 +23,6 @@ const ENTER = "\r"
 const ESC = "\x1b"
 const CTRL_C = "\x03"
 const BACKSPACE = "\x7f"
-
-/**
- * A stand-in terminal: an input that says it is a terminal, records each
- * change of raw mode and takes keys from the test, and an output that keeps
- * what Ink writes. Ink draws into it as into a person's terminal.
- */
-function terminal(columns = 100, rows = 30) {
-  const modes: boolean[] = []
-  const input = Object.assign(new PassThrough(), {
-    isTTY: true,
-    isRaw: false,
-    setRawMode(mode: boolean) {
-      modes.push(mode)
-      input.isRaw = mode
-      return input
-    },
-    ref: () => input,
-    unref: () => input,
-  })
-  let raw = ""
-  const output = Object.assign(
-    new Writable({
-      write(chunk, _encoding, done) {
-        raw += String(chunk)
-        done()
-      },
-    }),
-    { columns, rows, isTTY: true }
-  )
-  const ui = inkUi({ stdin: input as unknown as NodeJS.ReadStream, stdout: output as unknown as NodeJS.WriteStream, interactive: true })
-  return {
-    ui,
-    input,
-    modes,
-    /** Keys typed, as a terminal hands them over. */
-    keys: (text: string) => void input.write(text),
-    /** The lines on the screen now, empty ones left out. */
-    lines: () => screenOf(raw).filter(Boolean),
-    raw: () => raw,
-  }
-}
-
-/** Waits until `ready` holds, a few seconds at most. */
-async function until(ready: () => boolean, what: string): Promise<void> {
-  const started = Date.now()
-  while (!ready()) {
-    if (Date.now() - started > 3000) throw new Error(`never happened: ${what}`)
-    await Bun.sleep(5)
-  }
-}
-
-/** Waits until a line on the screen is exactly `line`. */
-const shows = (t: ReturnType<typeof terminal>, line: string) => until(() => t.lines().includes(line), `the line ${JSON.stringify(line)}`)
 
 /** A moment for Ink to draw, when a key is expected to change nothing. */
 const settle = () => Bun.sleep(60)
