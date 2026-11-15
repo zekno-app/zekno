@@ -8,7 +8,8 @@ import { listKey } from "./input"
 import { openLogs } from "./logs"
 import { setSecretScreen } from "./set-secret"
 import { go, push, replaceTop, stay } from "./steps"
-import type { AppRow, Screen, ServerRow, State } from "./types"
+import type { AppRow } from "../../shared/views"
+import type { Screen, ServerRow, State } from "./types"
 
 type HomeScreen = Extract<Screen, { name: "home" }>
 

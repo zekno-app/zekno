@@ -8,7 +8,8 @@ import type { EventOf, Step } from "./events"
 import { isText } from "./input"
 import { go, keep, push, replaceTop, stay } from "./steps"
 import { withAppRows } from "./team"
-import { DEPLOY_LINES, type DeployProgress, type Screen, type State } from "./types"
+import type { DeployProgress } from "../../shared/deploy"
+import { DEPLOY_LINES, type Screen, type State } from "./types"
 
 /** The deploy screen's one key of its own: `o` shows or hides Docker's output. */
 export const onDeploy = (state: State, screen: Extract<Screen, { name: "deploy" }>, key: AppKey): Step | undefined =>

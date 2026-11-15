@@ -24,7 +24,6 @@
  * Like the rest of what `cli.ts` loads, this module loads neither Ink nor
  * React (main.ts loads the interface only once DEV is out of the environment).
  */
-import { RUNNER_PROTOCOL } from "@workspace/core"
 import { resolve } from "node:path"
 
 import { acceptedLinks } from "../project/accepted"
@@ -39,12 +38,13 @@ import { AppTaken, checkApp, prepareDeploy } from "../ops/deploy"
 import { createTeam } from "../ops/init"
 import { linkFolder, unlinkWritten, writtenLink, type WrittenLink } from "../ops/link"
 import { listSecrets, prepareSecretSet, setSecret } from "../ops/secret"
-import { addServer, prepareServerAdd, runnerRelation, runnerWarning } from "../ops/server"
+import { addServer, foundDetail, prepareServerAdd, runnerWarning } from "../ops/server"
 import { findServer, isMemberName, NAME, profileStore, type Server } from "../profile/profile"
 import { findProject, notSignedHere, withProject, type Details, type FromProject } from "../project/project"
 import { RUNNER_RELEASE } from "../version/runner-release"
 import { sanitize } from "../server/sanitize"
 import { SSH_DESTINATION } from "../server/transport"
+import { megabytes } from "../shared/sizes"
 import type { ListQuestion, Ui } from "../ui/types"
 import { whichApp, whichServer, type How } from "./asking"
 
@@ -95,28 +95,6 @@ export function openingLine(missing: { key: boolean; server: boolean; app: boole
   const things = [missing.key ? "your key" : "", missing.server ? "a server" : "", missing.app ? "this app" : ""].filter(Boolean)
   const count = `${["One", "Two", "Three"][things.length - 1]} ${things.length === 1 ? "thing" : "things"} first: ${things.join(", ")}.`
   return missing.key ? `Nothing is set up on this machine yet. ${count}` : count
-}
-
-/**
- * A size in bytes as the boards write it: "52 MB". The words of the app's
- * add-server screen (`megabytes` in app/effects/effects.ts, held equal by a test);
- * not imported from there, since that module brings Ink with it.
- */
-export const megabytes = (bytes: number): string => `${Math.max(1, Math.round(bytes / 1_000_000))} MB`
-
-/**
- * What is said beside a runner that was already on the server: its version,
- * and whether it is out of date or newer than this zekno. The words of the
- * app's add-server screen (`foundDetail` in app/effects/effects.ts, held equal by a
- * test), not imported from there for the same reason. The installer reports
- * a version only, already held to the version grammar, and never a protocol.
- */
-export function runnerFoundDetail(version: string | undefined, carried: string): string {
-  if (version === undefined) return "no version reported, out of date"
-  const { relation } = runnerRelation("session", { version, protocol: RUNNER_PROTOCOL }, carried)
-  if (relation === "older") return `version ${version}, out of date`
-  if (relation === "newer") return `version ${version}, newer than this zekno`
-  return `version ${version}`
 }
 
 /**
@@ -360,7 +338,7 @@ async function connectServer(deps: Deps, name: string, destination: string, made
   const installed = (event: InstallEvent) => {
     if (event.kind === "connected") ui.success("Connected over SSH")
     else if (event.kind === "docker") ui.success("Docker with Compose found")
-    else if (event.kind === "runner") ui.success("Runner found", runnerFoundDetail(event.version, carried))
+    else if (event.kind === "runner") ui.success("Runner found", foundDetail(event.version, carried))
     else if (event.kind === "download") bytes = event.bytes
     else if (event.kind === "install") ui.success("Runner installed", `${bytes === undefined ? "" : `${megabytes(bytes)}, `}checksum verified`)
   }

@@ -30,7 +30,8 @@ import { hiddenPromptOpen, refreshAllowed, textQuestionOpen, tooSmall, top } fro
 import { onHiddenPrompt, onSetSecret, secretRefused, secretSaved, setSecretScreen, typeSecretName } from "./set-secret"
 import { go, keep, pop, push, quit, replaceTop, stay, updateScreens } from "./steps"
 import { appStates, clampHome, serverReached, withApps } from "./team"
-import { RUNNER_LINES, type Linked, type Notice, type Question, type Screen, type Start, type State, type TeamView } from "./types"
+import type { Notice } from "../../shared/notice"
+import { RUNNER_LINES, type Linked, type Question, type Screen, type Start, type State, type TeamView } from "./types"
 import { teamCreated, typeName } from "./welcome"
 
 // ---------------------------------------------------------------------------

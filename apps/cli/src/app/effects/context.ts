@@ -14,7 +14,8 @@ import { appDetails, appsOf } from "../../shared/views"
 import { RUNNER_RELEASE } from "../../version/runner-release"
 import { askingConnect, oneAtATime, type Terminal } from "../hand-over"
 import type { AppEvent } from "../state/events"
-import type { Notice, Start } from "../state/types"
+import type { Notice } from "../../shared/notice"
+import type { Start } from "../state/types"
 
 /** The sentence for a failure a person can act on, or undefined for one nobody planned for. */
 export function reasonOf(error: unknown): string | undefined {

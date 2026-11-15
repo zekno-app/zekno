@@ -8,12 +8,10 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFile
 import { dirname, join, resolve } from "node:path"
 
 import { runner, tempDir } from "../../../runner/test/support/helpers"
-import { READ_LIMIT_MS } from "../../src/app/effects/servers"
 import {
   APP_NAME_RULE as A11,
   appRows,
   appTaken as A12,
-  ASKING_LIMIT_MS,
   folderName,
   NO_SERVER_YET as A4,
   NO_TEAM_AT_TERMINAL as A3,
@@ -126,9 +124,8 @@ describe("the building blocks", () => {
 })
 
 describe("the building blocks: the sentences and the limit", () => {
-  test("A3, and the read limit is the app's own", () => {
+  test("A3", () => {
     expect(A3).toBe("No team on this machine yet. Run `zekno deploy` in a project folder, or `zekno init --name <you>`.")
-    expect(ASKING_LIMIT_MS).toBe(READ_LIMIT_MS)
   })
 
   test("main.ts reaches neither Ink nor React through its static imports: the interface is loaded only once DEV is out of the environment", () => {

@@ -12,7 +12,6 @@ import { join, resolve } from "node:path"
 
 import runnerPackage from "../../../runner/package.json"
 import { runner, tempDir } from "../../../runner/test/support/helpers"
-import { foundDetail, megabytes as appMegabytes } from "../../src/app/effects/add-server"
 import { acceptedLinks } from "../../src/project/accepted"
 import { appTaken } from "../../src/asking/asking"
 import {
@@ -20,12 +19,10 @@ import {
   expectsValues,
   KEPT_SO_FAR,
   KEY_CREATED,
-  megabytes,
   MEMBER_NAME_RULE,
   NOTHING_MORE,
   openingLine,
   rememberFolder,
-  runnerFoundDetail,
   SERVER_CODE_ABOUT,
   SERVER_NAME_RULE,
   serverTaken,
@@ -203,11 +200,6 @@ describe("the building blocks of the first deploy", () => {
     expect(prepareServerAdd(m.deps, "prod", { ssh: "-oProxyCommand=x" })).rejects.toThrow(DESTINATION_RULE)
     expect(prepareServerAdd(m.deps, "Prod", { ssh: DESTINATION })).rejects.toThrow(SERVER_NAME_RULE)
     expect(prepareServerAdd(m.deps, "dev", { ssh: DESTINATION })).rejects.toThrow(serverTaken("dev"))
-  })
-
-  test("the runner's size and what is said of a runner found are the app's add-server screen's words", () => {
-    for (const bytes of [0, 1, 499_999, 500_000, 1_000_000, 52_400_000]) expect(megabytes(bytes)).toBe(appMegabytes(bytes))
-    for (const version of [undefined, "0.0.1", OWN, "99.0.0", `${OWN}-dev.1`]) expect(runnerFoundDetail(version, OWN)).toBe(foundDetail(version, OWN))
   })
 
   test("reopenTeam reads the profile again and proves it again, without the keychain; a changed profile is refused", async () => {

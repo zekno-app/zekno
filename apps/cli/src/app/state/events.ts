@@ -4,9 +4,10 @@
  * asks for, and a step, the next state with those effects.
  */
 import type { DeployStage } from "../../ops/deploy"
-import type { RunState } from "../../ops/status"
+import type { AppRow, DeployRow, RunState, SecretRow } from "../../shared/views"
 import type { AppKey } from "../keys"
-import type { AddStepName, AppRow, DeployRow, Linked, LogLine, Notice, RunnerRow, SecretRow, State, TeamView } from "./types"
+import type { Notice } from "../../shared/notice"
+import type { AddStepName, Linked, LogLine, RunnerRow, State, TeamView } from "./types"
 
 // ---------------------------------------------------------------------------
 // Effects: what the reducer asks for. effects/ runs them.

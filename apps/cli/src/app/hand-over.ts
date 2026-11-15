@@ -14,7 +14,8 @@
  * Nothing is sent twice that could matter: a second attempt is made only when
  * the first ended before the server answered a single byte, with SSH's own
  * status, and the last thing on standard error was SSH's own closing line
- * for a login or host key it could not get past (`saysWouldAsk`). SSH writes
+ * for a login or host key it could not get past (server/batch.ts
+ * `wouldHaveAsked`). SSH writes
  * that line and stops before the remote command starts. A remote command
  * that ran and failed with "Permission denied" somewhere in what it wrote
  * does not end that way, so its request is not sent again.
@@ -25,31 +26,9 @@
  * kept.
  */
 import type { Deps } from "../cli/context"
+import { recording, wouldHaveAsked } from "../server/batch"
 import { sanitize } from "../server/sanitize"
-import type { ErrorLines, RunnerProcess, Transport } from "../server/transport"
-
-/** Lines of an attempt kept to decide on: the last ones written, since SSH's closing line comes last. */
-const KEPT_LINES = 64
-
-/**
- * SSH's closing line when it stopped where it would have asked: whole lines,
- * in the form OpenSSH writes them. `<user@host>: Permission denied (<methods>).`
- * for a password or passphrase, and the host key line for an unknown or
- * changed host key.
- */
-const DENIED = /^[^\s:]{1,255}: Permission denied \([a-z0-9,-]{1,128}\)\.$/
-const HOST_KEY = "Host key verification failed."
-
-/**
- * Whether the last thing written on standard error is SSH's closing line.
- * Only the last line counts, and only whole: the words alone, anywhere in
- * what a remote command wrote, say nothing about SSH.
- */
-function saysWouldAsk(lines: readonly string[]): boolean {
-  const written = lines.map((line) => line.trim()).filter((line) => line !== "")
-  const last = written.at(-1)
-  return last !== undefined && (last === HOST_KEY || DENIED.test(last))
-}
+import type { RunnerProcess, Transport } from "../server/transport"
 
 /** How long to wait, once SSH has exited, for the last of what it wrote on standard error. */
 const ERRORS_GRACE_MS = 1000
@@ -60,23 +39,8 @@ const ERRORS_GRACE_MS = 1000
  * before any answer, and SSH said why.
  */
 export function needsAnswers(attempt: { exitCode: number; answered: boolean; lines: readonly string[] }): boolean {
-  return !attempt.answered && attempt.exitCode === 255 && saysWouldAsk(attempt.lines)
+  return !attempt.answered && attempt.exitCode === 255 && wouldHaveAsked(attempt.lines)
 }
-
-/**
- * For what the app reads on its own, every few seconds, with nobody having
- * asked: SSH in batch mode only, and the terminal never handed over. What SSH
- * writes on standard error goes to `lines` (the last few), so that a failure
- * where SSH would have asked can be told from others (`wouldHaveAsked`).
- * A runner on this machine is reached as usual.
- */
-export function batchOnly(connect: Deps["connect"], lines: string[]): Deps["connect"] {
-  return (target, localRunner, options = {}) =>
-    connect(target, localRunner, { ...options, batch: true, errorLines: recording(lines, undefined) })
-}
-
-/** Whether SSH said it stopped where it would have asked for a password, a passphrase or a host key. */
-export const wouldHaveAsked = (lines: readonly string[]): boolean => saysWouldAsk(lines)
 
 /** What SSH's question is about, shown on the normal screen before SSH asks. */
 export const handOverNote = (destination: string): string =>
@@ -113,15 +77,6 @@ export function oneAtATime(terminal: Terminal): Terminal {
         }
       )
     },
-  }
-}
-
-/** Keeps the last lines an attempt wrote, and passes every line on. */
-export function recording(lines: string[], out: ErrorLines | undefined): ErrorLines {
-  return (line) => {
-    lines.push(line)
-    if (lines.length > KEPT_LINES) lines.shift()
-    return out?.(line)
   }
 }
 

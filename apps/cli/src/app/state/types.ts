@@ -6,8 +6,9 @@
  */
 import type { TeamTrust } from "@workspace/core"
 
-import type { DeployStage } from "../../ops/deploy"
-import type { RunState } from "../../ops/status"
+import type { DeployProgress } from "../../shared/deploy"
+import type { Notice } from "../../shared/notice"
+import type { AppRow, DeployRow, SecretRow } from "../../shared/views"
 
 /** FR-007: the smallest window the app draws itself in. */
 export const MIN_COLUMNS = 80
@@ -30,34 +31,7 @@ export const RUNNER_LINES = 200
 // ---------------------------------------------------------------------------
 // What the app knows
 
-/** Whether an app's services are running, as the runner last said (ops/status.ts). */
-export type { RunState }
-
-/**
- * One app on Home. The deploy number, time, result, signer and secret count
- * are those of the latest deploy in this machine's history that verifies
- * (views.ts), so they are known even when the server cannot be reached.
- */
-export type AppRow = {
-  name: string
-  deploy?: number
-  at?: string
-  state: RunState
-  outcome?: DeployRow["outcome"]
-  /** Who signed the latest deploy. */
-  signer?: string
-  /** How many secrets the latest deploy carried. */
-  secrets?: number
-  /** The deploy `r` returns to on Home: the accepted one before the latest. */
-  previous?: number
-  /**
-   * The last deploy its runner accepted, as the runner last said. Undefined
-   * until the server answers, and once it cannot be reached: then `deploy`,
-   * from this machine's history, is shown instead.
-   */
-  accepted?: number
-}
-
+/** A server on Home, with its apps (shared/views.ts `AppRow`). */
 export type ServerRow = {
   name: string
   /** The SSH destination. Undefined for a runner on this machine. */
@@ -89,59 +63,8 @@ export type RunnerRow = { version?: string; relation: "older" | "same" | "newer"
 /** The verified team, as the screens show it. `code` is the team code, which servers check. */
 export type TeamView = { member: string; version: number; code?: string; servers: ServerRow[] }
 
-/** One deploy in an app's history. Everything but `outcome` is read from under the deploy's signature. */
-export type DeployRow = {
-  sequence: number
-  outcome: "sent" | "started" | "start_failed"
-  at: string
-  signer?: string
-  /** The version of the team list it was signed with. */
-  teamVersion?: number
-  /** Each service of its Compose file, as `web (caddy:2)`. */
-  services?: string[]
-  secrets?: { name: string; version: number }[]
-  /** It ran the same service definition as this earlier deploy, and not the one just before it. */
-  rollbackTo?: number
-}
-export type SecretRow = {
-  name: string
-  version: number
-  removed: boolean
-  /** Set or removed after the latest deploy the runner accepted: it takes effect on the next deploy. */
-  afterDeploy?: boolean
-}
 /** One line of an app's logs. Its text was cleaned when it arrived (session.ts). */
 export type LogLine = { time: string; service: string; line: string }
-
-/** A line on the current screen: the result of something done elsewhere, or why something was not done. */
-export type Notice = { tone: "success" | "error" | "warning" | "info"; text: string }
-
-/** A deploy started from the app, kept until the app closes. */
-export type DeployProgress = {
-  server: string
-  app: string
-  /** Known from the "checked" stage on. */
-  sequence?: number
-  secrets?: number
-  stage?: DeployStage
-  /** Docker's output, cleaned, the last `DEPLOY_LINES`. */
-  lines: string[]
-  running: boolean
-  /** How it ended. `error` is a refusal or a failure before the runner answered. */
-  outcome?: "started" | "start_failed" | "error"
-  /** When it began, in milliseconds, for the time shown beside it. */
-  since: number
-  /** When it ended, in milliseconds. */
-  endedAt?: number
-  /** Where the service definition comes from: a file, or an earlier deploy. */
-  from?: string
-  /** The deploy it takes over from, when there was one. */
-  replaces?: number
-  /** The names of the secrets it carries. */
-  secretNames?: string[]
-  /** The line that says how it ended. */
-  result?: Notice
-}
 
 /** The steps of adding a server, in order (board "Add a server"). */
 export const ADD_STEPS = ["connect", "docker", "runner", "set_up", "added"] as const

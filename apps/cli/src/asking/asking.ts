@@ -16,12 +16,12 @@
 import { realpathSync } from "node:fs"
 import { basename } from "node:path"
 
-import { batchOnly } from "../app/hand-over"
-import { appsOf, latestFirst } from "../shared/views"
+import { appsOf, latestFirst, type RunState } from "../shared/views"
 import { reach, type Deps, type Team } from "../cli/context"
 import { CliError, MISSING_APP, MISSING_SERVER, UsageError } from "../cli/errors"
-import { readOver, stateOf, type RunState } from "../ops/status"
+import { readOver, stateOf } from "../ops/status"
 import { findServer, NAME, type Profile, type Server } from "../profile/profile"
+import { batchOnly, READ_LIMIT_MS } from "../server/batch"
 import { sanitize } from "../server/sanitize"
 import { withSession } from "../server/session"
 import type { ListRow } from "../ui/types"
@@ -46,14 +46,6 @@ export const appTaken = (server: string, app: string): string => `${server} alre
 
 /** The row deploy adds to the list of apps, last (mock-up 2). */
 export const NEW_APP = "+ a new app"
-
-/**
- * How long the read of a server's apps may take: 20 seconds, the limit of the
- * app's own reads (`READ_LIMIT_MS` in app/effects/effects.ts, held equal by a test).
- * Not imported from there: that module brings the full-screen app, and Ink
- * with it, which main.ts loads only once `DEV` is out of the environment.
- */
-export const ASKING_LIMIT_MS = 20_000
 
 /** How a detail was found: a flag, the linked folder, the one server, a question, or made in this run (the first deploy). */
 export type How = "given" | "linked" | "only" | "asked" | "made"
@@ -108,7 +100,7 @@ async function readApps(deps: Deps, team: Team, server: Server, limitMs: number)
 export async function appRows(deps: Deps, team: Team, server: Server, options: { limitMs?: number } = {}): Promise<ListRow<string>[]> {
   const known = appsOf(team, server, deps.home)
   const at = new Map(known.map((row) => [row.name, row.at]))
-  const read = await deps.ui.step(`Asking ${server.name}`, () => readApps(deps, team, server, options.limitMs ?? ASKING_LIMIT_MS))
+  const read = await deps.ui.step(`Asking ${server.name}`, () => readApps(deps, team, server, options.limitMs ?? READ_LIMIT_MS))
   const apps = read ?? known.map((row) => ({ name: row.name, deploy: row.deploy, state: "unknown" as RunState }))
   return apps
     .map((app) => ({ ...app, at: at.get(app.name) }))

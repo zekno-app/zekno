@@ -9,9 +9,11 @@ import { useTheme } from "../../ui/terminal/theme"
 import { Frame, Header, Trail } from "../frame"
 import { appViewOf } from "../state/app"
 import { CHOICES } from "../state/questions"
-import type { DeployRow, RunState, Screen, SecretRow, State } from "../state/types"
+import type { Screen, State } from "../state/types"
+import type { DeployRow, RunState, SecretRow } from "../../shared/views"
 import { clockTime } from "../../shared/time"
-import { Cell, Fields, Marker, Pane, Rule, StateCell } from "./parts"
+import { Fields } from "../../ui/parts/fields"
+import { Cell, Marker, Pane, Rule, StateCell } from "./parts"
 import { HINTS } from "./placeholder"
 
 type AppScreenState = Extract<Screen, { name: "app" }>

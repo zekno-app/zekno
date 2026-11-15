@@ -27,7 +27,6 @@ import { CoreError, RunnerStatusSchema, type RunnerVersion } from "@workspace/co
 import { lstatSync } from "node:fs"
 import { join } from "node:path"
 
-import { batchOnly, wouldHaveAsked } from "../app/hand-over"
 import { readCompose, type ComposeSource } from "../project/compose-read"
 import { KeyEntryError, openTeam, reach, readIdentity, type OpDeps, type Team } from "../cli/context"
 import { CliError } from "../cli/errors"
@@ -36,6 +35,7 @@ import type { KeyStore } from "../profile/keystore"
 import { findServer, profileStore, type Profile, type Server } from "../profile/profile"
 import { DEFAULT_COMPOSE, findProject, shownPath, standingOf, type ProjectLink } from "../project/project"
 import { RUNNER_RELEASE } from "../version/runner-release"
+import { batchOnly, READ_LIMIT_MS, wouldHaveAsked } from "../server/batch"
 import { sanitize } from "../server/sanitize"
 import { runCheck, type CheckRead } from "../server/check-script"
 import { openSession, type Session } from "../server/session"
@@ -173,9 +173,6 @@ export const LOG_IN_WITH_HOME = "Log in as a user with a home folder"
  * the command that says why. Not in contracts/doctor.md: needs approval.
  */
 export const seeWhyHere = (server: string): string => `Run zekno status --server ${server} to see why`
-
-/** How long each connection to a server may take: 20 seconds, as the app's reads (`READ_LIMIT_MS`, held equal by a test). */
-export const DOCTOR_LIMIT_MS = 20_000
 
 /** How many servers are checked at the same time. */
 export const SERVERS_AT_ONCE = 4
@@ -454,7 +451,7 @@ export async function runDoctor(deps: OpDeps, options: { server?: string; limitM
   const team = profile.team
   if (team) {
     const chosen = options.server === undefined ? team.profile.servers : [findServer(team.profile, options.server)]
-    const limitMs = options.limitMs ?? DOCTOR_LIMIT_MS
+    const limitMs = options.limitMs ?? READ_LIMIT_MS
     servers = await atMost(options.at ?? SERVERS_AT_ONCE, chosen, async (server) => ({
       name: server.name,
       where: server.target.kind === "ssh" ? sanitize(server.target.destination) : "this machine",

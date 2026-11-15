@@ -9,23 +9,15 @@ import type { RunnerStatus, RunnerVersion } from "@workspace/core"
 
 import { openTeam, reach, type Team } from "../../cli/context"
 import { runnerRelation, runnerWarning, type RunnerRelation } from "../../ops/server"
-import { locateServer, readOver, stateOf, type AppStates, type RunState, type StatusResult } from "../../ops/status"
+import { locateServer, readOver, stateOf, type AppStates, type StatusResult } from "../../ops/status"
 import type { Server } from "../../profile/profile"
+import { batchOnly, READ_LIMIT_MS, recording, wouldHaveAsked } from "../../server/batch"
 import { sanitize } from "../../server/sanitize"
 import { openSession, SshUnreachable, type Session, type SessionMode } from "../../server/session"
 import type { Target } from "../../server/transport"
-import { appNames } from "../../shared/views"
-import { batchOnly, recording, wouldHaveAsked } from "../hand-over"
+import { appNames, type RunState } from "../../shared/views"
 import type { RunnerRow } from "../state/types"
 import { reasonOf, routeErrorLines, type Context } from "./context"
-
-/**
- * How long a read in the background may take: over a server's kept session,
- * or connecting again in batch mode and reading. Past it the session is
- * closed and the server shown as not reached, never with state that looks
- * current when it is not.
- */
-export const READ_LIMIT_MS = 20_000
 
 /**
  * A server whose kept session ended, or that could not be reached, is
@@ -220,7 +212,7 @@ export function createServers(context: Context, timing: Timing = {}) {
    * as needing an answer and is not connected to in the background again
    * until the person connects to it on purpose (`asking`). Only SSH's own
    * failure counts: its status, before the runner said a word, and its own
-   * closing line last on standard error (hand-over.ts `wouldHaveAsked`).
+   * closing line last on standard error (server/batch.ts `wouldHaveAsked`).
    */
   async function connect(team: Pick<Team, "trust">, server: Server, deliberately: boolean): Promise<void> {
     const name = server.name

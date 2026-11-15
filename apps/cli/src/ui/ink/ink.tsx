@@ -1,11 +1,10 @@
 import { Box, render, Static, Text, useInput, useWindowSize, type RenderOptions } from "ink"
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react"
 
-import type { DeployProgress } from "../../app/state/types"
 import { logClock } from "../../shared/time"
 import { CliError, Left } from "../../cli/errors"
 import type { CheckLine, DoctorReport } from "../../ops/doctor"
-import { keptLines } from "../../shared/deploy"
+import { keptLines, type DeployProgress } from "../../shared/deploy"
 import { DeployBlock, type DeployShown } from "./deploy-view"
 import { NO_TERMINAL_FOR_VALUE, readStdin } from "../plain/plain"
 import { answerPieces, isCtrlC, ListPrompt, QuestionLine, questionPieces, TypedPrompt, VALUE_EMPTY, valueHasLines, type Settled } from "./questions"

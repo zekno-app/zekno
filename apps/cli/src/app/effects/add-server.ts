@@ -2,11 +2,10 @@
  * Adding a server from the app, each step as an event, and the session it
  * was added over kept for the reads that follow.
  */
-import { RUNNER_PROTOCOL } from "@workspace/core"
-
 import { openTeam, type Team } from "../../cli/context"
-import { addServer, prepareServerAdd, runnerRelation } from "../../ops/server"
+import { addServer, foundDetail, prepareServerAdd } from "../../ops/server"
 import type { InstallEvent } from "../../server/install/install"
+import { megabytes } from "../../shared/sizes"
 import { seconds } from "../../shared/time"
 import type { Effect } from "../state/events"
 import type { AddStepName } from "../state/types"
@@ -20,23 +19,6 @@ import { relationOf, runnerRow, type Servers } from "./servers"
  * and it can never be an SSH destination (it has a space).
  */
 export const THIS_MACHINE = "this machine"
-
-/**
- * What the add-server screen says beside a runner that was already on the
- * server (contracts/versions.md, "The app"): its version, and whether it is
- * out of date or newer than this zekno. The installer reports a version only,
- * already held to the version grammar, and never a protocol.
- */
-export function foundDetail(version: string | undefined, carried: string): string {
-  if (version === undefined) return "no version reported, out of date"
-  const { relation } = runnerRelation("session", { version, protocol: RUNNER_PROTOCOL }, carried)
-  if (relation === "older") return `version ${version}, out of date`
-  if (relation === "newer") return `version ${version}, newer than this zekno`
-  return `version ${version}`
-}
-
-/** A size in bytes as the board writes it: "27 MB". */
-export const megabytes = (bytes: number): string => `${Math.max(1, Math.round(bytes / 1_000_000))} MB`
 
 /** Adding servers, one at a time. */
 export function createAdding(context: Context, servers: Servers) {

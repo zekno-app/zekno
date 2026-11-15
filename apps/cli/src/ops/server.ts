@@ -157,6 +157,21 @@ export function runnerWarning(server: string, version: string | undefined, relat
   return sentence
 }
 
+/**
+ * What is said beside a runner that was already on the server, in the app's
+ * add-server screen and in `zekno deploy`'s first run (contracts/versions.md,
+ * "The app"): its version, and whether it is out of date or newer than this
+ * zekno. The installer reports a version only, already held to the version
+ * grammar, and never a protocol.
+ */
+export function foundDetail(version: string | undefined, carried: string): string {
+  if (version === undefined) return "no version reported, out of date"
+  const { relation } = runnerRelation("session", { version, protocol: RUNNER_PROTOCOL }, carried)
+  if (relation === "older") return `version ${version}, out of date`
+  if (relation === "newer") return `version ${version}, newer than this zekno`
+  return `version ${version}`
+}
+
 /** Checks the name and how to reach the server; reads `--runner-file` once, here. */
 export async function prepareServerAdd(deps: OpDeps, name: string | undefined, options: ServerAddOptions): Promise<ServerAddPlan> {
   const team = await teamOf(deps)

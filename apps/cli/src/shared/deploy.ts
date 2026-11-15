@@ -7,6 +7,7 @@
  */
 import type { DeployInfo, DeployStage } from "../ops/deploy"
 import type { Ui } from "../ui/types"
+import type { Notice } from "./notice"
 
 /** What a deploy view is told before anything is sent. */
 export type DeployStart = {
@@ -40,6 +41,38 @@ export type DeployView = {
   progress(line: string): void
   /** The deploy ended. Resolves once the view has said so. Called once. */
   end(ending: DeployEnding): Promise<void>
+}
+
+/**
+ * A deploy as it is drawn: by the app, which keeps the one it started until
+ * it closes (app/state/), and by `zekno deploy` and `zekno rollback` at a
+ * terminal (ui/ink/deploy-view.tsx), with the same panel and stage row
+ * (ui/parts/deploy-summary.tsx).
+ */
+export type DeployProgress = {
+  server: string
+  app: string
+  /** Known from the "checked" stage on. */
+  sequence?: number
+  secrets?: number
+  stage?: DeployStage
+  /** Docker's output, cleaned, the last `DEPLOY_LINES` in the app (app/state/types.ts). */
+  lines: string[]
+  running: boolean
+  /** How it ended. `error` is a refusal or a failure before the runner answered. */
+  outcome?: "started" | "start_failed" | "error"
+  /** When it began, in milliseconds, for the time shown beside it. */
+  since: number
+  /** When it ended, in milliseconds. */
+  endedAt?: number
+  /** Where the service definition comes from: a file, or an earlier deploy. */
+  from?: string
+  /** The deploy it takes over from, when there was one. */
+  replaces?: number
+  /** The names of the secrets it carries. */
+  secretNames?: string[]
+  /** The line that says how it ended. */
+  result?: Notice
 }
 
 /** The most of Docker's lines kept during a deploy (research R5): the last ones, where it says what went wrong. */

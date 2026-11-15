@@ -17,10 +17,9 @@ import { dirname, join } from "node:path"
 
 import runnerPackage from "../../../runner/package.json"
 import { tempDir } from "../../../runner/test/support/helpers"
-import { READ_LIMIT_MS } from "../../src/app/effects/servers"
 import { doctorJson } from "../../src/commands/doctor"
 import { readCompose } from "../../src/project/compose-read"
-import { DOCTOR_LIMIT_MS, freeText, runDoctor, sessionSentence, type DoctorReport } from "../../src/ops/doctor"
+import { freeText, runDoctor, sessionSentence, type DoctorReport } from "../../src/ops/doctor"
 import { profileStore } from "../../src/profile/profile"
 import { findProject, shownPath } from "../../src/project/project"
 import { doctorCounts, SERVERS_SKIPPED } from "../../src/ui/types"
@@ -183,10 +182,6 @@ describe("the sentences of contracts/doctor.md", () => {
     expect(freeText(1)).toBe("1 MB")
     expect(sessionSentence(new Error("The runner did not answer as expected. Check that it is installed and reachable."))).toBe("did not answer as expected")
     expect(sessionSentence(new Error("The connection to the runner ended before it answered."))).toBe("The connection to the runner ended before it answered")
-  })
-
-  test("each connection's limit is the app's 20 seconds", () => {
-    expect(DOCTOR_LIMIT_MS).toBe(READ_LIMIT_MS)
   })
 })
 

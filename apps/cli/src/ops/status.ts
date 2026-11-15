@@ -4,6 +4,7 @@ import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
 import { CliError, RunnerRefused } from "../cli/errors"
 import { findServer, type Server } from "../profile/profile"
 import { namedUnreachable, withSession, type Session, type SessionMode } from "../server/session"
+import type { RunState } from "../shared/views"
 
 /** A server of the verified team, found by name. Nothing has been asked of it yet. */
 export type Located = { team: Team; server: Server }
@@ -27,9 +28,6 @@ export function checkIdentity(team: Pick<Team, "trust">, server: Server, status:
     throw new CliError(`"${server.name}" answered as a different server than the one that was connected.`)
   }
 }
-
-/** Whether an app's services are running, as the runner last said (data-model.md). */
-export type RunState = "running" | "stopped" | "partly running" | "unknown"
 
 /** One service of an app, as the runner reports it: its name, state, exit code and health, nothing else. */
 export type ServiceState = RunnerAppStates["apps"][string]["services"][number]

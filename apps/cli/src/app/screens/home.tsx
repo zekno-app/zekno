@@ -9,9 +9,11 @@ import { useTheme } from "../../ui/terminal/theme"
 import { Frame, Header, PRE_ALPHA } from "../frame"
 import { selectedApp, selectedServer } from "../state/home"
 import { CHOICES } from "../state/questions"
-import type { AppRow, Linked, Screen, ServerRow, State } from "../state/types"
+import type { Linked, Screen, ServerRow, State } from "../state/types"
+import type { AppRow } from "../../shared/views"
 import { relativeTime } from "../../shared/time"
-import { Cell, Fields, Marker, Pane, Rule, StateCell, wordsThatFit } from "./parts"
+import { Fields } from "../../ui/parts/fields"
+import { Cell, Marker, Pane, Rule, StateCell, wordsThatFit } from "./parts"
 import { HINTS } from "./placeholder"
 
 type HomeScreenState = Extract<Screen, { name: "home" }>

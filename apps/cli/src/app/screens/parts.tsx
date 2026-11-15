@@ -1,14 +1,15 @@
 /**
- * Pieces Home, the app screen and the deploy screen share: a pane as the
- * boards draw them (a box with its title on its first line), a table cell, a
- * label and its value, and an app's running state.
+ * Pieces Home and the app screen share: a pane as the boards draw them (a
+ * box with its title on its first line), a table cell, and an app's running
+ * state. A label and its value is ui/parts/fields.tsx, which the single
+ * commands draw with too.
  */
 import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
 import { MARKER } from "../../ui/parts/select"
 import { useTheme } from "../../ui/terminal/theme"
-import type { RunState } from "../state/types"
+import type { RunState } from "../../shared/views"
 
 /**
  * A pane of Home or the app screen: a rounded box with its title on its
@@ -79,26 +80,6 @@ export function Marker({ selected }: { selected: boolean }) {
   return (
     <Box width={2} flexShrink={0}>
       <Text color={theme.brand}>{selected ? MARKER : " "}</Text>
-    </Box>
-  )
-}
-
-/** Faint labels and their values, one pair to a line, as the boards' details lists. */
-export function Fields({ rows, labelWidth }: { rows: readonly (readonly [label: string, value: ReactNode])[]; labelWidth: number }) {
-  return (
-    <Box flexDirection="column">
-      {rows.map(([label, value]) => (
-        <Box key={label}>
-          <Box width={labelWidth} flexShrink={0}>
-            <Text dimColor wrap="truncate-end">
-              {label}
-            </Text>
-          </Box>
-          <Box flexGrow={1} flexShrink={1} flexBasis={0}>
-            <Text wrap="truncate-end">{value}</Text>
-          </Box>
-        </Box>
-      ))}
     </Box>
   )
 }

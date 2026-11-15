@@ -20,7 +20,56 @@ import { COMPOSE_READ_BYTES, tooManyAliases } from "../project/compose-file"
 import type { Team } from "../cli/context"
 import type { History, Server } from "../profile/profile"
 import { sanitize } from "../server/sanitize"
-import type { AppRow, DeployRow, SecretRow } from "../app/state/types"
+
+/** Whether an app's services are running, as the runner last said (data-model.md). */
+export type RunState = "running" | "stopped" | "partly running" | "unknown"
+
+/**
+ * One app on Home. The deploy number, time, result, signer and secret count
+ * are those of the latest deploy in this machine's history that verifies
+ * (`appsOf`), so they are known even when the server cannot be reached.
+ */
+export type AppRow = {
+  name: string
+  deploy?: number
+  at?: string
+  state: RunState
+  outcome?: DeployRow["outcome"]
+  /** Who signed the latest deploy. */
+  signer?: string
+  /** How many secrets the latest deploy carried. */
+  secrets?: number
+  /** The deploy `r` returns to on Home: the accepted one before the latest. */
+  previous?: number
+  /**
+   * The last deploy its runner accepted, as the runner last said. Undefined
+   * until the server answers, and once it cannot be reached: then `deploy`,
+   * from this machine's history, is shown instead.
+   */
+  accepted?: number
+}
+
+/** One deploy in an app's history. Everything but `outcome` is read from under the deploy's signature. */
+export type DeployRow = {
+  sequence: number
+  outcome: "sent" | "started" | "start_failed"
+  at: string
+  signer?: string
+  /** The version of the team list it was signed with. */
+  teamVersion?: number
+  /** Each service of its Compose file, as `web (caddy:2)`. */
+  services?: string[]
+  secrets?: { name: string; version: number }[]
+  /** It ran the same service definition as this earlier deploy, and not the one just before it. */
+  rollbackTo?: number
+}
+export type SecretRow = {
+  name: string
+  version: number
+  removed: boolean
+  /** Set or removed after the latest deploy the runner accepted: it takes effect on the next deploy. */
+  afterDeploy?: boolean
+}
 
 /** A history file's name: an app name and `.json`. Anything else in the folder is not an app. */
 const HISTORY_FILE = /^([a-z0-9][a-z0-9-]{0,62})\.json$/

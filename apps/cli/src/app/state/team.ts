@@ -6,7 +6,8 @@
 import { clampIndex } from "../../ui/parts/select"
 import type { EventOf, Step } from "./events"
 import { stay, updateScreens } from "./steps"
-import type { AppRow, ServerRow, State } from "./types"
+import type { AppRow } from "../../shared/views"
+import type { ServerRow, State } from "./types"
 
 /** Keeps each selection on Home inside its list after the team changed. */
 export function clampHome(state: State): State {
