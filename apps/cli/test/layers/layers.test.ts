@@ -106,6 +106,19 @@ function hiddenLoadsOf(code: string, loader: "ts" | "tsx"): string[] {
     .map((found) => text.slice(found.index).split("\n")[0]!.slice(0, 80))
 }
 
+/**
+ * Other ways to load code that no rule could follow (review R6): `require`
+ * used as a value (`const r = require`), `createRequire`,
+ * `import.meta.require`, a `Worker`, `eval` and `new Function`. None is used
+ * in src, and none is allowed: each is looked for in the transpiled text, as
+ * `hiddenLoadsOf` does.
+ */
+const OTHER_LOADERS: readonly RegExp[] = [/\brequire\b(?!\s*\()/g, /\bcreateRequire\b/g, /\bimport\.meta\.require\b/g, /\bnew\s+Worker\b/g, /\beval\s*\(/g, /\bnew\s+Function\b/g]
+function otherLoadersOf(code: string, loader: "ts" | "tsx"): string[] {
+  const text = new Bun.Transpiler({ loader }).transformSync(code)
+  return OTHER_LOADERS.flatMap((pattern) => [...text.matchAll(pattern)].map((found) => text.slice(found.index).split("\n")[0]!.slice(0, 80)))
+}
+
 /** The package a specifier names, without a subpath: `react/jsx-runtime` is `react`, `@workspace/core/x` is `@workspace/core`. */
 const packageOf = (spec: string): string => spec.split("/").slice(0, spec.startsWith("@") ? 2 : 1).join("/")
 
@@ -351,6 +364,19 @@ describe("the checker itself", () => {
     expect(strayTargets([{ from: "version/version.ts", to: "../package.json", kind: "value" }])).toEqual([])
   })
 
+  test("the ways review R6 found to load code unseen are each caught, and a plain import or require is not", () => {
+    const caught = (code: string) => otherLoadersOf(code, "ts").length > 0
+    expect(caught('const r = require\nexport const x = r("../app/state/steps")')).toBe(true)
+    expect(caught('import { createRequire } from "node:module"\nexport const x = createRequire(import.meta.url)("../app/state/steps")')).toBe(true)
+    expect(caught('export const x = import.meta.require("../app/state/steps")')).toBe(true)
+    expect(caught('export const w = new Worker("../app/state/steps.ts")')).toBe(true)
+    expect(caught('export const x = eval("1")')).toBe(true)
+    expect(caught('export const f = new Function("return 1")')).toBe(true)
+    expect(caught('import { a } from "./a"\nexport const x = [a, require("./b"), await import("./c")]')).toBe(false)
+    // A word in a comment or a type is not a use.
+    expect(caught('// require is not used here\nexport type Worker = { eval: string }\nexport const x = 1')).toBe(false)
+  })
+
   test("an import that is neither relative, a built-in nor a package of package.json is caught", () => {
     const found = (spec: string): Import => ({ spec, kind: "value", dynamic: false })
     const specs = ["./x", "../y", "node:fs", "bun", "bun:test", "ink", "react", "react/jsx-dev-runtime", "zod", "@workspace/core", "#app/state", "src/app/state/state", "fs", "ai", "@workspace/coreish", "@workspace"]
@@ -389,6 +415,10 @@ describe("which way imports point in apps/cli/src (plan.md, rules 1 to 4 and 6)"
 
   test("every `import(…)` and `require(…)` names its file as a plain string, so the parser reads where it leads", () => {
     expect(READ.flatMap(({ file, code }) => hiddenLoadsOf(code, file.endsWith(".tsx") ? "tsx" : "ts").map((found) => `${file}: ${found}`))).toEqual([])
+  })
+
+  test("no file loads code another way: require as a value, createRequire, import.meta.require, a Worker, eval or new Function (review R6)", () => {
+    expect(READ.flatMap(({ file, code }) => otherLoadersOf(code, file.endsWith(".tsx") ? "tsx" : "ts").map((found) => `${file}: ${found}`))).toEqual([])
   })
 
   test("every import that is not relative is a node: or bun built-in, or a package apps/cli/package.json names in dependencies", () => {

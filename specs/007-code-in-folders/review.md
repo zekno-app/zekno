@@ -315,3 +315,121 @@ but `apps/cli/src/ops/doctor.ts`, 480 lines.
 **R3.** FR-003 now states it. Recorded by the orchestrator in spec.md.
 
 **R5.** FR-008 now states it. Recorded by the orchestrator in spec.md.
+
+## 6. Second pass
+
+Written by the reviewer, after part 5, on the three commits after 29af7c4: `9a6e201` (the
+project file split), `fd37244` (Home split) and `8ba4536` (the layering test). Parts 1 to 5 are
+unchanged: parts 1 to 4 are the text of b77b1ae, line for line.
+
+### What was compared, and what was run
+
+- **The project file split.** `git show 29af7c4:apps/cli/src/project/project.ts` (665 lines)
+  against the union of `project/project.ts`, `file.ts`, `signed.ts`, `write.ts` and `shown.ts` at
+  HEAD. As multisets of trimmed lines, comments and imports included, the only lines on one side
+  are imports, the new files' opening comments, and the word `export` on `ComposePathSchema` and
+  `ProjectSchema`. A second script split both sides into top-level declarations and compared the
+  code of each by name: all 47 are identical, function bodies included. The order script found no
+  break inside a function.
+- **The checks of the signed link, read in the new files.** Each is the same text, in the same
+  order, under the same condition as at 29af7c4:
+  - `findProject` (file.ts): stops above home; `lstatSync`; the exact name in the listing; then
+    `readProject`.
+  - `readProject`: `checkEntry` on the entry (no link, a regular file, this user's), then
+    `readText`, then `JSON.parse`, then `ProjectSchema.safeParse`, then the duplicate-key check
+    (`objectKeys`), then the fields.
+  - `readText`: open with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK`, `ELOOP` said as a link,
+    `checkEntry(fstatSync(fd))` on the open file, at most `PROJECT_BYTES + 1` read, more refused,
+    strict UTF-8 (`fatal: true`) and the SHA-256 of the same bytes, `closeSync` in `finally`.
+  - `signerOf` and `standingOf` (signed.ts): no `signed`, no signer; `verifyLink` against the
+    team list; the app, the Compose file and the server named by the signed id must equal the
+    plain fields; then `isAccepted` for `used` or `new`.
+  - `useOnce` (project.ts): ask; a missing terminal becomes a `UsageError`; anything but yes
+    stops; `accept` only after a yes.
+  - `withProject`: nothing missing, nothing read; find; with both names given, only an accepted
+    file in use gives its Compose file; else the standing; unsigned is left aside at a terminal or
+    refused; `new` asks first; then the fields are filled.
+- **The two schemas now exported.** Only `project/write.ts` imports them. They parse; they read
+  no file and check no signature. Reading a project file still goes only through `findProject`,
+  since `readProject`, `readText` and `checkEntry` stay private, and a signature is still judged
+  only by `signerOf`. Code outside `project/` could already build a `ProjectLink` (an exported
+  type) and call `accept` (exported from `accepted.ts`), so the schemas give it nothing new. No
+  input from a file, a server or the hosted service reaches what a module exports. No import cycle
+  was added: `file.ts` takes `sha256Of` from `accepted.ts`, which imports nothing from `project/`.
+- **Home split.** `git show 29af7c4:apps/cli/src/app/screens/home.tsx` (673 lines) against
+  `app/screens/home/*`: the only lines on one side are imports, the new opening comments, and
+  `export` on what another new file uses. All 39 top-level declarations are identical. There is no
+  module-level state. The three importers (`app/app.tsx`, two tests) changed their import path
+  only. Nothing is drawn differently.
+- **Other files of the three commits.** In source, import lines and comments only. In tests other
+  than the layering test, import lines only.
+- **Run:** `tsc --noEmit` in `apps/cli`, no error. Single test files, all passing:
+  `test/layers/layers.test.ts` (22), `test/project/project.test.ts` (75),
+  `test/project/project-flow.test.tsx` (52), `test/app/app-screens.test.tsx` (15),
+  `test/app/app-operate.test.tsx` (46), `test/app/app-effects.test.ts` (14),
+  `test/ops/doctor.test.ts` (24), `test/e2e/e2e-screen-model.test.ts` (18),
+  `test/scenarios/first-run.test.tsx` (34), `test/ui/ink/single-commands.test.tsx` (24),
+  `test/scenarios/hardening.test.ts` (20), `test/scenarios/edge-cases.test.ts` (12),
+  `test/asking/first-deploy.test.ts` (29).
+- **The layering test, by the reviewer's own means.** HEAD's `apps/cli/src`, the test and
+  `apps/cli/package.json` were copied outside the repository. Each breach was added alone, the
+  test run, and the copy restored; backups were kept outside `src`, since a stray file in `src`
+  now fails the test by itself. The five breaches of R1:
+
+  | Breach | Fails |
+  |--------|-------|
+  | `server/batch.ts` imports `run` from `../cli/cli` | "6. cli/cli.ts is imported by main.ts only." |
+  | `cli/context.ts` re-exports `prepareDeploy` from `../ops/deploy`; `ui/parts/panel.tsx` imports it | both rule 6 tests |
+  | `import(where)` in `ui/parts/panel.tsx` | the plain-string test |
+  | `require(there)` in `ui/parts/panel.tsx` | the plain-string test |
+  | `ui/parts/bridge.js` re-exporting `app/`, imported by `panel.tsx` | the test of files and where imports land |
+
+  Also caught: `import st = require("../../app/state/state")`, an `import()` of a template
+  without an expression, `import("../../app/" + "state/state")`, a folder symlink
+  `ui/parts/appdir -> ../../app` and a file symlink to `app/state/steps.ts`. A package path that
+  climbs out (`zod/../../../apps/cli/src/app/…`, `@workspace/core/../../…`) passes the test, but
+  Bun does not resolve it (the packages' `exports`), so it is no breach.
+
+### New finding
+
+#### R6. A `require` that is not written `require("…")` still passes the layering test
+
+- **Kind:** a claim that is false. Part 5 and plan.md say the test refuses what would let a breach
+  pass unseen; one way remains.
+- **Where:** `apps/cli/test/layers/layers.test.ts`, `hiddenLoadsOf` (it looks only for
+  `import(` and `require(` followed by a plain string) and `foreignOf` (it allows every `node:`
+  built-in, `node:module` included).
+- **Evidence:** each added alone to the copy, the test passed 22 of 22:
+  - `const r = require; r("../../app/state/state")` in `ui/parts/panel.tsx`;
+  - `import { createRequire } from "node:module"` and
+    `createRequire(import.meta.url)("../app/state/steps")` in `server/batch.ts`;
+  - `import.meta.require("../../app/state/steps")` in `ui/parts/panel.tsx`.
+
+  Run by Bun from a file in `ui/parts/`, each of the three loaded `app/state/steps.ts` and returned
+  its exports. (`app/state/state.ts` itself cannot be loaded with `require`, for Bun counts it an
+  async module, but most files of `app/` can.) `new Worker(new URL("../../app/state/state.ts",
+  import.meta.url).href)` also passes the test; it was not run.
+- **Today's tree:** `apps/cli/src` uses no `require`, `createRequire`, `node:module`,
+  `import.meta.require`, `Worker`, `eval` or `new Function`, so nothing breaks a rule this way now.
+- **Confirmed by running:** yes, in the copy.
+- **Smallest fix:** since nothing in `src` uses them, fail on any `require` word,
+  `createRequire`, `import.meta.require`, an import of `node:module`, and `new Worker` in a
+  source file, read in the text the transpiler gives back.
+
+### R1 and R4
+
+- **R1:** answered for the five breaches it listed: each now fails the test, as shown above. R6 is
+  a sixth way through, which the answer does not cover.
+- **R4:** answered. Both files were split as moved text. The longest source file under the three
+  `src` folders is now `apps/cli/src/ops/doctor.ts`, 480 lines.
+
+## 7. After the second pass: what was done (written by the orchestrator, not by the reviewer)
+
+- **R6** (an indirect `require`, `createRequire`, `import.meta.require` or a `Worker` passes the
+  layering test): the test now fails on each of them, and on `eval` and `new Function`, looked
+  for in the transpiled text of every file of `apps/cli/src`. Its self-test runs the reviewer's
+  three forms and the other three, and checks that a plain `import` or `require("…")`, and the
+  same words in a comment or a type, are not caught. None of these is used in `src` today.
+- **R2**: no change. The release workflow runs the tagged commit's own script, which names the
+  path that commit has.
+- **R3** and **R5**: recorded in `spec.md` (FR-003 and FR-008).
