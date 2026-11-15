@@ -14,7 +14,9 @@ import { discardTypedAhead } from "./type-ahead"
 import { REMOTE_MARK, type Cell, type ListRow, type LogOutput, type Ui } from "./types"
 
 type Item =
-  | { id: number; kind: "info" | "success" | "warn" | "error" | "remote" | "note"; text: string }
+  | { id: number; kind: "info" | "success" | "error" | "remote" | "note"; text: string }
+  /** `firstBold`: the first sentence in bold (`zekno version`'s newer release, board "The version, and a newer release"). */
+  | { id: number; kind: "warn"; text: string; firstBold?: boolean }
   | { id: number; kind: "field"; label: string; value: string }
   | { id: number; kind: "table"; rows: Cell[][] }
   | { id: number; kind: "log"; line: LogOutput; serviceWidth: number }
@@ -315,7 +317,7 @@ function Line({ item, columns }: { item: Item; columns: number }) {
       <Box flexShrink={0} marginRight={1}>
         <Text color={COLOR[item.kind]}>{MARK[item.kind]}</Text>
       </Box>
-      <Text>{item.text}</Text>
+      {item.kind === "warn" && item.firstBold ? <QuestionWords text={item.text} /> : <Text>{item.text}</Text>}
     </Box>
   )
 }
@@ -543,7 +545,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
   return {
     info: (text) => add({ kind: "info", text }),
     success: (text) => add({ kind: "success", text }),
-    warn: (text) => add({ kind: "warn", text }),
+    warn: (text, options) => add({ kind: "warn", text, ...(options?.firstBold ? { firstBold: true } : {}) }),
     error: (text) => add({ kind: "error", text }),
     note: (text) => add({ kind: "note", text }),
     code: (label, value, about) => add({ kind: "code", label, value, about }),

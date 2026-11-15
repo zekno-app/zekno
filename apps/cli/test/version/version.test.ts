@@ -12,7 +12,8 @@ import { PassThrough, Writable } from "node:stream"
 import { tempDir } from "../../../runner/test/helpers"
 import { HELP, run } from "../../src/cli"
 import type { Deps } from "../../src/context"
-import type { Fetch } from "../../src/version/newest"
+import { newerExists, type Fetch } from "../../src/version/newest"
+import { firstSentence } from "../../src/ui/questions"
 import { RUNNER_RELEASE } from "../../src/runner-release"
 import { inkUi } from "../../src/ui/ink"
 import { plainUi } from "../../src/ui/plain"
@@ -219,6 +220,24 @@ describe("zekno version says whether a newer release exists (contracts/version.m
     expect(await drawn(carrying("runner-v0.1.0"), "version")).toEqual({ code: 0, lines: [...lines, "✔ This is the newest release."] })
     expect(await drawn(carrying("runner-v0.2.0"), "version")).toEqual({ code: 0, lines: [...lines, "! A newer release exists: 0.2.0. Update zekno to get it."] })
     expect(await drawn(carrying("fails"), "version")).toEqual({ code: 0, lines: [...lines, "  Could not check for a newer release."] })
+  })
+
+  test("at a terminal a newer release is drawn as the board draws it: its first sentence bold, the rest plain; no other warning is", async () => {
+    // Colour and bold are not written to a test's stream (no terminal to colour), so what is checked is what the interface is told.
+    expect(firstSentence(newerExists("0.2.0"))).toEqual({ first: "A newer release exists: 0.2.0.", rest: " Update zekno to get it." })
+    const m = { ...bare(github("runner-v0.2.0").fetch) }
+    m.deps.release = CARRIED
+    const warned: { text: string; options?: { firstBold?: boolean } }[] = []
+    const plain = m.deps.ui
+    m.deps.ui = { ...plain, warn: (text, options) => (warned.push({ text, ...(options === undefined ? {} : { options }) }), plain.warn(text, options)) }
+    expect(await m.zekno("version")).toBe(0)
+    expect(warned).toEqual([{ text: "A newer release exists: 0.2.0. Update zekno to get it.", options: { firstBold: true } }])
+    // Plain output is the same as before: the sentence whole, on standard error.
+    expect(m.err).toEqual(["A newer release exists: 0.2.0. Update zekno to get it."])
+    // No other warning is drawn so: only `zekno version` asks for it.
+    const source = join(import.meta.dir, "../../src")
+    const asking = [...new Bun.Glob("**/*.{ts,tsx}").scanSync(source)].filter((file) => /\.warn\([^\n]*firstBold/.test(readFileSync(join(source, file), "utf8")))
+    expect(asking).toEqual(["cli.ts"])
   })
 })
 

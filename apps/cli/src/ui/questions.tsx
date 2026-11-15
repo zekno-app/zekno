@@ -73,18 +73,28 @@ const LIST_SPARE_LINES = 4
 const FIRST_SENTENCE = /[.?](?=\s)/
 
 /**
- * A question's words as the boards of feature 006 draw them: in bold, or, for
- * a question of more than one sentence (`Remember this folder? It writes
- * zekno.json, ...`), its first sentence in bold and the rest in the text
- * colour.
+ * A text's first sentence and the rest after it, the space between included
+ * in `rest`; all of it is `first` when it is one sentence. `0.2.0.` ends a
+ * sentence only at its last full stop, the one a space follows.
+ */
+export function firstSentence(text: string): { first: string; rest: string } {
+  const end = text.search(FIRST_SENTENCE)
+  return end === -1 ? { first: text, rest: "" } : { first: text.slice(0, end + 1), rest: text.slice(end + 1) }
+}
+
+/**
+ * Words whose first sentence is bold and the rest in the text colour, as the
+ * boards of feature 006 draw a question (`Remember this folder? It writes
+ * zekno.json, ...`; a question of one sentence is bold whole) and the newer
+ * release `zekno version` reports (board "The version, and a newer release").
  */
 export function QuestionWords({ text }: { text: string }) {
-  const end = text.search(FIRST_SENTENCE)
-  if (end === -1) return <Text bold>{text}</Text>
+  const { first, rest } = firstSentence(text)
+  if (rest === "") return <Text bold>{first}</Text>
   return (
     <Text>
-      <Text bold>{text.slice(0, end + 1)}</Text>
-      {text.slice(end + 1)}
+      <Text bold>{first}</Text>
+      {rest}
     </Text>
   )
 }
@@ -161,9 +171,11 @@ export function ListPrompt<T>({ question, rows, settle }: { question: string; ro
 
 /**
  * A one-line answer to type: `? <question> › <answer>` and the cursor. Enter
- * checks it: a wrong answer stays as typed, with `! <reason>` under it, until
- * Enter is pressed again. Esc and Ctrl-C leave. A paste of several lines
- * changes nothing (`applyTextInput`).
+ * checks it: a wrong answer stays as typed, with the reason under it, until
+ * Enter is pressed again. The reason is drawn as the board "Questions in
+ * single commands" draws it: in the warning colour, in line with the
+ * question's words (column 2), with no mark. Esc and Ctrl-C leave. A paste of
+ * several lines changes nothing (`applyTextInput`).
  */
 export function TypedPrompt({
   question,
@@ -205,9 +217,9 @@ export function TypedPrompt({
         <Text inverse> </Text>
       </Text>
       {reason === undefined ? null : (
-        <Text>
-          <Text color="yellow">!</Text> {reason}
-        </Text>
+        <Box paddingLeft={2}>
+          <Text color="yellow">{reason}</Text>
+        </Box>
       )}
     </Box>
   )

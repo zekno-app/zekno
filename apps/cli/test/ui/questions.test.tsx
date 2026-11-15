@@ -198,13 +198,15 @@ describe("a typed answer (mock-up 2)", () => {
     await t.ui.close()
   })
 
-  test("a refused answer stays open as typed, with the reason under it; a paste of two lines changes nothing", async () => {
+  test("a refused answer stays open as typed, with the reason under it in line with the question's words and no mark; a paste of two lines changes nothing", async () => {
     const t = terminal()
     const answered = t.ui.ask(nameForTheNewApp((answer) => (answer === "my-folder" ? "Not that one." : undefined)))
     await shows(t, "? Name for the new app › my-folder")
     t.keys(ENTER)
-    await shows(t, "! Not that one.")
-    expect(t.lines()).toEqual(["? Name for the new app › my-folder", "! Not that one."])
+    // As the board "Questions in single commands" draws it: from column 2, under the question's words, without `!`.
+    await shows(t, "  Not that one.")
+    expect(t.lines()).toEqual(["? Name for the new app › my-folder", "  Not that one."])
+    expect(t.raw()).not.toContain("!")
     t.keys("x\ny")
     await settle()
     expect(t.lines()).toContain("? Name for the new app › my-folder")
@@ -212,6 +214,24 @@ describe("a typed answer (mock-up 2)", () => {
     await shows(t, "? Name for the new app › my-folder-2")
     t.keys(ENTER)
     expect(await answered).toBe("my-folder-2")
+    await t.ui.close()
+  })
+
+  test("a reason wider than the window goes on under itself, never at the left edge", async () => {
+    const t = terminal(40)
+    const answered = t.ui.ask(nameForTheNewApp(() => "Use lowercase letters, digits and hyphens, starting with a letter or a digit."))
+    await shows(t, "? Name for the new app › my-folder")
+    t.keys(ENTER)
+    await shows(t, "  Use lowercase letters, digits and")
+    const reason = t.lines().slice(1)
+    expect(reason.length).toBeGreaterThan(1)
+    for (const line of reason) {
+      expect(line.startsWith("  ")).toBe(true)
+      expect(line.startsWith("   ")).toBe(false)
+      expect([...line].length).toBeLessThanOrEqual(40)
+    }
+    t.keys(ESC)
+    await answered.catch(() => {})
     await t.ui.close()
   })
 

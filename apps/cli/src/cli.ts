@@ -124,7 +124,8 @@ export async function run(argv: string[], given: Deps): Promise<number> {
       const cells = versionCells(runner)
       versionLines(runner).forEach((line, index) => deps.ui.line(line, cells[index]))
       if (latest?.state === "newest") deps.ui.success(NEWEST)
-      else if (latest?.state === "newer") deps.ui.warn(newerExists(latest.version))
+      // At a terminal its first sentence is bold, as the board "The version, and a newer release" draws it; plain output is unchanged.
+      else if (latest?.state === "newer") deps.ui.warn(newerExists(latest.version), { firstBold: true })
       else if (latest?.state === "not_checked") deps.ui.note(NOT_CHECKED)
       return 0
     }

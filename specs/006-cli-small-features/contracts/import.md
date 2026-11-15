@@ -124,9 +124,9 @@ $ zekno secret import .env
   .env still holds them in plain text. Delete it, or keep it out of git.
 ```
 
-- `info(I1)`, `gap()`, then `groups(...)`: two spaces, the label padded to 12 columns, then the
-  names joined with `, `, wrapping in their own column (from column 14). A group with no name has
-  no line. `gap()`.
+- `note(I1)` (dim, set in by two columns, as the board "zekno secret import" draws it), `gap()`,
+  then `groups(...)`: two spaces, the label padded to 12 columns, then the names joined with `, `,
+  wrapping in their own column (from column 14). A group with no name has no line. `gap()`.
 - `confirm(I15, I16)` unless `--yes`. "No" (`n`, Enter, Esc, Ctrl-C): `Nothing was done.`, status
   1, nothing stored.
 - Stored: `success(I17)`, then `info(I18)`.

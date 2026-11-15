@@ -52,9 +52,12 @@ colour (`BRAND`, `ui/theme.ts`), `✔` green, `!` yellow, `✖` red, hints and s
 - Input follows `applyTextInput` (`ui/text-input.ts`): one line, at most 256 characters, control
   characters dropped, a paste ending in one line break is a paste and Enter, a paste of several
   lines changes nothing.
-- Enter: the answer is checked. When it is wrong, the line under the question is `! <reason>` (the
-  `!` yellow) and the question stays open with the answer as typed; the reason goes once Enter is
-  pressed again. Esc and Ctrl-C leave.
+- Enter: the answer is checked. When it is wrong, the reason is drawn under the question, as the
+  board "Questions in single commands" draws it: in the warning colour (yellow), set in by two
+  columns so it is in line with the question's words, with no `!`; a reason wider than the window
+  goes on under itself. The question stays open with the answer as typed; the reason goes once
+  Enter is pressed again. Esc and Ctrl-C leave. (The board decides this look, 2026-11-15; this page
+  said `! <reason>` before.)
 - After a good answer the line stays as `? Your name › ada`, without the cursor (research Q1).
 
 ## A yes-or-no question

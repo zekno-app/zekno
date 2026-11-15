@@ -68,8 +68,14 @@ export type LogOutput = { time: string; service: string; text: string }
 export interface Ui {
   info(text: string): void
   success(text: string): void
-  /** Something the person should notice. Goes to standard error in plain output. */
-  warn(text: string): void
+  /**
+   * Something the person should notice. Goes to standard error in plain
+   * output. At a terminal, with `firstBold`, its first sentence is bold and
+   * the rest in the text colour, as the board "The version, and a newer
+   * release" draws `zekno version`'s newer release; every other warning is
+   * drawn in the text colour whole. Plain output is the same either way.
+   */
+  warn(text: string, options?: { firstBold?: boolean }): void
   /** Why a command failed. Goes to standard error in plain output. */
   error(text: string): void
   /**
