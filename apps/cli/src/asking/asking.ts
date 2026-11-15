@@ -16,6 +16,7 @@
 import { realpathSync } from "node:fs"
 import { basename } from "node:path"
 
+import { appTaken } from "../shared/app-names"
 import { appsOf, latestFirst, type RunState } from "../shared/views"
 import { reach, type Deps, type Team } from "../cli/context"
 import { CliError, MISSING_APP, MISSING_SERVER, UsageError } from "../cli/errors"
@@ -40,9 +41,6 @@ export const noApps = (server: string): string => `${server} has no apps yet, so
 
 /** A11: why a typed app name is refused. It is the rule `--app` is held to (`NAME`). Needs approval (research Q4). */
 export const APP_NAME_RULE = "Use lowercase letters, digits and hyphens, starting with a letter or a digit."
-
-/** A12: a new app's name that the list already has. Needs approval (research Q4). */
-export const appTaken = (server: string, app: string): string => `${server} already has an app named ${app}. Choose it from the list, or give another name.`
 
 /** The row deploy adds to the list of apps, last (mock-up 2). */
 export const NEW_APP = "+ a new app"

@@ -11,7 +11,6 @@ import { runner, tempDir } from "../../../runner/test/support/helpers"
 import {
   APP_NAME_RULE as A11,
   appRows,
-  appTaken as A12,
   folderName,
   NO_SERVER_YET as A4,
   NO_TEAM_AT_TERMINAL as A3,
@@ -21,6 +20,7 @@ import {
   whichServer,
 } from "../../src/asking/asking"
 import { openTeam, teamOnce, type Team } from "../../src/cli/context"
+import { appTaken as A12 } from "../../src/shared/app-names"
 import { MISSING_APP, MISSING_SERVER } from "../../src/cli/errors"
 import { isMemberName, type Server } from "../../src/profile/profile"
 import type { ListQuestion } from "../../src/ui/types"

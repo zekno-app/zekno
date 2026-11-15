@@ -4,10 +4,19 @@
  * it is told as a deploy happens, the words it says, and how plain output
  * shows it. The terminal draws it in ink.tsx with deploy-view.tsx. Nothing
  * here loads Ink, so plain output never does.
+ *
+ * The stages of a deploy and what it is once its number is known are here
+ * too: ops/deploy.ts reports them, and both this view and the app's deploy
+ * screen show them (`DeployProgress`).
  */
-import type { DeployInfo, DeployStage } from "../ops/deploy"
 import type { Ui } from "../ui/types"
 import type { Notice } from "./notice"
+
+/** data-model.md, "Stages of a deploy". A refusal ends a deploy at whatever stage it had reached. */
+export type DeployStage = "checked" | "signed" | "sent" | "starting" | "started" | "failed"
+
+/** What a deploy is, from the moment its number is known. */
+export type DeployInfo = { app: string; server: string; sequence: number; secrets: number }
 
 /** What a deploy view is told before anything is sent. */
 export type DeployStart = {

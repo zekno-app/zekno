@@ -13,7 +13,7 @@ import { join, resolve } from "node:path"
 import runnerPackage from "../../../runner/package.json"
 import { runner, tempDir } from "../../../runner/test/support/helpers"
 import { acceptedLinks } from "../../src/project/accepted"
-import { appTaken } from "../../src/asking/asking"
+import { appTaken } from "../../src/shared/app-names"
 import {
   DESTINATION_RULE,
   expectsValues,

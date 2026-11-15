@@ -7,8 +7,7 @@
 import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
-import type { DeployStage } from "../../ops/deploy"
-import type { DeployProgress } from "../../shared/deploy"
+import type { DeployProgress, DeployStage } from "../../shared/deploy"
 import { Fields } from "./fields"
 import { Panel, type PanelTone } from "./panel"
 import type { Stage, StageState } from "./stages"

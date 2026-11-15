@@ -3,7 +3,7 @@
  * (keys, the window's size, and what effects/ reports back), the effects it
  * asks for, and a step, the next state with those effects.
  */
-import type { DeployStage } from "../../ops/deploy"
+import type { DeployStage } from "../../shared/deploy"
 import type { AppRow, DeployRow, RunState, SecretRow } from "../../shared/views"
 import type { AppKey } from "../keys"
 import type { Notice } from "../../shared/notice"
