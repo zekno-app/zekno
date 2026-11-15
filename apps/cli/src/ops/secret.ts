@@ -9,12 +9,14 @@ import {
   SECRET_NAME,
   verifySecret,
   verifySecretRemoval,
+  type SecretRecord,
   type TeamTrust,
 } from "@workspace/core"
 
 import { teamOf, type OpDeps, type Team } from "../context"
 import { CliError, UsageError } from "../errors"
 import { findServer, type SecretStore, type Server } from "../profile"
+import type { ImportEntry } from "../secrets/import-file"
 import { checkApp, type Where } from "./deploy"
 
 export type { Where }
@@ -24,6 +26,21 @@ async function locate(deps: OpDeps, where: Where) {
   const server = findServer(team.profile, where.server, where.serverFrom)
   const app = checkApp(where.app)
   return { team, trust: team.trust, server, app, secrets: team.store.secrets(server.serverId, app) }
+}
+
+/** The highest version this machine has seen for each name, set or removed: `latestVersion` for every name at once, in one pass. */
+function latestVersions(trust: TeamTrust, serverId: string, app: string, held: SecretStore): Map<string, number> {
+  const latest = new Map<string, number>()
+  const seen = (name: string, version: number) => latest.set(name, Math.max(latest.get(name) ?? 0, version))
+  for (const record of held.records) {
+    const checked = verifySecret({ record, trust, serverId, app })
+    if (checked.ok) seen(checked.value.name, checked.value.version)
+  }
+  for (const removal of held.removals) {
+    const checked = verifySecretRemoval({ removal, trust, serverId, app })
+    if (checked.ok) seen(checked.value.name, checked.value.version)
+  }
+  return latest
 }
 
 /** The highest version this machine has seen for a name, set or removed. */
@@ -98,6 +115,102 @@ export async function setSecret(plan: SecretPlan, value: string): Promise<Secret
     .catch(asCliError)
   team.store.saveSecrets(server.serverId, app, { ...secrets, records: [...secrets.records, record] })
   return { name, version, app, server: server.name }
+}
+
+/** One value an import stores: its name, its value and the version it gets. `replaces`: the app has a current secret of that name. */
+export type ImportValue = { name: string; value: string; version: number; replaces: boolean }
+
+/** A name an import leaves out, as its summary shows it (`shown`), and why (`reason`). */
+export type LeftOut = { shown: string; reason: string }
+
+/**
+ * An import checked as far as it can be before anything is sealed
+ * (specs/006-cli-small-features, data-model.md, "Import entry and import
+ * summary"): where the values go, the store as it was read, each value to
+ * store in the file's order with its next version, and the names left out.
+ * The values are held here in memory for the run, and go to `storeSecrets`
+ * and nowhere else.
+ */
+export type ImportPlan = { team: Team; server: Server; app: string; secrets: SecretStore; values: ImportValue[]; leftOut: LeftOut[] }
+
+/** I12: more values than one deploy carries. `file` as typed, cleaned. Needs approval (research Q4). */
+export const importTooMany = (file: string): string => `${file} has more than ${LIMITS.secretsPerDeploy} values, more than one deploy carries. Nothing was stored.`
+/** I13: the app would have more secrets than one deploy carries. Needs approval (research Q4). */
+export const importTooManySecrets = (app: string, server: string): string =>
+  `${app} on ${server} would have more than ${LIMITS.secretsPerDeploy} secrets, more than one deploy carries. Nothing was stored.`
+/** I14: the app's records on this machine would pass the limit past which none of them is read. Needs approval (research Q4). */
+export const importTooManyRecords = (app: string, server: string): string =>
+  `${app} on ${server} would have more than ${LIMITS.secretHistory} secret records on this machine. Nothing was stored.`
+
+/**
+ * Why an entry of an import file is left out, or undefined when it can be
+ * stored: the rule `zekno secret set` holds a name to, and the value it
+ * accepts. A key the summary shows has only `[A-Za-z0-9_.-]` (the grammar of
+ * contracts/import.md), so it cannot carry a control character; a key longer
+ * than a name may be is shown by its line only, since it may be a value.
+ */
+function leftOut(entry: ImportEntry): LeftOut | undefined {
+  if (entry.name.length > LIMITS.secretNameLength) return { shown: `line ${entry.line}`, reason: `a name longer than ${LIMITS.secretNameLength} characters` }
+  if (!SECRET_NAME.test(entry.name)) return { shown: entry.name, reason: "not a valid name" }
+  if (isReservedSecretName(entry.name)) return { shown: entry.name, reason: "zekno keeps this name" }
+  if (entry.value === "") return { shown: entry.name, reason: "empty" }
+  if (Buffer.byteLength(entry.value, "utf8") > LIMITS.secretValueBytes) return { shown: entry.name, reason: "larger than 64 KiB" }
+  return undefined
+}
+
+/**
+ * Groups the entries of an import file and checks the limits, before
+ * anything is sealed (contracts/import.md, "Names" and "Limits"). `file` is
+ * the file as typed, cleaned, for I12. The store is not written.
+ */
+export async function prepareSecretImport(deps: OpDeps, where: Where, entries: readonly ImportEntry[], file: string): Promise<ImportPlan> {
+  const { team, trust, server, app, secrets } = await locate(deps, where)
+  const accepted: ImportEntry[] = []
+  const out: LeftOut[] = []
+  for (const entry of entries) {
+    const why = leftOut(entry)
+    if (why) out.push(why)
+    else accepted.push(entry)
+  }
+  if (accepted.length > LIMITS.secretsPerDeploy) throw new CliError(importTooMany(file))
+  // Counted before anything is verified: past this limit `currentSecrets` would refuse the store whole.
+  if (secrets.records.length + secrets.removals.length + accepted.length > LIMITS.secretHistory) throw new CliError(importTooManyRecords(app, server.name))
+  const current = new Set(currentSecrets({ trust, serverId: server.serverId, app, ...secrets }).secrets.map((record) => record.sealed.name))
+  const fresh = accepted.filter((entry) => !current.has(entry.name)).length
+  if (current.size + fresh > LIMITS.secretsPerDeploy) throw new CliError(importTooManySecrets(app, server.name))
+  const latest = latestVersions(trust, server.serverId, app, secrets)
+  const values = accepted.map((entry) => ({
+    name: entry.name,
+    value: entry.value,
+    version: (latest.get(entry.name) ?? 0) + 1,
+    replaces: current.has(entry.name),
+  }))
+  return { team, server, app, secrets, values, leftOut: out }
+}
+
+/**
+ * Stores every value of an import, or none (FR-019, research R9): each is
+ * sealed and signed inside one `withSigner`, as `setSecret` seals one, and
+ * only then is the app's store written once, with every new record appended.
+ * A failure while sealing writes nothing; a failed write leaves the old file
+ * and removes its temporary one (`profileStore`'s write); the one rename
+ * makes all of them visible at once.
+ */
+export async function storeSecrets(plan: ImportPlan): Promise<SecretChange[]> {
+  const { team, server, app, secrets, values } = plan
+  if (values.length === 0) return []
+  const { trust } = team
+  const made = await team
+    .withSigner(async (signer) => {
+      const records: SecretRecord[] = []
+      for (const entry of values) {
+        records.push(await createSecret({ trust, serverId: server.serverId, app, name: entry.name, value: entry.value, version: entry.version, signer }))
+      }
+      return records
+    })
+    .catch(asCliError)
+  team.store.saveSecrets(server.serverId, app, { ...secrets, records: [...secrets.records, ...made] })
+  return values.map((entry) => ({ name: entry.name, version: entry.version, app, server: server.name }))
 }
 
 /** Signs the removal of a secret the app has now. */

@@ -85,14 +85,16 @@ type Invocation = { text: string; words: string[]; flags: string[] }
  * part are read as a value, so that a `<` left over is a redirect.
  *
  * `zekno` runs a command only where a command starts: at the start of the
- * code, after a `$ ` prompt, or after `|`, `;`, `&&` or `(`. Anywhere else it
- * is a word of zekno's own output, such as `runner 0.1.0, the runner release
- * this zekno installs` in `zekno version`'s lines (specs/006-cli-small-features,
- * mock-up 6).
+ * code, after a `$ ` prompt, or after `|`, `;`, `&&`, `$(`, or a `(` that
+ * itself stands where a command starts. Anywhere else it is a word of zekno's
+ * own output, such as `runner 0.1.0, the runner release this zekno installs`
+ * in `zekno version`'s lines (specs/006-cli-small-features, mock-up 6) and
+ * `PATH (zekno keeps this name)` in `zekno secret import`'s (mock-up 4): a `(`
+ * after a word starts no command in a shell.
  */
 function invocationsIn(code: string): Invocation[] {
   const plain = code.replace(/<[^<>\n]*>/g, "VALUE").replace(/[[\]]/g, " ")
-  return [...plain.matchAll(/(?:^|[|;(]|&&|\$)\s*zekno(?=\s|$)([^|;&<>]*)/g)].map((match) => {
+  return [...plain.matchAll(/(?:^\s*\(?|[|;]\s*\(?|&&\s*\(?|\$\(?)\s*zekno(?=\s|$)([^|;&<>]*)/g)].map((match) => {
     const tokens = match[1]!.trim() === "" ? [] : match[1]!.trim().split(/\s+/)
     const words: string[] = []
     for (const token of tokens) {

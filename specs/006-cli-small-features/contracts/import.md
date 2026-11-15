@@ -129,7 +129,8 @@ $ zekno secret import .env
   wrapping in their own column (from column 14). A group with no name has no line. `gap()`.
 - `confirm(I15, I16)` unless `--yes`. "No" (`n`, Enter, Esc, Ctrl-C): `Nothing was done.`, status
   1, nothing stored.
-- Stored: `success(I17)`, then `info(I18)`.
+- Stored: `success(I17)`, its first sentence bold (`Stored 4 values for demo on prod.`), then
+  `note(I18)` (dim, set in by two columns), as the board "zekno secret import" draws them.
 - No name to store (every name left out): the summary, then I11, status 1, no question.
 
 ## With no terminal

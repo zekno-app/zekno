@@ -226,6 +226,7 @@ zekno server add <name> --local [--home <dir>]
 zekno server update <name> [--yes]
 zekno server ls
 zekno secret set <NAME> [--app <app>] [--server <name>] [--stdin]
+zekno secret import <file> [--app <app>] [--server <name>] [--yes]
 zekno secret rm <NAME> [--app <app>] [--server <name>]
 zekno secret ls [--app <app>] [--server <name>]
 zekno deploy [--app <app>] [--server <name>] [-f <compose file>] [--json]
@@ -330,7 +331,7 @@ server id.
 zekno server ls
 ```
 
-### zekno secret set, rm and ls
+### zekno secret set, import, rm and ls
 
 `zekno secret set` seals a value for one app on one server and signs it. It
 takes effect on the next deploy. Before the value is asked for, `zekno` names
@@ -350,6 +351,53 @@ value.
 
 ```bash
 zekno secret set DATABASE_URL --app api --server prod --stdin < database-url.txt
+```
+
+`zekno secret import <file>` brings in a project's values from a file of
+`NAME=value` lines, such as a `.env` file, all at once. It shows the names it
+found, never a value, asks once, and stores each value sealed and signed, as
+`zekno secret set` does one at a time:
+
+```text
+$ zekno secret import .env
+  .env, for demo on prod
+
+  new         DATABASE_URL, SESSION_KEY, STRIPE_KEY
+  replaces    API_URL
+  left out    PATH (zekno keeps this name), my-var (not a valid name)
+
+? Store 4 values? Values are never shown. (y/N)
+✔ Stored 4 values for demo on prod. They take effect on the next deploy.
+  .env still holds them in plain text. Delete it, or keep it out of git.
+```
+
+- **What is read.** One `NAME=value` per line. Blank lines and lines that
+  start with `#` are skipped. `export ` in front of a name is allowed. A value
+  may be in single quotes, taken exactly as written, or in double quotes, where
+  `\n`, `\r`, `\t`, `\\`, `\"` and `\$` are the only escapes. A `#` after a
+  space or a tab starts a comment.
+- **What stops the import.** A `$` outside single quotes, and a `#` inside a
+  value without quotes: put such a value in single quotes to keep it as it is.
+  A value never spans lines: write a line break as `\n` inside double quotes.
+  A name given twice stops it too. Any line that does not fit stops the whole
+  import and nothing is stored: the message names the file and the line's
+  number, and never repeats the line.
+- **Names.** A name that already has a secret gets a new version
+  ("replaces"). A name that does not fit the rule of `zekno secret set`, a
+  reserved name, and an empty value are left out and named, and the rest is
+  still offered. A value may be at most 64 KiB, and one import at most 256
+  values.
+- **One question.** Nothing is stored before the answer, and then every value
+  is stored at once, or none is. `--yes` answers the question in advance. With
+  no terminal, the import stops unless you add `--yes`, and stores nothing.
+  `--app` and `--server` work as for the other secret commands, and at a
+  terminal are asked for when missing.
+- **The file.** It may be anywhere. `zekno` reads it once, at most 1 MiB, and
+  never changes, copies or deletes it. It still holds the values in plain text
+  afterwards: delete it, or keep it out of git.
+
+```bash
+zekno secret import .env --app api --server prod --yes
 ```
 
 ### zekno deploy

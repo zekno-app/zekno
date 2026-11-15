@@ -79,9 +79,12 @@ export interface Ui {
    * A result: `✔` and its words at a terminal. `detail`, when given, is drawn
    * dim after two spaces, as the board "zekno deploy from nothing" draws
    * `✔ Runner installed  52 MB, checksum verified`; plain output prints the
-   * same words, two spaces apart.
+   * same words, two spaces apart. With `firstBold`, the first sentence is bold
+   * at a terminal and the rest in the text colour, as the board "zekno secret
+   * import" draws `✔ Stored 4 values for demo on prod. They take effect on
+   * the next deploy.`; plain output is the same either way.
    */
-  success(text: string, detail?: string): void
+  success(text: string, detail?: string, options?: { firstBold?: boolean }): void
   /** Why a command failed. Goes to standard error in plain output. */
   error(text: string): void
   /**

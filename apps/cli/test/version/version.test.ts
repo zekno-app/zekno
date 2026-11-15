@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { RUNNER_VERSION_PATTERN } from "@workspace/core"
-import { readFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
 
@@ -253,6 +253,7 @@ const NEVER_FETCHES: { [command: string]: string[] } = {
   "server update": ["server", "update", "dev", "--yes"],
   "server ls": ["server", "ls"],
   "secret set": ["secret", "set", "GREETING", "--app", "web", "--server", "dev"],
+  "secret import": ["secret", "import", ".env", "--app", "web", "--server", "dev", "--yes"],
   "secret rm": ["secret", "rm", "GREETING", "--app", "web", "--server", "dev"],
   "secret ls": ["secret", "ls", "--app", "web", "--server", "dev"],
   deploy: ["deploy", "--app", "web", "--server", "dev"],
@@ -290,6 +291,7 @@ describe("no other command asks GitHub (FR-036)", () => {
     expect(commands.filter((command) => NEVER_FETCHES[command] === undefined)).toEqual([])
     for (const command of commands) {
       if (command === "secret set") m.typing("hello")
+      if (command === "secret import") writeFileSync(join(m.project, ".env"), "IMPORTED=1\n")
       await m.zekno(...NEVER_FETCHES[command]!)
       expect({ command, calls }).toEqual({ command, calls: [] })
     }

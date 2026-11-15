@@ -7,7 +7,7 @@ import { deploy, rollback } from "./commands/deploy"
 import { init } from "./commands/init"
 import { link } from "./commands/link"
 import { logs, parseTail } from "./commands/logs"
-import { secretList, secretRemove, secretSet } from "./commands/secret"
+import { readImport, secretImport, secretList, secretRemove, secretSet, type ImportRead } from "./commands/secret"
 import { serverAdd, serverList, serverUpdate } from "./commands/server"
 import { status } from "./commands/status"
 import { teamOnce, type Deps } from "./context"
@@ -29,6 +29,7 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno server update <name> [--yes]
   zekno server ls
   zekno secret set <NAME> [--app <app>] [--server <name>] [--stdin]
+  zekno secret import <file> [--app <app>] [--server <name>] [--yes]
   zekno secret rm <NAME> [--app <app>] [--server <name>]
   zekno secret ls [--app <app>] [--server <name>]
   zekno deploy [--app <app>] [--server <name>] [-f <compose file>] [--json]
@@ -49,6 +50,7 @@ const WORDS: Record<string, number> = {
   "server update": 3,
   "server ls": 2,
   "secret set": 3,
+  "secret import": 3,
   "secret rm": 3,
   "secret ls": 2,
   deploy: 1,
@@ -197,10 +199,13 @@ export async function run(argv: string[], given: Deps): Promise<number> {
       return { ...values, server: server.name, app }
     }
 
+    // The file of `zekno secret import`, read and parsed whole before any question and before the team is opened (contracts/import.md, "Order of checks").
+    let imported: ImportRead | undefined
     if (atTerminal && Object.hasOwn(WORDS, name) && !WITHOUT_TEAM.has(name)) {
       // With no team, the way to make one: `zekno deploy` makes it from nothing (A3).
       if (!profileStore(deps.home).exists()) throw new CliError(NO_TEAM_AT_TERMINAL)
       // What needs no answer is checked before any question (research R1). Only the order of failures at a terminal changes.
+      if (name === "secret import") imported = readImport(deps.cwd, third)
       if (name === "secret set") checkSecretName(third)
       if (name === "secret rm" && !third) throw new UsageError(sayWhichSecret("rm"))
       if (name === "rollback") checkTo(values.to)
@@ -229,6 +234,11 @@ export async function run(argv: string[], given: Deps): Promise<number> {
       case "secret set":
         await secretSet(deps, third, await details(["app", "server"]))
         return 0
+      case "secret import": {
+        const read = imported ?? readImport(deps.cwd, third)
+        await secretImport(deps, read, await details(["app", "server"]), { yes: values.yes === true })
+        return 0
+      }
       case "secret rm":
         await secretRemove(deps, third, await details(["app", "server"]))
         return 0
