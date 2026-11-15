@@ -22,6 +22,7 @@
 - Q: What does one bad line in the import file do? → A: It stops the whole import. The message names the line's number and never its content.
 - Q: Does a warning fail `zekno doctor`? → A: No. Only a problem does. It also takes `--server <name>` and `--json`.
 - Q: Is there a way to check the version? → A: Yes, asked for by the maintainer: `zekno --version` and `zekno version` print the CLI's own version and the runner release it installs, and `zekno doctor` shows both on its first line.
+- Q: Does Zekno say when a newer version is available? → A: Yes, asked for by the maintainer. `zekno version` and `zekno doctor` ask the place releases are published whether a newer release exists and say so in one line. `zekno --version` never uses the network. Zekno never checks on its own, and never downloads or installs anything because of the answer.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -162,6 +163,10 @@ Something does not work. The developer runs `zekno doctor`. It checks this machi
 
 - **FR-031**: `zekno --version` and `zekno version` MUST print the CLI's own version and the runner release it installs, and MUST offer both as data for scripts. They MUST work with no key, no profile and no terminal, and change nothing.
 - **FR-032**: `zekno doctor` MUST show the same two versions on its first line, and for each server how its runner's version relates to them (FR-022).
+- **FR-033**: `zekno version` and `zekno doctor` MUST ask, once per run, whether a release newer than the one this Zekno carries has been published, and say in one line that this is the newest, that a newer one exists and which, or that it could not be checked.
+- **FR-034**: That check MUST send nothing about the developer, their team, their servers or their project, MUST give up after a few seconds, and MUST never fail the command: with no answer the command behaves as if the check did not exist.
+- **FR-035**: The answer MUST be treated as untrusted: it is read as a version by the rule for versions and used for that one line only. Zekno MUST never download, install or run anything because of it.
+- **FR-036**: No other command MUST make this check, and `zekno --version` MUST never use the network. With no terminal the check MUST still run for `zekno version` and `zekno doctor`, since they were asked for.
 
 **Everywhere**
 
@@ -201,4 +206,6 @@ Something does not work. The developer runs `zekno doctor`. It checks this machi
 - `zekno doctor` reaches servers the way background reads do: it never hands the terminal to SSH. A server that needs a password is reported as needing one.
 - How the import file's format is read, and whether `zekno doctor` needs anything new from the runner, are decided with the maintainer during planning, not here.
 - Out of scope: packaging the CLI, the bigger features (building from source, templates, domains), anything in the full-screen app, and fixing what `zekno doctor` finds.
+- The newest release is the newest one that is not a development release. A Zekno that carries a development release is compared the same way, so `0.1.0-dev.1` is told that `0.1.0` exists.
+- Until the CLI is packaged, "update zekno" means getting the newer source and building it again. The docs say so.
 - The product stays pre-alpha and unaudited.

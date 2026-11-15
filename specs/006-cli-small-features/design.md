@@ -134,5 +134,37 @@ zekno 0.1.0
 runner 0.1.0, the runner release this zekno installs
 ```
 
-`zekno version` prints the same. With `--json`: one object with both versions. The first line
-of `zekno doctor` ("This machine") shows the same two versions.
+With `--json`: one object with both versions. `zekno --version` never uses the network.
+
+`zekno version` prints the same two lines, then asks GitHub once whether a newer release exists
+(approved by the maintainer on 2026-11-15), and adds one of:
+
+```text
+$ zekno version
+zekno 0.1.0
+runner 0.1.0, the runner release this zekno installs
+✔ This is the newest release.
+```
+
+```text
+! A newer release exists: 0.2.0. Update zekno to get it.
+```
+
+```text
+  Could not check for a newer release.
+```
+
+The last one is dim, and is what an unreachable network, a slow answer or an answer that is not
+a version gives. None of the three changes the exit status: `zekno version` ends with 0.
+
+The first line of `zekno doctor` ("This machine") shows the same two versions, and makes the same
+check. A newer release is a warning there, with the same sentence on the line below; no answer
+is not a warning:
+
+```text
+! zekno          0.1.0, installs runner 0.1.0
+                 A newer release exists: 0.2.0. Update zekno to get it.
+```
+
+zekno never checks on its own: only these two commands do, each once per run. It never downloads
+or installs anything because of the answer.
