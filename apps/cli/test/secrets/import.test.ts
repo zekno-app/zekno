@@ -89,7 +89,7 @@ describe("storing (contracts/import.md, Names and Limits; research R9)", () => {
     expect(importGroups(plan)).toEqual([
       ["new", "DATABASE_URL, SESSION_KEY, STRIPE_KEY"],
       ["replaces", "GREETING"],
-      ["left out", "PATH (zekno keeps this name), my-var (not a valid name), EMPTY (empty), line 7 (a name longer than 128 characters), BIG (larger than 64 KiB)"],
+      ["left out", "PATH (zekno keeps this name), line 5 (not a valid name), line 6 (empty), line 7 (a name longer than 128 characters), line 9 (larger than 64 KiB)"],
     ])
     expect(plan.values.map(({ name, version, replaces }) => ({ name, version, replaces }))).toEqual([
       { name: "DATABASE_URL", version: 1, replaces: false },
@@ -242,7 +242,7 @@ const SUMMARY = [
   ".env, for demo on prod",
   "new\tDATABASE_URL, SESSION_KEY, STRIPE_KEY",
   "replaces\tAPI_URL",
-  "left out\tPATH (zekno keeps this name), my-var (not a valid name)",
+  "left out\tPATH (zekno keeps this name), line 7 (not a valid name)",
 ]
 const STORED = ["Stored 4 values for demo on prod. They take effect on the next deploy.", ".env still holds them in plain text. Delete it, or keep it out of git."] as const
 
@@ -333,7 +333,7 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
       "",
       "  new         DATABASE_URL, SESSION_KEY, STRIPE_KEY",
       "  replaces    API_URL",
-      "  left out    PATH (zekno keeps this name), my-var (not a valid name)",
+      "  left out    PATH (zekno keeps this name), line 7 (not a valid name)",
       "",
       "? Store 4 values? Values are never shown. (y/N)",
     ])
@@ -347,7 +347,7 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
       "",
       "  new         DATABASE_URL, SESSION_KEY, STRIPE_KEY",
       "  replaces    API_URL",
-      "  left out    PATH (zekno keeps this name), my-var (not a valid name)",
+      "  left out    PATH (zekno keeps this name), line 7 (not a valid name)",
       "",
       "? Store 4 values? Values are never shown. (y/N) yes",
       "✔ Stored 4 values for demo on prod. They take effect on the next deploy.",
@@ -396,7 +396,7 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     writeFileSync(join(m.project, "out.env"), `PATH=${secret("path")}\nmy-var=${secret("var")}\nEMPTY=\n`)
     m.out.length = 0
     expect(await m.zekno("secret", "import", "out.env", "--app", "web", "--server", "dev", "--yes")).toBe(1)
-    expect(m.out).toEqual(["out.env, for web on dev", "left out\tPATH (zekno keeps this name), my-var (not a valid name), EMPTY (empty)"])
+    expect(m.out).toEqual(["out.env, for web on dev", "left out\tPATH (zekno keeps this name), line 2 (not a valid name), line 3 (empty)"])
     expect(m.lastErr()).toBe("No value in out.env can be stored, so nothing was stored.")
     expect(existsSync(storeOf(m).path)).toBe(false)
 
@@ -447,6 +447,57 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     expect(holding(m.home)).toEqual([])
     expect(holding(m.project).map((file) => file.path.split("/").at(-1)).sort()).toEqual([".env", "twenty.env"])
     expect(readFileSync(join(m.project, "twenty.env"), "utf8")).toBe(text)
+  }, 60_000)
+
+  test("a value wrapped onto lines of its own (security review S1): no piece of it is shown, stored as a name, or in any error", async () => {
+    const m = await ready()
+    // The review's file: line 2 is the last piece of GOOGLE_CREDENTIALS's value, line 4 the last piece of API_TOKEN's.
+    const FIRST = "c2VydmljZS1hY2NvdW50LWtleS1hYmNkZWYxMjM0NTY3ODkw"
+    const PIECES = ["QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo1Ng", "dG9wc2VjcmV0dG9rZW4xMjM0NTY3ODkwYWJj", "c2VjcmV0LXdyYXBwZWQ"]
+    const REVIEW = `GOOGLE_CREDENTIALS=${FIRST}\n${PIECES[0]}==\nAPI_TOKEN=x\n${PIECES[1]}=\n`
+    const nowhere = (lines: readonly string[]) => expect(lines.filter((line) => PIECES.some((piece) => line.includes(piece)))).toEqual([])
+    const plain = m.deps.ui
+    const drawn: string[] = []
+    const atTerminal = async (...args: string[]) => {
+      const t = terminal(80)
+      m.deps.ui = t.ui
+      const code = await m.zekno(...args).finally(() => (m.deps.ui = plain))
+      await t.ui.close()
+      drawn.push(t.raw())
+      return { code, lines: t.lines() }
+    }
+    const [out, err] = [m.out.length, m.err.length]
+
+    // Line 2 begins with `=` after its key: the whole import stops there, by the line's number, and nothing is stored.
+    writeFileSync(join(m.project, ".env"), REVIEW)
+    expect(await m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toBe(1)
+    expect(m.out.slice(out)).toEqual([])
+    expect(m.err.slice(err)).toEqual([".env, line 2: this is not a NAME=value line. Nothing was stored."])
+    expect(await atTerminal("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toEqual({
+      code: 1,
+      lines: ["✖ .env, line 2: this is not a NAME=value line.", "  Nothing was stored."],
+    })
+    expect(existsSync(storeOf(m).path)).toBe(false)
+
+    // Without line 2, the pieces left are left out by their line only: one read as an empty value, one as a name that does not fit.
+    writeFileSync(join(m.project, ".env"), `GOOGLE_CREDENTIALS=${FIRST}\n# wrapped\nAPI_TOKEN=x\n${PIECES[1]}=\nOTHER=y\n${PIECES[2]}-Zg=x\n`)
+    const shown = m.out.length
+    expect(await m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(m.out.slice(shown)).toEqual([
+      ".env, for web on dev",
+      "new\tGOOGLE_CREDENTIALS, API_TOKEN, OTHER",
+      "left out\tline 4 (empty), line 6 (not a valid name)",
+      "Stored 3 values for web on dev. They take effect on the next deploy.",
+      ".env still holds them in plain text. Delete it, or keep it out of git.",
+    ])
+    const screen = await atTerminal("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")
+    expect(screen.code).toBe(0)
+    expect(screen.lines).toContain("  left out    line 4 (empty), line 6 (not a valid name)")
+
+    // The names stored are the three real ones; no piece is a name, a line, an error or a file in plain text.
+    expect((await listed(m)).sort()).toEqual(["API_TOKEN\tversion 2", "GOOGLE_CREDENTIALS\tversion 2", "OTHER\tversion 2"])
+    nowhere([...m.out, ...m.err, ...drawn])
+    nowhere(filesUnder(m.home).map((file) => file.content))
   }, 60_000)
 
   test("no value in any error: a bad line, a limit, a failed write", async () => {

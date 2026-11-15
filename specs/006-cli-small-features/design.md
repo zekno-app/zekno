@@ -85,15 +85,17 @@ $ zekno secret import .env
 
   new         DATABASE_URL, SESSION_KEY, STRIPE_KEY
   replaces    API_URL
-  left out    PATH (zekno keeps this name), my-var (not a valid name)
+  left out    PATH (zekno keeps this name), line 7 (not a valid name)
 
 ? Store 4 values? Values are never shown. (y/N)
 ✔ Stored 4 values for demo on prod. They take effect on the next deploy.
   .env still holds them in plain text. Delete it, or keep it out of git.
 ```
 
-A name that already has a secret gets a new version. One line the format does not allow stops
-the whole import: the message names the line's number and never repeats the line. In a script,
+A name that already has a secret gets a new version. A name left out is named by its line's
+number (`my-var` is on line 7 of this `.env`), unless it is one zekno keeps, such as `PATH`: what
+looks like a name may be the end of a value wrapped onto its own line. One line the format does
+not allow stops the whole import: the message names the line's number and never repeats the line. In a script,
 `--yes` stores without the question.
 
 ## 5. `zekno doctor`

@@ -145,16 +145,19 @@ export const importTooManyRecords = (app: string, server: string): string =>
 /**
  * Why an entry of an import file is left out, or undefined when it can be
  * stored: the rule `zekno secret set` holds a name to, and the value it
- * accepts. A key the summary shows has only `[A-Za-z0-9_.-]` (the grammar of
- * contracts/import.md), so it cannot carry a control character; a key longer
- * than a name may be is shown by its line only, since it may be a value.
+ * accepts. Only a reserved name is shown as written: it is a name zekno keeps,
+ * not a piece of a value. Every other entry left out is shown by its line
+ * only (security review S1): a key that is too long or does not fit the name
+ * rule, or whose value is empty or too large, may be the last piece of a
+ * value wrapped onto its own line, and a key is never shown in its place.
  */
 function leftOut(entry: ImportEntry): LeftOut | undefined {
-  if (entry.name.length > LIMITS.secretNameLength) return { shown: `line ${entry.line}`, reason: `a name longer than ${LIMITS.secretNameLength} characters` }
-  if (!SECRET_NAME.test(entry.name)) return { shown: entry.name, reason: "not a valid name" }
+  const line = `line ${entry.line}`
+  if (entry.name.length > LIMITS.secretNameLength) return { shown: line, reason: `a name longer than ${LIMITS.secretNameLength} characters` }
+  if (!SECRET_NAME.test(entry.name)) return { shown: line, reason: "not a valid name" }
   if (isReservedSecretName(entry.name)) return { shown: entry.name, reason: "zekno keeps this name" }
-  if (entry.value === "") return { shown: entry.name, reason: "empty" }
-  if (Buffer.byteLength(entry.value, "utf8") > LIMITS.secretValueBytes) return { shown: entry.name, reason: "larger than 64 KiB" }
+  if (entry.value === "") return { shown: line, reason: "empty" }
+  if (Buffer.byteLength(entry.value, "utf8") > LIMITS.secretValueBytes) return { shown: line, reason: "larger than 64 KiB" }
   return undefined
 }
 

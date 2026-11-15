@@ -199,6 +199,9 @@ function readLine(line: string): LineRead {
   }
 
   // 5. An unquoted value, up to a comment that follows a space or a tab. Spaces inside it are kept, those around it dropped.
+  // One that begins with `=` is not read: it is how the last piece of a value wrapped onto its own line looks, such as
+  // base64 ending in `==`, and reading it would make that piece a secret's name (security review S1).
+  if (line[at] === "=") return wrong("not_entry")
   let end = line.length
   for (let next = at; next < line.length; next++) {
     const char = line[next]!

@@ -39,7 +39,8 @@ entry     = *WS [ "export" 1*WS ] key *WS "=" *WS [ value ] *WS [ tail ]
 tail      = "#" *CHAR                          ; only after at least one WS, or right after a closing quote
 key       = 1*( ALPHA / DIGIT / "_" / "." / "-" )
 value     = unquoted / single / double
-unquoted  = uchar *( *WS uchar )               ; inner WS kept, leading and trailing WS dropped
+unquoted  = ufirst *( *WS uchar )              ; inner WS kept, leading and trailing WS dropped
+ufirst    = any uchar except "="
 uchar     = any CHAR except WS, '"', "'", "`", "\", "$", "#"
 single    = "'" *schar "'"                     ; taken exactly as written
 schar     = any CHAR except "'"
@@ -69,6 +70,7 @@ What each case means:
 | `NAME="a\qb"` | stops: an escape that is not one of the six (I5) |
 | `NAME="v" x` | stops: text after the closing quote that is not a comment (I4) |
 | `` NAME=`cmd` `` , `NAME=a"b` , `NAME=a\b` | stops: a quote, a backquote or a backslash inside an unquoted value (I2) |
+| `NAME==x`, `NAME==`, `QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo1Ng==` | stops: an unquoted value that begins with `=` (I2). It is how the last piece of a value wrapped onto its own line looks, such as base64 ending in `==`, so it is never read as a name and a value (security review S1). `NAME=a=b` is `a=b` |
 | A control character anywhere but a tab | stops (I8) |
 | `NAME value`, `=value`, `my var=x`, `{`, anything else | stops: not a `NAME=value` line (I2) |
 | The same key twice (exactly, letter case counts) | stops, naming both lines (I9) |
@@ -83,8 +85,8 @@ so the tests can name one sentence per line:
    closing `'`, anything but spaces and tabs, then the end or a `#`, I4.
 4. A value that starts with `"`: reading it, a `\` followed by anything but `\ " n r t $`, I5; a `$`
    not after `\`, I6; no closing `"` on the line, I3; after the closing `"`, as in 3, I4.
-5. Any other value, read one character at a time: `$`, I6; `#` with no space or tab right before
-   it, I7; `"`, `'`, a backquote or `\`, I2.
+5. Any other value: one that begins with `=`, I2; then, read one character at a time: `$`, I6; `#`
+   with no space or tab right before it, I7; `"`, `'`, a backquote or `\`, I2.
 6. A line that fits, whose key was already the key of line `<n>`: I9.
 
 ## Names
@@ -95,13 +97,16 @@ After the whole file is read without a stop, each entry's key is judged:
 |-----|-------|----------|
 | fits `SECRET_NAME` (`^[A-Za-z_][A-Za-z0-9_]*$`), at most 128 characters, not reserved, value not empty and at most 64 KiB as UTF-8 | `new` when the app has no current secret of that name; `replaces` when it has | the key |
 | reserved (`isReservedSecretName`: PATH, HOME, DOCKER_*, COMPOSE_*, ...) | left out | ``<key> (zekno keeps this name)`` |
-| does not fit `SECRET_NAME`, at most 128 characters | left out | ``<key> (not a valid name)`` |
-| longer than 128 characters | left out | ``line <n> (a name longer than 128 characters)``: the key is not shown, it may be a value |
-| value empty | left out | ``<key> (empty)`` |
-| value larger than 64 KiB | left out | ``<key> (larger than 64 KiB)`` |
+| does not fit `SECRET_NAME`, at most 128 characters | left out | ``line <n> (not a valid name)`` |
+| longer than 128 characters | left out | ``line <n> (a name longer than 128 characters)`` |
+| value empty | left out | ``line <n> (empty)`` |
+| value larger than 64 KiB | left out | ``line <n> (larger than 64 KiB)`` |
 
-A key that is shown has only `[A-Za-z0-9_.-]`, so it cannot carry a control character. The order
-of names in each group is the file's.
+Only a reserved key is shown: it is a name zekno keeps for itself, not a piece of a value. Every
+other key left out is shown by its line's number only, never as written: a key that does not fit,
+or whose value is empty or too large, may be the last piece of a value wrapped onto its own line
+(security review S1). A key that is shown has only `[A-Za-z0-9_.-]`, so it cannot carry a control
+character. The order of names in each group is the file's.
 
 ## Limits, before anything is sealed
 
@@ -117,12 +122,16 @@ $ zekno secret import .env
 
   new         DATABASE_URL, SESSION_KEY, STRIPE_KEY
   replaces    API_URL
-  left out    PATH (zekno keeps this name), my-var (not a valid name)
+  left out    PATH (zekno keeps this name), line 7 (not a valid name)
 
 ? Store 4 values? Values are never shown. (y/N)
 ✔ Stored 4 values for demo on prod. They take effect on the next deploy.
   .env still holds them in plain text. Delete it, or keep it out of git.
 ```
+
+The `.env` of this example (and of the tests and the walkthrough) has a comment on line 1, then
+`DATABASE_URL`, `SESSION_KEY`, `STRIPE_KEY`, `API_URL`, `PATH` and `my-var` on lines 2 to 7, so
+`my-var` is named `line 7`.
 
 - `note(I1)` (dim, set in by two columns, as the board "zekno secret import" draws it), `gap()`,
   then `groups(...)`: two spaces, the label padded to 12 columns, then the names joined with `, `,
@@ -141,7 +150,7 @@ Plain lines on standard output, the same words, no symbols, no empty lines:
 .env, for demo on prod
 new	DATABASE_URL, SESSION_KEY, STRIPE_KEY
 replaces	API_URL
-left out	PATH (zekno keeps this name), my-var (not a valid name)
+left out	PATH (zekno keeps this name), line 7 (not a valid name)
 Stored 4 values for demo on prod. They take effect on the next deploy.
 .env still holds them in plain text. Delete it, or keep it out of git.
 ```

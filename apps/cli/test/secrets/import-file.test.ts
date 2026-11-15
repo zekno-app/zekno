@@ -102,6 +102,12 @@ describe("the grammar, case by case (contracts/import.md, What each case means)"
       ['NAME=a"b', "not_entry"],
       ["NAME=a'b", "not_entry"],
       ["NAME=a\\b", "not_entry"],
+      // An unquoted value that begins with `=`: the last piece of a wrapped value, never a name and a value (security review S1).
+      ["QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo1Ng==", "not_entry"],
+      ["NAME==", "not_entry"],
+      ["NAME==x", "not_entry"],
+      ["NAME = =x", "not_entry"],
+      ["NAME==$x", "not_entry"],
       ["NAME value", "not_entry"],
       ["=value", "not_entry"],
       ["my var=x", "not_entry"],
@@ -147,6 +153,7 @@ describe("which sentence a line that does not fit gets (I2 to I9)", () => {
     [`NAME=${SENTINEL}$X`, "dollar", "a $ that zekno would not expand. Put the value in single quotes to keep it as it is."],
     [`NAME=${SENTINEL}#x`, "hash", "a # inside a value. Quote the value to keep it, or put a space before # to start a comment."],
     [`NAME=${SENTINEL}"x`, "not_entry", "this is not a NAME=value line."],
+    [`${SENTINEL}==`, "not_entry", "this is not a NAME=value line."],
   ]
 
   test("each step of the order, on line 4 after a blank line, a comment and an entry, in an LF file and a CRLF file", () => {

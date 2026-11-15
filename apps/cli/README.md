@@ -332,7 +332,7 @@ $ zekno secret import .env
 
   new         DATABASE_URL, SESSION_KEY, STRIPE_KEY
   replaces    API_URL
-  left out    PATH (zekno keeps this name), my-var (not a valid name)
+  left out    PATH (zekno keeps this name), line 7 (not a valid name)
 
 ? Store 4 values? Values are never shown. (y/N)
 ✔ Stored 4 values for demo on prod. They take effect on the next deploy.
@@ -343,15 +343,17 @@ $ zekno secret import .env
   skipped. `export ` in front of a name is allowed. A value may be in single quotes, taken
   exactly as written, or in double quotes, where `\n`, `\r`, `\t`, `\\`, `\"` and `\$` are the
   only escapes. A `#` after a space or a tab starts a comment.
-- **What stops the import.** A `$` outside single quotes, and a `#` inside a value without
-  quotes: put such a value in single quotes to keep it as it is. A value never spans lines: write
+- **What stops the import.** A `$` outside single quotes, a `#` inside a value without quotes,
+  and a value without quotes that begins with `=`: put such a value in single quotes to keep it as
+  it is. A value never spans lines: write
   a line break as `\n` inside double quotes. A name given twice stops it too. Any line that does not fit stops the whole import and
   nothing is stored: the message names the file and the line's number, and never repeats the
   line.
 - **Names.** A name that already has a secret gets a new version ("replaces"). A name that does
-  not fit the rule of `secret set`, a reserved name, and an empty value are left out and named,
-  and the rest is still offered. A value may be at most 64 KiB, and one import at most 256
-  values.
+  not fit the rule of `secret set`, a reserved name, and an empty value are left out, and the rest
+  is still offered. A reserved name is shown as written; any other name left out is shown by its
+  line's number only (`line 7` above), since it may be the end of a value wrapped onto its own
+  line. A value may be at most 64 KiB, and one import at most 256 values.
 - **One question.** Nothing is stored before the answer, and then every value is stored at once,
   or none is. `--yes` answers the question in advance. With no terminal, the import stops unless
   you add `--yes`, and stores nothing. `--app` and `--server` work as for the other secret

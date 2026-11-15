@@ -95,7 +95,7 @@ groups, each in the file's order:
 |-------|-------|------|
 | `fresh` ("new") | names with no current secret | name fits `SECRET_NAME`, at most 128 characters, not reserved, value not empty, at most 64 KiB |
 | `replaces` | names with a current secret | the same rule; the app's current secrets have this name (`currentSecrets`, not removed) |
-| `leftOut` | `{ shown, reason }` | the name does not fit (`not a valid name`), is reserved (`zekno keeps this name`), the value is empty (`empty`), or larger than 64 KiB (`larger than 64 KiB`); a name longer than 128 characters is shown as `line <n>` with `a name longer than 128 characters` |
+| `leftOut` | `{ shown, reason }` | the name does not fit (`not a valid name`), is reserved (`zekno keeps this name`), the value is empty (`empty`), or larger than 64 KiB (`larger than 64 KiB`), or the name is longer than 128 characters (`a name longer than 128 characters`). `shown` is the key for a reserved name, and `line <n>` for every other reason, so a piece of a wrapped value is never shown (security review S1) |
 
 Limits checked before anything is sealed (each stops the import, "Nothing was stored."): at most
 256 accepted values; the app's current secrets and the new names together at most 256; the store's
