@@ -73,6 +73,15 @@ docs. `apps/cli/tests/` (the agent end-to-end tests) keeps the layout its runner
 4. `ui/` imports from `ops/` only types (the data it draws), and nothing from `app/`,
    `commands/` or `asking/`.
 5. Nothing that `cli/cli.ts` imports statically loads Ink or React (already tested).
+6. `cli/` holds two kinds of file. `cli/cli.ts` (arguments and dispatch) is imported by
+   `main.ts` only. `cli/context.ts` and `cli/errors.ts` are what every folder may import, so
+   they import nothing from `ops/`, `commands/`, `asking/` or `app/`, from `ui/` only
+   `ui/types.ts`, and re-export nothing from another folder (review R1).
+
+The test also fails on what would let a breach pass unseen (review R1): a source file that is
+not `.ts` or `.tsx`, an `import(` or `require(` whose argument is not a plain string, and an
+import that is neither relative nor one of the packages `apps/cli/package.json` names (or a
+`node:`/`bun` built-in).
 
 A test, `apps/cli/test/layers/layers.test.ts`, walks the imports and fails on a breach of 1 to 4.
 

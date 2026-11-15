@@ -55,7 +55,11 @@ test that enforces them; run every existing test.
   tests, `RELEASING.md`, the READMEs, the docs page and the workflows' comments.
 - **FR-007**: Imports between the folders of `apps/cli/src` MUST follow the directions of the
   plan, checked by a test.
-- **FR-008**: A rule that exists twice MUST exist once: the secret-name rule is the core's.
+- **FR-008**: A rule that exists twice MUST exist once: the CLI's own copy of the secret-name
+  rule is gone, and the app uses the core's. Not changed here (review R5): inside the core, two
+  message schemas write the pattern of an `app/name` key in full, one with a length limit and
+  one without. Those are the core's message formats, and a change to them belongs with a change
+  to the core, not with a move of files.
 - **FR-009**: No dependency, tool or file format is added. Lint and format for the CLI, the
   runner and the core are a separate choice for the maintainer, not part of this feature.
 
