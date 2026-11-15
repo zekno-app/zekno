@@ -31,8 +31,13 @@ type Item =
   | { id: number; kind: "deploy"; shown: DeployShown }
   | { id: number; kind: "chosen"; collapsed: string; label: string }
   | { id: number; kind: "asked"; question: string; answer: string }
-  /** A question left with Esc or Ctrl-C: its line stays, above what is said next (board "Questions in single commands"). `answer`: a typed answer so far. */
-  | { id: number; kind: "left"; question: string; answer?: string }
+  /**
+   * A question left with Esc or Ctrl-C: its line stays as it was drawn, above what is said next (board
+   * "Questions in single commands"). `form` says how its line ends: a list's question alone; a typed
+   * answer's `› <answer so far>` (`answer`), without the cursor; a yes-or-no question's `(y/N)`; the hidden
+   * prompt's `(hidden)   esc skips it`, which never shows anything of a value.
+   */
+  | { id: number; kind: "left"; question: string; form: "list" | "typed" | "yes-or-no" | "hidden"; answer?: string }
   | { id: number; kind: "answered"; question: string; yes: boolean }
   | { id: number; kind: "hidden"; question: string; skipped: boolean }
   | { id: number; kind: "code"; label: string; value: string; about: string }
@@ -267,7 +272,9 @@ function Line({ item, columns }: { item: Item; columns: number }) {
   }
   if (item.kind === "asked") return <QuestionLine pieces={[...questionPieces(item.question), ...answerPieces(item.answer)]} columns={columns} />
   if (item.kind === "left") {
-    return <QuestionLine pieces={[...questionPieces(item.question), ...(item.answer === undefined ? [] : answerPieces(item.answer))]} columns={columns} />
+    const end: Piece[] =
+      item.form === "typed" ? answerPieces(item.answer ?? "") : item.form === "yes-or-no" ? yesOrNoPieces : item.form === "hidden" ? hiddenPieces : []
+    return <QuestionLine pieces={[...questionPieces(item.question), ...end]} columns={columns} />
   }
   if (item.kind === "answered") {
     return <QuestionLine pieces={[...questionPieces(item.question), ...yesOrNoPieces, { text: ` ${item.yes ? "yes" : "no"}` }]} columns={columns} />
@@ -339,6 +346,9 @@ function Line({ item, columns }: { item: Item; columns: number }) {
 
 /** The dim `(y/N)` after a yes-or-no question, a space before it. */
 const yesOrNoPieces: Piece[] = [{ text: " " }, { text: "(y/N)", dim: true }]
+
+/** What follows the question of the hidden prompt that can be skipped while it is open: `(hidden)` and `esc skips it`, dim. Nothing of the value. */
+const hiddenPieces: Piece[] = [{ text: "(hidden)", dim: true }, { text: "   " }, { text: "esc skips it", dim: true }]
 
 /**
  * A line from a server: dim, after the mark. A line wider than the terminal
@@ -464,9 +474,10 @@ const GROUP_LABEL = 12
  * What each question leaves on the screen once it is answered, above
  * whatever comes next. A list collapses to `✔ Server  prod` (mock-ups 1 and
  * 2), except for a row that asks a question of its own (`+ a new app`). A
- * list or a typed answer left with Esc or Ctrl-C keeps its question's line,
- * a typed answer with what was typed, above `✖ Nothing was done.` (board
- * "Questions in single commands"). The rest is research Q1, built as
+ * question left with Esc or Ctrl-C keeps its line as it was drawn, above
+ * `✖ Nothing was done.` (board "Questions in single commands"): a typed
+ * answer with what was typed and no cursor, the hidden prompt with nothing of
+ * the value. The rest is research Q1, built as
  * recommended and not yet approved by the maintainer: a typed answer stays as
  * `? Your name › ada`; a yes-or-no question as `? <question> (y/N) yes`, the
  * questions that existed before included; the skippable hidden prompt as its
@@ -475,7 +486,12 @@ const GROUP_LABEL = 12
  */
 const LEFT_BEHIND = {
   choose: (collapsed: string, label: string) => ({ kind: "chosen", collapsed, label }),
-  left: (question: string, answer?: string) => ({ kind: "left", question, ...(answer === undefined ? {} : { answer }) }),
+  left: (question: string, form: "list" | "typed" | "yes-or-no" | "hidden", answer?: string) => ({
+    kind: "left",
+    question,
+    form,
+    ...(answer === undefined ? {} : { answer }),
+  }),
   ask: (question: string, answer: string) => ({ kind: "asked", question, answer }),
   confirm: (question: string, yes: boolean) => ({ kind: "answered", question, yes }),
   askValue: (question: string, skipped: boolean) => ({ kind: "hidden", question, skipped }),
@@ -538,7 +554,7 @@ function ValuePrompt({ open }: { open: ValueOpen }) {
   })
   return (
     <Box flexDirection="column">
-      <QuestionLine pieces={[...questionPieces(open.question), { text: "(hidden)", dim: true }, { text: "   " }, { text: "esc skips it", dim: true }]} columns={columns} />
+      <QuestionLine pieces={[...questionPieces(open.question), ...hiddenPieces]} columns={columns} />
       {reason === undefined ? null : <MarkedLine mark={MARK.warn} color={COLOR.warn} pieces={[{ text: reason }]} columns={columns} />}
     </Box>
   )
@@ -830,6 +846,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
             settle(result) {
               if (result.kind === "left") {
                 store.set({ value: undefined })
+                add(LEFT_BEHIND.left(question, "hidden"))
                 return reject(new Left())
               }
               // Another hidden value may follow once this one is stored: the terminal must not echo what is typed meanwhile.
@@ -850,7 +867,10 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
             leave: options?.leave === true,
             settle(answer) {
               store.set({ question: undefined })
-              if (answer === "left") return reject(new Left())
+              if (answer === "left") {
+                add(LEFT_BEHIND.left(question, "yes-or-no"))
+                return reject(new Left())
+              }
               add(LEFT_BEHIND.confirm(question, answer))
               resolve(answer)
             },
@@ -869,7 +889,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
             settle(result) {
               store.set({ list: undefined })
               if ("left" in result) {
-                add(LEFT_BEHIND.left(question.question))
+                add(LEFT_BEHIND.left(question.question, "list"))
                 return reject(new Left())
               }
               const row = question.rows[result.answer]!
@@ -893,7 +913,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
             settle(result) {
               store.set({ typed: undefined })
               if ("left" in result) {
-                add(LEFT_BEHIND.left(question.question, result.typed))
+                add(LEFT_BEHIND.left(question.question, "typed", result.typed ?? ""))
                 return reject(new Left())
               }
               add(LEFT_BEHIND.ask(question.question, result.answer))

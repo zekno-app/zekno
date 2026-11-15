@@ -290,14 +290,16 @@ describe("a yes-or-no question", () => {
     await t.ui.close()
   })
 
-  test("asked with leave: Esc and Ctrl-C leave; n and Enter are no", async () => {
+  test("asked with leave: Esc and Ctrl-C leave, and its line stays as it was drawn; n and Enter are no", async () => {
     for (const key of [ESC, CTRL_C]) {
       const t = terminal()
-      const asked = t.ui.confirm("Remember this folder?", "no terminal", { leave: true })
-      await shows(t, "? Remember this folder? (y/N)")
+      const asked = t.ui.confirm("Remember this folder? It writes zekno.json.", "no terminal", { leave: true })
+      await shows(t, "? Remember this folder? It writes zekno.json. (y/N)")
       t.keys(key)
       expect(asked).rejects.toBeInstanceOf(Left)
       await asked.catch(() => {})
+      await settle()
+      expect(t.lines()).toEqual(["? Remember this folder? It writes zekno.json. (y/N)"])
       await t.ui.close()
     }
     for (const key of ["n", ENTER]) {
@@ -345,13 +347,37 @@ describe("the hidden prompt that can be skipped (mock-up 3)", () => {
     await t.ui.close()
   })
 
-  test("Ctrl-C leaves", async () => {
+  test("Ctrl-C leaves, and its line stays as it was drawn, with nothing of the value and without a reason that was under it", async () => {
     const t = terminal()
     const value = t.ui.askValue(QUESTION, "DATABASE_URL")
     await shows(t, OPEN)
+    t.keys(ENTER)
+    await shows(t, "! A value cannot be empty. Press esc to skip it.")
+    t.keys("zk_typed_9f3a")
+    await settle()
     t.keys(CTRL_C)
     expect(value).rejects.toBeInstanceOf(Left)
     await value.catch(() => {})
+    await settle()
+    expect(t.lines()).toEqual([OPEN])
+    await t.ui.close()
+    expect(t.raw()).not.toContain("9f3a")
+  })
+
+  test("a yes-or-no question asked without leave, and the hidden prompt of zekno secret set, are as before", async () => {
+    const t = terminal()
+    const asked = t.ui.confirm("Use it here?", "no terminal")
+    await shows(t, "? Use it here? (y/N)")
+    t.keys(ESC)
+    expect(await asked).toBe(false)
+    await shows(t, "? Use it here? (y/N) no")
+    const secret = t.ui.askSecret("Value for A (demo on prod): ", false)
+    await shows(t, "? Value for A (demo on prod): (hidden)")
+    t.keys(CTRL_C)
+    expect(secret).rejects.toThrow("Cancelled.")
+    await secret.catch(() => {})
+    await settle()
+    expect(t.lines()).toEqual(["? Use it here? (y/N) no"])
     await t.ui.close()
   })
 })

@@ -502,7 +502,8 @@ zekno link --app api --server prod
 ### `zekno doctor`
 
 Checks this machine and each connected server, one line per check, and says what to do for each
-thing that is wrong. It changes nothing, on this machine or on any server.
+thing that is wrong. zekno itself changes nothing, on your machine or on any server. SSH keeps its
+own records: it may add the server to `known_hosts` on your machine, and the server logs the login.
 
 ```text
 $ zekno doctor
@@ -543,8 +544,9 @@ $ zekno doctor
 - **No questions.** It reaches servers in SSH's batch mode and never asks for anything, so it never
   waits on a password. A server where SSH would have to ask says "SSH needs an answer": open the
   app with `zekno` and press `enter` on that server, where SSH can ask.
-- **Nothing changes.** No file is written on this machine, `links.json` included; nothing is
-  written, installed or started on a server; no deploy number is used.
+- **zekno changes nothing.** zekno writes no file on your machine, `links.json` included; it
+  writes, installs and starts nothing on a server; no deploy number is used. SSH's own records are
+  as said above.
 - `--server <name>` checks this machine and that one server. `--json` prints one object:
   `zekno`, `runner`, `machine` (the checks of this machine), `servers` (each with `name`, `where`
   and `checks`), `serversSkipped`, `latest`, `problems` and `warnings`. Each check has `check`,

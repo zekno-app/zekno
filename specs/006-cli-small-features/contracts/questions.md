@@ -111,10 +111,14 @@ Esc or Ctrl-C at a list or a typed answer, Esc or Ctrl-C at a yes-or-no question
 through `ui.error` (at a terminal `✖ Nothing was done.`) and returns 1. Nothing more is done
 (FR-005). In the first deploy, what leaving says once something was made in the run is research Q3.
 
-At a terminal, a list or a typed answer that is left keeps its question's line above that
-sentence, as the board "Questions in single commands" draws it ("Leaving with esc"): a list's
-`? <question>`, without its rows and hint; a typed answer's `? <question> › <answer so far>`,
-without the cursor and without a reason that was under it.
+At a terminal, a question that is left keeps its line, as it was drawn, above that sentence, as
+the board "Questions in single commands" draws it ("Leaving with esc"): a list's `? <question>`,
+without its rows and hint; a typed answer's `? <question> › <answer so far>`, without the cursor;
+a yes-or-no question asked with `{ leave: true }`, `? <question> (y/N)`; the skippable hidden
+prompt, `? <question>(hidden)   esc skips it`, which shows nothing of the value. A reason that was
+under a typed answer or the hidden prompt goes. A yes-or-no question asked without `leave` is not
+left (Esc answers no, and `? <question> (y/N) no` stays), and the hidden prompt of `zekno secret
+set` is unchanged.
 
 ## The lists each command offers
 

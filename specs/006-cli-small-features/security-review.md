@@ -321,7 +321,7 @@ no keychain, no real SSH host, no network.
 |---------|--------|--------|
 | S1 | fixed | `9f26e59` |
 | S2 | fixed | `9445411` |
-| S3 | fixed | `fbb5a99` |
+| S3 | fixed | `fbb5a99`, follow-up `b260fe6` |
 | S4 | waiting for the maintainer | none |
 | Echo between the first deploy's hidden prompts ("Needs validation") | fixed | `45f57d1` |
 

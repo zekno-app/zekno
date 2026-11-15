@@ -356,6 +356,23 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     expect(t.raw()).not.toContain(SENTINEL)
   }, 60_000)
 
+  test("through the stand-in terminal: Esc at the one question answers no, its line stays, and nothing is stored", async () => {
+    const { m } = await mockUp4()
+    const store = storeOf(m, "demo", "prod")
+    const before = readFileSync(store.path)
+    const plain = m.deps.ui
+    const t = terminal()
+    m.deps.ui = t.ui
+    const done = m.zekno("secret", "import", ".env").finally(() => (m.deps.ui = plain))
+    await shows(t, "? Store 4 values? Values are never shown. (y/N)", 20_000)
+    t.keys("\x1b")
+    expect(await done).toBe(1)
+    await t.ui.close()
+    expect(t.lines().slice(-2)).toEqual(["? Store 4 values? Values are never shown. (y/N) no", "✖ Nothing was done."])
+    expect(readFileSync(store.path).equals(before)).toBe(true)
+    expect(t.raw()).not.toContain(SENTINEL)
+  }, 60_000)
+
   test("through the stand-in terminal: a bad line is named by its number, its first sentence after ✖ and the rest under it", async () => {
     const { m } = await mockUp4()
     writeFileSync(join(m.project, ".env"), `A=1\nB=2\nC=3\nD=4\nE=5\nF=6\nnot a line ${SENTINEL}\n`)

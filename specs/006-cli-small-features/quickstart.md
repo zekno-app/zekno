@@ -213,9 +213,18 @@ hidden prompts of `m3-value` (a value skipped with Esc, then the next one typed)
 
 Left as they are, as decided: known point (a), F8 and F9 in the common error style; (b), a refused
 hidden value as `! <reason>` (A10 keeps its backticks at a terminal); (c), the label column of
-doctor's "not checked" lines. Not changed by these fixes, and not in their scope: a yes-or-no
-question asked with `leave` (F5) and the hidden prompt still leave no line when left with Esc or
-Ctrl-C (`m2-demo-*-2-final`: `✔ App  demo`, then `✖ Nothing was done.`).
+doctor's "not checked" lines.
+
+A follow-up (after `b260fe6`) made every question that can be left keep its line. Run again at
+both sizes: F5 left with Esc keeps `? Remember this folder? It writes zekno.json, so it always
+deploys demo to prod. (y/N)` (at 80 columns `  (y/N)` on the next line) above `✖ Nothing was
+done.` (`m2-demo-*-2-final`); the hidden prompt left with Ctrl-C, after `abc` was typed, keeps `?
+Value for DATABASE_URL (demo on prod): (hidden)   esc skips it`, and `abc` is in none of the bytes
+written (`m3-value-ctrlc-*-final`). The import's question is asked without `leave`: Esc answers
+no, and `? Store 4 values? Values are never shown. (y/N) no` stays above `✖ Nothing was done.`, as
+before (`m4-esc-*-2-final`, from a scene added beside the drivers in the scratchpad's
+`walkthrough-extra/`, which uses the walkthrough's harness and driver unchanged). `m3-value` and
+`m3-leave` were run again and draw as above.
 
 ### The agent end-to-end tests
 
