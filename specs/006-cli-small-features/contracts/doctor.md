@@ -61,7 +61,10 @@ from column 0, exactly as the mock-up:
 - Not checked: `–`, two spaces, the label padded to 14 columns, `not checked`; the `–` and
   `not checked` dim, the label in the text colour, as the board draws them. The detail also
   starts at column 17.
-- A next step: 17 spaces and the sentence, dim, on the line under its check.
+- A next step: 17 spaces and the sentence, dim, on the line under its check. A command in it is
+  drawn without the backticks around it, as an error line draws one (``Point to one with `-f
+  <file>`.`` is drawn `Point to one with -f <file>.`). Plain output and `--json` keep the backticks.
+- A detail or a next step wider than the window goes on under itself, from column 17.
 - The last line: two spaces and D30, bold (board).
 
 When the profile did not verify, no server is contacted and, in place of the server sections, one

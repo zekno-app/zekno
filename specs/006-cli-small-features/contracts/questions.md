@@ -34,6 +34,9 @@ colour (`BRAND`, `ui/theme.ts`), `✔` green, `!` yellow, `✖` red, hints and s
   the list opens.
 - After a choice the question, its rows and the hint line are replaced by one line:
   `✔ <collapsed>  <label>` (two spaces between), for example `✔ Server  prod`, `✔ App  demo`.
+  A row that asks a question of its own (`+ a new app`) leaves no line: the question it asks is
+  drawn in the list's place, as mock-up 2 and its board go from the list to `? Name for the new
+  app`.
 - **More rows than fit.** The list may use the window's height less two lines. When the rows do not
   fit, a window of rows around the selected one is drawn, with `  ↑ <n> more` above it when rows are
   hidden above and `  ↓ <n> more` below it when rows are hidden below, dim (A13), counted in the
@@ -87,12 +90,31 @@ Before any of the four is drawn, and before the hidden prompt of `zekno secret s
 and not read is thrown away (`discardTypedAhead` on the interface's input, raw mode first for a
 hidden prompt). A key pressed after the question is drawn answers it (FR-007, feature 004 K12).
 
+After a value is given or skipped at the hidden prompt that can be skipped, raw mode stays on
+until the next question opens, anything else is drawn, a step or a deploy starts, or 2 seconds
+pass: between two hidden values of the first deploy the terminal never echoes what is typed or
+pasted, and the next prompt throws it away. Ctrl-C in that time turns raw mode off and interrupts,
+as the terminal would.
+
+## Lines wider than the window
+
+A line of a single command wider than the window goes on at the column its words start at, never
+with a space of its own at the start: under the words after `?`, `✔`, `!` or `✖` (column 2), at
+column 2 for a note or a reason set in by two, from column 14 for the groups of an import and
+column 17 for doctor's details and next steps, and at column 0 for a line that starts there (the
+first line of `zekno status`). The words are broken at a space, which is dropped there.
+
 ## Leaving
 
 Esc or Ctrl-C at a list or a typed answer, Esc or Ctrl-C at a yes-or-no question asked with
 `{ leave: true }`, and Ctrl-C at the skippable hidden prompt throw `Left`. `run` prints its sentence
 through `ui.error` (at a terminal `✖ Nothing was done.`) and returns 1. Nothing more is done
 (FR-005). In the first deploy, what leaving says once something was made in the run is research Q3.
+
+At a terminal, a list or a typed answer that is left keeps its question's line above that
+sentence, as the board "Questions in single commands" draws it ("Leaving with esc"): a list's
+`? <question>`, without its rows and hint; a typed answer's `? <question> › <answer so far>`,
+without the cursor and without a reason that was under it.
 
 ## The lists each command offers
 

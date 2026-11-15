@@ -20,8 +20,10 @@ Something a single command asks at a terminal (`Ui`, `apps/cli/src/ui/types.ts`)
 | Yes or no | `confirm(question, refusal, options?: { leave?: boolean }): Promise<boolean>` | as today; `leave` | `y` yes; `n`, Enter no; without `leave` Esc and Ctrl-C no | with `leave`, Esc and Ctrl-C throw `Left` |
 | Hidden, skippable | `askValue(question: string): Promise<string \| undefined>` | `question` | the value; `undefined` after Esc | Ctrl-C throws `Left` |
 
-`ListRow<T> = { value: T; label: string; detail?: string }`. `label` and `detail` are drawn as
-given; whoever builds a row cleans anything that came from a file or a server (`sanitize`).
+`ListRow<T> = { value: T; label: string; detail?: string; asksNext?: boolean }`. `label` and
+`detail` are drawn as given; whoever builds a row cleans anything that came from a file or a server
+(`sanitize`). `asksNext`: choosing the row asks a question of its own (`+ a new app`), so at a
+terminal it leaves no `✔ App` line behind.
 
 Validation:
 

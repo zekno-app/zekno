@@ -309,3 +309,105 @@ the batch read fails (S3).
 
 **Not checked by this review**: a real terminal or pseudo-terminal; real SSH, Docker or Linux; a
 real answer from GitHub; the full-screen app, beyond seeing that none of its files changed.
+
+## 6. After the review: what was fixed
+
+**Written by the implementer who fixed the findings, not by the reviewer.** Parts 1 to 5 above are
+the reviewer's and are unchanged. Everything below was run on `006-cli-small-features` after
+`724130a`, with the in-memory key store, local runners, the stand-in `ssh` and the stand-in Docker;
+no keychain, no real SSH host, no network.
+
+| Finding | Status | Commit |
+|---------|--------|--------|
+| S1 | fixed | `9f26e59` |
+| S2 | fixed | `9445411` |
+| S3 | fixed | `fbb5a99` |
+| S4 | waiting for the maintainer | none |
+| Echo between the first deploy's hidden prompts ("Needs validation") | fixed | `45f57d1` |
+
+**S1, a piece of a value becomes a secret's name.** The review's smallest fix, as written:
+
+- `secrets/import-file.ts`, `readLine`: an unquoted value that begins with `=` (after the spaces
+  that follow the key's `=`) stops the import with I2, `<file>, line <n>: this is not a NAME=value
+  line. Nothing was stored.`, naming the line's number only. `NAME=a=b` still reads `a=b`.
+- `ops/secret.ts`, `leftOut`: an entry left out because its value is empty, its key does not fit
+  `SECRET_NAME`, or its value is larger than 64 KiB is shown as `line <n> (empty)`, `line <n> (not
+  a valid name)`, `line <n> (larger than 64 KiB)`, as a key longer than 128 characters already was.
+  A reserved name is still shown as written (`PATH (zekno keeps this name)`). The import has no
+  `--json` output, so there was nothing to change there.
+- With the review's file, the import now stops at line 2 and stores nothing; without line 2, line
+  4 is `line 4 (empty)`.
+- Tests: `test/secrets/import-file.test.ts` (the grammar cases `QUJD…Ng==`, `NAME==`, `NAME==x`,
+  `NAME = =x`, `NAME==$x`, and the order case `<sentinel>==`), `test/secrets/import.test.ts`, "a
+  value wrapped onto lines of its own (security review S1): no piece of it is shown, stored as a
+  name, or in any error" (the review's file, plain and at a stand-in terminal; every output, error,
+  drawn byte, stored name and file of the profile folder searched for each piece). Existing
+  expectations in `import.test.ts` changed from the key to `line <n>`: the left-out group of the
+  storing test, of mock-up 4 (plain, at a terminal and through the stand-in terminal) and of the
+  case where every name is left out.
+- Still true after the fix: the first line of a wrapped value is stored as the whole value without a
+  word (the review's `GOOGLE_CREDENTIALS` point); a wrapped line that itself reads as `NAME=value`
+  with a valid name would be stored under that name, shown under `new` before the question (no
+  base64 or base64url piece does: `=` comes only at its end). The reserved-name rule matches
+  prefixes and suffixes case-insensitively (`LD_…`, `…_proxy`), so a base64url piece that happens
+  to match it would still be shown as written; the brief for this fix decided reserved names stay
+  shown.
+
+**S2, no time limit after a runner answers as one from before sessions.** As the review proposed:
+`openSession` hands its signal to the one-shot path (`oneShot(transport, signal)`); a one-shot
+request passes it through `ask` to `Transport.run`, which kills the process (or the SSH connection)
+as soon as the signal fires and rejects without waiting for the process any further; the request
+then rejects with `ENDED`. Without a signal, a one-shot request runs exactly as before. Tests: a
+stand-in runner (`stallingRunner` in `test/stand-in-server.ts`) that prints `hello` for `session`
+and writes its process id and then sleeps for `status`: `test/ops/doctor.test.ts`, "a runner that
+answers as one from before sessions, then never answers status (security review S2) …" (on this
+machine with a 1-second limit, and over the stand-in `ssh` with a 3-second limit: the Runner line
+says `did not answer within 20 seconds`), and `test/asking/asking.test.ts`, the same title, for
+`appRows` with a 1-second limit (this machine's history is offered); both return within their
+limit and check that no runner process is left running. Both tests fail before the fix (a 20 s and
+a 30 s timeout). Every other caller that already passed a signal to `openSession` (the app's
+background reads, `zekno logs`, `server add` and `server update` through `ops/server.ts`) now has
+its one-shot requests stopped by that signal too, as its session requests already were.
+
+**S3, a "new" app can replace an app already on the server.** The review's first fix, on the
+deploy's own connection: `DeployPlan` carries `fresh` (the app's name was typed as new in
+`whichApp`); `sendDeploy` compares it with `status.lastSequence`, which it already reads on its
+session before anything is signed, and throws `AppTaken` (A12, `<server> already has an app named
+<app>. Choose it from the list, or give another name.`) when the runner holds the app. Nothing is
+signed, recorded in the history, or sent; no new connection is made. In the first deploy, when
+something was made earlier in the run (the key, a server, zekno.json, a value), A12 is followed by
+F9 as the flow's leaving rule says, and what was made stays. Test:
+`test/asking/first-deploy.test.ts`, "a second machine with no history of the app, its apps not
+read: A12 from the deploy's own connection, before anything is signed, stored or sent": machine A
+deploys `api`; machine B (same team and server, no history) in a folder named `api`, the batch-mode
+read failing as SSH does where it would ask, the deploy's own connection working; with "Remember
+this folder?" answered no and yes: status 1, A12 (and F9 after zekno.json was written), no history
+entry on B, the stand-in server byte for byte as it was, nothing started. It fails before the fix
+(the deploy went through). Left for the maintainer: when the folder was remembered in that same
+run, zekno.json names the app, so the next `zekno deploy` there takes the app from zekno.json, does
+not ask, and deploys it; F9's "run `zekno deploy` again to carry on" then replaces the app. The
+review's second fix (no folder name filled in, and saying the list comes from this machine only,
+when the read failed) was not built.
+
+**S4, the import names the link.** Not changed: waiting for the maintainer, as the brief for these
+fixes says.
+
+**Echo between the first deploy's hidden prompts.** Fixed, in `ui/ink.tsx` only. After a value is
+given or skipped at `askValue`, the prompt is replaced in the same update by a component that reads
+keys (`HeldInput`), so Ink keeps raw mode on across the swap and `asking` does not turn it off; it
+stays on until the next question opens in its place, anything else is drawn, a step or a deploy
+starts, the interface closes, or 2 seconds pass. What is typed meanwhile is thrown away, as the next
+prompt would throw it away. Ctrl-C in that time turns raw mode off and sends the process the SIGINT
+the terminal would have sent with raw mode off. The plain path is unchanged; no `Ui` method was
+added; only `askValue` holds raw mode. Tests: `test/ui/questions.test.tsx`, "between two hidden
+values of one flow" (raw mode never goes off between two prompts and keys typed between them reach
+neither; it goes off on its own and on close; Ctrl-C between them sends SIGINT with raw mode off;
+a list and a yes-or-no question still turn it off at once). In a real pseudo-terminal (a driver
+outside the repository: two hidden prompts with 1.5 s of work between them, `typed-between` typed
+in the gap): before the change the terminal echoed `typed-between`; after it nothing was echoed and
+both values arrived as typed; Ctrl-C in the gap ended the program by SIGINT, with echo and line
+mode off in the gap until then. The walkthrough's `m3-value` scene (a value skipped, then the next
+one typed) ran through it at both sizes. The existing type-ahead helper in `questions.test.tsx` now reads
+raw mode after the flow draws its next line. Still true: what is typed before the first prompt
+appears, while raw mode is off, is echoed (feature 003's accepted limit); during the hold, Ctrl-Z
+and Ctrl-\ do nothing (for 2 seconds at most).

@@ -1000,8 +1000,10 @@ The profile folder has mode 700 and its files mode 600. App state and logs are
 never stored.
 
 The file you give `zekno secret import` is read once and never copied: its
-values are kept only as the encrypted records above. `zekno doctor` writes
-nothing, on your machine or on a server.
+values are kept only as the encrypted records above. `zekno doctor` itself
+writes nothing, on your machine or on a server. SSH keeps its own records: it
+may add the server to `known_hosts` on your machine, and the server logs the
+login.
 
 The files in `~/.zekno` are safe to read but are not believed as they stand.
 Every command rebuilds the team from the signed team lists, starting from the

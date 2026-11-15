@@ -187,6 +187,36 @@ deploy), Ink's last frame. Not checked: a light terminal; resizing the window wh
 open; D51's form on the `Reachable` line (it was reached on the `Runner` line); feature 004's lines
 that come after a choice (the status lines) beyond reading them.
 
+#### After the fixes
+
+Run again on 2026-11-15 at `9750eaf` with the same drivers, unchanged, at 100 by 30 and 80 by 24:
+mock-ups 1 (Enter, Esc, Ctrl-C, one server), 2 (`+ a new app`, `demo`), 3 (the whole flow, leaving,
+refused answers, the hidden values), 4, 5 and 6, doctor with a newer release, doctor's states on
+this machine, and F1's rule. The captures are in the scratchpad's
+`walkthrough-006/captures-after-fixes/`, beside the first ones. Every run ended with the cursor
+shown and raw mode off; the terminal wrapped no row itself (`wrapped_rows` 0 in every run).
+
+| Difference | Now | Capture |
+|------------|-----|---------|
+| 1. Leaving a list | fixed: `? Which server?` (`?` blue, the question bold) stays above `✖ Nothing was done.`, after Esc and after Ctrl-C. A typed question left keeps its line with what was typed and no cursor: `? Where is the server? ›` above F8 and above `Nothing was done.`, `? Name for this app › demo`, `? Your name ›` | `m1-esc-*-final`, `m1-ctrlc-*-final`, `m3-leave-*`, `m3-refuse-*-4-final`, `s-f1-*-final` |
+| 2. Choosing `+ a new app` | fixed: no `✔ App  + a new app`; `✔ Server  prod`, then `? Name for the new app › my-folder` straight after the list; after A12 and Esc, `? Name for the new app › demo` above `✖ Nothing was done.` | `m2-new-*-3-name`, `m2-new-*-6-final` |
+| 3. The cursor on a refused typed answer | left as decided | `m3-refuse-*-1-A6` |
+| 4. The version's comma | fixed: `runner 0.1.0` in the text colour, `, the runner release this zekno installs` dim from the comma; the words unchanged | `m6-*-final.styled.txt` |
+| 5. `(y/N) yes` after an answered question | left as decided | `m4-*-2-final` |
+| 6. Wrapped lines at 80 columns | fixed: F1 goes on as `  this app.` (column 2); F5 as `  (y/N)` and `  (y/N) yes` (column 2, under the question's words); A6 as `  end.` (column 2); the status line as `to date)` (column 0); A10 under its words from column 2, at 100 columns too; A12 as `  name.` (column 2). A word wider than a line, such as a long path in a doctor next step, is broken where Ink broke it | `m3-80x24-*`, `m3-refuse-80x24-1-A6`, `m1-enter-80x24-5-final`, `m3-value-*-3-A10`, `m2-new-80x24-5-A12` |
+| Doctor's next steps | fixed: drawn without the backticks around a command, as error lines draw it (`Point to one with -f <file>.`); plain output keeps them | `s-doctor-machine-*-final` |
+
+Also changed on these screens: mock-up 4's left-out group is now `PATH (zekno keeps this name),
+line 7 (not a valid name)` (security review S1; the `.env` has `my-var` on line 7). Between the two
+hidden prompts of `m3-value` (a value skipped with Esc, then the next one typed), raw mode stayed on
+(the echo fix of the security review's "Needs validation").
+
+Left as they are, as decided: known point (a), F8 and F9 in the common error style; (b), a refused
+hidden value as `! <reason>` (A10 keeps its backticks at a terminal); (c), the label column of
+doctor's "not checked" lines. Not changed by these fixes, and not in their scope: a yes-or-no
+question asked with `leave` (F5) and the hidden prompt still leave no line when left with Esc or
+Ctrl-C (`m2-demo-*-2-final`: `✔ App  demo`, then `✖ Nothing was done.`).
+
 ### The agent end-to-end tests
 
 (not yet run)

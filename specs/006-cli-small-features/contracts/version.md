@@ -15,7 +15,9 @@ runner 0.1.0, the runner release this zekno installs
 ```
 
 - Line 1: `zekno <CLI_VERSION>`.
-- Line 2: `runner <RUNNER_RELEASE.version>, the runner release this zekno installs`.
+- Line 2: `runner <RUNNER_RELEASE.version>, the runner release this zekno installs`. At a terminal the
+  versions are in the text colour and the rest is dim from the comma on, the comma included, as the
+  board "The version, and a newer release" draws it. Plain output is the same words.
 
 With `--json`, one object on one line and nothing else: `{"zekno":"0.1.0","runner":"0.1.0"}`.
 
