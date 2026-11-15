@@ -7,7 +7,7 @@ import { CliError, Left } from "../errors"
 import { keptLines } from "./deploy"
 import { DeployBlock, type DeployShown } from "./deploy-view"
 import { NO_TERMINAL_FOR_VALUE, readStdin } from "./plain"
-import { isCtrlC, ListPrompt, TypedPrompt, VALUE_EMPTY, valueHasLines, type Settled } from "./questions"
+import { isCtrlC, ListPrompt, QuestionWords, TypedPrompt, VALUE_EMPTY, valueHasLines, type Settled } from "./questions"
 import { applySecretInput } from "./secret-input"
 import { BRAND } from "./theme"
 import { discardTypedAhead } from "./type-ahead"
@@ -20,6 +20,7 @@ type Item =
   | { id: number; kind: "log"; line: LogOutput; serviceWidth: number }
   | { id: number; kind: "line"; cells: readonly Cell[] }
   | { id: number; kind: "deploy"; shown: DeployShown }
+  | { id: number; kind: "chosen"; collapsed: string; label: string }
   | { id: number; kind: "asked"; question: string; answer: string }
   | { id: number; kind: "answered"; question: string; yes: boolean }
   | { id: number; kind: "hidden"; question: string; skipped: boolean }
@@ -220,24 +221,33 @@ function Line({ item, columns }: { item: Item; columns: number }) {
     )
   }
   if (item.kind === "log") return <LogItem line={item.line} serviceWidth={item.serviceWidth} columns={columns} />
+  if (item.kind === "chosen") {
+    return (
+      <Text>
+        <Text color={COLOR.success}>{MARK.success}</Text> <Text dimColor>{item.collapsed}</Text>
+        {"  "}
+        {item.label}
+      </Text>
+    )
+  }
   if (item.kind === "asked") {
     return (
       <Text>
-        <Text color={BRAND}>?</Text> {item.question} <Text dimColor>›</Text> {item.answer}
+        <Text color={BRAND}>?</Text> <QuestionWords text={item.question} /> <Text dimColor>›</Text> {item.answer}
       </Text>
     )
   }
   if (item.kind === "answered") {
     return (
       <Text>
-        <Text color={BRAND}>?</Text> {item.question} <Text dimColor>(y/N)</Text> {item.yes ? "yes" : "no"}
+        <Text color={BRAND}>?</Text> <QuestionWords text={item.question} /> <Text dimColor>(y/N)</Text> {item.yes ? "yes" : "no"}
       </Text>
     )
   }
   if (item.kind === "hidden") {
     return (
       <Text>
-        <Text color={BRAND}>?</Text> {item.question}
+        <Text color={BRAND}>?</Text> <QuestionWords text={item.question} />
         <Text dimColor>{item.skipped ? "skipped" : "(hidden)"}</Text>
       </Text>
     )
@@ -265,9 +275,16 @@ function Line({ item, columns }: { item: Item; columns: number }) {
         {item.rows.map(([label, text], index) => (
           <Box key={index} paddingLeft={2}>
             <Box width={GROUP_LABEL} flexShrink={0}>
-              <Text>{label}</Text>
+              <Text dimColor>{label}</Text>
             </Box>
-            <Text>{text}</Text>
+            <Text>
+              {/* A reason in brackets, such as "(zekno keeps this name)", is dim (board "zekno secret import"). */}
+              {text.split(/(\([^()]*\))/).map((part, at) => (
+                <Text key={at} dimColor={at % 2 === 1}>
+                  {part}
+                </Text>
+              ))}
+            </Text>
           </Box>
         ))}
       </Box>
@@ -336,7 +353,7 @@ const GROUP_LABEL = 12
  * `skipped`. The hidden prompt of `zekno secret set` leaves nothing, as before.
  */
 const LEFT_BEHIND = {
-  choose: (collapsed: string, label: string) => ({ kind: "success", text: `${collapsed}  ${label}` }),
+  choose: (collapsed: string, label: string) => ({ kind: "chosen", collapsed, label }),
   ask: (question: string, answer: string) => ({ kind: "asked", question, answer }),
   confirm: (question: string, yes: boolean) => ({ kind: "answered", question, yes }),
   askValue: (question: string, skipped: boolean) => ({ kind: "hidden", question, skipped }),
@@ -370,7 +387,7 @@ function SecretPrompt({ prompt }: { prompt: Prompt }) {
   })
   return (
     <Text>
-      <Text color={BRAND}>?</Text> {prompt.question}
+      <Text color={BRAND}>?</Text> <QuestionWords text={prompt.question} />
       <Text dimColor>(hidden)</Text>
     </Text>
   )
@@ -403,7 +420,7 @@ function ValuePrompt({ open }: { open: ValueOpen }) {
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color={BRAND}>?</Text> {open.question}
+        <Text color={BRAND}>?</Text> <QuestionWords text={open.question} />
         <Text dimColor>(hidden)</Text>
         {"   "}
         <Text dimColor>esc skips it</Text>
@@ -435,7 +452,7 @@ function QuestionPrompt({ question }: { question: Question }) {
   })
   return (
     <Text>
-      <Text color={BRAND}>?</Text> {question.question} <Text dimColor>(y/N)</Text>
+      <Text color={BRAND}>?</Text> <QuestionWords text={question.question} /> <Text dimColor>(y/N)</Text>
     </Text>
   )
 }
@@ -454,13 +471,13 @@ function App({ store }: { store: ReturnType<typeof createStore> }) {
       {state.prompt ? (
         <SecretPrompt prompt={state.prompt} />
       ) : state.value ? (
-        <ValuePrompt key={state.value.id} open={state.value} />
+        <ValuePrompt key={`value-${state.value.id}`} open={state.value} />
       ) : state.question ? (
         <QuestionPrompt question={state.question} />
       ) : state.list ? (
-        <ListPrompt key={state.list.id} question={state.list.question} rows={state.list.rows} settle={state.list.settle} />
+        <ListPrompt key={`list-${state.list.id}`} question={state.list.question} rows={state.list.rows} settle={state.list.settle} />
       ) : state.typed ? (
-        <TypedPrompt key={state.typed.id} question={state.typed.question} fill={state.typed.fill} check={state.typed.check} settle={state.typed.settle} />
+        <TypedPrompt key={`typed-${state.typed.id}`} question={state.typed.question} fill={state.typed.fill} check={state.typed.check} settle={state.typed.settle} />
       ) : state.step?.still ? (
         <Box marginLeft={2}>
           <Text>{state.step.label}…</Text>

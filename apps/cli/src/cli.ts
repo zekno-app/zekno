@@ -13,8 +13,7 @@ import { CliError, UsageError } from "./errors"
 import { checkNewest, NEWEST, newerExists, NOT_CHECKED } from "./newest"
 import { withProject } from "./project"
 import { RUNNER_RELEASE } from "./runner-release"
-import { plainCell } from "./ui/types"
-import { versionLines, versionObject } from "./version"
+import { versionCells, versionLines, versionObject } from "./version"
 
 export const HELP = `zekno: deploy to your own servers. Secrets are encrypted and deploys are signed on this machine.
 
@@ -122,7 +121,8 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         deps.ui.json(latest === undefined ? versionObject(runner) : { ...versionObject(runner), latest })
         return 0
       }
-      for (const line of versionLines(runner)) deps.ui.line(line, [plainCell(line)])
+      const cells = versionCells(runner)
+      versionLines(runner).forEach((line, index) => deps.ui.line(line, cells[index]))
       if (latest?.state === "newest") deps.ui.success(NEWEST)
       else if (latest?.state === "newer") deps.ui.warn(newerExists(latest.version))
       else if (latest?.state === "not_checked") deps.ui.note(NOT_CHECKED)

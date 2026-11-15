@@ -12,6 +12,7 @@
 import { RUNNER_VERSION_PATTERN } from "@workspace/core"
 
 import cli from "../package.json"
+import { plainCell, quiet, type Cell } from "./ui/types"
 
 if (typeof cli.version !== "string" || !RUNNER_VERSION_PATTERN.test(cli.version)) {
   throw new Error("apps/cli/package.json has a version zekno does not read.")
@@ -23,6 +24,15 @@ export const CLI_VERSION: string = cli.version
 /** The two lines of `zekno --version` (mock-up 6): this zekno, and the runner release it installs. */
 export function versionLines(runner: string): [string, string] {
   return [`zekno ${CLI_VERSION}`, `runner ${runner}, the runner release this zekno installs`]
+}
+
+/**
+ * The same two lines as a terminal draws them (board "The version, and a
+ * newer release"): the versions in the text colour, the words after the
+ * runner's version dim.
+ */
+export function versionCells(runner: string): [Cell[], Cell[]] {
+  return [[plainCell(`zekno ${CLI_VERSION}`)], [plainCell(`runner ${runner},`), quiet("the runner release this zekno installs")]]
 }
 
 /** The same, as one object for `--json`. */

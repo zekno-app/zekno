@@ -69,6 +69,26 @@ export const moreLine = (direction: "↑" | "↓", count: number): string => `  
  */
 const LIST_SPARE_LINES = 4
 
+/** Where a question's first sentence ends: a full stop or a question mark before a space. */
+const FIRST_SENTENCE = /[.?](?=\s)/
+
+/**
+ * A question's words as the boards of feature 006 draw them: in bold, or, for
+ * a question of more than one sentence (`Remember this folder? It writes
+ * zekno.json, ...`), its first sentence in bold and the rest in the text
+ * colour.
+ */
+export function QuestionWords({ text }: { text: string }) {
+  const end = text.search(FIRST_SENTENCE)
+  if (end === -1) return <Text bold>{text}</Text>
+  return (
+    <Text>
+      <Text bold>{text.slice(0, end + 1)}</Text>
+      {text.slice(end + 1)}
+    </Text>
+  )
+}
+
 /** How a question ends: with an answer, or left (Esc, Ctrl-C). */
 export type Settled<T> = { answer: T } | { left: true }
 
@@ -81,7 +101,9 @@ export const isCtrlC = (input: string, key: QuestionKey): boolean => key.ctrl ==
 /**
  * A list to pick one row from (mock-ups 1 and 2): the question, a row per
  * line with the marker on the selected one, and the keys. ↑ and ↓ move and
- * stop at the ends; Enter chooses; Esc and Ctrl-C leave.
+ * stop at the ends; Enter chooses; Esc and Ctrl-C leave. The selected row's
+ * label is bold; a row with no detail, such as `+ a new app`, is dim until it
+ * is selected (board "Questions in single commands").
  */
 export function ListPrompt<T>({ question, rows, settle }: { question: string; rows: readonly ListRow<T>[]; settle(result: Settled<number>): void }) {
   const [selected, setSelected] = useState(0)
@@ -109,7 +131,7 @@ export function ListPrompt<T>({ question, rows, settle }: { question: string; ro
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color={BRAND}>?</Text> {question}
+        <Text color={BRAND}>?</Text> <QuestionWords text={question} />
       </Text>
       {shown.above > 0 ? <Text dimColor>{moreLine("↑", shown.above)}</Text> : null}
       {rows.slice(shown.from, shown.to).map((row, offset) => {
@@ -119,7 +141,9 @@ export function ListPrompt<T>({ question, rows, settle }: { question: string; ro
             <Text wrap="truncate-end">
               {"  "}
               <Text color={BRAND}>{at ? `${MARKER} ` : "  "}</Text>
-              <Text bold={at}>{row.detail === undefined ? row.label : row.label.padEnd(width)}</Text>
+              <Text bold={at} dimColor={!at && row.detail === undefined}>
+                {row.detail === undefined ? row.label : row.label.padEnd(width)}
+              </Text>
               {row.detail === undefined ? null : <Text dimColor>{row.detail}</Text>}
             </Text>
           </Box>
@@ -177,7 +201,7 @@ export function TypedPrompt({
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color={BRAND}>?</Text> {question} <Text dimColor>›</Text> {answer}
+        <Text color={BRAND}>?</Text> <QuestionWords text={question} /> <Text dimColor>›</Text> {answer}
         <Text inverse> </Text>
       </Text>
       {reason === undefined ? null : (
