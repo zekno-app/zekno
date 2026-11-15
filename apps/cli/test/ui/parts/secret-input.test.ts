@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { applySecretInput } from "../src/ui/secret-input"
-import { plainUi } from "../src/ui/plain"
+import { applySecretInput } from "../../../src/ui/parts/secret-input"
+import { plainUi } from "../../../src/ui/plain/plain"
 
 describe("typing a hidden value", () => {
   test("characters are added and Enter finishes", () => {

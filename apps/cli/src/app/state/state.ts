@@ -13,12 +13,12 @@
  */
 import { isReservedSecretName, type TeamTrust } from "@workspace/core"
 
-import type { DeployStage } from "../ops/deploy"
-import type { RunState } from "../ops/status"
-import { applyConfirmKey, type Choice } from "../ui/confirm"
-import { applySelectKey, clampIndex, type ListKey } from "../ui/select"
-import { applyTextInput } from "../ui/text-input"
-import type { AppKey } from "./keys"
+import type { DeployStage } from "../../ops/deploy"
+import type { RunState } from "../../ops/status"
+import { applyConfirmKey, type Choice } from "../../ui/parts/confirm"
+import { applySelectKey, clampIndex, type ListKey } from "../../ui/parts/select"
+import { applyTextInput } from "../../ui/parts/text-input"
+import type { AppKey } from "../keys"
 
 /** FR-007: the smallest window the app draws itself in. */
 export const MIN_COLUMNS = 80
@@ -727,7 +727,7 @@ const own = <T>(record: Record<string, T> | undefined, key: string): T | undefin
 
 const isText = (key: AppKey, text: string): boolean => key.kind === "text" && key.text === text
 
-/** As the list helpers in ui/select.tsx read keys. */
+/** As the list helpers in ui/parts/select.tsx read keys. */
 const listKey = (key: AppKey): ListKey => ({
   upArrow: key.kind === "up",
   downArrow: key.kind === "down",
@@ -1072,7 +1072,7 @@ function failAdding(adding: AddProgress): AddProgress {
   return { ...adding, running: false, steps: at ? { ...adding.steps, [at]: { state: "failed" } } : adding.steps }
 }
 
-/** The core library's rule for a secret name (`secretName` in packages/core/src/secrets.ts). */
+/** The core library's rule for a secret name (`secretName` in packages/core/src/secrets/secrets.ts). */
 const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/
 
 /** Why a name cannot be a secret's, in the words `zekno secret set` uses, or undefined when it can. */

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 
-import { openSecrets, verifyDeploy } from "../src/index"
-import { publish, setup } from "./helpers"
+import { openSecrets, verifyDeploy } from "../../src/index"
+import { publish, setup } from "../support/helpers"
 
 test("SC-004: a runner verifies and opens a deploy with 50 secrets in under 100 ms", async () => {
   const { founder, relay, server, trust } = await setup()

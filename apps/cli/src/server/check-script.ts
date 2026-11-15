@@ -27,9 +27,9 @@
  * `doctor` reaches a server in SSH's batch mode only, so this never waits on
  * a person: where SSH would ask, it ends at once, and that is reported.
  */
-import { CliError } from "../errors"
-import { INSTALL_LINE_LIMIT, isInstallPath, scriptLines } from "../install"
-import type { Transport } from "../transport"
+import { CliError } from "../cli/errors"
+import { INSTALL_LINE_LIMIT, isInstallPath, scriptLines } from "./install/install"
+import type { Transport } from "./transport"
 
 /** The script, exactly as contracts/doctor.md writes it. */
 export const CHECK_SCRIPT = String.raw`{

@@ -2,8 +2,8 @@ import { z } from "zod"
 
 import { concat, fromBase64Url, fromUtf8, toBase64Url, utf8 } from "./encoding"
 import { decodeKey, keyIdOf, type MemberPublicKey, type Signer } from "./keys"
-import { base64UrlLength, LIMITS } from "./limits"
-import { CoreError, ok, refuse, type Result } from "./result"
+import { base64UrlLength, LIMITS } from "../protocol/limits"
+import { CoreError, ok, refuse, type Result } from "../protocol/result"
 import { sodium } from "./sodium"
 
 /** The kinds of signed message. A signature for one kind never verifies as another. */

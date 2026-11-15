@@ -1,4 +1,4 @@
-import { THIS_MACHINE } from "../src/app/effects"
+import { THIS_MACHINE } from "../src/app/effects/effects"
 import { expect, test } from "./support/fixtures"
 
 test("first run: create the key, then add this machine as a server", async ({ world, terminal, agent, screen }) => {

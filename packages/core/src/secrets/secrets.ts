@@ -1,11 +1,11 @@
 import { z } from "zod"
 
-import { fromBase64Url, fromUtf8, isWellFormed, toBase64Url, toHex, utf8, wipe } from "./encoding"
-import { hash } from "./hash"
-import { decodeKey, serverIdOf, type ServerPublicKey } from "./keys"
-import { base64UrlLength, LIMITS } from "./limits"
-import { CoreError, ok, refuse, type Result } from "./result"
-import { sodium } from "./sodium"
+import { fromBase64Url, fromUtf8, isWellFormed, toBase64Url, toHex, utf8, wipe } from "../crypto/encoding"
+import { hash } from "../crypto/hash"
+import { decodeKey, serverIdOf, type ServerPublicKey } from "../crypto/keys"
+import { base64UrlLength, LIMITS } from "../protocol/limits"
+import { CoreError, ok, refuse, type Result } from "../protocol/result"
+import { sodium } from "../crypto/sodium"
 
 /** Environment-variable convention: letters, digits and underscore, not starting with a digit. */
 export const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/

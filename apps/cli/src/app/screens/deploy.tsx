@@ -2,13 +2,13 @@ import { Box, Text, useAnimation } from "ink"
 import type { ReactNode } from "react"
 
 import type { DeployStage } from "../../ops/deploy"
-import { Confirm } from "../../ui/confirm"
-import type { KeyHint } from "../../ui/key-hints"
-import { Panel, type PanelTone } from "../../ui/panel"
-import { Stages, type Stage, type StageState } from "../../ui/stages"
+import { Confirm } from "../../ui/parts/confirm"
+import type { KeyHint } from "../../ui/parts/key-hints"
+import { Panel, type PanelTone } from "../../ui/parts/panel"
+import { Stages, type Stage, type StageState } from "../../ui/parts/stages"
 import { Frame, Header, NoticeLine, Trail } from "../frame"
-import { CHOICES, elsewhereChoices, elsewhereWords, useLinkWords, type DeployProgress, type Question, type Screen, type State } from "../state"
-import { seconds } from "../time"
+import { CHOICES, elsewhereChoices, elsewhereWords, useLinkWords, type DeployProgress, type Question, type Screen, type State } from "../state/state"
+import { seconds } from "../../shared/time"
 import { Fields } from "./parts"
 import { HINTS } from "./placeholder"
 
@@ -50,7 +50,7 @@ function Elapsed({ deploy }: { deploy: DeployProgress }) {
 /**
  * The summary panel: the number, app, server, where the definition comes
  * from, the secrets and what it replaces. The single commands draw it too
- * (ui/deploy-view.tsx), with a faint border, as on the board "zekno deploy:
+ * (ui/ink/deploy-view.tsx), with a faint border, as on the board "zekno deploy:
  * success and failure".
  */
 export function Summary({ deploy, width, tone = "focus" }: { deploy: DeployProgress; width: number; tone?: PanelTone }) {

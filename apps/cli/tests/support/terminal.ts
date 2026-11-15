@@ -18,7 +18,7 @@ export type Launch = {
   rows: number
 }
 
-/** The background question and DA1, as the app writes them (src/ui/background.ts). */
+/** The background question and DA1, as the app writes them (src/ui/terminal/background.ts). */
 const QUESTIONS = /\x1b\]11;\?(?:\x07|\x1b\\)|\x1b\[0?c/g
 /** A dark terminal's answers: a black background, then "a VT220 with colour". */
 const DARK_BACKGROUND = "\x1b]11;rgb:0000/0000/0000\x1b\\"

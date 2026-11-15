@@ -1,10 +1,10 @@
 import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
-import { KeyHints, type KeyHint } from "../ui/key-hints"
-import { Logo } from "../ui/logo"
-import { useTheme } from "../ui/theme"
-import type { Notice } from "./state"
+import { KeyHints, type KeyHint } from "../ui/parts/key-hints"
+import { Logo } from "../ui/terminal/logo"
+import { useTheme } from "../ui/terminal/theme"
+import type { Notice } from "./state/state"
 
 /** FR-005: shown on every screen that has nothing of its own on the right of its header. */
 export const PRE_ALPHA = "pre-alpha, unaudited"

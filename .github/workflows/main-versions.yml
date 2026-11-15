@@ -1,6 +1,6 @@
 # Fails when `main` carries a development version (specs/005-runner-release/contracts/release.md,
 # ".github/workflows/main-versions.yml"). A CLI built from `main` must install a prod release
-# only, so apps/runner/package.json and apps/cli/src/runner-release.json hold plain versions
+# only, so apps/runner/package.json and apps/cli/src/version/runner-release.json hold plain versions
 # there. Before merging `dev` into `main`, the prod versions are committed on `dev`
 # (apps/runner/RELEASING.md).
 #

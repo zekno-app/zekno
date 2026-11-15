@@ -11,9 +11,9 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join, resolve } from "node:path"
 
 import runnerPackage from "../../../runner/package.json"
-import { runner, tempDir } from "../../../runner/test/helpers"
-import { foundDetail, megabytes as appMegabytes } from "../../src/app/effects"
-import { acceptedLinks } from "../../src/accepted"
+import { runner, tempDir } from "../../../runner/test/support/helpers"
+import { foundDetail, megabytes as appMegabytes } from "../../src/app/effects/effects"
+import { acceptedLinks } from "../../src/project/accepted"
 import { appTaken } from "../../src/asking/asking"
 import {
   DESTINATION_RULE,
@@ -32,14 +32,14 @@ import {
   TEAM_CODE_ABOUT,
 } from "../../src/asking/first-deploy"
 import { SSH_IDENTITY } from "../../src/commands/server"
-import { openTeam, reopenTeam } from "../../src/context"
-import { MISSING_APP, MISSING_SERVER } from "../../src/errors"
+import { openTeam, reopenTeam } from "../../src/cli/context"
+import { MISSING_APP, MISSING_SERVER } from "../../src/cli/errors"
 import { prepareServerAdd } from "../../src/ops/server"
-import type { RunnerRelease } from "../../src/runner-release"
+import type { RunnerRelease } from "../../src/version/runner-release"
 import type { ListQuestion, Ui } from "../../src/ui/types"
-import { answering, COMPOSE_V1, filesUnder, machine, ready, twin, type Answer, type Asked } from "../helpers"
-import { realRunner, snapshot, sshStandIn, standInServer, withSsh, type StandInServer } from "../stand-in-server"
-import { shows, terminal } from "../ui/terminal"
+import { answering, COMPOSE_V1, filesUnder, machine, ready, twin, type Answer, type Asked } from "../support/helpers"
+import { realRunner, snapshot, sshStandIn, standInServer, withSsh, type StandInServer } from "../support/stand-in-server"
+import { shows, terminal } from "../support/terminal"
 
 type Machine = ReturnType<typeof machine>
 

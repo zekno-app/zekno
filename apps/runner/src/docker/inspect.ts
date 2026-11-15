@@ -17,7 +17,7 @@ import {
   type RunnerState,
 } from "@workspace/core"
 
-import { isReport, load, refused } from "./commands"
+import { isReport, load, refused } from "../commands/commands"
 import { dockerCommand, dockerEnv, readLines } from "./compose"
 
 type Service = RunnerAppStates["apps"][string]["services"][number]

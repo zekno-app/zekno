@@ -13,7 +13,7 @@
  * servers use; and compares each binary's SHA-256 three ways: this build, the
  * file downloaded, and the release's SHA256SUMS. Only when all three agree
  * for both binaries does it write the checksums into
- * apps/cli/src/runner-release.json, which is then the only file of the
+ * apps/cli/src/version/runner-release.json, which is then the only file of the
  * repository it changes. It never commits, pushes or edits the release: it
  * prints the commands for that.
  *

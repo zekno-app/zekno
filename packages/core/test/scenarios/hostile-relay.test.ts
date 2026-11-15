@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { createDeploy, createSecret, generateServerKeyPair, openSecrets, verifyDeploy, verifySecret } from "../../src/index"
-import { addServer, catchUp, changeTeam, overTheWire, person, publish, setSecret, setup } from "../helpers"
+import { addServer, catchUp, changeTeam, overTheWire, person, publish, setSecret, setup } from "../support/helpers"
 
 function refusal(result: { ok: boolean; error?: { code: string } }) {
   return result.ok ? "accepted" : result.error!.code

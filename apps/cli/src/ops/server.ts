@@ -13,8 +13,8 @@ import {
 } from "@workspace/core"
 import { join, resolve } from "node:path"
 
-import { reach, teamOf, type OpDeps, type Team } from "../context"
-import { CliError, RunnerRefused, UsageError } from "../errors"
+import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
+import { CliError, RunnerRefused, UsageError } from "../cli/errors"
 import {
   isRunnerFileName,
   notNamedRunner,
@@ -25,11 +25,11 @@ import {
   type InstallEvent,
   type InstallRequest,
   type InstallSource,
-} from "../install"
-import { NAME, type Server } from "../profile"
-import { RUNNER_RELEASE, type RunnerRelease } from "../runner-release"
-import { openSession, type Session, type SessionMode } from "../session"
-import { RUNNER_PATH, SSH_DESTINATION, type RunnerProcess, type Target, type Transport } from "../transport"
+} from "../server/install/install"
+import { NAME, type Server } from "../profile/profile"
+import { RUNNER_RELEASE, type RunnerRelease } from "../version/runner-release"
+import { openSession, type Session, type SessionMode } from "../server/session"
+import { RUNNER_PATH, SSH_DESTINATION, type RunnerProcess, type Target, type Transport } from "../server/transport"
 import { locateServer } from "./status"
 
 export type ServerAddOptions = { ssh?: string; local?: boolean; home?: string; runnerPath?: string; runnerFile?: string }

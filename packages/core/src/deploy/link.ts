@@ -1,13 +1,13 @@
 import { z } from "zod"
 
 import { DEPLOY_ROLES } from "./deploy"
-import { isWellFormed, utf8 } from "./encoding"
-import { hasOtherVersion, openEnvelope, parseJson, PAYLOAD_TYPES, signEnvelope, type Envelope } from "./envelope"
-import type { Signer } from "./keys"
-import { LIMITS } from "./limits"
-import { CoreError, ok, refuse, type LinkRefusal, type Result } from "./result"
-import { assertTrust, memberByKeyId, serverKeyOf, TEAM_ID, type Member, type TeamTrust } from "./roster"
-import { APP_NAME, SERVER_ID } from "./secrets"
+import { isWellFormed, utf8 } from "../crypto/encoding"
+import { hasOtherVersion, openEnvelope, parseJson, PAYLOAD_TYPES, signEnvelope, type Envelope } from "../crypto/envelope"
+import type { Signer } from "../crypto/keys"
+import { LIMITS } from "../protocol/limits"
+import { CoreError, ok, refuse, type LinkRefusal, type Result } from "../protocol/result"
+import { assertTrust, memberByKeyId, serverKeyOf, TEAM_ID, type Member, type TeamTrust } from "../team/roster"
+import { APP_NAME, SERVER_ID } from "../secrets/secrets"
 
 /**
  * Whether a path stays inside the folder it is relative to, read as any

@@ -1,7 +1,7 @@
 import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
-import { useTheme } from "./theme"
+import { useTheme } from "../terminal/theme"
 
 /** The keys a list reads. A subset of what Ink reports. */
 export type ListKey = { upArrow?: boolean; downArrow?: boolean; return?: boolean; escape?: boolean }

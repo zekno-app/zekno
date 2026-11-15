@@ -58,5 +58,5 @@ bun test test/scenarios   # only the scenarios: client, hostile relay and runner
 bun run typecheck
 ```
 
-Source files are internal apart from `src/index.ts`. `src/limits.ts` holds every size limit and
-`src/result.ts` every refusal code.
+Source files are internal apart from `src/index.ts`. `src/protocol/limits.ts` holds every size limit and
+`src/protocol/result.ts` every refusal code.

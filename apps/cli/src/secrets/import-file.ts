@@ -16,7 +16,7 @@
  */
 import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs"
 
-import { CliError } from "../errors"
+import { CliError } from "../cli/errors"
 
 /** The most an import file may be: 1 MiB. A file of 256 values of a few hundred bytes each is far below it. */
 export const IMPORT_FILE_LIMIT = 1_048_576

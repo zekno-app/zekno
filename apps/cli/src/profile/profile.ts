@@ -14,8 +14,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { dirname, join } from "node:path"
 import { z } from "zod"
 
-import { CliError, MISSING_SERVER, UsageError } from "./errors"
-import { RUNNER_PATH, SSH_DESTINATION } from "./transport"
+import { CliError, MISSING_SERVER, UsageError } from "../cli/errors"
+import { RUNNER_PATH, SSH_DESTINATION } from "../server/transport"
 
 export const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/
 
@@ -34,7 +34,7 @@ const TargetSchema = z.discriminatedUnion("kind", [
 
 /**
  * The rule the core library holds a member's name to in a team list
- * (`displayName` in packages/core/src/roster.ts): no control, format,
+ * (`displayName` in packages/core/src/team/roster.ts): no control, format,
  * unassigned or private-use character, which covers escape sequences and
  * bidirectional overrides, no line or paragraph separator, and no space at
  * either end. `\p{C}` also matches a lone surrogate.

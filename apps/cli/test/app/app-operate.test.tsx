@@ -3,15 +3,15 @@ import { Box, renderToString, Text, type Key } from "ink"
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { waitFor } from "../../runner/test/helpers"
-import { AppView, createStore } from "../src/app/app"
-import { COMPOSE_FILE, createEffects, loadStart, type Effects } from "../src/app/effects"
-import { emptyHiddenValue, hiddenPromptKey } from "../src/app/hidden-prompt"
-import type { AppKey } from "../src/app/keys"
-import { changedNote } from "../src/app/screens/app"
-import { lastLines, numberUsed, stagesOf } from "../src/app/screens/deploy"
-import { inkRows, rowsOf } from "../src/app/screens/home"
-import { HINTS } from "../src/app/screens/placeholder"
+import { waitFor } from "../../../runner/test/support/helpers"
+import { AppView, createStore } from "../../src/app/app"
+import { COMPOSE_FILE, createEffects, loadStart, type Effects } from "../../src/app/effects/effects"
+import { emptyHiddenValue, hiddenPromptKey } from "../../src/app/hidden-prompt"
+import type { AppKey } from "../../src/app/keys"
+import { changedNote } from "../../src/app/screens/app"
+import { lastLines, numberUsed, stagesOf } from "../../src/app/screens/deploy"
+import { inkRows, rowsOf } from "../../src/app/screens/home"
+import { HINTS } from "../../src/app/screens/placeholder"
 import {
   hiddenPromptOpen,
   initialState,
@@ -22,12 +22,12 @@ import {
   type DeployProgress,
   type State,
   type TeamView,
-} from "../src/app/state"
-import { clockTime, relativeTime } from "../src/app/time"
-import { appDetails, appsOf, composeServices } from "../src/app/views"
-import { openTeam, type OpDeps } from "../src/context"
-import { connect, type ConnectOptions, type Target } from "../src/transport"
-import { COMPOSE_V1, COMPOSE_V2, filesUnder, machine, ready } from "./helpers"
+} from "../../src/app/state/state"
+import { clockTime, relativeTime } from "../../src/shared/time"
+import { appDetails, appsOf, composeServices } from "../../src/shared/views"
+import { openTeam, type OpDeps } from "../../src/cli/context"
+import { connect, type ConnectOptions, type Target } from "../../src/server/transport"
+import { COMPOSE_V1, COMPOSE_V2, filesUnder, machine, ready } from "../support/helpers"
 
 type Machine = ReturnType<typeof machine>
 
@@ -62,7 +62,7 @@ function drawnInColour(state: State, columns = 100, rows = 30): string {
   const script = [
     'import { createElement } from "react"',
     'import { renderToString } from "ink"',
-    `import { AppView } from ${JSON.stringify(join(import.meta.dir, "../src/app/app.tsx"))}`,
+    `import { AppView } from ${JSON.stringify(join(import.meta.dir, "../../src/app/app.tsx"))}`,
     "const state = JSON.parse(process.argv.at(-1))",
     `process.stdout.write(renderToString(createElement(AppView, { state, columns: ${columns}, rows: ${rows} }), { columns: ${columns} }))`,
   ].join("\n")

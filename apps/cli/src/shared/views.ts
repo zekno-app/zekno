@@ -16,11 +16,11 @@ import { currentSecrets, readSignedDeploy, verifySecret, verifySecretRemoval, ty
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 
-import { COMPOSE_READ_BYTES, tooManyAliases } from "../compose-file"
-import type { Team } from "../context"
-import type { History, Server } from "../profile"
-import { sanitize } from "../sanitize"
-import type { AppRow, DeployRow, SecretRow } from "./state"
+import { COMPOSE_READ_BYTES, tooManyAliases } from "../project/compose-file"
+import type { Team } from "../cli/context"
+import type { History, Server } from "../profile/profile"
+import { sanitize } from "../server/sanitize"
+import type { AppRow, DeployRow, SecretRow } from "../app/state/state"
 
 /** A history file's name: an app name and `.json`. Anything else in the folder is not an app. */
 const HISTORY_FILE = /^([a-z0-9][a-z0-9-]{0,62})\.json$/

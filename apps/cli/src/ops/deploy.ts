@@ -2,13 +2,13 @@ import { CoreError, createDeploy, currentSecrets, readSignedDeploy, RunnerReport
 import { resolve } from "node:path"
 
 import { appTaken } from "../asking/asking"
-import { readCompose, type ComposeText } from "../compose-read"
-import { reach, teamOf, type OpDeps, type Team } from "../context"
-import { CliError, MISSING_APP, UsageError } from "../errors"
-import { findServer, NAME, type History, type Server } from "../profile"
-import type { ProjectLink } from "../project"
-import { sanitize } from "../sanitize"
-import { namedUnreachable, withSession, type SessionMode } from "../session"
+import { readCompose, type ComposeText } from "../project/compose-read"
+import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
+import { CliError, MISSING_APP, UsageError } from "../cli/errors"
+import { findServer, NAME, type History, type Server } from "../profile/profile"
+import type { ProjectLink } from "../project/project"
+import { sanitize } from "../server/sanitize"
+import { namedUnreachable, withSession, type SessionMode } from "../server/session"
 import { checkIdentity } from "./status"
 
 /** data-model.md, "Stages of a deploy". A refusal ends a deploy at whatever stage it had reached. */

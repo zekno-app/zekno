@@ -18,12 +18,12 @@
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { RUNNER_MAIN } from "../../runner/test/helpers"
-import { run } from "../src/cli"
-import type { Deps } from "../src/context"
-import { memoryKeyStore } from "../src/keystore"
-import { connect } from "../src/transport"
-import { processPlainUi } from "../src/ui/plain"
+import { RUNNER_MAIN } from "../../../runner/test/support/helpers"
+import { run } from "../../src/cli/cli"
+import type { Deps } from "../../src/cli/context"
+import { memoryKeyStore } from "../../src/profile/keystore"
+import { connect } from "../../src/server/transport"
+import { processPlainUi } from "../../src/ui/plain/plain"
 
 const [kind, dir] = process.argv.slice(2) as [string, string]
 const LINE = "x".repeat(1000)

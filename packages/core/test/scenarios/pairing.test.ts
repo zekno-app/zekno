@@ -8,7 +8,7 @@ import {
   serverConfirmationCode,
   trustFoundingRoster,
 } from "../../src/index"
-import { changeTeam, overTheWire, person, setup } from "../helpers"
+import { changeTeam, overTheWire, person, setup } from "../support/helpers"
 
 describe("User Story 4: confirming keys when a server is connected", () => {
   test("the same key gives the same code on two machines", () => {

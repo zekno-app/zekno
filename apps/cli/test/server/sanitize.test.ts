@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { sanitize } from "../src/sanitize"
+import { sanitize } from "../../src/server/sanitize"
 
 const ESC = "\x1b"
 

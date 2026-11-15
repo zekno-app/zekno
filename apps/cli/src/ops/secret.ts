@@ -13,9 +13,9 @@ import {
   type TeamTrust,
 } from "@workspace/core"
 
-import { teamOf, type OpDeps, type Team } from "../context"
-import { CliError, UsageError } from "../errors"
-import { findServer, type SecretStore, type Server } from "../profile"
+import { teamOf, type OpDeps, type Team } from "../cli/context"
+import { CliError, UsageError } from "../cli/errors"
+import { findServer, type SecretStore, type Server } from "../profile/profile"
 import type { ImportEntry } from "../secrets/import-file"
 import { checkApp, type Where } from "./deploy"
 
@@ -236,7 +236,7 @@ export async function removeSecret(deps: OpDeps, name: string | undefined, where
  * The secrets the latest deploy the runner accepted carries, by name and
  * version, from this machine's history; undefined when there is none. Only a
  * deploy signed for this team, server and app counts, read from under its
- * signature, as the app screen reads the history (app/views.ts). A history
+ * signature, as the app screen reads the history (shared/views.ts). A history
  * that cannot be read counts as no deploy: this only adds a note to a list.
  */
 function deployedSecrets(team: Team, server: Server, app: string): Map<string, number> | undefined {

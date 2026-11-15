@@ -2,7 +2,7 @@
  * The smallest terminal screen that reads what the app writes: text with
  * its width, bold and colour per cell, cursor movement, erasing a line or
  * the screen, SGR, the alternate screen and synchronised output. That is the
- * whole set Ink uses (checked against real output, test/e2e-screen-model.test.ts).
+ * whole set Ink uses (checked against real output, test/e2e/e2e-screen-model.test.ts).
  * Anything else is noted and otherwise ignored, never drawn as text.
  *
  * It holds no process and does no input or output: the pseudo-terminal

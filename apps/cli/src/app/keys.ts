@@ -4,7 +4,7 @@
  */
 import type { Key } from "ink"
 
-import { isLateAnswer } from "../ui/background"
+import { isLateAnswer } from "../ui/terminal/background"
 
 /** One key press, or a paste, as the reducer sees it. */
 export type AppKey =

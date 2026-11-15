@@ -26,8 +26,8 @@ import { closeSync, constants, fchmodSync, fstatSync, openSync, readSync, rename
 import { join } from "node:path"
 import { z } from "zod"
 
-import { CliError } from "./errors"
-import { sanitize } from "./sanitize"
+import { CliError } from "../cli/errors"
+import { sanitize } from "../server/sanitize"
 
 export const LINKS_FILE = "links.json"
 /** The most entries kept. The oldest are dropped first. */

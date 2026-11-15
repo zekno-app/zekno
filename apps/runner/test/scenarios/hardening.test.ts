@@ -8,8 +8,8 @@ import { LIMITS, parseMessage, RunnerAppStatesSchema, RunnerStatusSchema } from 
 import { chmodSync, closeSync, constants, existsSync, openSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { appStates } from "../src/inspect"
-import { buildDeploy, deployed, fakeDocker, isAlive, residentMiB, runner, RUNNER_MAIN, session, tempDir, waitFor, world } from "./helpers"
+import { appStates } from "../../src/docker/inspect"
+import { buildDeploy, deployed, fakeDocker, isAlive, residentMiB, runner, RUNNER_MAIN, session, tempDir, waitFor, world } from "../support/helpers"
 
 /**
  * The most resident memory, in MiB, a runner may reach in these tests. The

@@ -1,14 +1,14 @@
 import { realpathSync } from "node:fs"
 import { isAbsolute, relative, resolve } from "node:path"
 
-import { remoteThroughUi, type Deps } from "../context"
+import { remoteThroughUi, type Deps } from "../cli/context"
 import { prepareDeploy, prepareRollback, sendDeploy, type DeployPlan, type Where } from "../ops/deploy"
-import { shownPath } from "../project"
-import { sanitize } from "../sanitize"
-import { plainDeployView, type DeployStart } from "../ui/deploy"
+import { shownPath } from "../project/project"
+import { sanitize } from "../server/sanitize"
+import { plainDeployView, type DeployStart } from "../shared/deploy"
 
 /** Kept where earlier tests and tools look for them. */
-export { HELD_LINES, heldLines, leftOut } from "../ui/deploy"
+export { HELD_LINES, heldLines, leftOut } from "../shared/deploy"
 
 /**
  * `typed`: the `--app` and `--server` the person typed, as opposed to those

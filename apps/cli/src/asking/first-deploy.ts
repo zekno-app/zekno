@@ -27,24 +27,24 @@
 import { RUNNER_PROTOCOL } from "@workspace/core"
 import { resolve } from "node:path"
 
-import { acceptedLinks } from "../accepted"
+import { acceptedLinks } from "../project/accepted"
 import { flagsAgain, send, shownFile } from "../commands/deploy"
 import { SSH_IDENTITY } from "../commands/server"
-import { expectedValues } from "../compose-file"
-import { readCompose } from "../compose-read"
-import { openTeam, remoteThroughUi, reopenTeam, type Deps, type Team, type teamOnce } from "../context"
-import { CliError, Left, MISSING_SERVER, NOTHING_DONE, UsageError } from "../errors"
-import type { InstallEvent } from "../install"
+import { expectedValues } from "../project/compose-file"
+import { readCompose } from "../project/compose-read"
+import { openTeam, remoteThroughUi, reopenTeam, type Deps, type Team, type teamOnce } from "../cli/context"
+import { CliError, Left, MISSING_SERVER, NOTHING_DONE, UsageError } from "../cli/errors"
+import type { InstallEvent } from "../server/install/install"
 import { AppTaken, checkApp, prepareDeploy } from "../ops/deploy"
 import { createTeam } from "../ops/init"
 import { linkFolder, unlinkWritten, writtenLink, type WrittenLink } from "../ops/link"
 import { listSecrets, prepareSecretSet, setSecret } from "../ops/secret"
 import { addServer, prepareServerAdd, runnerRelation, runnerWarning } from "../ops/server"
-import { findServer, isMemberName, NAME, profileStore, type Server } from "../profile"
-import { findProject, notSignedHere, withProject, type Details, type FromProject } from "../project"
-import { RUNNER_RELEASE } from "../runner-release"
-import { sanitize } from "../sanitize"
-import { SSH_DESTINATION } from "../transport"
+import { findServer, isMemberName, NAME, profileStore, type Server } from "../profile/profile"
+import { findProject, notSignedHere, withProject, type Details, type FromProject } from "../project/project"
+import { RUNNER_RELEASE } from "../version/runner-release"
+import { sanitize } from "../server/sanitize"
+import { SSH_DESTINATION } from "../server/transport"
 import type { ListQuestion, Ui } from "../ui/types"
 import { whichApp, whichServer, type How } from "./asking"
 
@@ -99,7 +99,7 @@ export function openingLine(missing: { key: boolean; server: boolean; app: boole
 
 /**
  * A size in bytes as the boards write it: "52 MB". The words of the app's
- * add-server screen (`megabytes` in app/effects.ts, held equal by a test);
+ * add-server screen (`megabytes` in app/effects/effects.ts, held equal by a test);
  * not imported from there, since that module brings Ink with it.
  */
 export const megabytes = (bytes: number): string => `${Math.max(1, Math.round(bytes / 1_000_000))} MB`
@@ -107,7 +107,7 @@ export const megabytes = (bytes: number): string => `${Math.max(1, Math.round(by
 /**
  * What is said beside a runner that was already on the server: its version,
  * and whether it is out of date or newer than this zekno. The words of the
- * app's add-server screen (`foundDetail` in app/effects.ts, held equal by a
+ * app's add-server screen (`foundDetail` in app/effects/effects.ts, held equal by a
  * test), not imported from there for the same reason. The installer reports
  * a version only, already held to the version grammar, and never a protocol.
  */

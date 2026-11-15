@@ -9,7 +9,7 @@
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-import { tempDir } from "./helpers"
+import { tempDir } from "../support/helpers"
 
 /** git with no configuration from this machine, so a signing key or a hook of the user's never runs. */
 export const GIT_ENV: Record<string, string> = {
@@ -43,14 +43,14 @@ function writeCommit(root: string, label: string, versions: CommitVersions) {
   const bun = versions.bun === undefined ? "1.4.4" : versions.bun
   write("package.json", `${JSON.stringify({ name: "zekno", private: true, ...(bun === null ? {} : { packageManager: `bun@${bun}` }) }, null, 2)}\n`)
   write("apps/runner/package.json", `${JSON.stringify({ name: "@workspace/runner", version: versions.runner }, null, 2)}\n`)
-  write("apps/cli/src/runner-release.json", runnerRelease(versions.cli, null, null))
+  write("apps/cli/src/version/runner-release.json", runnerRelease(versions.cli, null, null))
   write(`notes/${label}.txt`, `${label}\n`)
   git(root, "add", "-A")
   git(root, "commit", "-q", "-m", label)
   return git(root, "rev-parse", "HEAD")
 }
 
-/** apps/cli/src/runner-release.json as the second build writes it. */
+/** apps/cli/src/version/runner-release.json as the second build writes it. */
 export function runnerRelease(version: string, x64: string | null, arm64: string | null): string {
   return `${JSON.stringify({ version, files: { "linux-x64": { sha256: x64 }, "linux-arm64": { sha256: arm64 } } }, null, 2)}\n`
 }

@@ -9,10 +9,10 @@ import { describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { parseTag, runnerReleaseJson } from "../scripts/release-lib"
-import { tempDir } from "./helpers"
+import { parseTag, runnerReleaseJson } from "../../scripts/release-lib"
+import { tempDir } from "../support/helpers"
 
-const RUNNER = join(import.meta.dir, "..")
+const RUNNER = join(import.meta.dir, "../..")
 const page = readFileSync(join(RUNNER, "RELEASING.md"), "utf8")
 const lines = page.split("\n")
 
@@ -106,7 +106,7 @@ describe("apps/runner/RELEASING.md", () => {
     const blocks: string[] = []
     for (let at = 0; at < lines.length; at++) {
       // The here-document is read before the file is opened, so a VERSION not set leaves the file as it was.
-      const start = /^(\s*)cat <<EOF > apps\/cli\/src\/runner-release\.json$/.exec(lines[at]!)
+      const start = /^(\s*)cat <<EOF > apps\/cli\/src\/version\/runner-release\.json$/.exec(lines[at]!)
       if (!start) continue
       const indent = start[1]!.length
       const body: string[] = []
@@ -116,13 +116,13 @@ describe("apps/runner/RELEASING.md", () => {
     expect(blocks).toHaveLength(2)
     for (const block of blocks) expect(block.replaceAll("${VERSION:?}", "0.1.0")).toBe(runnerReleaseJson("0.1.0", null, null))
     // Run as the page has it, with VERSION not set, in each shell there is: the file is not touched.
-    const command = `cat <<EOF > apps/cli/src/runner-release.json\n${blocks[0]}EOF\n`
+    const command = `cat <<EOF > apps/cli/src/version/runner-release.json\n${blocks[0]}EOF\n`
     for (const shell of ["/bin/sh", "/bin/bash", "/bin/dash", "/bin/zsh"].filter((path) => existsSync(path))) {
       const dir = tempDir("releasing")
-      mkdirSync(join(dir, "apps/cli/src"), { recursive: true })
-      writeFileSync(join(dir, "apps/cli/src/runner-release.json"), "as it was\n")
+      mkdirSync(join(dir, "apps/cli/src/version"), { recursive: true })
+      writeFileSync(join(dir, "apps/cli/src/version/runner-release.json"), "as it was\n")
       const run = Bun.spawnSync([shell, "-c", `unset VERSION\n${command}`], { cwd: dir, stdout: "pipe", stderr: "pipe" })
-      expect({ shell, code: run.exitCode === 0, file: readFileSync(join(dir, "apps/cli/src/runner-release.json"), "utf8") }).toEqual({ shell, code: false, file: "as it was\n" })
+      expect({ shell, code: run.exitCode === 0, file: readFileSync(join(dir, "apps/cli/src/version/runner-release.json"), "utf8") }).toEqual({ shell, code: false, file: "as it was\n" })
     }
   })
 

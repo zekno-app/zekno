@@ -10,18 +10,18 @@ import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
 
-import { runner, RUNNER_MAIN, tempDir } from "../../runner/test/helpers"
-import type { DeployProgress } from "../src/app/state"
-import { HELP } from "../src/cli"
-import { sshUnreachable } from "../src/session"
-import { secretsWords, type DeployStart } from "../src/ui/deploy"
-import { DeployBlock, type DeployShown } from "../src/ui/deploy-view"
-import { inkUi } from "../src/ui/ink"
-import { plainUi, processPlainUi, wantsPlain } from "../src/ui/plain"
-import { ORDERED_VERSIONS } from "../../../packages/core/test/fixtures/versions"
-import runnerPackage from "../../runner/package.json"
-import { COMPOSE_V1, COMPOSE_V2, machine, ready, screenOf } from "./helpers"
-import { realRunner, sshStandIn, standInServer, withSsh } from "./stand-in-server"
+import { runner, RUNNER_MAIN, tempDir } from "../../../../runner/test/support/helpers"
+import type { DeployProgress } from "../../../src/app/state/state"
+import { HELP } from "../../../src/cli/cli"
+import { sshUnreachable } from "../../../src/server/session"
+import { secretsWords, type DeployStart } from "../../../src/shared/deploy"
+import { DeployBlock, type DeployShown } from "../../../src/ui/ink/deploy-view"
+import { inkUi } from "../../../src/ui/ink/ink"
+import { plainUi, processPlainUi, wantsPlain } from "../../../src/ui/plain/plain"
+import { ORDERED_VERSIONS } from "../../../../../packages/core/test/fixtures/versions"
+import runnerPackage from "../../../../runner/package.json"
+import { COMPOSE_V1, COMPOSE_V2, machine, ready, screenOf } from "../../support/helpers"
+import { realRunner, sshStandIn, standInServer, withSsh } from "../../support/stand-in-server"
 
 type Machine = ReturnType<typeof machine>
 
@@ -510,7 +510,7 @@ describe("piped, in scripts and CI: plain and stable (contracts/commands.md)", (
   })
 
   test("`zekno` with no arguments and no terminal prints the help and exits with status 2, as before", async () => {
-    const child = Bun.spawn([process.execPath, join(import.meta.dir, "../src/main.ts")], {
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, "../../../src/main.ts")], {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",

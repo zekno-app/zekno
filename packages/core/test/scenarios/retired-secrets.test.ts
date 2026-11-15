@@ -11,7 +11,7 @@ import {
   verifyDeploy,
   verifySecretRemoval,
 } from "../../src/index"
-import { addServer, catchUp, changeTeam, overTheWire, person, setSecret, setup } from "../helpers"
+import { addServer, catchUp, changeTeam, overTheWire, person, setSecret, setup } from "../support/helpers"
 
 const code = (result: { ok: boolean; error?: { code: string } }) =>
   result.ok ? "accepted" : result.error!.code
@@ -162,7 +162,7 @@ describe("retired secrets: the relay cannot bring back a secret the team stopped
     await expect(createDeploy({ ...base, sequence: 2, secrets: [database], removals: [removal, removal] })).rejects.toMatchObject({ code: "invalid_argument" })
 
     // A runner refuses one built by other means.
-    const { signEnvelope } = await import("../../src/envelope")
+    const { signEnvelope } = await import("../../src/crypto/envelope")
     const { PAYLOAD_TYPES } = await import("../../src/index")
     const good = await createDeploy({ ...base, sequence: 2, secrets: [debug] })
     const payload = JSON.parse(Buffer.from(good.envelope.payload, "base64url").toString("utf8")) as { removed: unknown[] }

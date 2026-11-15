@@ -9,12 +9,12 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { HELP, run } from "../src/cli"
-import type { Deps } from "../src/context"
-import { memoryKeyStore } from "../src/keystore"
-import { plainUi } from "../src/ui/plain"
+import { HELP, run } from "../../src/cli/cli"
+import type { Deps } from "../../src/cli/context"
+import { memoryKeyStore } from "../../src/profile/keystore"
+import { plainUi } from "../../src/ui/plain/plain"
 
-const ROOT = join(import.meta.dir, "../../..")
+const ROOT = join(import.meta.dir, "../../../..")
 const read = (path: string): string => readFileSync(join(ROOT, path), "utf8")
 
 /** The two places a person reads about the CLI. */

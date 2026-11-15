@@ -7,8 +7,8 @@ import {
   parseRunnerVersion,
   RUNNER_VERSION_PATTERN,
   RunnerVersionSchema,
-} from "../src/index"
-import { ORDERED_VERSIONS as ORDERED, REFUSED_VERSIONS as REFUSED } from "./fixtures/versions"
+} from "../../src/index"
+import { ORDERED_VERSIONS as ORDERED, REFUSED_VERSIONS as REFUSED } from "../fixtures/versions"
 
 const ACCEPTED = ["0.0.0", "0.1.0", "1.2.3", "10.20.30", "999999999.0.0", "0.1.0-dev.1", "0.1.0-dev.12", "1.0.0-dev.999999999"]
 

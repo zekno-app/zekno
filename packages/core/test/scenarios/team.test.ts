@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { applyRosterUpdate, verifyDeploy, type Member } from "../../src/index"
-import { overTheWire, person, publish, setup, propose } from "../helpers"
+import { overTheWire, person, publish, setup, propose } from "../support/helpers"
 
 const code = (result: { ok: boolean; error?: { code: string } }) =>
   result.ok ? "accepted" : result.error!.code

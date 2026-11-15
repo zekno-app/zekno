@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 
-import { applyConfirmKey, keyName, type Choice } from "../src/ui/confirm"
-import { applySelectKey, clampIndex } from "../src/ui/select"
-import { applyTextInput, TEXT_LIMIT } from "../src/ui/text-input"
+import { applyConfirmKey, keyName, type Choice } from "../../../src/ui/parts/confirm"
+import { applySelectKey, clampIndex } from "../../../src/ui/parts/select"
+import { applyTextInput, TEXT_LIMIT } from "../../../src/ui/parts/text-input"
 
 describe("a list", () => {
   test("↑ and ↓ move one row and stop at the first and last rows", () => {

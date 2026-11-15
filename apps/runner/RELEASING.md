@@ -87,7 +87,7 @@ an account this is not tried. Either way, write down whether it was tried.
 ### The rules for `dev` and `main`
 
 A release is checked against these two branches. The workflow and the second build look for the
-tagged commit on them, and `apps/cli/src/runner-release.json` on each decides what every zekno
+tagged commit on them, and `apps/cli/src/version/runner-release.json` on each decides what every zekno
 built from it installs.
 
 1. **[outward]** **Settings**, **Rules**, **Rulesets**, **New ruleset**, **New branch ruleset**.
@@ -217,10 +217,10 @@ git pull --ff-only origin dev
 ```
 
 In `apps/runner/package.json`, set `"version"` to the version. Then write
-`apps/cli/src/runner-release.json` with the same version and no checksums:
+`apps/cli/src/version/runner-release.json` with the same version and no checksums:
 
 ```sh
-cat <<EOF > apps/cli/src/runner-release.json
+cat <<EOF > apps/cli/src/version/runner-release.json
 {
   "version": "${VERSION:?}",
   "files": {
@@ -237,7 +237,7 @@ git diff
 bun run typecheck
 bun run lint
 bun run test
-git add apps/runner/package.json apps/cli/src/runner-release.json
+git add apps/runner/package.json apps/cli/src/version/runner-release.json
 git commit -m "chore: prod versions for runner ${VERSION:?}"
 ```
 
@@ -253,7 +253,7 @@ bun apps/runner/scripts/release.ts check-main
 ```
 
 `check-main` must print
-`No development version: apps/runner/package.json holds <version>, apps/cli/src/runner-release.json holds <version>.`
+`No development version: apps/runner/package.json holds <version>, apps/cli/src/version/runner-release.json holds <version>.`
 If it names a file instead, stop: fix it on `dev` and merge again.
 
 **[outward]** `git push origin main`
@@ -321,7 +321,7 @@ Or open **Actions**, **runner release** on GitHub.
 
 | Job | What it checks and does |
 |-----|-------------------------|
-| `check` | The tag is `runner-v<version>`. The checked-out commit is the tag's. That commit is on `origin/dev` (dev) or `origin/main` (prod). `apps/runner/package.json` says the version. The root `package.json` pins Bun. For prod, `apps/cli/src/runner-release.json` names no dev version. Then it hands on the environment, the version, the commit and the Bun version. |
+| `check` | The tag is `runner-v<version>`. The checked-out commit is the tag's. That commit is on `origin/dev` (dev) or `origin/main` (prod). `apps/runner/package.json` says the version. The root `package.json` pins Bun. For prod, `apps/cli/src/version/runner-release.json` names no dev version. Then it hands on the environment, the version, the commit and the Bun version. |
 | `build-dev` or `build-prod` | First, before anything is checked out, checks that the tag itself is of its kind, dev or prod. Reads the pinned Bun version from the commit, installs the packages without running their install scripts, and builds the runner for Linux on x86-64 and ARM64 with that Bun. Checks that it builds the commit `check` passed, that both runners were built, each at most 256 MiB, and that the x86-64 runner answers with the version. Writes the two `.gz` files, `SHA256SUMS` and `RELEASE-NOTES.md`, prints the checksums, and hands the four files on as the run's artifact `runner-release`. It can read the repository and not write to it. |
 | `publish-dev` or `publish-prod` | First checks that the tag itself is of its kind, and takes the version from it. Downloads the artifact. Checks that exactly the four files are there, each within its size (the notes at most 64 KiB), and that the two runners unpack to what `SHA256SUMS` says. Stops if a release for the tag exists already. Publishes with `gh`: a dev release as a pre-release that is never the latest. It checks out nothing, installs nothing, and runs nothing of the repository or of the files it was handed. `publish-prod` waits for your approval before its first step. |
 
@@ -372,7 +372,7 @@ first: the tagged commit must be on it as your checkout has it.
 ```sh
 git switch dev
 git pull --ff-only origin dev
-git status --short apps/cli/src/runner-release.json
+git status --short apps/cli/src/version/runner-release.json
 bun --version
 bun apps/runner/scripts/second-build.ts "${TAG:?}"
 ```
@@ -380,7 +380,7 @@ bun apps/runner/scripts/second-build.ts "${TAG:?}"
 For a prod release, use `main` in place of `dev` in the first two commands. `git status` must
 print nothing.
 
-It checks the tag, the branch, that `apps/cli/src/runner-release.json` has no change of its own
+It checks the tag, the branch, that `apps/cli/src/version/runner-release.json` has no change of its own
 and records nothing newer, that the tagged commit is on the branch here, that the tag here and on
 GitHub is the same commit, that Bun is the pinned version, and that the commit builds this
 version. Nothing of a commit that is not on the branch is downloaded or built. It downloads the
@@ -392,13 +392,13 @@ Bun downloads the runtimes again instead of using copies already on this machine
 of your terminal, such as `BUN_OPTIONS` or a proxy, do not reach it. Then it compares each binary
 three ways: its own build, the downloaded file, and the line of `SHA256SUMS`.
 
-**When all agree**, it writes the checksums into `apps/cli/src/runner-release.json`, prints the
+**When all agree**, it writes the checksums into `apps/cli/src/version/runner-release.json`, prints the
 record, `Second build of <tag> (<dev|prod>): matched.`, the commit and its subject, and a table,
 then:
 
 ```text
-Recorded runner <version> in apps/cli/src/runner-release.json. Next, on <branch>:
-  git add apps/cli/src/runner-release.json
+Recorded runner <version> in apps/cli/src/version/runner-release.json. Next, on <branch>:
+  git add apps/cli/src/version/runner-release.json
   git commit -F <commit message file>
   git push origin <branch>
   gh release edit <tag> --repo zekno-app/zekno --notes-file <notes file>
@@ -406,7 +406,7 @@ Recorded runner <version> in apps/cli/src/runner-release.json. Next, on <branch>
 
 It runs none of them. First compare the commit and the subject in the record with those `git log`
 printed when you made the tag (part 5). If they differ, stop: run none of the commands, undo the
-change with `git restore apps/cli/src/runner-release.json`, and decide with the maintainer, as for
+change with `git restore apps/cli/src/version/runner-release.json`, and decide with the maintainer, as for
 a file that differs (below). If they are the same, run the first two commands as printed. The
 commit message holds the record. Add the "Tried on" section to the notes file (part 8).
 Then **[outward]** run the `git push` and **[outward]** the `gh release edit` as printed.
@@ -418,10 +418,10 @@ From that commit on, a zekno built from the branch installs the release.
 | Status | Meaning | What to do |
 |--------|---------|------------|
 | 1 | Something did not match: a file, the commit, the version, `SHA256SUMS` or the notes. Or the tagged commit is not on the branch here. | For a commit not on the branch: pull the branch and run it again. If it says so again, the release was not cut from the branch: record nothing, and decide with the maintainer. Otherwise, below. |
-| 2 | A condition on this machine: the wrong branch, a change in `apps/cli/src/runner-release.json`, another Bun, no tag here, or a newer release already recorded. | Do what its sentence says. A tag you made on another machine can be fetched with `git fetch origin tag "${TAG:?}"`. Its commit must then be on the branch here, as for any tag. |
+| 2 | A condition on this machine: the wrong branch, a change in `apps/cli/src/version/runner-release.json`, another Bun, no tag here, or a newer release already recorded. | Do what its sentence says. A tag you made on another machine can be fetched with `git fetch origin tag "${TAG:?}"`. Its commit must then be on the branch here, as for any tag. |
 | 3 | It could not finish: the network, the build, or another failure that is none of its checks, such as a program that could not start. Its sentence says whether it had compared anything. | Fix what it names and run it again. |
 
-Nothing is written to `apps/cli/src/runner-release.json` with status 1 or 2, or with status 3
+Nothing is written to `apps/cli/src/version/runner-release.json` with status 1 or 2, or with status 3
 before the comparison. After the comparison, status 3 says so: check that file with `git diff`
 before you commit anything.
 
@@ -473,7 +473,7 @@ release's files are never replaced.
 When a release turns out to be bad, these steps stop zekno from installing it, within the limits
 below. The GitHub release is deleted, its tag is kept, and its version is never used again.
 
-1. On each branch that records it, write `apps/cli/src/runner-release.json` with the same version
+1. On each branch that records it, write `apps/cli/src/version/runner-release.json` with the same version
    and no checksums. A dev release is recorded on `dev`. A prod release is recorded on `main`, and
    on `dev` too once `main` was merged back (part 10). On `dev`, with the version being withdrawn in
    place of `<version>`:
@@ -484,7 +484,7 @@ below. The GitHub release is deleted, its tag is kept, and its version is never 
    TAG="runner-v${VERSION:?}"
    git switch dev
    git pull --ff-only origin dev
-   cat <<EOF > apps/cli/src/runner-release.json
+   cat <<EOF > apps/cli/src/version/runner-release.json
    {
      "version": "${VERSION:?}",
      "files": {
@@ -498,7 +498,7 @@ below. The GitHub release is deleted, its tag is kept, and its version is never 
    }
    EOF
    git diff
-   git add apps/cli/src/runner-release.json
+   git add apps/cli/src/version/runner-release.json
    git commit -m "chore(cli): withdraw runner ${VERSION:?}"
    ```
 

@@ -1,19 +1,19 @@
 /**
- * Words that wrap at a terminal (apps/cli/src/ui/wrap.tsx; specs/006-cli-small-features,
+ * Words that wrap at a terminal (apps/cli/src/ui/ink/wrap.tsx; specs/006-cli-small-features,
  * quickstart.md, the walkthrough's difference 6): a line goes on at the
  * column its text started at, with no space of its own, also when the word
  * before the break fills the line to its last column.
  */
 import { describe, expect, test } from "bun:test"
 
-import { KEPT_SO_FAR, MEMBER_NAME_RULE, openingLine, rememberFolder } from "../../src/asking/first-deploy"
-import type { DoctorReport } from "../../src/ops/doctor"
-import { linePieces } from "../../src/ui/ink"
-import { plainUi } from "../../src/ui/plain"
-import { quiet, strong } from "../../src/ui/types"
-import { wrapPieces, type Piece } from "../../src/ui/wrap"
-import { CLI_VERSION, versionCells, versionLines } from "../../src/version/version"
-import { shows, terminal, until } from "./terminal"
+import { KEPT_SO_FAR, MEMBER_NAME_RULE, openingLine, rememberFolder } from "../../../src/asking/first-deploy"
+import type { DoctorReport } from "../../../src/ops/doctor"
+import { linePieces } from "../../../src/ui/ink/ink"
+import { plainUi } from "../../../src/ui/plain/plain"
+import { quiet, strong } from "../../../src/ui/types"
+import { wrapPieces, type Piece } from "../../../src/ui/ink/wrap"
+import { CLI_VERSION, versionCells, versionLines } from "../../../src/version/version"
+import { shows, terminal, until } from "../../support/terminal"
 
 /** The lines as plain text. */
 const text = (pieces: Piece[], columns: number) => wrapPieces(pieces, columns).map((line) => line.map((piece) => piece.text).join(""))

@@ -24,9 +24,9 @@
  * does not already have: the request it gets twice is one it could have
  * kept.
  */
-import type { Deps } from "../context"
-import { sanitize } from "../sanitize"
-import type { ErrorLines, RunnerProcess, Transport } from "../transport"
+import type { Deps } from "../cli/context"
+import { sanitize } from "../server/sanitize"
+import type { ErrorLines, RunnerProcess, Transport } from "../server/transport"
 
 /** Lines of an attempt kept to decide on: the last ones written, since SSH's closing line comes last. */
 const KEPT_LINES = 64

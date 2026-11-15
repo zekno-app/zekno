@@ -27,8 +27,8 @@ import {
 } from "node:fs"
 import { join } from "node:path"
 
-import { RUNNER_MAIN, tempDir } from "../../runner/test/helpers"
-import { INSTALL_SCRIPT } from "../src/install"
+import { RUNNER_MAIN, tempDir } from "../../../runner/test/support/helpers"
+import { INSTALL_SCRIPT } from "../../src/server/install/install"
 
 /** The system tools the script and the stand-ins use, linked into a folder of their own so nothing else is on PATH. */
 const TOOLS = [

@@ -1,6 +1,6 @@
-import type { Deps } from "../context"
+import type { Deps } from "../cli/context"
 import { runDoctor, type CheckLine, type DoctorReport } from "../ops/doctor"
-import { profileStore } from "../profile"
+import { profileStore } from "../profile/profile"
 
 /**
  * The report as `zekno doctor --json` prints it (contracts/doctor.md,

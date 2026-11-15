@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { CoreError, createSigner, generateMemberKeyPair, LIMITS, PAYLOAD_TYPES, type Signer } from "../src/index"
-import { openEnvelope, readEnvelope, signEnvelope } from "../src/envelope"
+import { CoreError, createSigner, generateMemberKeyPair, LIMITS, PAYLOAD_TYPES, type Signer } from "../../src/index"
+import { openEnvelope, readEnvelope, signEnvelope } from "../../src/crypto/envelope"
 
 const bytes = (text: string) => new TextEncoder().encode(text)
 

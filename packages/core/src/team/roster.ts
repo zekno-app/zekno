@@ -1,7 +1,7 @@
 import { z } from "zod"
 
-import { rosterCodeFromHash, confirmationCodesMatch } from "./confirm"
-import { fromHex, isWellFormed, toBase64Url, toHex, utf8 } from "./encoding"
+import { rosterCodeFromHash, confirmationCodesMatch } from "../crypto/confirm"
+import { fromHex, isWellFormed, toBase64Url, toHex, utf8 } from "../crypto/encoding"
 import {
   hasOtherVersion,
   openEnvelope,
@@ -11,8 +11,8 @@ import {
   signEnvelope,
   verifySignature,
   type Envelope,
-} from "./envelope"
-import { hash } from "./hash"
+} from "../crypto/envelope"
+import { hash } from "../crypto/hash"
 import {
   isKey,
   keyIdOf,
@@ -20,10 +20,10 @@ import {
   type MemberPublicKey,
   type ServerPublicKey,
   type Signer,
-} from "./keys"
-import { LIMITS } from "./limits"
-import { CoreError, ok, refuse, type Result, type RosterRefusal } from "./result"
-import { sodium } from "./sodium"
+} from "../crypto/keys"
+import { LIMITS } from "../protocol/limits"
+import { CoreError, ok, refuse, type Result, type RosterRefusal } from "../protocol/result"
+import { sodium } from "../crypto/sodium"
 
 export const ROLES = ["admin", "deployer"] as const
 /** An admin can change the team and authorize deploys. A deployer can only authorize deploys. */

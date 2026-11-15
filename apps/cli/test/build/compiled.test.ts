@@ -12,10 +12,10 @@ import { beforeAll, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { tempDir } from "../../runner/test/helpers"
+import { tempDir } from "../../../runner/test/support/helpers"
 
-const BUILD = join(import.meta.dir, "../build.ts")
-const MAIN = join(import.meta.dir, "../src/main.ts")
+const BUILD = join(import.meta.dir, "../../build.ts")
+const MAIN = join(import.meta.dir, "../../src/main.ts")
 
 let binary = ""
 
@@ -58,8 +58,8 @@ const NO_TEAM = "No team on this machine yet. Run `zekno init --name <you>` firs
 
 /** What `zekno --version` prints (contracts/version.md), from the two files the versions come from, read here as text. */
 function versionText(): string {
-  const cli = JSON.parse(readFileSync(join(import.meta.dir, "../package.json"), "utf8")) as { version: string }
-  const release = JSON.parse(readFileSync(join(import.meta.dir, "../src/runner-release.json"), "utf8")) as { version: string }
+  const cli = JSON.parse(readFileSync(join(import.meta.dir, "../../package.json"), "utf8")) as { version: string }
+  const release = JSON.parse(readFileSync(join(import.meta.dir, "../../src/version/runner-release.json"), "utf8")) as { version: string }
   return `zekno ${cli.version}\nrunner ${release.version}, the runner release this zekno installs\n`
 }
 

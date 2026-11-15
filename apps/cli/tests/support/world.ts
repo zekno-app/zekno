@@ -13,9 +13,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 
-import { fakeDocker, filesUnder } from "../../../runner/test/helpers"
-import { openTeam } from "../../src/context"
-import { realRunner, sshStandIn, standInServer, type StandInServer } from "../../test/stand-in-server"
+import { fakeDocker, filesUnder } from "../../../runner/test/support/helpers"
+import { openTeam } from "../../src/cli/context"
+import { realRunner, sshStandIn, standInServer, type StandInServer } from "../../test/support/stand-in-server"
 import { fileKeyStore } from "./file-keystore"
 import type { Launch } from "./terminal"
 

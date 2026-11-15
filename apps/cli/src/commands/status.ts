@@ -1,8 +1,8 @@
-import { appsOf, latestFirst } from "../app/views"
-import { remoteThroughUi, type Deps } from "../context"
+import { appsOf, latestFirst } from "../shared/views"
+import { remoteThroughUi, type Deps } from "../cli/context"
 import { runnerRelation, runnerWarning } from "../ops/server"
 import { locateServer, readStatus, stateOf, type RunState } from "../ops/status"
-import { RUNNER_RELEASE } from "../runner-release"
+import { RUNNER_RELEASE } from "../version/runner-release"
 import { plainCell, quiet, strong, type MarkedCell } from "../ui/types"
 
 const TONES: Record<RunState, MarkedCell["tone"]> = { running: "success", stopped: "danger", "partly running": "warning", unknown: "quiet" }

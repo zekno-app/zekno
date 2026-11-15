@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, readFileSync, truncateSync, writeFileSync, chmodSync } from "node:fs"
 import { join } from "node:path"
 
-import { ORDERED_VERSIONS, REFUSED_VERSIONS } from "../../../packages/core/test/fixtures/versions"
-import { parseTag } from "../scripts/release-lib"
-import { tempDir } from "./helpers"
+import { ORDERED_VERSIONS, REFUSED_VERSIONS } from "../../../../packages/core/test/fixtures/versions"
+import { parseTag } from "../../scripts/release-lib"
+import { tempDir } from "../support/helpers"
 import { git, gitEnv, releaseRepo } from "./release-helpers"
 
-const RELEASE_TS = join(import.meta.dir, "../scripts/release.ts")
+const RELEASE_TS = join(import.meta.dir, "../../scripts/release.ts")
 
 /** Runs `bun apps/runner/scripts/release.ts <args>` in `cwd`, as the workflow does. */
 async function release(cwd: string, ...args: string[]) {
@@ -158,7 +158,7 @@ describe("release.ts check: the tag, the branch and the versions", () => {
     expect(await release(repo.root, "check", "--tag", "runner-v0.1.0")).toEqual({
       code: 1,
       stdout: "",
-      stderr: "apps/cli/src/runner-release.json names 0.1.0-dev.1, a development release. A commit on main must not carry one.\n",
+      stderr: "apps/cli/src/version/runner-release.json names 0.1.0-dev.1, a development release. A commit on main must not carry one.\n",
     })
   })
 
@@ -221,7 +221,7 @@ function expectedNotes(version: string, dev: boolean, commit: string): string {
     `    ${sha(ARM64)}  zekno-runner-linux-arm64`,
     "",
     "zekno installs this release only once these checksums are recorded in its",
-    "`apps/cli/src/runner-release.json`, after a second build on another machine produced the same files.",
+    "`apps/cli/src/version/runner-release.json`, after a second build on another machine produced the same files.",
     "",
     "## Second build",
     "",
@@ -337,12 +337,12 @@ describe("release.ts check-main: main never carries a dev version", () => {
     const refused = await release(dev.root, "check-main")
     const sentence = (path: string) =>
       `${path} holds 0.1.0-dev.1, a development version. main must not carry one: before merging into main, commit the prod versions on dev (apps/runner/RELEASING.md).`
-    expect(refused).toEqual({ code: 1, stdout: "", stderr: `${sentence("apps/runner/package.json")}\n${sentence("apps/cli/src/runner-release.json")}\n` })
+    expect(refused).toEqual({ code: 1, stdout: "", stderr: `${sentence("apps/runner/package.json")}\n${sentence("apps/cli/src/version/runner-release.json")}\n` })
 
     const one = releaseRepo({ a: { runner: "0.1.0", cli: "0.1.0-dev.3" } })
     git(one.root, "switch", "-q", "main")
     expect((await release(one.root, "check-main")).stderr).toBe(
-      "apps/cli/src/runner-release.json holds 0.1.0-dev.3, a development version. main must not carry one: before merging into main, commit the prod versions on dev (apps/runner/RELEASING.md).\n"
+      "apps/cli/src/version/runner-release.json holds 0.1.0-dev.3, a development version. main must not carry one: before merging into main, commit the prod versions on dev (apps/runner/RELEASING.md).\n"
     )
   })
 })

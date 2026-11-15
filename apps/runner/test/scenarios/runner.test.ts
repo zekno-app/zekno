@@ -3,8 +3,8 @@ import { parseMessage, RunnerSetupResponseSchema, RunnerStatusSchema, serverConf
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { defaultHome, homeDir } from "../src/home"
-import { buildDeploy, COMPOSE, fakeDocker, filesUnder, RUNNER_MAIN, runner, tempDir, world } from "./helpers"
+import { defaultHome, homeDir } from "../../src/home/home"
+import { buildDeploy, COMPOSE, fakeDocker, filesUnder, RUNNER_MAIN, runner, tempDir, world } from "../support/helpers"
 
 describe("the runner", () => {
   test("sets itself up once: its own key, the team pinned by its code, private files", async () => {

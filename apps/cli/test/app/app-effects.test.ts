@@ -4,14 +4,14 @@ import { existsSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-import { tempDir } from "../../runner/test/helpers"
-import { createEffects, loadStart, routeErrorLines, tilde } from "../src/app/effects"
-import type { AppEvent } from "../src/app/state"
-import { openTeam, TAMPERED } from "../src/context"
-import { memoryKeyStore } from "../src/keystore"
-import { openSession } from "../src/session"
-import { connect, type ConnectOptions, type Target } from "../src/transport"
-import { machine, ready } from "./helpers"
+import { tempDir } from "../../../runner/test/support/helpers"
+import { createEffects, loadStart, routeErrorLines, tilde } from "../../src/app/effects/effects"
+import type { AppEvent } from "../../src/app/state/state"
+import { openTeam, TAMPERED } from "../../src/cli/context"
+import { memoryKeyStore } from "../../src/profile/keystore"
+import { openSession } from "../../src/server/session"
+import { connect, type ConnectOptions, type Target } from "../../src/server/transport"
+import { machine, ready } from "../support/helpers"
 
 /** A runner that only writes to standard error, with a colour code and a screen clear in it, then says it does not know `session`. */
 const NOISY = ["sh", "-c", "printf 'Usage: zekno-runner \\033[31m<setup|sync|apply|status>\\033[0m\\n\\033[2Jagain' >&2; exit 2", "sh"]

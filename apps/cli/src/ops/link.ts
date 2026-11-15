@@ -18,10 +18,10 @@
 import { CoreError, createLink } from "@workspace/core"
 import { lstatSync, readFileSync, rmSync } from "node:fs"
 
-import { accept, acceptedLinks, forget, isAccepted, sha256Of, type AcceptedLink } from "../accepted"
-import { teamOf, type OpDeps, type Team } from "../context"
-import { CliError, UsageError } from "../errors"
-import { findServer } from "../profile"
+import { accept, acceptedLinks, forget, isAccepted, sha256Of, type AcceptedLink } from "../project/accepted"
+import { teamOf, type OpDeps, type Team } from "../cli/context"
+import { CliError, UsageError } from "../cli/errors"
+import { findServer } from "../profile/profile"
 import {
   composeFor,
   DEFAULT_COMPOSE,
@@ -39,8 +39,8 @@ import {
   writeProject,
   type ProjectJudge,
   type ProjectLink,
-} from "../project"
-import { sanitize } from "../sanitize"
+} from "../project/project"
+import { sanitize } from "../server/sanitize"
 import { checkApp } from "./deploy"
 
 /** `yes`: the question about a teammate's zekno.json is answered yes beforehand, for a script. */

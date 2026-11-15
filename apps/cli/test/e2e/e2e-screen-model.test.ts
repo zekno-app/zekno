@@ -9,10 +9,10 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { keyBytes } from "../tests/support/engine"
-import { applySgr, createScreen } from "../tests/support/screen-model"
-import { findBoxes, screenTree, treeText } from "../tests/support/screen-tree"
-import { terminalAnswers } from "../tests/support/terminal"
+import { keyBytes } from "../../tests/support/engine"
+import { applySgr, createScreen } from "../../tests/support/screen-model"
+import { findBoxes, screenTree, treeText } from "../../tests/support/screen-tree"
+import { terminalAnswers } from "../../tests/support/terminal"
 
 const captured = (name: string) => readFileSync(join(import.meta.dir, "e2e-screens", `${name}.txt`), "utf8")
 

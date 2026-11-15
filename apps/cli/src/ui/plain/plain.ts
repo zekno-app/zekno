@@ -1,6 +1,6 @@
-import { CliError } from "../errors"
-import { plainDeployView } from "./deploy"
-import { cellText, doctorCounts, REMOTE_MARK, SERVERS_SKIPPED, type Ui } from "./types"
+import { CliError } from "../../cli/errors"
+import { plainDeployView } from "../../shared/deploy"
+import { cellText, doctorCounts, REMOTE_MARK, SERVERS_SKIPPED, type Ui } from "../types"
 
 /**
  * Writes to a stream of this process. When it is backed up, such as a pipe

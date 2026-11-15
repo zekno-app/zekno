@@ -6,8 +6,8 @@
  */
 import { PassThrough, Writable } from "node:stream"
 
-import { inkUi } from "../../src/ui/ink"
-import { screenOf } from "../helpers"
+import { inkUi } from "../../src/ui/ink/ink"
+import { screenOf } from "./helpers"
 
 /** Keys as a terminal hands them over. */
 export const KEYS = { up: "\x1b[A", down: "\x1b[B", enter: "\r", esc: "\x1b", ctrlC: "\x03", backspace: "\x7f" } as const

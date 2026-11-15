@@ -27,7 +27,7 @@ export const test = withTerminal.extend<{ world: World }>({
   },
 })
 
-/** A world whose SSH reaches only the stand-in server (test/stand-in-server.ts). */
+/** A world whose SSH reaches only the stand-in server (test/support/stand-in-server.ts). */
 export const sshTest = withTerminal.extend<{ world: World }>({
   world: async ({ terminal }, use) => {
     const world = await createWorld({ standInServer: true })

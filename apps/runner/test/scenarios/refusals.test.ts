@@ -3,7 +3,7 @@ import { createDeploy, createSigner, generateMemberKeyPair } from "@workspace/co
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { buildDeploy, runner, world } from "./helpers"
+import { buildDeploy, runner, world } from "../support/helpers"
 
 /** Someone with SSH access to the server, but without the team's signing key. */
 describe("the runner refuses what the team did not sign", () => {

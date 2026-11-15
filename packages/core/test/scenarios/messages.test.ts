@@ -14,7 +14,7 @@ import {
   verifyDeploy,
   type StatusReport,
 } from "../../src/index"
-import { publish, setup } from "../helpers"
+import { publish, setup } from "../support/helpers"
 
 const code = (result: { ok: boolean; error?: { code: string } }) =>
   result.ok ? "accepted" : result.error!.code
@@ -212,7 +212,7 @@ describe("User Story 5: one description of every message", () => {
   test("a signed payload with an unknown format version is refused with that reason", async () => {
     const { founder, server, trust } = await setup()
     const { PAYLOAD_TYPES } = await import("../../src/index")
-    const { signEnvelope } = await import("../../src/envelope")
+    const { signEnvelope } = await import("../../src/crypto/envelope")
     const future = { v: 2, teamId: trust.teamId, serverId: server.serverId, app: "web", sequence: 1, newField: true }
     const envelope = await signEnvelope(PAYLOAD_TYPES.deploy, new TextEncoder().encode(JSON.stringify(future)), founder.signer)
     expect(code(verifyDeploy({ envelope, secrets: [], state: server.state }))).toBe("unsupported_version")

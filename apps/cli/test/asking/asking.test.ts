@@ -7,8 +7,8 @@ import { describe, expect, test } from "bun:test"
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 
-import { runner, tempDir } from "../../../runner/test/helpers"
-import { READ_LIMIT_MS } from "../../src/app/effects"
+import { runner, tempDir } from "../../../runner/test/support/helpers"
+import { READ_LIMIT_MS } from "../../src/app/effects/effects"
 import {
   APP_NAME_RULE as A11,
   appRows,
@@ -22,13 +22,13 @@ import {
   whichApp,
   whichServer,
 } from "../../src/asking/asking"
-import { openTeam, teamOnce, type Team } from "../../src/context"
-import { MISSING_APP, MISSING_SERVER } from "../../src/errors"
-import { isMemberName, type Server } from "../../src/profile"
+import { openTeam, teamOnce, type Team } from "../../src/cli/context"
+import { MISSING_APP, MISSING_SERVER } from "../../src/cli/errors"
+import { isMemberName, type Server } from "../../src/profile/profile"
 import type { ListQuestion } from "../../src/ui/types"
 import runnerPackage from "../../../runner/package.json"
-import { answering, COMPOSE_V1, filesUnder, machine, ready, twin, type Answer, type Asked } from "../helpers"
-import { realRunner, sshStandIn, stallingRunner, standInServer, stillRunning, withSsh } from "../stand-in-server"
+import { answering, COMPOSE_V1, filesUnder, machine, ready, twin, type Answer, type Asked } from "../support/helpers"
+import { realRunner, sshStandIn, stallingRunner, standInServer, stillRunning, withSsh } from "../support/stand-in-server"
 
 /** The version the repository's runner reports, which a stand-in release made from it carries. */
 const OWN = runnerPackage.version

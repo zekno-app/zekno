@@ -3,8 +3,8 @@ import { LIMITS } from "@workspace/core"
 import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { connect, RUNNER_PATH, SSH_DESTINATION } from "../src/transport"
-import { machine, ready } from "./helpers"
+import { connect, RUNNER_PATH, SSH_DESTINATION } from "../../src/server/transport"
+import { machine, ready } from "../support/helpers"
 
 const where = ["--app", "web", "--server", "dev"]
 

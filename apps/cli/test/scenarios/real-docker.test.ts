@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test"
 
-import { ready } from "./helpers"
+import { ready } from "../support/helpers"
 
 /**
  * One run with real Docker and a real container. It only uses an image that

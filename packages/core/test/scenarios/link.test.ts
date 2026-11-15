@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { signEnvelope } from "../../src/envelope"
+import { signEnvelope } from "../../src/crypto/envelope"
 import {
   applyRosterUpdate,
   createLink,
@@ -17,7 +17,7 @@ import {
   type Envelope,
   type TeamTrust,
 } from "../../src/index"
-import { addServer, catchUp, changeTeam, overTheWire, person, propose, publish, setSecret, setup } from "../helpers"
+import { addServer, catchUp, changeTeam, overTheWire, person, propose, publish, setSecret, setup } from "../support/helpers"
 
 const code = (result: { ok: boolean; error?: { code: string } }) => (result.ok ? "accepted" : result.error!.code)
 

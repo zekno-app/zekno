@@ -1,8 +1,8 @@
 import { z } from "zod"
 
-import { fromUtf8, utf8 } from "./encoding"
-import { EnvelopeSchema } from "./envelope"
-import { isKey, serverIdOf, type ServerPublicKey } from "./keys"
+import { fromUtf8, utf8 } from "../crypto/encoding"
+import { EnvelopeSchema } from "../crypto/envelope"
+import { isKey, serverIdOf, type ServerPublicKey } from "../crypto/keys"
 import { LIMITS } from "./limits"
 import {
   DEPLOY_REFUSALS,
@@ -12,9 +12,9 @@ import {
   type MessageRefusal,
   type Result,
 } from "./result"
-import { isoTime, TEAM_ID } from "./roster"
-import { SecretRecordSchema } from "./secret-record"
-import { APP_NAME, SealedSecretSchema, SERVER_ID } from "./secrets"
+import { isoTime, TEAM_ID } from "../team/roster"
+import { SecretRecordSchema } from "../secrets/secret-record"
+import { APP_NAME, SealedSecretSchema, SERVER_ID } from "../secrets/secrets"
 import { RUNNER_VERSION_PATTERN } from "./version"
 
 /**

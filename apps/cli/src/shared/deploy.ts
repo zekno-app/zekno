@@ -6,7 +6,7 @@
  * here loads Ink, so plain output never does.
  */
 import type { DeployInfo, DeployStage } from "../ops/deploy"
-import type { Ui } from "./types"
+import type { Ui } from "../ui/types"
 
 /** What a deploy view is told before anything is sent. */
 export type DeployStart = {

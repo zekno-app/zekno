@@ -1,6 +1,6 @@
-import { remoteThroughUi, type Deps } from "../context"
+import { remoteThroughUi, type Deps } from "../cli/context"
 import { addServer, listServers, prepareServerAdd, prepareServerUpdate, runnerWarning, updateRunner } from "../ops/server"
-import { RUNNER_RELEASE } from "../runner-release"
+import { RUNNER_RELEASE } from "../version/runner-release"
 
 /** Said after a server reached over SSH is added: where its identity rests. The first deploy says it too (asking/first-deploy.ts, F4). */
 export const SSH_IDENTITY = "You reached this server over SSH, so its identity rests on SSH's host verification."

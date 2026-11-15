@@ -11,26 +11,26 @@ import { CoreError, RUNNER_PROTOCOL, type RunnerStatus, type RunnerVersion, type
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 
-import { accept } from "../accepted"
-import { expectedValues } from "../compose-file"
-import { readCompose, type ComposeText } from "../compose-read"
-import { openTeam, reach, TAMPERED, type OpDeps, type Team } from "../context"
-import { CliError, UsageError } from "../errors"
-import type { InstallEvent } from "../install"
-import { prepareDeploy, prepareRollback, sendDeploy, type DeployPlan } from "../ops/deploy"
-import { createTeam } from "../ops/init"
-import { writeLink } from "../ops/link"
-import { followLogs, LOG_TAIL, prepareLogs, type LogLine } from "../ops/logs"
-import { prepareSecretSet, removeSecret, setSecret } from "../ops/secret"
-import { addServer, prepareServerAdd, prepareServerUpdate, runnerRelation, runnerWarning, updateRunner, type RunnerRelation } from "../ops/server"
-import { locateServer, readOver, stateOf, type AppStates, type RunState, type StatusResult } from "../ops/status"
-import { profileStore, type Server } from "../profile"
-import { aboveOf, DEFAULT_COMPOSE, findProject, notSignedHere, shownPath, standingOf, tilde, type ProjectLink, type Standing } from "../project"
-import { RUNNER_RELEASE } from "../runner-release"
-import { sanitize } from "../sanitize"
-import { openSession, SshUnreachable, type Session, type SessionMode } from "../session"
-import type { ErrorLines, Target } from "../transport"
-import { askingConnect, batchOnly, oneAtATime, recording, wouldHaveAsked, type Terminal } from "./hand-over"
+import { accept } from "../../project/accepted"
+import { expectedValues } from "../../project/compose-file"
+import { readCompose, type ComposeText } from "../../project/compose-read"
+import { openTeam, reach, TAMPERED, type OpDeps, type Team } from "../../cli/context"
+import { CliError, UsageError } from "../../cli/errors"
+import type { InstallEvent } from "../../server/install/install"
+import { prepareDeploy, prepareRollback, sendDeploy, type DeployPlan } from "../../ops/deploy"
+import { createTeam } from "../../ops/init"
+import { writeLink } from "../../ops/link"
+import { followLogs, LOG_TAIL, prepareLogs, type LogLine } from "../../ops/logs"
+import { prepareSecretSet, removeSecret, setSecret } from "../../ops/secret"
+import { addServer, prepareServerAdd, prepareServerUpdate, runnerRelation, runnerWarning, updateRunner, type RunnerRelation } from "../../ops/server"
+import { locateServer, readOver, stateOf, type AppStates, type RunState, type StatusResult } from "../../ops/status"
+import { profileStore, type Server } from "../../profile/profile"
+import { aboveOf, DEFAULT_COMPOSE, findProject, notSignedHere, shownPath, standingOf, tilde, type ProjectLink, type Standing } from "../../project/project"
+import { RUNNER_RELEASE } from "../../version/runner-release"
+import { sanitize } from "../../server/sanitize"
+import { openSession, SshUnreachable, type Session, type SessionMode } from "../../server/session"
+import type { ErrorLines, Target } from "../../server/transport"
+import { askingConnect, batchOnly, oneAtATime, recording, wouldHaveAsked, type Terminal } from "../hand-over"
 import {
   DEPLOY_LINES,
   LOG_LINES,
@@ -43,9 +43,9 @@ import {
   type RunnerRow,
   type Start,
   type TeamView,
-} from "./state"
-import { seconds } from "./time"
-import { appDetails, appNames, appsOf, latestAccepted, secretNamesOf } from "./views"
+} from "../state/state"
+import { seconds } from "../../shared/time"
+import { appDetails, appNames, appsOf, latestAccepted, secretNamesOf } from "../../shared/views"
 
 /** What the app needs from the outside world: what every operation needs. */
 export type AppDeps = OpDeps

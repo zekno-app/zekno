@@ -8,8 +8,8 @@ import {
   isKey,
   keyIdOf,
   serverIdOf,
-} from "../src/index"
-import { decodeKey } from "../src/keys"
+} from "../../src/index"
+import { decodeKey } from "../../src/crypto/keys"
 
 describe("keys", () => {
   test("each kind of key carries its own marking", () => {

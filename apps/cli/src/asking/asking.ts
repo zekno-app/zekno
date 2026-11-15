@@ -17,13 +17,13 @@ import { realpathSync } from "node:fs"
 import { basename } from "node:path"
 
 import { batchOnly } from "../app/hand-over"
-import { appsOf, latestFirst } from "../app/views"
-import { reach, type Deps, type Team } from "../context"
-import { CliError, MISSING_APP, MISSING_SERVER, UsageError } from "../errors"
+import { appsOf, latestFirst } from "../shared/views"
+import { reach, type Deps, type Team } from "../cli/context"
+import { CliError, MISSING_APP, MISSING_SERVER, UsageError } from "../cli/errors"
 import { readOver, stateOf, type RunState } from "../ops/status"
-import { findServer, NAME, type Profile, type Server } from "../profile"
-import { sanitize } from "../sanitize"
-import { withSession } from "../session"
+import { findServer, NAME, type Profile, type Server } from "../profile/profile"
+import { sanitize } from "../server/sanitize"
+import { withSession } from "../server/session"
 import type { ListRow } from "../ui/types"
 
 /** A1: the one server, used without asking (mock-up 1). */
@@ -49,7 +49,7 @@ export const NEW_APP = "+ a new app"
 
 /**
  * How long the read of a server's apps may take: 20 seconds, the limit of the
- * app's own reads (`READ_LIMIT_MS` in app/effects.ts, held equal by a test).
+ * app's own reads (`READ_LIMIT_MS` in app/effects/effects.ts, held equal by a test).
  * Not imported from there: that module brings the full-screen app, and Ink
  * with it, which main.ts loads only once `DEV` is out of the environment.
  */

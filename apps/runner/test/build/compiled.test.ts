@@ -13,8 +13,8 @@ import { beforeAll, describe, expect, test } from "bun:test"
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import pkg from "../package.json"
-import { RUNNER_MAIN, tempDir } from "./helpers"
+import pkg from "../../package.json"
+import { RUNNER_MAIN, tempDir } from "../support/helpers"
 
 const AUTOLOAD_OFF = ["--no-compile-autoload-dotenv", "--no-compile-autoload-bunfig"]
 const AUTOLOAD_ON = ["--compile-autoload-dotenv", "--compile-autoload-bunfig", "--compile-autoload-tsconfig", "--compile-autoload-package-json"]
@@ -27,7 +27,7 @@ beforeAll(async () => {
   const at = words.indexOf("--outfile")
   binary = join(tempDir("compiled-runner"), "zekno-runner")
   const argv = [process.execPath, ...words.slice(1, at), "--outfile", binary]
-  const build = Bun.spawn(argv, { cwd: join(import.meta.dir, ".."), stdout: "pipe", stderr: "pipe" })
+  const build = Bun.spawn(argv, { cwd: join(import.meta.dir, "../.."), stdout: "pipe", stderr: "pipe" })
   const [code, err] = await Promise.all([build.exited, new Response(build.stderr).text()])
   if (code !== 0) throw new Error(`the runner did not compile: ${err}`)
 }, 120_000)

@@ -7,7 +7,7 @@
  * box, and the hidden prompt is a secure one whose value is never read.
  *
  * Pure: it reads cells and returns nodes, so it is checked with captured
- * output in test/e2e-screen-model.test.ts.
+ * output in test/e2e/e2e-screen-model.test.ts.
  */
 import type { SemanticNode } from "e2e/engine"
 

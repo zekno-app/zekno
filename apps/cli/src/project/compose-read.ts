@@ -22,9 +22,9 @@ import { LIMITS } from "@workspace/core"
 import { closeSync, constants, fstatSync, openSync, readSync, realpathSync, statSync, type Stats } from "node:fs"
 import { resolve } from "node:path"
 
-import { CliError } from "./errors"
+import { CliError } from "../cli/errors"
 import { DEFAULT_COMPOSE, isAbove, shownPath, type ProjectLink } from "./project"
-import { sanitize } from "./sanitize"
+import { sanitize } from "../server/sanitize"
 
 /** Where a deploy's Compose file comes from. */
 export type ComposeSource =

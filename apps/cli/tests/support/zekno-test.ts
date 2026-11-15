@@ -8,7 +8,7 @@
  * - the key store is a file in the test's temporary folder, never the
  *   system keychain;
  * - a runner on this machine uses the stand-in Docker;
- * - SSH reaches only the stand-in server of test/stand-in-server.ts. Every
+ * - SSH reaches only the stand-in server of test/support/stand-in-server.ts. Every
  *   process this build starts goes through `guardSpawn`, which sends `ssh`
  *   to the stand-in and refuses any other `ssh` (and every other network
  *   tool), so nothing typed into "add a server" can start a real one.
@@ -19,13 +19,13 @@
 import { appendFileSync } from "node:fs"
 import { basename } from "node:path"
 
-import { RUNNER_MAIN } from "../../../runner/test/helpers"
-import { run } from "../../src/cli"
-import type { OpDeps } from "../../src/context"
-import { CliError } from "../../src/errors"
-import { RUNNER_RELEASE, type RunnerRelease } from "../../src/runner-release"
-import { connect, type Target } from "../../src/transport"
-import { processPlainUi, wantsPlain } from "../../src/ui/plain"
+import { RUNNER_MAIN } from "../../../runner/test/support/helpers"
+import { run } from "../../src/cli/cli"
+import type { OpDeps } from "../../src/cli/context"
+import { CliError } from "../../src/cli/errors"
+import { RUNNER_RELEASE, type RunnerRelease } from "../../src/version/runner-release"
+import { connect, type Target } from "../../src/server/transport"
+import { processPlainUi, wantsPlain } from "../../src/ui/plain/plain"
 import { fileKeyStore } from "./file-keystore"
 
 /** Names of programs that reach the network. Only the stand-in `ssh` is ever started. */
@@ -127,7 +127,7 @@ const argv = process.argv.slice(2)
 /** One command, as main.ts runs it: Ink at a terminal, plain lines when piped. */
 async function command(): Promise<number> {
   const plain = wantsPlain(argv, process.stdout, process.stdin)
-  const ui = plain ? processPlainUi() : (await import("../../src/ui/ink")).inkUi()
+  const ui = plain ? processPlainUi() : (await import("../../src/ui/ink/ink")).inkUi()
   try {
     return await run(argv, { ...deps, ui })
   } finally {
@@ -137,8 +137,8 @@ async function command(): Promise<number> {
 
 /** The full-screen app, as main.ts opens it: the profile verified, then the terminal asked, then the first frame. */
 async function app(): Promise<number> {
-  const { detectBackground } = await import("../../src/ui/background")
-  const [{ loadStart }, { openApp }] = await Promise.all([import("../../src/app/effects"), import("../../src/app/app")])
+  const { detectBackground } = await import("../../src/ui/terminal/background")
+  const [{ loadStart }, { openApp }] = await Promise.all([import("../../src/app/effects/effects"), import("../../src/app/app")])
   const start = await loadStart(deps)
   const background = await detectBackground()
   try {

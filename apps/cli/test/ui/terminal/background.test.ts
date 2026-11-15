@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 
-import { answered, backgroundFrom, detectBackground, isLateAnswer, parseBackgroundAnswer, QUERY } from "../src/ui/background"
-import { discardTypedAhead } from "../src/ui/type-ahead"
+import { answered, backgroundFrom, detectBackground, isLateAnswer, parseBackgroundAnswer, QUERY } from "../../../src/ui/terminal/background"
+import { discardTypedAhead } from "../../../src/ui/terminal/type-ahead"
 
 const BEL = "\x07"
 const ST = "\x1b\\"

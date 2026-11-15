@@ -16,9 +16,9 @@ import {
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import pkg from "../package.json"
-import { requestLines } from "../src/session"
-import { buildDeploy, fakeDocker, runner, session, tempDir, waitFor, world, type Frame } from "./helpers"
+import pkg from "../../package.json"
+import { requestLines } from "../../src/session/session"
+import { buildDeploy, fakeDocker, runner, session, tempDir, waitFor, world, type Frame } from "../support/helpers"
 
 type World = Awaited<ReturnType<typeof world>>
 

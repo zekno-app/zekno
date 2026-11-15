@@ -8,8 +8,8 @@ import {
   openSecrets,
   trustFoundingRoster,
   verifyDeploy,
-} from "../src/index"
-import { COMPOSE, person, publish, setSecret, setup, propose } from "./helpers"
+} from "../../src/index"
+import { COMPOSE, person, publish, setSecret, setup, propose } from "../support/helpers"
 
 const code = (result: { ok: boolean; error?: { code: string } }) =>
   result.ok ? "accepted" : result.error!.code
@@ -104,8 +104,8 @@ describe("edge cases from the specification", () => {
 
   test("signed content that is not a valid deploy is refused as malformed", async () => {
     const { founder, server } = await setup()
-    const { signEnvelope } = await import("../src/envelope")
-    const { PAYLOAD_TYPES } = await import("../src/index")
+    const { signEnvelope } = await import("../../src/crypto/envelope")
+    const { PAYLOAD_TYPES } = await import("../../src/index")
     const sign = (text: string) => signEnvelope(PAYLOAD_TYPES.deploy, new TextEncoder().encode(text), founder.signer)
     for (const text of ["not json", "[]", "null", "{}", '{"v":1}', '{"v":1,"unknown":true}']) {
       expect(code(verifyDeploy({ envelope: await sign(text), secrets: [], state: server.state }))).toBe("malformed")

@@ -1,6 +1,6 @@
 import { Box, Text, useAnimation } from "ink"
 
-import { useTheme } from "./theme"
+import { useTheme } from "../terminal/theme"
 
 /** Where one stage of a piece of work is. */
 export type StageState = "done" | "active" | "failed" | "pending"

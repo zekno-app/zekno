@@ -1,7 +1,7 @@
-import type { Deps } from "../context"
+import type { Deps } from "../cli/context"
 import { linkFolder, type LinkInput } from "../ops/link"
-import { shownPath } from "../project"
-import { sanitize } from "../sanitize"
+import { shownPath } from "../project/project"
+import { sanitize } from "../server/sanitize"
 
 /**
  * Writes zekno.json in this folder, signed, or records as used here the one

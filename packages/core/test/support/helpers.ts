@@ -16,7 +16,7 @@ import {
   type SecretRecord,
   type Signer,
   type TeamTrust,
-} from "../src/index"
+} from "../../src/index"
 
 export const COMPOSE = "services:\n  web:\n    image: example/web:1\n"
 

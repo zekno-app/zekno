@@ -23,8 +23,8 @@ import {
   type ServerSecretKey,
 } from "@workspace/core"
 
-import { composeUp } from "./compose"
-import { acquireLock, isPrivate, isSetUp, readKeys, readState, writeCompose, writeKeys, writeState } from "./home"
+import { composeUp } from "../docker/compose"
+import { acquireLock, isPrivate, isSetUp, readKeys, readState, writeCompose, writeKeys, writeState } from "../home/home"
 
 type Reason = NonNullable<RunnerReport["reason"]>
 export const refused = (reason: Reason): RunnerReport => ({ outcome: "refused", reason })

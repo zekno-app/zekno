@@ -6,7 +6,7 @@
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 
-import type { KeyStore } from "../../src/keystore"
+import type { KeyStore } from "../../src/profile/keystore"
 
 function read(path: string): Record<string, string> {
   if (!existsSync(path)) return {}

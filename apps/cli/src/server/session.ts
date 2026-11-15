@@ -26,7 +26,7 @@ import {
 } from "@workspace/core"
 import type { z } from "zod"
 
-import { CliError, RunnerRefused } from "./errors"
+import { CliError, RunnerRefused } from "../cli/errors"
 import { sanitize } from "./sanitize"
 import { ask, type RunnerProcess, type Transport } from "./transport"
 

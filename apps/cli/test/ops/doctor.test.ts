@@ -16,19 +16,19 @@ import { appendFileSync, chmodSync, existsSync, readFileSync, rmSync, symlinkSyn
 import { dirname, join } from "node:path"
 
 import runnerPackage from "../../../runner/package.json"
-import { tempDir } from "../../../runner/test/helpers"
-import { READ_LIMIT_MS } from "../../src/app/effects"
+import { tempDir } from "../../../runner/test/support/helpers"
+import { READ_LIMIT_MS } from "../../src/app/effects/effects"
 import { doctorJson } from "../../src/commands/doctor"
-import { readCompose } from "../../src/compose-read"
+import { readCompose } from "../../src/project/compose-read"
 import { DOCTOR_LIMIT_MS, freeText, runDoctor, sessionSentence, type DoctorReport } from "../../src/ops/doctor"
-import { profileStore } from "../../src/profile"
-import { findProject, shownPath } from "../../src/project"
+import { profileStore } from "../../src/profile/profile"
+import { findProject, shownPath } from "../../src/project/project"
 import { doctorCounts, SERVERS_SKIPPED } from "../../src/ui/types"
 import type { Fetch } from "../../src/version/newest"
 import { CLI_VERSION } from "../../src/version/version"
-import { answering, machine, twin } from "../helpers"
-import { olderRunner, realRunner, reportingRunner, snapshot, sshStandIn, stallingRunner, standInServer, stillRunning, withSsh, type StandInServer } from "../stand-in-server"
-import { terminal } from "../ui/terminal"
+import { answering, machine, twin } from "../support/helpers"
+import { olderRunner, realRunner, reportingRunner, snapshot, sshStandIn, stallingRunner, standInServer, stillRunning, withSsh, type StandInServer } from "../support/stand-in-server"
+import { terminal } from "../support/terminal"
 
 /** The version the repository's runner reports, and so the one a stand-in release made from it carries: this zekno's. */
 const OWN = runnerPackage.version

@@ -2,14 +2,14 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { fakeDocker, filesUnder, RUNNER_MAIN } from "../../runner/test/helpers"
-import { run } from "../src/cli"
-import type { Deps } from "../src/context"
-import { Left } from "../src/errors"
-import { memoryKeyStore } from "../src/keystore"
-import { connect } from "../src/transport"
-import { plainUi } from "../src/ui/plain"
-import type { Ui } from "../src/ui/types"
+import { fakeDocker, filesUnder, RUNNER_MAIN } from "../../../runner/test/support/helpers"
+import { run } from "../../src/cli/cli"
+import type { Deps } from "../../src/cli/context"
+import { Left } from "../../src/cli/errors"
+import { memoryKeyStore } from "../../src/profile/keystore"
+import { connect } from "../../src/server/transport"
+import { plainUi } from "../../src/ui/plain/plain"
+import type { Ui } from "../../src/ui/types"
 
 export { filesUnder }
 

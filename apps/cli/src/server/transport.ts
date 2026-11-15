@@ -1,9 +1,9 @@
 import { LIMITS, parseMessage, RunnerReportSchema, type RunnerReport } from "@workspace/core"
 import type { z } from "zod"
 
-import { CliError, RunnerRefused } from "./errors"
+import { CliError, RunnerRefused } from "../cli/errors"
 import { sanitize } from "./sanitize"
-import { writeStandardError } from "./ui/plain"
+import { writeStandardError } from "../ui/plain/plain"
 
 export const SSH_DESTINATION = /^[A-Za-z0-9][A-Za-z0-9._@:-]*$/
 export const RUNNER_PATH = /^[A-Za-z0-9._/~-]+$/

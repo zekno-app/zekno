@@ -1,7 +1,7 @@
 import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
-import type { KeyHint } from "../../ui/key-hints"
+import type { KeyHint } from "../../ui/parts/key-hints"
 import { Frame, Header, Trail } from "../frame"
 
 /** The board "Help", column by column: each group's heading and its keys. */

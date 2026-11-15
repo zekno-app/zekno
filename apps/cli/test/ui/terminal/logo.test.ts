@@ -4,9 +4,9 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { createElement } from "react"
 
-import { APP_COLUMN, Logo, LOGO_BITMAP, LOGO_HEIGHT, LOGO_WIDTH, logoLines, logoParts } from "../src/ui/logo"
+import { APP_COLUMN, Logo, LOGO_BITMAP, LOGO_HEIGHT, LOGO_WIDTH, logoLines, logoParts } from "../../../src/ui/terminal/logo"
 
-const DESIGN = join(import.meta.dir, "../../../specs/004-cli-app/design")
+const DESIGN = join(import.meta.dir, "../../../../../specs/004-cli-app/design")
 
 type Run = { x: number; y: number; width: number; height: number }
 

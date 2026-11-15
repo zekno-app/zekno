@@ -1,5 +1,5 @@
 import type { DoctorReport } from "../ops/doctor"
-import type { DeployStart, DeployView } from "./deploy"
+import type { DeployStart, DeployView } from "../shared/deploy"
 
 /**
  * What every line from a server starts with, as git marks what the other

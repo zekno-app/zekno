@@ -1,4 +1,4 @@
-import type { Deps } from "../context"
+import type { Deps } from "../cli/context"
 import { createTeam } from "../ops/init"
 
 /** Creates the signing key in the keychain and starts a team with this person as its admin. */

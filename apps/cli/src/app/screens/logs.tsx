@@ -1,12 +1,12 @@
 import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
-import type { KeyHint } from "../../ui/key-hints"
-import { TextQuestion } from "../../ui/text-input"
-import { useTheme, type Theme } from "../../ui/theme"
+import type { KeyHint } from "../../ui/parts/key-hints"
+import { TextQuestion } from "../../ui/parts/text-input"
+import { useTheme, type Theme } from "../../ui/terminal/theme"
 import { Frame, Header, NoticeLine, Trail } from "../frame"
-import { servicesOf, visibleLines, type LogLine, type Screen, type State } from "../state"
-import { logClock } from "../time"
+import { servicesOf, visibleLines, type LogLine, type Screen, type State } from "../state/state"
+import { logClock } from "../../shared/time"
 import { HINTS } from "./placeholder"
 
 type LogsScreenState = Extract<Screen, { name: "logs" }>

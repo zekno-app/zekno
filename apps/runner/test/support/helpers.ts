@@ -14,7 +14,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, statSync
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-export const RUNNER_MAIN = join(import.meta.dir, "../src/main.ts")
+export const RUNNER_MAIN = join(import.meta.dir, "../../src/main.ts")
 export const COMPOSE = "services:\n  web:\n    image: example/web:1\n    environment:\n      - GREETING\n"
 
 export function tempDir(label: string): string {

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { renderToString } from "ink"
 
-import { AppView, createStore } from "../src/app/app"
-import { HELP } from "../src/app/screens/help"
-import { HINTS } from "../src/app/screens/placeholder"
-import { initialState, update, type AppEvent, type Effect, type State, type TeamView } from "../src/app/state"
-import { logoLines } from "../src/ui/logo"
+import { AppView, createStore } from "../../src/app/app"
+import { HELP } from "../../src/app/screens/help"
+import { HINTS } from "../../src/app/screens/placeholder"
+import { initialState, update, type AppEvent, type Effect, type State, type TeamView } from "../../src/app/state/state"
+import { logoLines } from "../../src/ui/terminal/logo"
 
 const TEAM: TeamView = { member: "Ada", version: 2, servers: [{ name: "prod", destination: "deploy@203.0.113.7", apps: [] }] }
 

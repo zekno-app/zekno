@@ -3,12 +3,12 @@ import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-import { run } from "./cli"
-import type { OpDeps } from "./context"
-import { CliError } from "./errors"
-import { osKeychain } from "./keystore"
-import { connect } from "./transport"
-import { processPlainUi, wantsPlain } from "./ui/plain"
+import { run } from "./cli/cli"
+import type { OpDeps } from "./cli/context"
+import { CliError } from "./cli/errors"
+import { osKeychain } from "./profile/keystore"
+import { connect } from "./server/transport"
+import { processPlainUi, wantsPlain } from "./ui/plain/plain"
 
 const argv = process.argv.slice(2)
 
@@ -47,7 +47,7 @@ async function withoutDev<T>(work: () => Promise<T>): Promise<T> {
 async function command(): Promise<number> {
   // Piped either way, in a script or with `--json` it is plain lines, so output stays stable for whatever reads it.
   const plain = wantsPlain(argv, process.stdout, process.stdin)
-  const ui = plain ? processPlainUi() : await withoutDev(async () => (await import("./ui/ink")).inkUi())
+  const ui = plain ? processPlainUi() : await withoutDev(async () => (await import("./ui/ink/ink")).inkUi())
   try {
     return await run(argv, { ...deps, ui })
   } finally {
@@ -66,10 +66,10 @@ async function command(): Promise<number> {
  * app opens with ("Use it here?").
  */
 async function app(): Promise<number> {
-  const { detectBackground } = await import("./ui/background")
+  const { detectBackground } = await import("./ui/terminal/background")
   let closed: Promise<number> | undefined
   await withoutDev(async () => {
-    const [{ loadStart }, { openApp }] = await Promise.all([import("./app/effects"), import("./app/app")])
+    const [{ loadStart }, { openApp }] = await Promise.all([import("./app/effects/effects"), import("./app/app")])
     const start = await loadStart(deps)
     const background = await detectBackground()
     closed = openApp(deps, { start, background })

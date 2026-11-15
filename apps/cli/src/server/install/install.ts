@@ -24,10 +24,10 @@
 import { RUNNER_VERSION_PATTERN } from "@workspace/core"
 import { statSync } from "node:fs"
 
-import { CliError } from "./errors"
-import { RUNNER_RELEASE, type RunnerArch } from "./runner-release"
-import { sanitize } from "./sanitize"
-import { RUNNER_PATH, type RunnerProcess, type Transport } from "./transport"
+import { CliError } from "../../cli/errors"
+import { RUNNER_RELEASE, type RunnerArch } from "../../version/runner-release"
+import { sanitize } from "../sanitize"
+import { RUNNER_PATH, type RunnerProcess, type Transport } from "../transport"
 
 /** A runner version: the one grammar of packages/core (contracts/release.md, "Versions and tags"). */
 export const VERSION_PATTERN = RUNNER_VERSION_PATTERN

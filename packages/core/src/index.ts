@@ -17,9 +17,9 @@ export {
   type ServerPublicKey,
   type ServerSecretKey,
   type Signer,
-} from "./keys"
-export { confirmationCodesMatch, serverConfirmationCode } from "./confirm"
-export { EnvelopeSchema, PAYLOAD_TYPES, type Envelope, type PayloadType } from "./envelope"
+} from "./crypto/keys"
+export { confirmationCodesMatch, serverConfirmationCode } from "./crypto/confirm"
+export { EnvelopeSchema, PAYLOAD_TYPES, type Envelope, type PayloadType } from "./crypto/envelope"
 export {
   applyRosterUpdate,
   createTeam,
@@ -32,8 +32,8 @@ export {
   type Role,
   type ServerEntry,
   type TeamTrust,
-} from "./roster"
-export { isReservedSecretName, SealedSecretSchema, SECRET_NAME, type SealedSecret } from "./secrets"
+} from "./team/roster"
+export { isReservedSecretName, SealedSecretSchema, SECRET_NAME, type SealedSecret } from "./secrets/secrets"
 export {
   createSecret,
   createSecretRemoval,
@@ -45,7 +45,7 @@ export {
   type SecretRecord,
   type VerifiedRemoval,
   type VerifiedSecret,
-} from "./secret-record"
+} from "./secrets/secret-record"
 export {
   createDeploy,
   initialRunnerState,
@@ -56,8 +56,8 @@ export {
   type RunnerState,
   type Deploy,
   type VerifiedDeploy,
-} from "./deploy"
-export { createLink, verifyLink, type VerifiedLink } from "./link"
+} from "./deploy/deploy"
+export { createLink, verifyLink, type VerifiedLink } from "./deploy/link"
 export {
   parseMessage,
   PendingDeploysResponseSchema,
@@ -117,15 +117,15 @@ export {
   type RunnerSyncRequest,
   type SecretsResponse,
   type StatusReport,
-} from "./protocol"
-export { LIMITS } from "./limits"
+} from "./protocol/protocol"
+export { LIMITS } from "./protocol/limits"
 export {
   compareRunnerVersions,
   isDevVersion,
   parseRunnerVersion,
   RUNNER_VERSION_PATTERN,
   type ParsedRunnerVersion,
-} from "./version"
+} from "./protocol/version"
 export {
   CoreError,
   DEPLOY_REFUSALS,
@@ -142,4 +142,4 @@ export {
   type Result,
   type RosterRefusal,
   type SecretRefusal,
-} from "./result"
+} from "./protocol/result"

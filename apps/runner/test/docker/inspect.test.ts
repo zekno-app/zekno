@@ -3,8 +3,8 @@ import { LogEventSchema, parseMessage, RunnerAppStatesSchema, SessionFrameSchema
 import { chmodSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { parseLogLine, parsePs } from "../src/inspect"
-import { deployed, fakeDocker, isAlive, session, tempDir, waitFor, world } from "./helpers"
+import { parseLogLine, parsePs } from "../../src/docker/inspect"
+import { deployed, fakeDocker, isAlive, session, tempDir, waitFor, world } from "../support/helpers"
 
 /** One row of `docker compose ps --format json` as Docker 29 prints it, with everything it carries. */
 function psRow(service: string, state: string, extra: Record<string, unknown> = {}) {

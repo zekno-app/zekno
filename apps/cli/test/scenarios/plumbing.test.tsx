@@ -9,18 +9,18 @@ import { closeSync, constants, existsSync, openSync, readFileSync } from "node:f
 import { join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
 
-import { isAlive, residentMiB, tempDir, waitFor } from "../../runner/test/helpers"
-import { HELD_LINES, heldLines } from "../src/commands/deploy"
-import { sanitize } from "../src/sanitize"
-import { inkUi, RemoteLine } from "../src/ui/ink"
-import { plainUi } from "../src/ui/plain"
-import { REMOTE_MARK } from "../src/ui/types"
-import { machine, ready } from "./helpers"
+import { isAlive, residentMiB, tempDir, waitFor } from "../../../runner/test/support/helpers"
+import { HELD_LINES, heldLines } from "../../src/commands/deploy"
+import { sanitize } from "../../src/server/sanitize"
+import { inkUi, RemoteLine } from "../../src/ui/ink/ink"
+import { plainUi } from "../../src/ui/plain/plain"
+import { REMOTE_MARK } from "../../src/ui/types"
+import { machine, ready } from "../support/helpers"
 
 /** The most resident memory, in MiB, the CLI may reach in these tests. It needs about 60 on its own. */
 const MEMORY_BOUND_MIB = 200
 
-const FLOOD = join(import.meta.dir, "flood.ts")
+const FLOOD = join(import.meta.dir, "../support/flood.ts")
 
 /** The processes `pid` started that are still running. */
 const childrenOf = (pid: number): number[] =>

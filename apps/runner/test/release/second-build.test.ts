@@ -2,15 +2,15 @@ import { describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-import { realBuild, secondBuild, type SecondBuildDeps } from "../scripts/second-build"
-import { tempDir } from "./helpers"
+import { realBuild, secondBuild, type SecondBuildDeps } from "../../scripts/second-build"
+import { tempDir } from "../support/helpers"
 import { copied, git, releaseRepo, runnerRelease, type ReleaseRepo } from "./release-helpers"
 
 const TAG = "runner-v0.1.0-dev.1"
 const X64 = new TextEncoder().encode("the x64 runner\n".repeat(64))
 const ARM64 = new TextEncoder().encode("the arm64 runner\n".repeat(64))
 const sha = (bytes: Uint8Array) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
-const RELEASE_JSON = "apps/cli/src/runner-release.json"
+const RELEASE_JSON = "apps/cli/src/version/runner-release.json"
 
 /** The release notes the workflow writes (contracts/release.md), for this stand-in release. */
 function notes(commit: string, x64 = sha(X64), arm64 = sha(ARM64)): string {
@@ -37,7 +37,7 @@ function notes(commit: string, x64 = sha(X64), arm64 = sha(ARM64)): string {
     `    ${arm64}  zekno-runner-linux-arm64`,
     "",
     "zekno installs this release only once these checksums are recorded in its",
-    "`apps/cli/src/runner-release.json`, after a second build on another machine produced the same files.",
+    "`apps/cli/src/version/runner-release.json`, after a second build on another machine produced the same files.",
     "",
     "## Second build",
     "",
@@ -57,7 +57,7 @@ function record(commit: string, rows: [string, string, string, string, string][]
     "|------|------------|------------|------------|--------|",
     ...rows.map((row) => `| ${row.join(" | ")} |`),
     "",
-    matched ? "The checksums are recorded in apps/cli/src/runner-release.json on dev." : "Nothing was recorded. No zekno installs this release.",
+    matched ? "The checksums are recorded in apps/cli/src/version/runner-release.json on dev." : "Nothing was recorded. No zekno installs this release.",
     "",
   ].join("\n")
 }
@@ -168,7 +168,7 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     const printed = w.out.join("")
     expect(printed.startsWith(text)).toBe(true)
     const next = printed.slice(text.length)
-    const match = /^Recorded runner 0\.1\.0-dev\.1 in apps\/cli\/src\/runner-release\.json\. Next, on dev:\n {2}git add apps\/cli\/src\/runner-release\.json\n {2}git commit -F (\S+)\n {2}git push origin dev\n {2}gh release edit runner-v0\.1\.0-dev\.1 --repo zekno-app\/zekno --notes-file (\S+)\n$/.exec(next)
+    const match = /^Recorded runner 0\.1\.0-dev\.1 in apps\/cli\/src\/version\/runner-release\.json\. Next, on dev:\n {2}git add apps\/cli\/src\/version\/runner-release\.json\n {2}git commit -F (\S+)\n {2}git push origin dev\n {2}gh release edit runner-v0\.1\.0-dev\.1 --repo zekno-app\/zekno --notes-file (\S+)\n$/.exec(next)
     expect(match).not.toBeNull()
     const [, message, notesFile] = match!
     expect(readFileSync(message!, "utf8")).toBe(`chore(cli): install runner 0.1.0-dev.1\n\n${text}`)
@@ -355,7 +355,7 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     }
     expect(await secondBuild(TAG, late.deps)).toBe(3)
     expect(said(late)).toBe(
-      "The second build could not finish: EPIPE: broken pipe, write. It stopped after comparing the files: check apps/cli/src/runner-release.json with git diff before you commit anything.\n"
+      "The second build could not finish: EPIPE: broken pipe, write. It stopped after comparing the files: check apps/cli/src/version/runner-release.json with git diff before you commit anything.\n"
     )
   })
 
@@ -376,7 +376,7 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     writeFileSync(join(dirty.repo.root, RELEASE_JSON), runnerRelease("0.1.0-dev.1", "a".repeat(64), "b".repeat(64)))
     const edited = readFileSync(join(dirty.repo.root, RELEASE_JSON), "utf8")
     expect(await secondBuild(TAG, dirty.deps)).toBe(2)
-    expect(said(dirty)).toBe("apps/cli/src/runner-release.json has changes that are not committed. Commit or undo them first.\n")
+    expect(said(dirty)).toBe("apps/cli/src/version/runner-release.json has changes that are not committed. Commit or undo them first.\n")
     expect(readFileSync(join(dirty.repo.root, RELEASE_JSON), "utf8")).toBe(edited)
 
     const bun = world()
@@ -409,7 +409,7 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     const others = world({ recorded: runnerRelease("0.1.0-dev.1", "a".repeat(64), "b".repeat(64)) })
     expect(await secondBuild(TAG, others.deps)).toBe(1)
     expect(said(others)).toBe(
-      `apps/cli/src/runner-release.json already records runner 0.1.0-dev.1 with other checksums: ${"a".repeat(64)} and ${"b".repeat(64)}. Nothing was changed.\n`
+      `apps/cli/src/version/runner-release.json already records runner 0.1.0-dev.1 with other checksums: ${"a".repeat(64)} and ${"b".repeat(64)}. Nothing was changed.\n`
     )
     unchanged(others)
 
@@ -579,7 +579,7 @@ describe("the second build's own build, without the network", () => {
 /**
  * The real build of the second build, twice, from the same commit in two
  * separate temporary folders. Needs the network and a few minutes, so it runs
- * only when asked: `ZEKNO_REAL_BUILD=1 bun test test/second-build.test.ts`.
+ * only when asked: `ZEKNO_REAL_BUILD=1 bun test test/release/second-build.test.ts`.
  * Each build downloads Bun's two Linux runtimes into its own empty folder,
  * about 107 MB each unpacked, and takes npm packages from Bun's cache on this machine,
  * downloading any that are not there. It builds HEAD, or the commit in
@@ -588,7 +588,7 @@ describe("the second build's own build, without the network", () => {
 test.skipIf(process.env.ZEKNO_REAL_BUILD !== "1")(
   "the real build gives the same bytes twice",
   async () => {
-    const root = join(import.meta.dir, "../../..")
+    const root = join(import.meta.dir, "../../../..")
     const commit = process.env.ZEKNO_REAL_BUILD_COMMIT || git(root, "rev-parse", "HEAD")
     const results = []
     for (const label of ["first", "second"]) {

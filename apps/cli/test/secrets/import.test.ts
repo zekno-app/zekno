@@ -11,8 +11,8 @@ import { describe, expect, spyOn, test } from "bun:test"
 import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { tempDir } from "../../../runner/test/helpers"
-import { HELP } from "../../src/cli"
+import { tempDir } from "../../../runner/test/support/helpers"
+import { HELP } from "../../src/cli/cli"
 import {
   importFor,
   importGroups,
@@ -23,13 +23,13 @@ import {
   SAY_WHICH_FILE,
   storeQuestion,
 } from "../../src/commands/secret"
-import { openTeam, type Team } from "../../src/context"
-import { MISSING_APP, NOTHING_DONE } from "../../src/errors"
+import { openTeam, type Team } from "../../src/cli/context"
+import { MISSING_APP, NOTHING_DONE } from "../../src/cli/errors"
 import { importTooMany, importTooManyRecords, importTooManySecrets, prepareSecretImport, storeSecrets } from "../../src/ops/secret"
-import { profileStore } from "../../src/profile"
+import { profileStore } from "../../src/profile/profile"
 import { parseImport, type ImportEntry } from "../../src/secrets/import-file"
-import { answering, filesUnder, machine, ready } from "../helpers"
-import { shows, terminal } from "../ui/terminal"
+import { answering, filesUnder, machine, ready } from "../support/helpers"
+import { shows, terminal } from "../support/terminal"
 
 type Machine = ReturnType<typeof machine>
 

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 
-import { CoreError, generateServerKeyPair, LIMITS } from "../src/index"
-import { decodeKey } from "../src/keys"
-import { openSealedSecret, sealSecret } from "../src/secrets"
+import { CoreError, generateServerKeyPair, LIMITS } from "../../src/index"
+import { decodeKey } from "../../src/crypto/keys"
+import { openSealedSecret, sealSecret } from "../../src/secrets/secrets"
 
 function open(sealed: ReturnType<typeof sealSecret>, server: ReturnType<typeof generateServerKeyPair>, app = "web") {
   return openSealedSecret(sealed, { serverId: server.serverId, app }, decodeKey("serverPublic", server.publicKey), decodeKey("serverSecret", server.secretKey))

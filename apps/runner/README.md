@@ -160,7 +160,7 @@ release, such as `0.1.0`; one built from `dev` installs a development release, s
 | root | `/usr/local/bin/zekno-runner` | `/var/lib/zekno` |
 | any other user | `~/.local/bin/zekno-runner` | `~/.local/state/zekno` |
 
-**The first runner release is 0.1.0.** `apps/cli/src/runner-release.json` holds its checksums, so
+**The first runner release is 0.1.0.** `apps/cli/src/version/runner-release.json` holds its checksums, so
 a zekno built from this branch installs it by itself. Installing by hand, below, and
 `--runner-file` remain for development and for servers that cannot reach GitHub.
 
@@ -213,7 +213,7 @@ A runner release is a GitHub Release of this repository, started by pushing a ta
 `scripts/release.ts check`, which stops the release when the tag is not a version, when the
 tagged commit is not on the branch for its kind, when `package.json` here says another version,
 when the root `package.json` pins no Bun version, or, for prod, when
-`apps/cli/src/runner-release.json` names a development version. Then `build-dev` or `build-prod`
+`apps/cli/src/version/runner-release.json` names a development version. Then `build-dev` or `build-prod`
 builds the runner for Linux on x86-64 and ARM64 with the pinned Bun, checks that the x86-64 runner
 answers with the tag's version, and hands four files on to `publish-dev` or `publish-prod`, which
 publishes them:

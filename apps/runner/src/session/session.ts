@@ -13,9 +13,9 @@ import {
   type SessionRequest,
 } from "@workspace/core"
 
-import { version as runnerVersion } from "../package.json"
-import { apply, refused, setup, status, sync } from "./commands"
-import { appStates, followLogs } from "./inspect"
+import { version as runnerVersion } from "../../package.json"
+import { apply, refused, setup, status, sync } from "../commands/commands"
+import { appStates, followLogs } from "../docker/inspect"
 
 export const version = (): RunnerVersion => ({ version: runnerVersion, protocol: RUNNER_PROTOCOL })
 

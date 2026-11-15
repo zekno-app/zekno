@@ -1,7 +1,7 @@
 import { Box, Text } from "ink"
 
-import { Panel } from "../../ui/panel"
-import { useTheme } from "../../ui/theme"
+import { Panel } from "../../ui/parts/panel"
+import { useTheme } from "../../ui/terminal/theme"
 import { Frame, Header } from "../frame"
 
 /** The width of the labels "folder" and "file", and a space. */

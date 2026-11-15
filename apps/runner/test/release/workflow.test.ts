@@ -11,9 +11,9 @@ import { describe, expect, test } from "bun:test"
 import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { ORDERED_VERSIONS, REFUSED_VERSIONS } from "../../../packages/core/test/fixtures/versions"
-import { parseTag, RELEASE_FILES, releaseNotes, sha256sumsText } from "../scripts/release-lib"
-import { tempDir } from "./helpers"
+import { ORDERED_VERSIONS, REFUSED_VERSIONS } from "../../../../packages/core/test/fixtures/versions"
+import { parseTag, RELEASE_FILES, releaseNotes, sha256sumsText } from "../../scripts/release-lib"
+import { tempDir } from "../support/helpers"
 
 type Step = { name?: string; uses?: string; run?: string; with?: Record<string, unknown>; env?: Record<string, string>; id?: string; "working-directory"?: string }
 type Job = {
@@ -27,7 +27,7 @@ type Job = {
 }
 type Workflow = { name: string; on: Record<string, unknown>; permissions: unknown; concurrency?: unknown; jobs: Record<string, Job> }
 
-const WORKFLOWS = join(import.meta.dir, "../../../.github/workflows")
+const WORKFLOWS = join(import.meta.dir, "../../../../.github/workflows")
 const read = (name: string) => {
   const text = readFileSync(join(WORKFLOWS, name), "utf8")
   return { text, workflow: Bun.YAML.parse(text) as Workflow }

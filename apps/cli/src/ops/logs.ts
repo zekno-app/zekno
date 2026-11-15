@@ -7,10 +7,10 @@
  */
 import { RunnerReportSchema, RunnerStatusSchema } from "@workspace/core"
 
-import { reach, teamOf, type OpDeps, type Team } from "../context"
-import { CliError } from "../errors"
-import { findServer, type Server } from "../profile"
-import { ENDED, namedUnreachable, openSession, type Session } from "../session"
+import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
+import { CliError } from "../cli/errors"
+import { findServer, type Server } from "../profile/profile"
+import { ENDED, namedUnreachable, openSession, type Session } from "../server/session"
 import { checkApp, type Where } from "./deploy"
 import { checkIdentity } from "./status"
 

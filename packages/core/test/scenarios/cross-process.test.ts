@@ -17,7 +17,7 @@ import {
   type RosterChainResponse,
   type StatusReport,
 } from "../../src/index"
-import { COMPOSE, overTheWire, person, SAMPLE_SECRETS } from "../helpers"
+import { COMPOSE, overTheWire, person, SAMPLE_SECRETS } from "../support/helpers"
 
 /**
  * End to end across real boundaries: the client is this process, the runner

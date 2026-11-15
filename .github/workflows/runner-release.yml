@@ -26,7 +26,7 @@
 # Every checkout keeps none of it (`persist-credentials: false`); only the step that publishes
 # names it.
 #
-# Recording the checksums in apps/cli/src/runner-release.json is not done here: only the
+# Recording the checksums in apps/cli/src/version/runner-release.json is not done here: only the
 # maintainer's second build writes them, after it built the same files on another machine.
 name: runner release
 

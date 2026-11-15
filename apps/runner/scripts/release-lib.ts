@@ -1,7 +1,7 @@
 /**
  * The pure parts of a runner release (specs/005-runner-release/contracts/
  * release.md and second-build.md): tags and environments, the release's
- * files, the second build's record, and apps/cli/src/runner-release.json.
+ * files, the second build's record, and apps/cli/src/version/runner-release.json.
  * Used by release.ts, which the workflow runs, and by second-build.ts, which
  * the maintainer runs. Imports only @workspace/core and nothing that touches
  * a file, a process or the network.
@@ -20,7 +20,7 @@ export const RELEASE_FILES = ["zekno-runner-linux-x64.gz", "zekno-runner-linux-a
 export const BINARY_LIMIT = 256 * 1024 * 1024
 
 export const RUNNER_PACKAGE = "apps/runner/package.json"
-export const RUNNER_RELEASE = "apps/cli/src/runner-release.json"
+export const RUNNER_RELEASE = "apps/cli/src/version/runner-release.json"
 
 const SHA256 = /^[0-9a-f]{64}$/
 const COMMIT = /^[0-9a-f]{40}$/
@@ -104,7 +104,7 @@ export function releaseNotes(input: NotesInput): string {
     `    ${input.arm64}  ${BINARIES.arm64}`,
     "",
     "zekno installs this release only once these checksums are recorded in its",
-    "`apps/cli/src/runner-release.json`, after a second build on another machine produced the same files.",
+    "`apps/cli/src/version/runner-release.json`, after a second build on another machine produced the same files.",
     "",
     "## Second build",
     "",
@@ -173,12 +173,12 @@ export function recordText(input: RecordInput): string {
   ].join("\n")
 }
 
-/** apps/cli/src/runner-release.json with this version and these checksums: two-space JSON and a final line feed. */
+/** apps/cli/src/version/runner-release.json with this version and these checksums: two-space JSON and a final line feed. */
 export function runnerReleaseJson(version: string, x64: string | null, arm64: string | null): string {
   return `${JSON.stringify({ version, files: { "linux-x64": { sha256: x64 }, "linux-arm64": { sha256: arm64 } } }, null, 2)}\n`
 }
 
-/** What apps/cli/src/runner-release.json records, read strictly, or undefined when it is not in that form. */
+/** What apps/cli/src/version/runner-release.json records, read strictly, or undefined when it is not in that form. */
 export function parseRunnerReleaseJson(text: string): { version: string; x64: string | null; arm64: string | null } | undefined {
   let value: unknown
   try {

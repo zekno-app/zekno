@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { openSecrets, verifyDeploy, type VerifiedDeploy } from "../../src/index"
-import { COMPOSE, overTheWire, person, publish, SAMPLE_SECRETS, setup } from "../helpers"
+import { COMPOSE, overTheWire, person, publish, SAMPLE_SECRETS, setup } from "../support/helpers"
 
 describe("User Story 1: a deploy only the team can authorize and only the server can read", () => {
   test("the runner accepts a member's deploy and recovers every secret exactly", async () => {

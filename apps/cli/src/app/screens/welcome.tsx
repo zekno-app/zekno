@@ -1,13 +1,13 @@
 import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
-import { Logo } from "../../ui/logo"
-import { Panel } from "../../ui/panel"
-import { Spinner } from "../../ui/stages"
-import { TextQuestion } from "../../ui/text-input"
-import { useTheme } from "../../ui/theme"
+import { Logo } from "../../ui/terminal/logo"
+import { Panel } from "../../ui/parts/panel"
+import { Spinner } from "../../ui/parts/stages"
+import { TextQuestion } from "../../ui/parts/text-input"
+import { useTheme } from "../../ui/terminal/theme"
 import { Frame, Header } from "../frame"
-import type { Screen } from "../state"
+import type { Screen } from "../state/state"
 import { HINTS } from "./placeholder"
 
 type WelcomeState = Extract<Screen, { name: "welcome" }>

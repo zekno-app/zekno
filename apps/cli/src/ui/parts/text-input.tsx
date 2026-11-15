@@ -1,6 +1,6 @@
 import { Text } from "ink"
 
-import { useTheme } from "./theme"
+import { useTheme } from "../terminal/theme"
 
 /** What one key press or paste does to a visible answer being typed. */
 export type TextInput = { kind: "typing"; value: string } | { kind: "done"; value: string } | { kind: "cancelled" }

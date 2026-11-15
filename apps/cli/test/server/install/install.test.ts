@@ -3,8 +3,8 @@ import { compareRunnerVersions } from "@workspace/core"
 import { chmodSync, existsSync, mkdirSync, readFileSync, truncateSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { ORDERED_VERSIONS, REFUSED_VERSIONS } from "../../../packages/core/test/fixtures/versions"
-import { tempDir } from "../../runner/test/helpers"
+import { ORDERED_VERSIONS, REFUSED_VERSIONS } from "../../../../../packages/core/test/fixtures/versions"
+import { tempDir } from "../../../../runner/test/support/helpers"
 import {
   followsOrder,
   INSTALL_SCRIPT,
@@ -22,10 +22,10 @@ import {
   VERSION_PATTERN,
   type InstallEvent,
   type InstallRequest,
-} from "../src/install"
-import { releaseUrl, RUNNER_RELEASE } from "../src/runner-release"
-import { connect, type RunnerProcess, type Transport } from "../src/transport"
-import { fakeRunner, sha256, sshStandIn, standInServer, withSsh, type StandInServer } from "./stand-in-server"
+} from "../../../src/server/install/install"
+import { releaseUrl, RUNNER_RELEASE } from "../../../src/version/runner-release"
+import { connect, type RunnerProcess, type Transport } from "../../../src/server/transport"
+import { fakeRunner, sha256, sshStandIn, standInServer, withSsh, type StandInServer } from "../../support/stand-in-server"
 
 const VERSION = RUNNER_RELEASE.version
 const OTHER = "0".repeat(64)
@@ -651,7 +651,7 @@ describe("the script, run with sh against stand-ins", () => {
   }
 
   test("its text has nothing a template could have put in it: no `${`, no backquote", () => {
-    const source = readFileSync(join(import.meta.dir, "../src/install.ts"), "utf8")
+    const source = readFileSync(join(import.meta.dir, "../../../src/server/install/install.ts"), "utf8")
     const start = source.indexOf("String.raw`") + "String.raw`".length
     const text = source.slice(start, source.indexOf("`", start))
     expect(text).toBe(INSTALL_SCRIPT)

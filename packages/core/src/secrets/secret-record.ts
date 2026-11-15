@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { utf8 } from "./encoding"
+import { utf8 } from "../crypto/encoding"
 import {
   EnvelopeSchema,
   hasOtherVersion,
@@ -9,10 +9,10 @@ import {
   PAYLOAD_TYPES,
   signEnvelope,
   type Envelope,
-} from "./envelope"
-import { LIMITS } from "./limits"
-import type { Signer } from "./keys"
-import { CoreError, ok, refuse, type Result, type SecretRefusal } from "./result"
+} from "../crypto/envelope"
+import { LIMITS } from "../protocol/limits"
+import type { Signer } from "../crypto/keys"
+import { CoreError, ok, refuse, type Result, type SecretRefusal } from "../protocol/result"
 import {
   assertTrust,
   isoTime,
@@ -21,7 +21,7 @@ import {
   TEAM_ID,
   type Member,
   type TeamTrust,
-} from "./roster"
+} from "../team/roster"
 import {
   APP_NAME,
   sealedSecretHash,

@@ -11,13 +11,13 @@ import {
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { isAlive, RUNNER_MAIN, runner, tempDir, waitFor } from "../../runner/test/helpers"
-import { RunnerRefused } from "../src/errors"
-import { prepareDeploy, sendDeploy } from "../src/ops/deploy"
-import { ENDED, openSession, TOO_LARGE, TOO_OLD, UNEXPECTED } from "../src/session"
-import { connect, LOCAL_FIRST_ANSWER_MS, type Target, type Transport } from "../src/transport"
-import runnerPackage from "../../runner/package.json"
-import { COMPOSE_V1, COMPOSE_V2, machine, ready } from "./helpers"
+import { isAlive, RUNNER_MAIN, runner, tempDir, waitFor } from "../../../runner/test/support/helpers"
+import { RunnerRefused } from "../../src/cli/errors"
+import { prepareDeploy, sendDeploy } from "../../src/ops/deploy"
+import { ENDED, openSession, TOO_LARGE, TOO_OLD, UNEXPECTED } from "../../src/server/session"
+import { connect, LOCAL_FIRST_ANSWER_MS, type Target, type Transport } from "../../src/server/transport"
+import runnerPackage from "../../../runner/package.json"
+import { COMPOSE_V1, COMPOSE_V2, machine, ready } from "../support/helpers"
 
 const where = ["--app", "web", "--server", "dev"]
 /** What the repository's runner answers to `version`; the scripted runners below answer the same. */

@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Box, renderToString, Text } from "ink"
 
-import { Confirm } from "../src/ui/confirm"
-import { KeyHints } from "../src/ui/key-hints"
-import { Panel } from "../src/ui/panel"
-import { MARKER, Select, SelectRow } from "../src/ui/select"
-import { SPINNER_FRAMES, Stages } from "../src/ui/stages"
-import { TextQuestion } from "../src/ui/text-input"
-import { BRAND, BRAND_DARKER, themeFor } from "../src/ui/theme"
+import { Confirm } from "../../../src/ui/parts/confirm"
+import { KeyHints } from "../../../src/ui/parts/key-hints"
+import { Panel } from "../../../src/ui/parts/panel"
+import { MARKER, Select, SelectRow } from "../../../src/ui/parts/select"
+import { SPINNER_FRAMES, Stages } from "../../../src/ui/parts/stages"
+import { TextQuestion } from "../../../src/ui/parts/text-input"
+import { BRAND, BRAND_DARKER, themeFor } from "../../../src/ui/terminal/theme"
 
 const draw = (node: React.ReactNode, columns = 100) => renderToString(node, { columns })
 const lines = (text: string) => text.split("\n")
@@ -20,7 +20,7 @@ describe("the theme", () => {
   })
 
   test("the colours match the tokens of packages/ui", async () => {
-    const css = await Bun.file(new URL("../../../packages/ui/src/styles/globals.css", import.meta.url)).text()
+    const css = await Bun.file(new URL("../../../../../packages/ui/src/styles/globals.css", import.meta.url)).text()
     expect(css).toContain(`--brand: ${BRAND};`)
     expect(css).toContain(`--brand-darker: ${BRAND_DARKER};`)
   })

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { COMPOSE_V1, COMPOSE_V2, ready } from "./helpers"
+import { COMPOSE_V1, COMPOSE_V2, ready } from "../support/helpers"
 
 const where = ["--app", "web", "--server", "dev"]
 

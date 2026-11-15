@@ -10,12 +10,12 @@ import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
 
-import { filesUnder, isAlive, residentMiB, runner, RUNNER_MAIN, tempDir, waitFor } from "../../runner/test/helpers"
-import { AppView, createStore } from "../src/app/app"
-import { acceptedFor, createEffects, LOG_BATCH_MS, loadStart, needsAnswer, noAnswer, statesFor, type Effects, type Timing } from "../src/app/effects"
-import type { Terminal } from "../src/app/hand-over"
-import type { AppKey } from "../src/app/keys"
-import { logRows, logsHints, STRAIGHT, STRAIGHT_HERE } from "../src/app/screens/logs"
+import { filesUnder, isAlive, residentMiB, runner, RUNNER_MAIN, tempDir, waitFor } from "../../../runner/test/support/helpers"
+import { AppView, createStore } from "../../src/app/app"
+import { acceptedFor, createEffects, LOG_BATCH_MS, loadStart, needsAnswer, noAnswer, statesFor, type Effects, type Timing } from "../../src/app/effects/effects"
+import type { Terminal } from "../../src/app/hand-over"
+import type { AppKey } from "../../src/app/keys"
+import { logRows, logsHints, STRAIGHT, STRAIGHT_HERE } from "../../src/app/screens/logs"
 import {
   initialState,
   LOG_LINES,
@@ -29,18 +29,18 @@ import {
   type LogLine,
   type State,
   type TeamView,
-} from "../src/app/state"
-import { logClock } from "../src/app/time"
-import { parseTail } from "../src/commands/logs"
-import { stateCell } from "../src/commands/status"
-import { openTeam, type OpDeps } from "../src/context"
-import { followLogs, logsDropped, logsTooOld, prepareLogs } from "../src/ops/logs"
-import { readStatus, runStateOf, stateOf, type ServiceState } from "../src/ops/status"
-import { TOO_LARGE } from "../src/session"
-import { connect } from "../src/transport"
-import { inkUi, LogItem } from "../src/ui/ink"
-import { COMPOSE_V1, machine, ready } from "./helpers"
-import { withSsh } from "./stand-in-server"
+} from "../../src/app/state/state"
+import { logClock } from "../../src/shared/time"
+import { parseTail } from "../../src/commands/logs"
+import { stateCell } from "../../src/commands/status"
+import { openTeam, type OpDeps } from "../../src/cli/context"
+import { followLogs, logsDropped, logsTooOld, prepareLogs } from "../../src/ops/logs"
+import { readStatus, runStateOf, stateOf, type ServiceState } from "../../src/ops/status"
+import { TOO_LARGE } from "../../src/server/session"
+import { connect } from "../../src/server/transport"
+import { inkUi, LogItem } from "../../src/ui/ink/ink"
+import { COMPOSE_V1, machine, ready } from "../support/helpers"
+import { withSsh } from "../support/stand-in-server"
 
 type Machine = ReturnType<typeof machine>
 
@@ -221,7 +221,7 @@ const within = <T,>(promise: Promise<T>, ms: number): Promise<T | typeof LATE> =
  */
 function logsProcess() {
   const dir = tempDir("logs-process")
-  const child = Bun.spawn([process.execPath, join(import.meta.dir, "logs-driver.ts"), dir], { stdin: "ignore", stdout: "pipe", stderr: "pipe" })
+  const child = Bun.spawn([process.execPath, join(import.meta.dir, "../support/logs-driver.ts"), dir], { stdin: "ignore", stdout: "pipe", stderr: "pipe" })
   const errors = new Response(child.stderr).text()
   const reader = child.stdout.getReader()
   const decoder = new TextDecoder()
@@ -1034,7 +1034,7 @@ describe("what is running, read again while the app is open", () => {
     const pids = join(dir, "ssh.pids")
     const asks = join(dir, "ask")
     const wrapper = join(dir, "zekno-runner")
-    writeFileSync(wrapper, `#!/bin/sh\nexec env ZEKNO_RUNNER_HOME="${join(dir, "runner-home")}" ZEKNO_DOCKER="${m.docker.path}" "${process.execPath}" "${join(import.meta.dir, "../../runner/src/main.ts")}" "$@"\n`)
+    writeFileSync(wrapper, `#!/bin/sh\nexec env ZEKNO_RUNNER_HOME="${join(dir, "runner-home")}" ZEKNO_DOCKER="${m.docker.path}" "${process.execPath}" "${join(import.meta.dir, "../../../runner/src/main.ts")}" "$@"\n`)
     chmodSync(wrapper, 0o755)
     // A stand-in for ssh: notes each call and its process, which becomes the runner's; in batch mode it fails as SSH does where it would ask for a password.
     const ssh = join(dir, "ssh")

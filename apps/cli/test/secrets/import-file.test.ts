@@ -9,8 +9,8 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, symlinkSync, truncateSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { tempDir } from "../../../runner/test/helpers"
-import { CliError } from "../../src/errors"
+import { tempDir } from "../../../runner/test/support/helpers"
+import { CliError } from "../../src/cli/errors"
 import {
   IMPORT_FILE_LIMIT,
   importError,
@@ -20,7 +20,7 @@ import {
   type ImportFailure,
   type ImportReason,
 } from "../../src/secrets/import-file"
-import { ready } from "../helpers"
+import { ready } from "../support/helpers"
 
 /** A value that must never appear in an error. */
 const SENTINEL = "zk_SENTINEL_9f3a"

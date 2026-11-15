@@ -9,12 +9,12 @@ import { describe, expect, test } from "bun:test"
 import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { CliError } from "../../src/errors"
-import { INSTALL_SCRIPT } from "../../src/install"
-import { RUNNER_RELEASE } from "../../src/runner-release"
+import { CliError } from "../../src/cli/errors"
+import { INSTALL_SCRIPT } from "../../src/server/install/install"
+import { RUNNER_RELEASE } from "../../src/version/runner-release"
 import { CHECK_PATH_INVALID, CHECK_SCRIPT, checkWords, runCheck } from "../../src/server/check-script"
-import type { RunnerProcess, Transport } from "../../src/transport"
-import { fakeRunner, snapshot, standInServer, type StandInServer } from "../stand-in-server"
+import type { RunnerProcess, Transport } from "../../src/server/transport"
+import { fakeRunner, snapshot, standInServer, type StandInServer } from "../support/stand-in-server"
 
 /** The shells the script is run with: this machine's `sh`, and `dash` where there is one (Debian's and Ubuntu's `sh`). */
 const SHELLS = ["/bin/sh", ...(existsSync("/bin/dash") ? ["/bin/dash"] : [])]

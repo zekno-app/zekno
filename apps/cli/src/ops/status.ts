@@ -1,9 +1,9 @@
 import { RunnerAppStatesSchema, RunnerStatusSchema, type RunnerAppStates, type RunnerStatus, type RunnerVersion } from "@workspace/core"
 
-import { reach, teamOf, type OpDeps, type Team } from "../context"
-import { CliError, RunnerRefused } from "../errors"
-import { findServer, type Server } from "../profile"
-import { namedUnreachable, withSession, type Session, type SessionMode } from "../session"
+import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
+import { CliError, RunnerRefused } from "../cli/errors"
+import { findServer, type Server } from "../profile/profile"
+import { namedUnreachable, withSession, type Session, type SessionMode } from "../server/session"
 
 /** A server of the verified team, found by name. Nothing has been asked of it yet. */
 export type Located = { team: Team; server: Server }

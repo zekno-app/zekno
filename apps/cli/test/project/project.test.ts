@@ -27,11 +27,11 @@ import {
 } from "node:fs"
 import { join } from "node:path"
 
-import { tempDir } from "../../runner/test/helpers"
-import { accept, acceptedLinks, isAccepted, LINKS_BYTES, LINKS_FILE, LINKS_KEPT, sha256Of } from "../src/accepted"
-import { readCompose } from "../src/compose-read"
-import { openTeam } from "../src/context"
-import { CliError, UsageError } from "../src/errors"
+import { tempDir } from "../../../runner/test/support/helpers"
+import { accept, acceptedLinks, isAccepted, LINKS_BYTES, LINKS_FILE, LINKS_KEPT, sha256Of } from "../../src/project/accepted"
+import { readCompose } from "../../src/project/compose-read"
+import { openTeam } from "../../src/cli/context"
+import { CliError, UsageError } from "../../src/cli/errors"
 import {
   composeFor,
   findProject,
@@ -45,8 +45,8 @@ import {
   writeProject,
   type Details,
   type ProjectLink,
-} from "../src/project"
-import { machine, ready, twin } from "./helpers"
+} from "../../src/project/project"
+import { machine, ready, twin } from "../support/helpers"
 
 const LINK = { app: "demo", server: "dev", compose: "compose.yaml" }
 /** A `signed` of the right shape. Whether it is the team's is judged later (`signerOf`), not when the file is read. */

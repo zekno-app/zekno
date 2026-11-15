@@ -33,7 +33,7 @@ const result = await Bun.build({
       name: "no-react-devtools",
       setup(build) {
         build.onResolve({ filter: /^react-devtools-core$/ }, () => ({
-          path: join(import.meta.dir, "src/ui/devtools-stub.ts"),
+          path: join(import.meta.dir, "src/ui/ink/devtools-stub.ts"),
         }))
       },
     },

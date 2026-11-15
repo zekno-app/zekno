@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { LIMITS } from "@workspace/core"
 
-import { composeServices } from "../src/app/views"
-import { COMPOSE_READ_BYTES, expectedValues, interpolated, MAX_ALIASES, MAX_NAMES, MAX_NODES, tooManyAliases } from "../src/compose-file"
+import { composeServices } from "../../src/shared/views"
+import { COMPOSE_READ_BYTES, expectedValues, interpolated, MAX_ALIASES, MAX_NAMES, MAX_NODES, tooManyAliases } from "../../src/project/compose-file"
 
 describe("environment", () => {
   test("as a list: a name with no `=` is expected; `NAME=value` and `NAME=` are not", () => {

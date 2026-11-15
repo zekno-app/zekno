@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { utf8, wipe } from "./encoding"
+import { utf8, wipe } from "../crypto/encoding"
 import {
   hasOtherVersion,
   openEnvelope,
@@ -8,7 +8,7 @@ import {
   PAYLOAD_TYPES,
   signEnvelope,
   type Envelope,
-} from "./envelope"
+} from "../crypto/envelope"
 import {
   decodeKey,
   serverIdOf,
@@ -16,8 +16,8 @@ import {
   tryDecodeKey,
   type ServerSecretKey,
   type Signer,
-} from "./keys"
-import { LIMITS } from "./limits"
+} from "../crypto/keys"
+import { LIMITS } from "../protocol/limits"
 import {
   CoreError,
   ok,
@@ -25,7 +25,7 @@ import {
   type DeployRefusal,
   type OpenRefusal,
   type Result,
-} from "./result"
+} from "../protocol/result"
 import {
   assertTrust,
   isoTime,
@@ -36,13 +36,13 @@ import {
   type Member,
   type Role,
   type TeamTrust,
-} from "./roster"
+} from "../team/roster"
 import {
   secretVersion,
   verifySecret,
   verifySecretRemoval,
   type SecretRecord,
-} from "./secret-record"
+} from "../secrets/secret-record"
 import {
   APP_NAME,
   openSealedSecret,
@@ -51,7 +51,7 @@ import {
   secretName,
   SERVER_ID,
   type SealedSecret,
-} from "./secrets"
+} from "../secrets/secrets"
 
 const sequence = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
 

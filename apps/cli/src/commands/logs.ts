@@ -1,5 +1,5 @@
-import { remoteThroughUi, type Deps } from "../context"
-import { UsageError } from "../errors"
+import { remoteThroughUi, type Deps } from "../cli/context"
+import { UsageError } from "../cli/errors"
 import type { Where } from "../ops/deploy"
 import { followLogs, LOG_TAIL, MAX_TAIL, prepareLogs } from "../ops/logs"
 

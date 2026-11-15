@@ -11,7 +11,7 @@
  */
 import { describe, expect, test } from "bun:test"
 
-import { HELP } from "../../src/cli"
+import { HELP } from "../../src/cli/cli"
 import { AT_HEAD, HELP_AT_HEAD } from "./plain-at-head"
 import { SCENES } from "./plain-scenes"
 

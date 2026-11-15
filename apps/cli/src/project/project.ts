@@ -59,9 +59,9 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { z } from "zod"
 
 import { accept, isAccepted, sha256Of } from "./accepted"
-import { CliError, NOTHING_DONE, UsageError } from "./errors"
-import { NAME } from "./profile"
-import { sanitize } from "./sanitize"
+import { CliError, NOTHING_DONE, UsageError } from "../cli/errors"
+import { NAME } from "../profile/profile"
+import { sanitize } from "../server/sanitize"
 
 export const PROJECT_FILE = "zekno.json"
 /** The Compose file a folder deploys when nothing names another. */
@@ -470,7 +470,7 @@ export function useQuestion(member: string, link: ProjectLink, cwd: string, uses
 }
 
 /** Said when the question is answered no. It lives in errors.ts, with `Left`, and is kept here for whoever imports it from here. */
-export { NOTHING_DONE } from "./errors"
+export { NOTHING_DONE } from "../cli/errors"
 
 /**
  * What judging a project file needs, beyond the files: the verified team

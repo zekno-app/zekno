@@ -10,12 +10,12 @@ import {
 import { z } from "zod"
 
 import { CliError } from "./errors"
-import type { KeyStore } from "./keystore"
-import type { Fetch } from "./version/newest"
-import { profileStore, type Profile, type ProfileStore } from "./profile"
-import type { RunnerRelease } from "./runner-release"
-import type { ConnectOptions, Target, Transport } from "./transport"
-import type { Ui } from "./ui/types"
+import type { KeyStore } from "../profile/keystore"
+import type { Fetch } from "../version/newest"
+import { profileStore, type Profile, type ProfileStore } from "../profile/profile"
+import type { RunnerRelease } from "../version/runner-release"
+import type { ConnectOptions, Target, Transport } from "../server/transport"
+import type { Ui } from "../ui/types"
 
 /** Everything a command needs from the outside world. Tests pass their own. */
 export type Deps = {

@@ -52,7 +52,7 @@ Run from the checkout, zekno reads `.env` and `bunfig.toml` from the folder you 
 because that is how Bun runs a script, and a `bunfig.toml` can make it load other code first. The
 runner it starts from `apps/runner` for `--local` does the same. So run it from source only inside
 folders you trust, and use the compiled `zekno` anywhere else: it is built with both turned off,
-and `test/compiled.test.ts` checks that it reads neither. Like any program built with Bun, the
+and `test/build/compiled.test.ts` checks that it reads neither. Like any program built with Bun, the
 compiled `zekno` still obeys three of Bun's own variables: `BUN_OPTIONS` (for example
 `--preload <file>`, which runs that file first), `BUN_BE_BUN=1` (it then acts as Bun itself) and
 `BUN_INSPECT` (it opens a debugger). Whoever can set them already controls your account.
@@ -738,7 +738,7 @@ check before it passed:
    download goes over HTTPS only, and follows a redirect only to another HTTPS address. With
    `--runner-file`, the file zekno sends is read instead, and step 7 checks it against the
    SHA-256 zekno computed before sending it.
-7. Its SHA-256 must equal the value this zekno holds in `src/runner-release.json`. The value
+7. Its SHA-256 must equal the value this zekno holds in `src/version/runner-release.json`. The value
    never comes from the download or from the server. The new runner must then answer `version`
    with the expected version from the temporary folder. Only then is it moved into place, with
    mode 755.
@@ -760,7 +760,7 @@ address is
 
 ### Which runner it installs
 
-A build of zekno installs exactly one runner version: the one `src/runner-release.json` names,
+A build of zekno installs exactly one runner version: the one `src/version/runner-release.json` names,
 with the SHA-256 of the runner for each kind of server. Which one depends on the branch that build
 of zekno came from. You never choose it.
 
@@ -776,13 +776,13 @@ development release of the same numbers. When one of the two is a development re
 other is not, `zekno status`, `zekno server add` and the app say so after they say which is older.
 
 When you work on zekno itself, your build installs the release your branch's
-`src/runner-release.json` names, not the runner in your checkout. To try a runner you changed,
+`src/version/runner-release.json` names, not the runner in your checkout. To try a runner you changed,
 build it and send it with `--runner-file` (below); it must answer with the version your zekno
 carries.
 
 ### How a release is trusted
 
-The checksums in `src/runner-release.json` are written by one command only: the maintainer's
+The checksums in `src/version/runner-release.json` are written by one command only: the maintainer's
 second build ([RELEASING.md](../runner/RELEASING.md), part 7). After GitHub's workflow has built
 and published a release, the maintainer builds the same commit again on their own machine, with
 the same Bun version, and compares each runner three ways: their own build, the file GitHub
@@ -842,7 +842,7 @@ single command, and in the full output in the app.
 
 ### If this zekno holds no checksum
 
-A zekno whose `src/runner-release.json` holds no checksums has no published runner to install.
+A zekno whose `src/version/runner-release.json` holds no checksums has no published runner to install.
 That is so between a release and its second build, after a release was withdrawn, and before a
 branch's first release is recorded. `zekno server add` still uses a runner already on the
 server. Otherwise, use one of these:
@@ -913,11 +913,11 @@ bun run typecheck
 bun run compile     # dist/zekno, a single file (build.ts)
 ```
 
-Commands never print. They call the `Ui` they are given (`src/ui/types.ts`): `src/ui/ink.tsx` at
-a terminal, `src/ui/plain.ts` everywhere else. What a command does lives in `src/ops/`, which the
-app (`src/app/`) uses too. The app's keys are a pure reducer, `src/app/state.ts`, and what a key
-press does at the hidden prompt is a pure function, `src/ui/secret-input.ts`. Tests use the plain
-interface and an in-memory key store, so they need no terminal and never touch the real keychain. `test/docs.test.ts` checks that this file and the docs page name every command, flag and
+Commands never print. They call the `Ui` they are given (`src/ui/types.ts`): `src/ui/ink/ink.tsx` at
+a terminal, `src/ui/plain/plain.ts` everywhere else. What a command does lives in `src/ops/`, which the
+app (`src/app/`) uses too. The app's keys are a pure reducer, `src/app/state/state.ts`, and what a key
+press does at the hidden prompt is a pure function, `src/ui/parts/secret-input.ts`. Tests use the plain
+interface and an in-memory key store, so they need no terminal and never touch the real keychain. `test/docs/docs.test.ts` checks that this file and the docs page name every command, flag and
 key, and nothing that does not exist.
 
 ## End-to-end tests
@@ -961,11 +961,11 @@ no tool that runs a command, reads a file or reaches the network. The app it dri
 build (`tests/support/zekno-test.ts`) that cannot do harm whatever is typed: a key store file in
 the test's temporary folder instead of the keychain, temporary folders for the profile, the
 project and the runner, the stand-in Docker, and SSH that reaches only the stand-in server of
-`test/stand-in-server.ts`. Without one, any SSH destination fails closed; no `ssh` is ever
+`test/support/stand-in-server.ts`. Without one, any SSH destination fails closed; no `ssh` is ever
 started.
 
 How it fits together: `tests/support/engine.ts` is the e2e engine, `terminal.ts` the
 pseudo-terminal, `screen-model.ts` the screen it reads, and `screen-tree.ts` the tree the runner
 and the model see. Each test sets its world up with exact steps (`tests/support/world.ts`) and
 opens the app on the screen it is about. The screen model has its own unit tests in
-`test/e2e-screen-model.test.ts`, which `bun test` runs.
+`test/e2e/e2e-screen-model.test.ts`, which `bun test` runs.

@@ -1,7 +1,7 @@
 import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
-import { useTheme } from "./theme"
+import { useTheme } from "../terminal/theme"
 
 /**
  * How a panel's border and title look, as on the boards:

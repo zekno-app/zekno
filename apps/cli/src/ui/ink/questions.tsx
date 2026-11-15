@@ -11,11 +11,11 @@
 import { Box, Text, useInput, useWindowSize } from "ink"
 import { useRef, useState } from "react"
 
-import { sanitize } from "../sanitize"
-import { applySelectKey, MARKER } from "./select"
-import { applyTextInput } from "./text-input"
-import { BRAND } from "./theme"
-import type { ListRow } from "./types"
+import { sanitize } from "../../server/sanitize"
+import { applySelectKey, MARKER } from "../parts/select"
+import { applyTextInput } from "../parts/text-input"
+import { BRAND } from "../terminal/theme"
+import type { ListRow } from "../types"
 import { Wrapped, type Piece } from "./wrap"
 
 /** A9: the hidden prompt that can be skipped, given nothing. Needs approval (research Q4). */

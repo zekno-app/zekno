@@ -1,9 +1,9 @@
 import { resolve } from "node:path"
 
-import type { Deps } from "../context"
-import { CliError, Left, UsageError } from "../errors"
+import type { Deps } from "../cli/context"
+import { CliError, Left, UsageError } from "../cli/errors"
 import { listSecrets, prepareSecretImport, prepareSecretSet, removeSecret, setSecret, storeSecrets, type ImportPlan, type Where } from "../ops/secret"
-import { sanitize } from "../sanitize"
+import { sanitize } from "../server/sanitize"
 import { importError, parseImport, readImportFile, type ImportEntry } from "../secrets/import-file"
 import { quiet } from "../ui/types"
 

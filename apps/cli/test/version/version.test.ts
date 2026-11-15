@@ -9,16 +9,16 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
 
-import { tempDir } from "../../../runner/test/helpers"
-import { HELP, run } from "../../src/cli"
-import type { Deps } from "../../src/context"
+import { tempDir } from "../../../runner/test/support/helpers"
+import { HELP, run } from "../../src/cli/cli"
+import type { Deps } from "../../src/cli/context"
 import { newerExists, type Fetch } from "../../src/version/newest"
-import { firstSentence } from "../../src/ui/questions"
-import { RUNNER_RELEASE } from "../../src/runner-release"
-import { inkUi } from "../../src/ui/ink"
-import { plainUi } from "../../src/ui/plain"
+import { firstSentence } from "../../src/ui/ink/questions"
+import { RUNNER_RELEASE } from "../../src/version/runner-release"
+import { inkUi } from "../../src/ui/ink/ink"
+import { plainUi } from "../../src/ui/plain/plain"
 import { CLI_VERSION } from "../../src/version/version"
-import { ready, screenOf } from "../helpers"
+import { ready, screenOf } from "../support/helpers"
 
 const PACKAGE = join(import.meta.dir, "../../package.json")
 
@@ -237,7 +237,7 @@ describe("zekno version says whether a newer release exists (contracts/version.m
     // No other warning is drawn so: only `zekno version` asks for it.
     const source = join(import.meta.dir, "../../src")
     const asking = [...new Bun.Glob("**/*.{ts,tsx}").scanSync(source)].filter((file) => /\.warn\([^\n]*firstBold/.test(readFileSync(join(source, file), "utf8")))
-    expect(asking).toEqual(["cli.ts"])
+    expect(asking).toEqual(["cli/cli.ts"])
   })
 })
 
@@ -308,7 +308,7 @@ describe("no other command asks GitHub (FR-036)", () => {
     expect(files.length).toBeGreaterThan(40)
     const using = (pattern: RegExp) => files.filter((file) => pattern.test(readFileSync(join(source, file), "utf8")))
     // cli.ts for `zekno version`; ops/doctor.ts for `zekno doctor`'s first line, once per run (contracts/version.md, "In zekno doctor").
-    expect(using(/\bcheckNewest\(/)).toEqual(["cli.ts", "ops/doctor.ts", "version/newest.ts"])
+    expect(using(/\bcheckNewest\(/)).toEqual(["cli/cli.ts", "ops/doctor.ts", "version/newest.ts"])
     expect(using(/\.fetch\b/)).toEqual(["version/newest.ts"])
     // A call with something to fetch. The installer's shell script has a function of its own named `fetch()`, which is not this.
     expect(using(/\bfetch\([^)\s]/)).toEqual(["main.ts", "version/newest.ts"])

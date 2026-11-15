@@ -1,6 +1,6 @@
 /**
  * The keys of the hidden prompt in "set a secret" (T020), with every rule of
- * ui/secret-input.ts: a value of several lines is refused with the pointer
+ * ui/parts/secret-input.ts: a value of several lines is refused with the pointer
  * to `--stdin`, an empty value is not stored, control keys never become part
  * of the value, and Ctrl-C cancels the prompt only.
  *
@@ -11,9 +11,9 @@
  */
 import type { Key } from "ink"
 
-import { isLateAnswer } from "../ui/background"
-import { applySecretInput } from "../ui/secret-input"
-import { promptedName, top, type AppEvent, type State } from "./state"
+import { isLateAnswer } from "../ui/terminal/background"
+import { applySecretInput } from "../ui/parts/secret-input"
+import { promptedName, top, type AppEvent, type State } from "./state/state"
 
 /** The value typed so far, and whether a finished value is being stored. */
 export type HiddenValue = { value: string; saving: boolean }

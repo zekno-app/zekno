@@ -8,9 +8,9 @@ import { Box, render, Text, useApp, useInput, useWindowSize, type Instance } fro
 import { constants } from "node:os"
 import { useEffect, useRef, useSyncExternalStore } from "react"
 
-import { Spinner } from "../ui/stages"
-import { ThemeProvider, themeFor, type Background } from "../ui/theme"
-import { createEffects, type AppDeps, type Effects } from "./effects"
+import { Spinner } from "../ui/parts/stages"
+import { ThemeProvider, themeFor, type Background } from "../ui/terminal/theme"
+import { createEffects, type AppDeps, type Effects } from "./effects/effects"
 import { NoticeLine } from "./frame"
 import type { Terminal } from "./hand-over"
 import { emptyHiddenValue, hiddenPromptKey } from "./hidden-prompt"
@@ -38,7 +38,7 @@ import {
   type AppEvent,
   type Effect,
   type State,
-} from "./state"
+} from "./state/state"
 
 /** Holds the state, runs the reducer for each event and hands its effects on. */
 export function createStore(initial: State, run: (effect: Effect) => void) {

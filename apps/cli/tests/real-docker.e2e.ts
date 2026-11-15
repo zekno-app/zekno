@@ -8,7 +8,7 @@
 import { createWorld, type RealDocker } from "./support/world"
 import { expect, terminalTest as base } from "./support/fixtures"
 
-/** The image the existing real-Docker test uses (test/real-docker.test.ts). */
+/** The image the existing real-Docker test uses (test/scenarios/real-docker.test.ts). */
 const IMAGE = "caddy:2.11.9"
 const APP = `e2e-${process.pid}`
 /** Only this machine's Docker programs and sockets: a small environment, never the run's. */

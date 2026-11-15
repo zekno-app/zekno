@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { toAppKey, type AppKey } from "../src/app/keys"
+import { toAppKey, type AppKey } from "../../src/app/keys"
 import {
   initialState,
   LOG_LINES,
@@ -13,7 +13,7 @@ import {
   type State,
   type Step,
   type TeamView,
-} from "../src/app/state"
+} from "../../src/app/state/state"
 
 // ---------------------------------------------------------------------------
 // Fixtures

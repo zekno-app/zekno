@@ -1,6 +1,6 @@
 import { fromBase64Url, toBase64Url, toHex, wipe } from "./encoding"
 import { hash } from "./hash"
-import { CoreError } from "./result"
+import { CoreError } from "../protocol/result"
 import { sodium } from "./sodium"
 
 /** A team member's Ed25519 public key, in marked text form. */

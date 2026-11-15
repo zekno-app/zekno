@@ -12,9 +12,9 @@
  */
 import { LIMITS } from "@workspace/core"
 
-import { apply, refused, setup, status, sync } from "./commands"
-import { homeDir } from "./home"
-import { runSession, stdoutSink, version } from "./session"
+import { apply, refused, setup, status, sync } from "./commands/commands"
+import { homeDir } from "./home/home"
+import { runSession, stdoutSink, version } from "./session/session"
 
 const COMMANDS = ["setup", "sync", "apply", "status", "version", "session"]
 const USAGE = `Usage: zekno-runner <${COMMANDS.join("|")}>\nReads one JSON message from standard input and prints one JSON line.\n\`session\` reads one request per line and answers each, until its input closes.`

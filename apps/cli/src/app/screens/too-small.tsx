@@ -1,7 +1,7 @@
 import { Box, Text } from "ink"
 
-import { KeyHints } from "../../ui/key-hints"
-import { MIN_COLUMNS, MIN_ROWS } from "../state"
+import { KeyHints } from "../../ui/parts/key-hints"
+import { MIN_COLUMNS, MIN_ROWS } from "../state/state"
 
 /** The width of the labels "this window" and "needed", and a space. */
 const LABEL_WIDTH = 13

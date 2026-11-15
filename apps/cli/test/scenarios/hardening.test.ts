@@ -3,8 +3,8 @@ import { createSigner, createTeam, generateMemberKeyPair, LIMITS } from "@worksp
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { runner } from "../../runner/test/helpers"
-import { COMPOSE_V2, machine, ready } from "./helpers"
+import { runner } from "../../../runner/test/support/helpers"
+import { COMPOSE_V2, machine, ready } from "../support/helpers"
 
 const where = ["--app", "web", "--server", "dev"]
 

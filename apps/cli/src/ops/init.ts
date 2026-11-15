@@ -1,8 +1,8 @@
 import { createSigner, createTeam as startTeam, generateMemberKeyPair } from "@workspace/core"
 
-import { writeIdentity, type OpDeps } from "../context"
-import { CliError } from "../errors"
-import { profileStore } from "../profile"
+import { writeIdentity, type OpDeps } from "../cli/context"
+import { CliError } from "../cli/errors"
+import { profileStore } from "../profile/profile"
 
 export type TeamCreated = {
   /** The team's code, which a server checks before it agrees to obey the team. */
