@@ -8,7 +8,7 @@ import { describe, expect, test } from "bun:test"
 
 import { KEPT_SO_FAR, MEMBER_NAME_RULE, openingLine, rememberFolder } from "../../../src/asking/first-deploy"
 import type { DoctorReport } from "../../../src/ops/doctor"
-import { linePieces } from "../../../src/ui/ink/ink"
+import { linePieces } from "../../../src/ui/ink/cells"
 import { plainUi } from "../../../src/ui/plain/plain"
 import { quiet, strong } from "../../../src/ui/types"
 import { wrapPieces, type Piece } from "../../../src/ui/ink/wrap"

@@ -33,7 +33,8 @@ import { followLogs, logsDropped, logsTooOld, prepareLogs } from "../../src/ops/
 import { readStatus, runStateOf, stateOf, type ServiceState } from "../../src/ops/status"
 import { TOO_LARGE } from "../../src/server/session"
 import { connect } from "../../src/server/transport"
-import { inkUi, LogItem } from "../../src/ui/ink/ink"
+import { inkUi } from "../../src/ui/ink/ink"
+import { LogItem } from "../../src/ui/ink/lines"
 import { COMPOSE_V1, machine, ready } from "../support/helpers"
 import { withSsh } from "../support/stand-in-server"
 

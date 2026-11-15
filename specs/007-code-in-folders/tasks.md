@@ -15,7 +15,7 @@
 - [X] T006 [US1] `apps/cli/src/app/effects/`: split `effects.ts` by concern
 - [X] T007 [US1] Nothing outside `app/` imports `app/`: what `ui/`, `asking/`, `ops/` and `shared/` take from it moves to `shared/` or `server/`; copies made in feature 006 to avoid loading Ink are replaced by the one original
 - [X] T008 [P] [US1] `apps/cli/src/server/install/`: split `install.ts` into its script, its steps and its checks; `INSTALL_SCRIPT` byte for byte
-- [ ] T009 [US1] `apps/cli/src/ui/ink/`: split `ink.tsx` by what it draws
+- [X] T009 [US1] `apps/cli/src/ui/ink/`: split `ink.tsx` by what it draws
 - [X] T010 [US1] `ops/` imports nothing from `asking/`: the sentence of an app that is taken lives where both can use it; `server/` does not import `ui/plain`
 
 ## Phase C: the end

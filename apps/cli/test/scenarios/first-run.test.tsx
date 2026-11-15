@@ -27,7 +27,7 @@ import { RUNNER_RELEASE, type RunnerRelease } from "../../src/version/runner-rel
 import { megabytes } from "../../src/shared/sizes"
 import runnerPackage from "../../../runner/package.json"
 import { plainUi } from "../../src/ui/plain/plain"
-import { yesOrNo } from "../../src/ui/ink/ink"
+import { yesOrNo } from "../../src/ui/ink/yes-or-no"
 import { ORDERED_VERSIONS } from "../../../../packages/core/test/fixtures/versions"
 import { COMPOSE_V1, filesUnder, machine } from "../support/helpers"
 import { fakeRunner, olderRunner, realRunner, releasedRunner, reportingRunner, sha256, sshStandIn, standInServer, withSsh, type StandInServer } from "../support/stand-in-server"
