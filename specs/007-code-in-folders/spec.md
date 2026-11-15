@@ -42,7 +42,10 @@ test that enforces them; run every existing test.
   `test/support/`, tests that cross subjects in `test/scenarios/`.
 - **FR-003**: Behaviour MUST NOT change: every existing test passes with its expectations
   unchanged, apart from paths named as text; the transcripts of `apps/cli/test/plain/` are not
-  edited; the agent end-to-end tests replay from their cache.
+  edited; the agent end-to-end tests replay from their cache. The one exception, found by the
+  review (R3): three expectations that held a copy equal to its original were removed with the
+  copies (two whole tests, in `ops/doctor.test.ts` and `asking/first-deploy.test.ts`, and one
+  line of a kept test in `asking/asking.test.ts`). Nothing else was removed or loosened.
 - **FR-004**: The installer's script MUST stay byte for byte as it is (its SHA-256 is pinned by
   a test), and so MUST the check script of `zekno doctor`.
 - **FR-005**: `packages/core`'s public interface (`src/index.ts`) MUST export exactly what it
