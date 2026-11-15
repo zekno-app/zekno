@@ -4,7 +4,9 @@
  * in this folder on this machine.
  */
 import { accept } from "../../project/accepted"
-import { findProject, notSignedHere, shownPath, standingOf, type ProjectLink } from "../../project/project"
+import { findProject, type ProjectLink } from "../../project/file"
+import { notSignedHere, standingOf } from "../../project/signed"
+import { shownPath } from "../../project/shown"
 import { sanitize } from "../../server/sanitize"
 import type { Effect } from "../state/events"
 import type { Context } from "./context"

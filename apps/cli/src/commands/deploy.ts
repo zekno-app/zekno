@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve } from "node:path"
 
 import { remoteThroughUi, type Deps } from "../cli/context"
 import { prepareDeploy, prepareRollback, sendDeploy, type DeployPlan, type Where } from "../ops/deploy"
-import { shownPath } from "../project/project"
+import { shownPath } from "../project/shown"
 import { sanitize } from "../server/sanitize"
 import { plainDeployView, type DeployStart } from "../shared/deploy"
 

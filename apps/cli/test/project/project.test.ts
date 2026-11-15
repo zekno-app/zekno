@@ -32,20 +32,10 @@ import { accept, acceptedLinks, isAccepted, LINKS_BYTES, LINKS_FILE, LINKS_KEPT,
 import { readCompose } from "../../src/project/compose-read"
 import { openTeam } from "../../src/cli/context"
 import { CliError, UsageError } from "../../src/cli/errors"
-import {
-  composeFor,
-  findProject,
-  notSigned,
-  notSignedHere,
-  notUsedHere,
-  objectKeys,
-  PROJECT_BYTES,
-  signerOf,
-  withProject,
-  writeProject,
-  type Details,
-  type ProjectLink,
-} from "../../src/project/project"
+import { findProject, objectKeys, PROJECT_BYTES, type ProjectLink } from "../../src/project/file"
+import { notUsedHere, withProject, type Details } from "../../src/project/project"
+import { notSigned, notSignedHere, signerOf } from "../../src/project/signed"
+import { composeFor, writeProject } from "../../src/project/write"
 import { machine, ready, twin } from "../support/helpers"
 
 const LINK = { app: "demo", server: "dev", compose: "compose.yaml" }

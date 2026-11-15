@@ -3,7 +3,7 @@
  * `links.json` in the profile folder, a list of the real path of each
  * `zekno.json` used in its folder on this machine and the SHA-256 of its
  * exact bytes. A zekno.json counts only when it is signed by the team
- * (project.ts `signerOf`); this list says whether it was used here before,
+ * (signed.ts `signerOf`); this list says whether it was used here before,
  * byte for byte. A signed file copied into another folder, or changed by an
  * edit or a `git pull`, is not in it, so the person is asked about it once.
  *

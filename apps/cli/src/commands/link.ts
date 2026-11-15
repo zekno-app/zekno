@@ -1,6 +1,6 @@
 import type { Deps } from "../cli/context"
 import { linkFolder, type LinkInput } from "../ops/link"
-import { shownPath } from "../project/project"
+import { shownPath } from "../project/shown"
 import { sanitize } from "../server/sanitize"
 
 /**

@@ -256,7 +256,7 @@ export function RememberFolderScreen({
   columns: number
   status?: ReactNode
 }) {
-  // The same three names, in the same order, as project.ts writes them.
+  // The same three names, in the same order, as project/write.ts writes them.
   const json = JSON.stringify({ app: question.app, server: question.server, compose: question.compose }, null, 2).split("\n")
   return (
     <Frame header={<Header place={<Trail parts={[question.server, question.app, "deploy"]} />} />} hints={REMEMBER_HINTS} status={status}>

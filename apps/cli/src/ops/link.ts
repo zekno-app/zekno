@@ -22,24 +22,11 @@ import { accept, acceptedLinks, forget, isAccepted, sha256Of, type AcceptedLink 
 import { teamOf, type OpDeps, type Team } from "../cli/context"
 import { CliError, UsageError } from "../cli/errors"
 import { findServer } from "../profile/profile"
-import {
-  composeFor,
-  DEFAULT_COMPOSE,
-  findProject,
-  noTerminalToUse,
-  notSigned,
-  notUsedHere,
-  projectFileIn,
-  projectText,
-  shownPath,
-  signerOf,
-  standingOf,
-  useOnce,
-  useQuestion,
-  writeProject,
-  type ProjectJudge,
-  type ProjectLink,
-} from "../project/project"
+import { DEFAULT_COMPOSE, findProject, projectFileIn, type ProjectLink } from "../project/file"
+import { noTerminalToUse, notUsedHere, useOnce, useQuestion, type ProjectJudge } from "../project/project"
+import { notSigned, signerOf, standingOf } from "../project/signed"
+import { shownPath } from "../project/shown"
+import { composeFor, projectText, writeProject } from "../project/write"
 import { sanitize } from "../server/sanitize"
 import { checkApp } from "./deploy"
 

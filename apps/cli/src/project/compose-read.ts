@@ -23,7 +23,8 @@ import { closeSync, constants, fstatSync, openSync, readSync, realpathSync, stat
 import { resolve } from "node:path"
 
 import { CliError } from "../cli/errors"
-import { DEFAULT_COMPOSE, isAbove, shownPath, type ProjectLink } from "./project"
+import { DEFAULT_COMPOSE, isAbove, type ProjectLink } from "./file"
+import { shownPath } from "./shown"
 import { sanitize } from "../server/sanitize"
 
 /** Where a deploy's Compose file comes from. */

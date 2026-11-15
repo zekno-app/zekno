@@ -5,7 +5,10 @@
 import { openTeam, TAMPERED, type OpDeps, type Team } from "../../cli/context"
 import { createTeam } from "../../ops/init"
 import { profileStore } from "../../profile/profile"
-import { aboveOf, findProject, notSignedHere, standingOf, tilde } from "../../project/project"
+import { findProject } from "../../project/file"
+import { aboveOf } from "../../project/project"
+import { notSignedHere, standingOf } from "../../project/signed"
+import { tilde } from "../../project/shown"
 import { sanitize } from "../../server/sanitize"
 import { appsOf } from "../../shared/views"
 import type { Effect } from "../state/events"
@@ -40,7 +43,7 @@ export function teamView(team: Team, home: string): TeamView {
  * that does not is the error screen with the reason. The screen says in its
  * own words that the folder may have been changed, so that sentence is not
  * repeated after the reason. A zekno.json that applies to `cwd` is judged
- * against the verified team list (project.ts `standingOf`): signed by the
+ * against the verified team list (project/signed.ts `standingOf`): signed by the
  * team and used here before, Home opens on its server and app ("Linked
  * folder"); signed by the team and not used here before, the app asks first
  * (`firstUse`); one that cannot be used is said on Home, and chooses
