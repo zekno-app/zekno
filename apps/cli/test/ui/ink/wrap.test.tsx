@@ -110,15 +110,15 @@ describe("the drawn lines at 80 columns (quickstart.md, the walkthrough's differ
     await t.ui.close()
   })
 
-  test("A10, the hidden prompt's reason after !: it goes on under its words, at column 2", async () => {
+  test("A10, the hidden prompt's reason: it starts at column 2, with no mark, and goes on under itself", async () => {
     const t = terminal(80)
     const value = t.ui.askValue("Value for DATABASE_URL (demo on prod): ", "DATABASE_URL")
     await shows(t, "? Value for DATABASE_URL (demo on prod): (hidden)   esc skips it")
     t.keys("one\ntwo\n")
-    await until(() => t.lines().some((line) => line.startsWith("! That value")), "A10")
+    await until(() => t.lines().some((line) => line.startsWith("  That value")), "A10")
     const reason = t.lines().slice(1)
-    expect(reason[0]).toBe("! That value has more than one line. Press esc to skip it, and set it later with")
-    expect(reason.slice(1)).toEqual(["  `zekno secret set DATABASE_URL --stdin`."])
+    expect(reason[0]).toBe("  That value has more than one line. Press esc to skip it, and set it later with")
+    expect(reason.slice(1)).toEqual(["  zekno secret set DATABASE_URL --stdin."])
     t.keys("\x1b")
     await value
     await t.ui.close()

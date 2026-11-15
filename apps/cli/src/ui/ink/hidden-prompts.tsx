@@ -10,9 +10,9 @@ import { Box, useInput, useWindowSize } from "ink"
 import { useRef, useState } from "react"
 
 import { CliError } from "../../cli/errors"
-import { isCtrlC, QuestionLine, questionPieces, VALUE_EMPTY, valueHasLines } from "./questions"
+import { isCtrlC, QuestionLine, questionPieces, Reason, VALUE_EMPTY, valueHasLines } from "./questions"
 import { applySecretInput } from "../parts/secret-input"
-import { COLOR, MARK, MarkedLine } from "./marks"
+import { withoutBackticks } from "./marks"
 import type { Piece } from "./wrap"
 
 export type Prompt = { question: string; settle(result: { value: string } | { error: Error }): void }
@@ -22,7 +22,11 @@ export type ValueOpen = { id: number; question: string; name: string; settle(res
 /** What follows the question of the hidden prompt that can be skipped while it is open: `(hidden)` and `esc skips it`, dim. Nothing of the value. */
 export const hiddenPieces: Piece[] = [{ text: "(hidden)", dim: true }, { text: "   " }, { text: "esc skips it", dim: true }]
 
-/** Asks for a value and shows nothing of it, not even its length. */
+/**
+ * Asks for a value and shows nothing of it, not even its length. A value it
+ * refuses (several lines) ends the command with that error, as before: it
+ * draws no reason of its own (specs/008-cli-decisions).
+ */
 export function SecretPrompt({ prompt }: { prompt: Prompt }) {
   // Kept out of React state: nothing is drawn from it, so nothing redraws as it grows.
   const value = useRef("")
@@ -41,7 +45,10 @@ export function SecretPrompt({ prompt }: { prompt: Prompt }) {
  * The hidden prompt of a first deploy (contracts/questions.md): nothing of
  * the value is drawn, not even its length, and it is never kept in React
  * state. Esc skips the value; Ctrl-C leaves. Nothing, or several lines, is
- * refused with its reason under the line, and the prompt stays open.
+ * refused with its reason under the line, drawn as a refused typed answer's
+ * (`Reason`: the warning colour, column 2, no `!`), and the prompt stays open.
+ * A command in the reason is drawn without its backticks, as in an error line
+ * (specs/008-cli-decisions).
  */
 export function ValuePrompt({ open }: { open: ValueOpen }) {
   const value = useRef("")
@@ -65,7 +72,7 @@ export function ValuePrompt({ open }: { open: ValueOpen }) {
   return (
     <Box flexDirection="column">
       <QuestionLine pieces={[...questionPieces(open.question), ...hiddenPieces]} columns={columns} />
-      {reason === undefined ? null : <MarkedLine mark={MARK.warn} color={COLOR.warn} pieces={[{ text: reason }]} columns={columns} />}
+      {reason === undefined ? null : <Reason text={withoutBackticks(reason)} columns={columns} />}
     </Box>
   )
 }

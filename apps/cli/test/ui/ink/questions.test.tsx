@@ -17,7 +17,7 @@ import { Left, NOTHING_DONE } from "../../../src/cli/errors"
 import { inkUi } from "../../../src/ui/ink/ink"
 import { plainUi } from "../../../src/ui/plain/plain"
 import type { ListRow } from "../../../src/ui/types"
-import { COMPOSE_V1, machine, screenOf } from "../../support/helpers"
+import { COMPOSE_V1, machine, ready, screenOf } from "../../support/helpers"
 import { realRunner, sshStandIn, standInServer, withSsh } from "../../support/stand-in-server"
 import { shows, terminal, until } from "../../support/terminal"
 
@@ -336,13 +336,21 @@ describe("the hidden prompt that can be skipped (mock-up 3)", () => {
     const value = t.ui.askValue(QUESTION, "DATABASE_URL")
     await shows(t, OPEN)
     t.keys(ENTER)
-    await shows(t, "! A value cannot be empty. Press esc to skip it.")
+    // Drawn as a refused typed answer's reason (specs/008-cli-decisions): from column 2, under the question's words, without `!`.
+    await shows(t, "  A value cannot be empty. Press esc to skip it.")
+    expect(t.lines()).toEqual([OPEN, "  A value cannot be empty. Press esc to skip it."])
     t.keys("zk_first_9f3a\nzk_second_9f3a\n")
-    await shows(t, "! That value has more than one line. Press esc to skip it, and set it later with `zekno secret set DATABASE_URL --stdin`.")
-    expect(t.lines()).toContain(OPEN)
+    // The command without its backticks, as an error line draws one at a terminal.
+    await shows(t, "  That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin.")
+    expect(t.lines()).toEqual([OPEN, "  That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin."])
+    expect(t.raw()).not.toContain("!")
+    expect(t.raw()).not.toContain("`")
     t.keys(ESC)
     expect(await value).toBeUndefined()
     await shows(t, "? Value for DATABASE_URL (demo on prod): skipped")
+    // The reason goes with the prompt: only the line that says the value was skipped stays.
+    await settle()
+    expect(t.lines()).toEqual(["? Value for DATABASE_URL (demo on prod): skipped"])
     expect(t.raw()).not.toContain("9f3a")
     await t.ui.close()
   })
@@ -352,7 +360,7 @@ describe("the hidden prompt that can be skipped (mock-up 3)", () => {
     const value = t.ui.askValue(QUESTION, "DATABASE_URL")
     await shows(t, OPEN)
     t.keys(ENTER)
-    await shows(t, "! A value cannot be empty. Press esc to skip it.")
+    await shows(t, "  A value cannot be empty. Press esc to skip it.")
     t.keys("zk_typed_9f3a")
     await settle()
     t.keys(CTRL_C)
@@ -363,6 +371,42 @@ describe("the hidden prompt that can be skipped (mock-up 3)", () => {
     await t.ui.close()
     expect(t.raw()).not.toContain("9f3a")
   })
+
+  test("Ctrl-C after A10: the line stays as it was drawn, without the reason, above Nothing was done.", async () => {
+    const t = terminal(200)
+    const value = t.ui.askValue(QUESTION, "DATABASE_URL")
+    await shows(t, OPEN)
+    t.keys("zk_first_9f3a\nzk_second_9f3a\n")
+    await shows(t, "  That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin.")
+    t.keys(CTRL_C)
+    expect(value).rejects.toBeInstanceOf(Left)
+    await value.catch(() => {})
+    t.ui.error(NOTHING_DONE)
+    await settle()
+    expect(t.lines()).toEqual([OPEN, "✖ Nothing was done."])
+    await t.ui.close()
+    expect(t.raw()).not.toContain("9f3a")
+  })
+
+  test("zekno secret set's own hidden prompt is as before: several lines, or nothing, end the command with its error, and no reason is drawn under the prompt", async () => {
+    const m = await ready()
+    const plain = m.deps.ui
+    for (const [typed, said] of [
+      ["zk_first_9f3a\nzk_second_9f3a\n", ["✖ That value has more than one line.", "  Pipe it in and add --stdin."]],
+      [ENTER, ["✖ No value was given, so nothing was set."]],
+    ] as const) {
+      const t = terminal(200)
+      m.deps.ui = t.ui
+      const done = m.zekno("secret", "set", "GREETING", "--app", "web", "--server", "dev").finally(() => (m.deps.ui = plain))
+      await shows(t, "? Value for GREETING (web on dev): (hidden)", 20_000)
+      t.keys(typed)
+      expect(await done).toBe(1)
+      await t.ui.close()
+      // The prompt leaves nothing, as before; what is said is the command's error, after ✖.
+      expect(t.lines()).toEqual([...said])
+      expect(t.raw()).not.toContain("9f3a")
+    }
+  }, 60_000)
 
   test("a yes-or-no question asked without leave, and the hidden prompt of zekno secret set, are as before", async () => {
     const t = terminal()

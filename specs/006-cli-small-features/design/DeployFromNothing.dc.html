@@ -55,7 +55,10 @@ body{margin:0}
     <div style="font-weight: 600">How it behaves</div>
     <div>Only what is missing is asked. With a key already, the first block is not shown, and the opening line counts what is left: “Two things first: a server, this app.”</div>
     <div>Each thing is finished before the next question. Leaving keeps what was made:</div>
-    <div style="color: #d7dde4"><span style="color: #f85149">✖</span> Nothing more was done. What was set up so far is kept: run zekno deploy again to carry on.</div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="color: #d7dde4"><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">Nothing more was done.</span></div>
+      <div style="color: #8b949e; padding-left: 17px">What was set up so far is kept: run zekno deploy again to carry on.</div>
+    </div>
     <div>At the hidden prompt, <span style="color: #d7dde4">esc</span> skips that value and <span style="color: #d7dde4">ctrl-c</span> leaves.</div>
     <div>Only <span style="color: #d7dde4">zekno deploy</span> starts from nothing. Another command says:</div>
     <div style="color: #d7dde4">No team on this machine yet. Run `zekno deploy` in a project folder, or `zekno init --name &lt;you&gt;`.</div>

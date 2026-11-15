@@ -740,4 +740,30 @@ describe("the drawn look of a deploy from nothing (mock-up 3, board 'zekno deplo
     expect(t.raw()).not.toContain(VALUE)
     for (const line of screen) expect([...line].length).toBeLessThanOrEqual(100)
   }, 60_000)
+
+  test("a value refused at the hidden prompt (A9, A10) is drawn as a refused typed answer's reason; Ctrl-C after it keeps the prompt's line above Nothing was done. (specs/008-cli-decisions)", async () => {
+    const m = await ready()
+    m.compose(COMPOSE_DB)
+    const t = terminal(200, 30)
+    m.deps.ui = t.ui
+    const open = "? Value for DATABASE_URL (web on dev): (hidden)   esc skips it"
+    const deploying = m.zekno("deploy", "--app", "web", "--server", "dev")
+    await shows(t, open, 30_000)
+    t.keys("\r")
+    await shows(t, "  A value cannot be empty. Press esc to skip it.")
+    expect(t.lines()).toEqual([`! ${expectsValues("compose.yaml", 1)}`, open, "  A value cannot be empty. Press esc to skip it."])
+    t.keys("zk_first_9f3a\nzk_second_9f3a\n")
+    const a10 = "  That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin."
+    await shows(t, a10)
+    expect(t.lines()).toEqual([`! ${expectsValues("compose.yaml", 1)}`, open, a10])
+    t.keys("\x03")
+    expect(await deploying).toBe(1)
+    await t.ui.close()
+    // The reason goes; the prompt's line stays as it was drawn, with nothing of the value; nothing was made in this run.
+    expect(t.lines()).toEqual([`! ${expectsValues("compose.yaml", 1)}`, open, "✖ Nothing was done."])
+    expect(t.raw()).not.toContain("9f3a")
+    expect(t.raw()).not.toContain("! A value")
+    expect(t.raw()).not.toContain("! That value")
+    expect(filesUnder(m.home).filter((file) => file.content.includes("9f3a"))).toEqual([])
+  }, 60_000)
 })

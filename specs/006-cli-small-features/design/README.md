@@ -20,6 +20,11 @@ lists, errors and piped output" from feature 004. Where a board and `../design.m
 about a word, `../design.md` is right; where they disagree about how something looks, the board
 is right. The maintainer approved the boards on the canvas on 2026-11-15.
 
+Changed after that, in this folder only (specs/008-cli-decisions, approved by the maintainer on
+2026-11-15): `DeployFromNothing.dc.html` draws "Nothing more was done." in the common error
+style, the first sentence bold after `✖` and the rest dim on the next line, as the program draws
+it. The canvas may still show the earlier look.
+
 Colours: background `#0b0d10`, text `#d7dde4`, strong text `#ffffff`, dim `#8b949e`, the brand
 blue `#2383e2` for `?` and `❯`, green `#3fb950` for `✔`, yellow `#d29922` for `!`, red `#f85149`
 for `✖`, lines `#2a313a`. On a light terminal the same roles use the theme of

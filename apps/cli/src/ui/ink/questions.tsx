@@ -21,7 +21,7 @@ import { Wrapped, type Piece } from "./wrap"
 /** A9: the hidden prompt that can be skipped, given nothing. Needs approval (research Q4). */
 export const VALUE_EMPTY = "A value cannot be empty. Press esc to skip it."
 
-/** A10: the same prompt, given a value of several lines. Needs approval (research Q4). */
+/** A10: the same prompt, given a value of several lines. Needs approval (research Q4). Drawn without its backticks (hidden-prompts.tsx). */
 export const valueHasLines = (name: string): string =>
   `That value has more than one line. Press esc to skip it, and set it later with \`zekno secret set ${sanitize(name)} --stdin\`.`
 
@@ -107,6 +107,21 @@ export function QuestionLine({ pieces, columns }: { pieces: readonly Piece[]; co
         <Text color={BRAND}>?</Text>
       </Box>
       <Wrapped pieces={pieces} columns={columns === undefined ? undefined : columns - 2} />
+    </Box>
+  )
+}
+
+/**
+ * Why an answer was refused, under its question, as the board "Questions in
+ * single commands" draws it: in the warning colour, in line with the
+ * question's words (column 2), with no mark, going on under itself when the
+ * window is narrower. A typed answer and the hidden prompt that can be
+ * skipped both draw their reason so.
+ */
+export function Reason({ text, columns }: { text: string; columns: number }) {
+  return (
+    <Box paddingLeft={2}>
+      <Wrapped pieces={[{ text, color: "yellow" }]} columns={columns - 2} />
     </Box>
   )
 }
@@ -230,11 +245,7 @@ export function TypedPrompt({
   return (
     <Box flexDirection="column">
       <QuestionLine pieces={[...questionPieces(question), ...answerPieces(answer), { text: " ", inverse: true, keep: true }]} columns={columns} />
-      {reason === undefined ? null : (
-        <Box paddingLeft={2}>
-          <Wrapped pieces={[{ text: reason, color: "yellow" }]} columns={columns - 2} />
-        </Box>
-      )}
+      {reason === undefined ? null : <Reason text={reason} columns={columns} />}
     </Box>
   )
 }
