@@ -120,7 +120,24 @@ function linksText(entries: readonly AcceptedLink[]): string {
  */
 export function accept(home: string, link: AcceptedLink): void {
   const entries = acceptedLinks(home).filter((entry) => entry.path !== link.path)
-  const text = linksText([...entries, { path: link.path, sha256: link.sha256 }])
+  writeLinks(home, [...entries, { path: link.path, sha256: link.sha256 }])
+}
+
+/**
+ * Takes back the record of a project file accepted with exactly these bytes,
+ * as the first deploy does with a zekno.json it wrote and then removed
+ * (asking/first-deploy.ts). An entry for the same path with other bytes is
+ * left as it is; with no matching entry nothing is written.
+ */
+export function forget(home: string, link: AcceptedLink): void {
+  const entries = acceptedLinks(home)
+  const kept = entries.filter((entry) => entry.path !== link.path || entry.sha256 !== link.sha256)
+  if (kept.length !== entries.length) writeLinks(home, kept)
+}
+
+/** Writes the list whole, as `accept` describes. */
+function writeLinks(home: string, entries: readonly AcceptedLink[]): void {
+  const text = linksText(entries)
   const path = join(home, LINKS_FILE)
   const temporary = join(home, `.${LINKS_FILE}.${randomBytes(8).toString("hex")}.tmp`)
   try {

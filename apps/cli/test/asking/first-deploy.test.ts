@@ -13,6 +13,7 @@ import { join, resolve } from "node:path"
 import runnerPackage from "../../../runner/package.json"
 import { runner, tempDir } from "../../../runner/test/helpers"
 import { foundDetail, megabytes as appMegabytes } from "../../src/app/effects"
+import { acceptedLinks } from "../../src/accepted"
 import { appTaken } from "../../src/asking/asking"
 import {
   DESTINATION_RULE,
@@ -36,7 +37,7 @@ import { MISSING_APP, MISSING_SERVER } from "../../src/errors"
 import { prepareServerAdd } from "../../src/ops/server"
 import type { RunnerRelease } from "../../src/runner-release"
 import type { ListQuestion, Ui } from "../../src/ui/types"
-import { answering, COMPOSE_V1, filesUnder, machine, ready, twin, type Answer } from "../helpers"
+import { answering, COMPOSE_V1, filesUnder, machine, ready, twin, type Answer, type Asked } from "../helpers"
 import { realRunner, snapshot, sshStandIn, standInServer, withSsh, type StandInServer } from "../stand-in-server"
 import { shows, terminal } from "../ui/terminal"
 
@@ -491,48 +492,108 @@ describe("what is asked depends on what is given and what exists", () => {
 })
 
 describe("a name typed as new that the server already holds (security review S3)", () => {
-  test("a second machine with no history of the app, its apps not read: A12 from the deploy's own connection, before anything is signed, stored or sent", async () => {
-    // Machine A deploys api to prod, from nothing, over the stand-in `ssh`.
-    const s = fromNothing({ folder: "api", compose: "services:\n  web:\n    image: example/web:1\n" })
+  const COMPOSE_A = "services:\n  web:\n    image: example/web:1\n"
+
+  /**
+   * Machine A deploys api to prod, from nothing, over the stand-in `ssh`; machine B has the same team and
+   * server and no history of api, in another folder named api with a Compose file of its own. SSH would ask
+   * from now on: a read in batch mode fails as SSH does then, and the deploy's own connection goes ahead.
+   */
+  async function taken(compose: string) {
+    const s = fromNothing({ folder: "api", compose: COMPOSE_A })
     const first = await s.deploy([{ type: "ada" }, { type: DESTINATION }, { type: "prod" }, { type: "api" }, { yes: false }])
     expect(first.code).toBe(0)
     const serverId = s.profile()!.servers[0]!.serverId
-    // Machine B: the same team and server, no history of api, in another folder named api with another Compose file.
     const b = await twin(s.m)
     const folder = join(tempDir("elsewhere"), "api")
     mkdirSync(folder)
-    writeFileSync(join(folder, "compose.yaml"), "services:\n  other:\n    image: example/other:1\n")
+    writeFileSync(join(folder, "compose.yaml"), compose)
     b.deps.cwd = folder
-    // SSH would ask here: the read in batch mode fails as SSH does then, and the deploy's own connection goes ahead.
     s.ssh.ask()
     const before = snapshot(s.server.root)
     const started = s.m.docker.calls().length
     const plain = b.deps.ui
-    const A12 = appTaken("prod", "api")
-    for (const [remember, said] of [
-      [false, A12],
-      [true, `${A12} ${KEPT_SO_FAR}`],
-    ] as const) {
-      b.deps.ui = plain
-      const asking = answering(b, [{ type: "api" }, { yes: remember }])
-      const err = b.err.length
-      expect(await withSsh(s.ssh, () => b.zekno("deploy"))).toBe(1)
-      // The apps were not read, so the name was offered as new, the folder's name filled in.
-      expect(asking.asked).toEqual([
-        { kind: "ask", question: "Name for this app", fill: "api" },
-        { kind: "confirm", question: rememberFolder("api", "prod") },
-      ])
-      // A12, with F9 once the folder was remembered in this run: what was set up is kept.
-      expect(b.err.slice(err)).toEqual([said])
-      expect(existsSync(join(folder, "zekno.json"))).toBe(remember)
-      // Nothing signed or stored on B, nothing sent: the server and its runner are byte for byte as they were, and nothing started.
-      expect(existsSync(join(b.home, "history", serverId, "api.json"))).toBe(false)
-      expect(snapshot(s.server.root)).toEqual(before)
-      expect(s.m.docker.calls().length).toBe(started)
+    return {
+      s,
+      b,
+      folder,
+      serverId,
+      /** `zekno deploy` on B at a terminal, answered by `answers`: its status, the questions, and what it said went wrong. */
+      async deploy(answers: Answer[]) {
+        b.deps.ui = plain
+        const asking = answering(b, answers)
+        const err = b.err.length
+        const code = await withSsh(s.ssh, () => b.zekno("deploy"))
+        return { code, asked: asking.asked, err: b.err.slice(err) }
+      },
+      /** Nothing signed or recorded on B, nothing sent: the server and its runner byte for byte as they were, and nothing started. */
+      nothingSent() {
+        expect(existsSync(join(b.home, "history", serverId, "api.json"))).toBe(false)
+        expect(snapshot(s.server.root)).toEqual(before)
+        expect(s.m.docker.calls().length).toBe(started)
+      },
     }
+  }
+
+  const A12 = appTaken("prod", "api")
+  const NAME: Asked = { kind: "ask", question: "Name for this app", fill: "api" }
+  const REMEMBER: Asked = { kind: "confirm", question: rememberFolder("api", "prod") }
+
+  test("its apps not read: A12 from the deploy's own connection, before anything is signed, stored or sent; a zekno.json this run wrote is taken back, and the next run asks the name again", async () => {
+    const t = await taken("services:\n  other:\n    image: example/other:1\n")
+    // Not remembered: A12 alone, as nothing was made in this run.
+    let run = await t.deploy([{ type: "api" }, { yes: false }])
+    expect(run).toEqual({ code: 1, asked: [NAME, REMEMBER], err: [A12] })
+    t.nothingSent()
+
+    // Remembered: zekno.json was written and recorded in this run, then taken back once the runner said it holds api.
+    const records = acceptedLinks(t.b.home)
+    run = await t.deploy([{ type: "api" }, { yes: true }])
+    // Nothing else was made in this run, so nothing is said to be kept: A12 alone.
+    expect(run).toEqual({ code: 1, asked: [NAME, REMEMBER], err: [A12] })
+    expect(existsSync(join(t.folder, "zekno.json"))).toBe(false)
+    expect(acceptedLinks(t.b.home)).toEqual(records)
+    t.nothingSent()
+
+    // The next run asks the name again, and sends nothing for api unless the person names it, and then stops with A12 again.
+    run = await t.deploy(["leave"])
+    expect(run).toEqual({ code: 1, asked: [NAME], err: ["Nothing was done."] })
+    run = await t.deploy([{ type: "api" }, { yes: false }])
+    expect(run).toEqual({ code: 1, asked: [NAME, REMEMBER], err: [A12] })
+    t.nothingSent()
     // The deploy's own connection read the runner, without batch mode.
-    expect(s.ssh.calls().some((call) => /^-- deploy@example\.test \S+ session$/.test(call))).toBe(true)
-  }, 90_000)
+    expect(t.s.ssh.calls().some((call) => /^-- deploy@example\.test \S+ session$/.test(call))).toBe(true)
+  }, 120_000)
+
+  test("a value stored in the same run is kept, and F9 says so; zekno.json is taken back; one that changed since is left, and A12 is said alone", async () => {
+    const t = await taken(COMPOSE_DB)
+    const run = await t.deploy([{ type: "api" }, { yes: true }, { value: VALUE }])
+    expect(run).toEqual({ code: 1, asked: [NAME, REMEMBER, { kind: "askValue", question: "Value for DATABASE_URL (api on prod): " }], err: [expectsValues("compose.yaml", 1), `${A12} ${KEPT_SO_FAR}`] })
+    expect(existsSync(join(t.folder, "zekno.json"))).toBe(false)
+    const secrets = join(t.b.home, "secrets", t.serverId, "api.json")
+    expect(JSON.parse(readFileSync(secrets, "utf8")).records).toHaveLength(1)
+    t.nothingSent()
+
+    // A zekno.json changed after this run wrote it is not this run's any more: it is left as it is, and F9 is not said,
+    // since running again would deploy the app it names.
+    const b = t.b
+    const plain = b.deps.ui
+    const asking = answering(b, [{ type: "api" }, { yes: true }])
+    b.deps.ui = {
+      ...b.deps.ui,
+      deploy: (start) => {
+        // The moment the deploy starts, after zekno.json was written: something else changes it.
+        writeFileSync(join(t.folder, "zekno.json"), `${readFileSync(join(t.folder, "zekno.json"), "utf8")}\n`)
+        return plain.deploy(start)
+      },
+    }
+    const err = b.err.length
+    expect(await withSsh(t.s.ssh, () => b.zekno("deploy"))).toBe(1)
+    expect(asking.asked).toEqual([NAME, REMEMBER])
+    expect(b.err.slice(err)).toEqual([A12])
+    expect(existsSync(join(t.folder, "zekno.json"))).toBe(true)
+    t.nothingSent()
+  }, 120_000)
 })
 
 describe("with a profile already (a server on this machine)", () => {

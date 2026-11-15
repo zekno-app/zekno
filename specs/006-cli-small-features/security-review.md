@@ -374,20 +374,34 @@ deploy's own connection: `DeployPlan` carries `fresh` (the app's name was typed 
 `whichApp`); `sendDeploy` compares it with `status.lastSequence`, which it already reads on its
 session before anything is signed, and throws `AppTaken` (A12, `<server> already has an app named
 <app>. Choose it from the list, or give another name.`) when the runner holds the app. Nothing is
-signed, recorded in the history, or sent; no new connection is made. In the first deploy, when
-something was made earlier in the run (the key, a server, zekno.json, a value), A12 is followed by
-F9 as the flow's leaving rule says, and what was made stays. Test:
+signed, recorded in the history, or sent; no new connection is made. In the first deploy, the key,
+a server and the values made earlier in the run stay, and A12 is followed by F9 when any of them
+was made, as the flow's leaving rule says. Tests:
 `test/asking/first-deploy.test.ts`, "a second machine with no history of the app, its apps not
 read: A12 from the deploy's own connection, before anything is signed, stored or sent": machine A
 deploys `api`; machine B (same team and server, no history) in a folder named `api`, the batch-mode
 read failing as SSH does where it would ask, the deploy's own connection working; with "Remember
 this folder?" answered no and yes: status 1, A12 (and F9 after zekno.json was written), no history
 entry on B, the stand-in server byte for byte as it was, nothing started. It fails before the fix
-(the deploy went through). Left for the maintainer: when the folder was remembered in that same
-run, zekno.json names the app, so the next `zekno deploy` there takes the app from zekno.json, does
-not ask, and deploys it; F9's "run `zekno deploy` again to carry on" then replaces the app. The
-review's second fix (no folder name filled in, and saying the list comes from this machine only,
-when the read failed) was not built.
+(the deploy went through).
+
+A follow-up closed the case where "Remember this folder?" was answered yes in that same run
+(the follow-up commit in the table above): zekno.json then named the taken app, so the
+next `zekno deploy` there would have deployed onto it without asking, as F9 told the person to do.
+Now, when the deploy stops with `AppTaken`, a zekno.json this run wrote is removed, only while its
+bytes are still exactly those written (`unlinkWritten` in `ops/link.ts`), and its record of first
+use is taken back from `links.json` (`forget` in `accepted.ts`; a record it replaced for the same
+path is put back). F9 is said only when the key, a server or a value made in this run is kept and
+no zekno.json of this run is left; a zekno.json that changed after it was written is left as it is,
+and A12 is said alone. A run cannot replace an older zekno.json: step 6 asks only where none applies
+to the folder (here or above) and writes without `--force`, which refuses an existing file.
+Tests, in the same describe: with "Remember this folder?" answered yes, A12 alone, zekno.json gone,
+`links.json`'s records as before, the server unchanged; the next run asks `Name for this app` again,
+and sends nothing for `api` (Esc ends it; naming `api` again stops with A12 again); with a value
+stored in the run, A12 and F9, zekno.json gone, the value's sealed record kept; a zekno.json changed
+after it was written stays, with A12 alone. Both fail before the follow-up. The review's second fix
+(no folder name filled in, and saying the list comes from this machine only, when the read failed)
+was not built.
 
 **S4, the import names the link.** Not changed: waiting for the maintainer, as the brief for these
 fixes says.

@@ -27,6 +27,7 @@
 import { RUNNER_PROTOCOL } from "@workspace/core"
 import { resolve } from "node:path"
 
+import { acceptedLinks } from "../accepted"
 import { flagsAgain, send, shownFile } from "../commands/deploy"
 import { SSH_IDENTITY } from "../commands/server"
 import { expectedValues } from "../compose-file"
@@ -36,7 +37,7 @@ import { CliError, Left, MISSING_SERVER, NOTHING_DONE, UsageError } from "../err
 import type { InstallEvent } from "../install"
 import { AppTaken, checkApp, prepareDeploy } from "../ops/deploy"
 import { createTeam } from "../ops/init"
-import { linkFolder } from "../ops/link"
+import { linkFolder, unlinkWritten, writtenLink, type WrittenLink } from "../ops/link"
 import { listSecrets, prepareSecretSet, setSecret } from "../ops/secret"
 import { addServer, prepareServerAdd, runnerRelation, runnerWarning } from "../ops/server"
 import { findServer, isMemberName, NAME, profileStore, type Server } from "../profile"
@@ -238,6 +239,9 @@ export async function deployAtTerminal(deps: Deps, team: ReturnType<typeof teamO
   if (opening !== undefined) ui.note(opening)
 
   let made = false
+  // What this run made other than zekno.json (the key, a server, a value), and the zekno.json it wrote, if any (security review S3).
+  let kept = false
+  let wrote: WrittenLink | undefined
   let server: Server
   let app: string
   let fresh = false
@@ -252,6 +256,7 @@ export async function deployAtTerminal(deps: Deps, team: ReturnType<typeof teamO
       })
       const created = await createTeam(deps, name)
       made = true
+      kept = true
       ui.success(KEY_CREATED)
       ui.code("Team code", created.teamCode, TEAM_CODE_ABOUT)
       current = await openTeam(deps)
@@ -274,7 +279,7 @@ export async function deployAtTerminal(deps: Deps, team: ReturnType<typeof teamO
           check: (answer) => (!NAME.test(answer) ? SERVER_NAME_RULE : connected.some((entry) => entry.name === answer) ? serverTaken(answer) : undefined),
           missing: new UsageError(MISSING_SERVER),
         }))
-      await connectServer(ops(), name, destination, () => (made = true))
+      await connectServer(ops(), name, destination, () => (made = kept = true))
       // The profile now holds the next team list and the server: read again and proved again, without the keychain.
       current = reopenTeam(current)
       server = findServer(current.profile, name)
@@ -293,7 +298,9 @@ export async function deployAtTerminal(deps: Deps, team: ReturnType<typeof teamO
     fresh = chosen.fresh
     if ((serverHow === "asked" || serverHow === "made" || chosen.how === "asked") && !fileHere && flags.file === undefined) {
       if (await ui.confirm(rememberFolder(app, server.name), NOTHING_DONE, { leave: true })) {
-        await linkFolder(ops(), { app, server: server.name }, (question, refusal) => ui.confirm(question, refusal))
+        const before = acceptedLinks(deps.home)
+        const linked = await linkFolder(ops(), { app, server: server.name }, (question, refusal) => ui.confirm(question, refusal))
+        wrote = writtenLink(deps.home, deps.cwd, linked, before)
         made = true
       }
     }
@@ -312,7 +319,7 @@ export async function deployAtTerminal(deps: Deps, team: ReturnType<typeof teamO
           const value = await ui.askValue(`Value for ${plan.name} (${plan.app} on ${plan.server.name}): `, plan.name)
           if (value === undefined) continue
           await setSecret(plan, value)
-          made = true
+          made = kept = true
         }
       }
     }
@@ -322,13 +329,18 @@ export async function deployAtTerminal(deps: Deps, team: ReturnType<typeof teamO
 
   // 8. The deploy, with the text read in step 1. It ends as any `zekno deploy` does. A name typed as new is compared
   // with what the runner holds, on the deploy's own connection, before anything is signed (security review S3): when
-  // the runner holds it, the deploy stops with A12, and what was made in this run is kept, as leaving says.
+  // the runner holds it, the deploy stops with A12. A zekno.json this run wrote names that app, and the next run would
+  // deploy onto it without asking: it is taken back, with its record of first use. The key, a server and the values
+  // made in this run are kept, and F9 says so; when zekno.json could not be taken back (it changed since), A12 is said
+  // alone, since running again would deploy the app it names.
   const plan = await prepareDeploy(ops(), { app, server: server.name, read })
   const typed = { app: flags.app, server: flags.server }
   try {
     return await send(ops(), { ...plan, fresh }, { typed }, { app: plan.app, server: plan.server.name, file: shownFile(deps.cwd, plan.from), flags: flagsAgain(typed) })
   } catch (error) {
-    throw error instanceof AppTaken ? keptSoFar(error, made) : error
+    if (!(error instanceof AppTaken)) throw error
+    const undone = wrote === undefined || unlinkWritten(deps.home, wrote)
+    throw keptSoFar(error, undone && kept)
   }
 }
 

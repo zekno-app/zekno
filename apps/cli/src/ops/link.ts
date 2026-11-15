@@ -16,8 +16,9 @@
  * replaced, with names and `--force`.
  */
 import { CoreError, createLink } from "@workspace/core"
+import { lstatSync, readFileSync, rmSync } from "node:fs"
 
-import { accept, isAccepted, sha256Of } from "../accepted"
+import { accept, acceptedLinks, forget, isAccepted, sha256Of, type AcceptedLink } from "../accepted"
 import { teamOf, type OpDeps, type Team } from "../context"
 import { CliError, UsageError } from "../errors"
 import { findServer } from "../profile"
@@ -155,4 +156,62 @@ export async function writeLink(
   const path = writeProject(folder, signedLink, force)
   accept(home, { path: projectFileIn(folder), sha256: sha256Of(projectText(signedLink)) })
   return path
+}
+
+/**
+ * A zekno.json written by one run, as the first deploy keeps track of it
+ * (asking/first-deploy.ts): where it is, its record of first use (the SHA-256
+ * of the bytes written), and the record for the same path that this record
+ * replaced, if there was one.
+ */
+export type WrittenLink = { path: string; record: AcceptedLink; replaced?: AcceptedLink }
+
+/**
+ * What `linkFolder` just wrote, from its result and the records of first use
+ * read before it ran (`before`); undefined when it wrote nothing, as when it
+ * recorded a file that was there already.
+ */
+export function writtenLink(home: string, cwd: string, linked: Linked, before: readonly AcceptedLink[]): WrittenLink | undefined {
+  if (linked.done !== "written") return undefined
+  const recordPath = projectFileIn(cwd)
+  const record = acceptedLinks(home).find((entry) => entry.path === recordPath)
+  if (!record) return undefined
+  const replaced = before.find((entry) => entry.path === recordPath)
+  return { path: linked.path, record, ...(replaced === undefined ? {} : { replaced }) }
+}
+
+/**
+ * Takes back a zekno.json written earlier in the same run, when what it names
+ * turns out not to be what the person meant: the first deploy, when the
+ * deploy stops because the runner holds the app typed as new (security
+ * review S3, `AppTaken`). The file is removed only while its bytes are still
+ * exactly those written; then its record of first use is taken back and the
+ * record it replaced put back. Returns whether no zekno.json of this run is
+ * left (also when the file is gone already). A file that changed since is
+ * left as it is, with its record, and false is returned.
+ */
+export function unlinkWritten(home: string, written: WrittenLink): boolean {
+  let bytes: Buffer
+  try {
+    if (!lstatSync(written.path).isFile()) return false
+    bytes = readFileSync(written.path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false
+    bytes = Buffer.alloc(0)
+  }
+  if (bytes.length > 0) {
+    if (sha256Of(bytes) !== written.record.sha256) return false
+    try {
+      rmSync(written.path)
+    } catch {
+      return false
+    }
+  }
+  try {
+    forget(home, written.record)
+    if (written.replaced) accept(home, written.replaced)
+  } catch {
+    // The record stays. It counts only for these exact bytes, which no file holds any more.
+  }
+  return true
 }

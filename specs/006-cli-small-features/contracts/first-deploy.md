@@ -110,7 +110,10 @@ edge cases). The `✔` lines are drawn as the installer's lines arrive.
    the name. Nothing is said for a skipped one beyond its line.
 8. **Deploy**: `prepareDeploy(deps', { app, server, read })` with the text of step 1, then `send`
    with `flags` the `--app` and `--server` that were typed. The exit status is `send`'s: 0, or 1
-   when the app did not start.
+   when the app did not start. When the app's name was typed as new in step 5, the deploy compares
+   it with the runner's `status`, which it reads on its own connection before anything is signed,
+   and stops with A12 when the runner holds that app (security review S3): see "When it stops in
+   the middle".
 
 ## A second run
 
@@ -136,9 +139,12 @@ edge cases). The `✔` lines are drawn as the installer's lines arrive.
 | Setup done, the runner does not take the new team list (`sync`) | as `zekno server add` leaves it today: the server in the profile; the next deploy carries the team lists | today's sentence, then F9, status 1 |
 | Writing zekno.json fails | key and server | `linkFolder`'s sentence, then F9, status 1 |
 | Storing a value fails | key, server, the values stored before it | `setSecret`'s sentence, then F9, status 1 |
+| The deploy finds that the runner already holds the app whose name was typed as new in step 5 (security review S3) | the key, the server and the values made in this run; nothing signed, recorded or sent. A zekno.json written in step 6 of this run is removed, only while its bytes are still exactly those written, and its record of first use in `links.json` is taken back (a record it replaced is put back), so the next run asks the app's name again | A12, then F9 when the key, a server or a value was made in this run; A12 alone otherwise, and also when zekno.json changed after it was written (it is then left as it is, and running again would deploy the app it names). Status 1 |
 | The deploy is refused or fails | key, server, the values; the deploy number used is recorded as today | as any `zekno deploy` |
 
-F9 is added only when something was made in this run; otherwise the sentence is said alone.
+F9 is added only when something was made in this run; otherwise the sentence is said alone. Step 6
+writes zekno.json only where none applies to the folder (none here or above) and never over one, so
+a run never replaces a zekno.json that was there before it.
 "Made in this run" is any of the key, a server (also one the profile names after a failed
 `sync`), zekno.json, or a value stored: after any of them "Nothing was done." would not be true,
 so leaving says F8.
