@@ -51,6 +51,8 @@ type ValueOpen = { id: number; question: string; name: string; settle(result: { 
  * starts afresh with what is left. `deploy` is a deploy still running, drawn
  * below the lines and redrawn as it goes; once it ends it becomes a line.
  * `step` is work in progress, with a spinner, or `still` without one.
+ * `hold`: raw mode is kept on after a hidden value, until the next question
+ * or anything else (`HeldInput`).
  */
 type State = {
   items: Item[]
@@ -62,6 +64,7 @@ type State = {
   typed?: TypedOpen
   value?: ValueOpen
   deploy?: DeployShown
+  hold?: boolean
 }
 
 /**
@@ -550,6 +553,26 @@ function ValuePrompt({ open }: { open: ValueOpen }) {
   )
 }
 
+/**
+ * How long raw mode is kept on after a hidden value when nothing else comes:
+ * far longer than storing the value and preparing the next one take.
+ */
+const HOLD_MS = 2000
+
+/**
+ * The input between two hidden values of one flow (the first deploy's step
+ * 7): raw mode stays on, so what is typed or pasted before the next prompt
+ * is on the screen is never echoed by the terminal; it is thrown away, as the
+ * next prompt throws away what was typed before it. Ctrl-C still interrupts,
+ * as the terminal itself would make it do with raw mode off.
+ */
+function HeldInput({ interrupt }: { interrupt(): void }) {
+  useInput((input, key) => {
+    if (isCtrlC(input, key)) interrupt()
+  })
+  return null
+}
+
 /** What a key answers to a yes-or-no question: `y` is yes; `n`, Enter, Esc and Ctrl-C are no; anything else, nothing yet. */
 export function yesOrNo(input: string, key: { return?: boolean; escape?: boolean; ctrl?: boolean }): boolean | undefined {
   if (key.ctrl) return input === "c" ? false : undefined
@@ -573,7 +596,7 @@ function QuestionPrompt({ question }: { question: Question }) {
   )
 }
 
-function App({ store }: { store: ReturnType<typeof createStore> }) {
+function App({ store, interrupt }: { store: ReturnType<typeof createStore>; interrupt(): void }) {
   const state = useSyncExternalStore(store.subscribe, store.get)
   const { columns } = useWindowSize()
   // Ink writes Static's new items to the terminal as the commit ends, before this runs.
@@ -594,6 +617,8 @@ function App({ store }: { store: ReturnType<typeof createStore> }) {
         <ListPrompt key={`list-${state.list.id}`} question={state.list.question} rows={state.list.rows} settle={state.list.settle} />
       ) : state.typed ? (
         <TypedPrompt key={`typed-${state.typed.id}`} question={state.typed.question} fill={state.typed.fill} check={state.typed.check} settle={state.typed.settle} />
+      ) : state.hold ? (
+        <HeldInput interrupt={interrupt} />
       ) : state.step?.still ? (
         <Box marginLeft={2}>
           <Text>{state.step.label}…</Text>
@@ -617,9 +642,45 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
   // Ink is not left to act on Ctrl-C: it would close the interface and leave the
   // command waiting for an answer that never comes. While the prompt is open
   // the prompt cancels the command; the rest of the time the terminal turns
-  // Ctrl-C into the usual interrupt.
-  const app = render(<App store={store} />, { ...streams, exitOnCtrlC: false })
-  const add = store.add
+  // Ctrl-C into the usual interrupt, or `HeldInput` sends that interrupt itself
+  // while raw mode is kept on between two hidden values.
+  const app = render(<App store={store} interrupt={() => interrupt()} />, { ...streams, exitOnCtrlC: false })
+  // Raw mode kept on after a hidden value (`HeldInput`): until the next question, anything else, or HOLD_MS.
+  let holding: ReturnType<typeof setTimeout> | undefined
+  /** Lets go of raw mode kept on after a hidden value; Ink turns it off once nothing reads keys. */
+  const release = () => {
+    if (holding === undefined) return
+    clearTimeout(holding)
+    holding = undefined
+    store.set({ hold: false })
+  }
+  /** Keeps raw mode on after a hidden value, in the same update that takes the prompt away, so it never goes off between them. */
+  const keepAfter = (next: Partial<State>) => {
+    clearTimeout(holding)
+    holding = setTimeout(release, HOLD_MS)
+    store.set({ ...next, hold: true })
+  }
+  /** Opens a question in place of anything held, in one update, so raw mode stays on from one to the next. */
+  const showQuestion = (next: Partial<State>) => {
+    clearTimeout(holding)
+    holding = undefined
+    store.set({ ...next, hold: false })
+  }
+  /** Ctrl-C while raw mode is held: raw mode off, then the interrupt the terminal would have sent. */
+  function interrupt() {
+    release()
+    try {
+      input.setRawMode(false)
+    } catch {
+      // The terminal went away. There is nothing left to put back.
+    }
+    process.kill(process.pid, "SIGINT")
+  }
+  // Anything drawn but a hidden value's own line ends what is held.
+  const add = (item: Record<string, unknown>) => {
+    if (item.kind !== "hidden") release()
+    store.add(item)
+  }
   // The service column grows to the longest name seen so far, up to a bound, so lines stay aligned.
   let serviceWidth = 0
   // Each question is drawn as a new one, so nothing of the one before (a selection, an answer so far) carries over.
@@ -652,7 +713,8 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
         )
       })
     } finally {
-      input.setRawMode(false)
+      // Kept on when a hidden value asked to hold it (`keepAfter`); Ink turns it off with the next question gone.
+      if (store.get().hold !== true) input.setRawMode(false)
     }
   }
 
@@ -674,6 +736,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
       if (cells !== undefined && cells.length > 0) add({ kind: "line", cells })
     },
     deploy(start) {
+      release()
       const kept = keptLines()
       // Nothing is drawn until the runner has answered: until then SSH may be asking for a password on this terminal.
       let shown: DeployShown | undefined
@@ -739,6 +802,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
       await app.waitUntilRenderFlush()
     },
     async step(label, work, options) {
+      release()
       // Quiet, it is not animated, so nothing is redrawn over what SSH may write unless a line comes to be drawn above it. Either way it is erased once the work ends.
       store.set({ step: { label, still: options?.quiet === true } })
       try {
@@ -755,7 +819,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
       // typed. What was typed before it is thrown away, so it never becomes
       // part of the value (specs/004-cli-app/security-review.md, "Left").
       return asking<string>((resolve, reject) =>
-        store.set({
+        showQuestion({
           prompt: {
             question,
             settle(result) {
@@ -770,14 +834,18 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
     async askValue(question, name) {
       if (!input.isTTY) throw new CliError(NO_TERMINAL_FOR_VALUE)
       return asking<string | undefined>((resolve, reject) =>
-        store.set({
+        showQuestion({
           value: {
             id: questions++,
             question,
             name,
             settle(result) {
-              store.set({ value: undefined })
-              if (result.kind === "left") return reject(new Left())
+              if (result.kind === "left") {
+                store.set({ value: undefined })
+                return reject(new Left())
+              }
+              // Another hidden value may follow once this one is stored: the terminal must not echo what is typed meanwhile.
+              keepAfter({ value: undefined })
               add(LEFT_BEHIND.askValue(question, result.kind === "skipped"))
               resolve(result.kind === "value" ? result.value : undefined)
             },
@@ -788,7 +856,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
     async confirm(question, refusal, options) {
       if (!input.isTTY) throw new CliError(refusal)
       return asking<boolean>((resolve, reject) =>
-        store.set({
+        showQuestion({
           question: {
             question,
             leave: options?.leave === true,
@@ -805,7 +873,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
     async choose(question) {
       if (!input.isTTY) throw question.missing
       return asking((resolve, reject) =>
-        store.set({
+        showQuestion({
           list: {
             id: questions++,
             question: question.question,
@@ -824,7 +892,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
     async ask(question) {
       if (!input.isTTY) throw question.missing
       return asking<string>((resolve, reject) =>
-        store.set({
+        showQuestion({
           typed: {
             id: questions++,
             question: question.question,
@@ -841,6 +909,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
       )
     },
     async close() {
+      release()
       app.unmount()
       await app.waitUntilExit()
     },

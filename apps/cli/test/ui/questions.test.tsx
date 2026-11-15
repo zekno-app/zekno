@@ -5,7 +5,7 @@
  * what the plain interface does with each: it never asks. Colour is checked in
  * the pseudo-terminal walkthrough, not here.
  */
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
@@ -330,6 +330,91 @@ describe("the hidden prompt that can be skipped (mock-up 3)", () => {
   })
 })
 
+describe("between two hidden values of one flow (security review, 'Echo between the first deploy's hidden prompts')", () => {
+  const A = "Value for A (demo on prod): "
+  const B = "Value for B (demo on prod): "
+  const open = (question: string) => `? ${question}(hidden)   esc skips it`
+
+  test("raw mode stays on from one to the next, so nothing typed between them is echoed; what is typed reaches neither; anything drawn next lets go", async () => {
+    const t = terminal()
+    const first = t.ui.askValue(A, "A")
+    await shows(t, open(A))
+    t.keys("one")
+    await settle()
+    t.keys(ENTER)
+    expect(await first).toBe("one")
+    const after = t.modes.length
+    // The value is stored meanwhile, and the next name prepared: keys typed now, as a paste would come.
+    t.keys("typed-between")
+    await Bun.sleep(150)
+    expect(t.input.isRaw).toBe(true)
+    const second = t.ui.askValue(B, "B")
+    await shows(t, open(B))
+    // Raw mode never went off between the first value and the second prompt.
+    expect(t.modes.slice(after)).not.toContain(false)
+    t.keys("two")
+    await settle()
+    t.keys(ENTER)
+    expect(await second).toBe("two")
+    expect(t.raw()).not.toContain("typed-between")
+    // What the flow draws next ends the hold: raw mode goes off.
+    t.ui.note("Deploying.")
+    await until(() => t.input.isRaw === false, "raw mode off")
+    await t.ui.close()
+  })
+
+  test("with nothing drawn and nothing asked, raw mode goes off on its own; closing lets go too", async () => {
+    const t = terminal()
+    const value = t.ui.askValue(A, "A")
+    await shows(t, open(A))
+    t.keys(ESC)
+    expect(await value).toBeUndefined()
+    expect(t.input.isRaw).toBe(true)
+    await until(() => t.input.isRaw === false, "raw mode off on its own", 4000)
+    const again = t.ui.askValue(B, "B")
+    await shows(t, open(B))
+    t.keys(ESC)
+    await again
+    await t.ui.close()
+    expect(t.input.isRaw).toBe(false)
+  })
+
+  test("Ctrl-C between them: raw mode off, then the interrupt the terminal would have sent", async () => {
+    const kill = spyOn(process, "kill").mockImplementation(() => true)
+    try {
+      const t = terminal()
+      const value = t.ui.askValue(A, "A")
+      await shows(t, open(A))
+      t.keys(ESC)
+      await value
+      t.keys(CTRL_C)
+      await until(() => kill.mock.calls.length > 0, "the interrupt")
+      expect(kill.mock.calls).toEqual([[process.pid, "SIGINT"]])
+      expect(t.input.isRaw).toBe(false)
+      await t.ui.close()
+    } finally {
+      kill.mockRestore()
+    }
+  })
+
+  test("only a hidden value holds raw mode: after a list, a typed answer or a yes-or-no question it goes off as before", async () => {
+    const t = terminal()
+    const chosen = t.ui.choose(whichServer())
+    await shows(t, "? Which server?")
+    t.keys(ENTER)
+    await chosen
+    await settle()
+    expect(t.input.isRaw).toBe(false)
+    const asked = t.ui.confirm("Remember this folder?", "no terminal")
+    await shows(t, "? Remember this folder? (y/N)")
+    t.keys("n")
+    await asked
+    await settle()
+    expect(t.input.isRaw).toBe(false)
+    await t.ui.close()
+  })
+})
+
 describe("keys typed before a question is on the screen never answer it (FR-007, feature 004 K12)", () => {
   /**
    * Types `before` while nothing reads it (as while the keychain asks), opens
@@ -351,6 +436,8 @@ describe("keys typed before a question is on the screen never answer it (FR-007,
       await settle()
     }
     const answer = await asked
+    // Whatever the flow does next: raw mode is off once it moves on, also after a hidden value, which holds it until then.
+    t.ui.note("what comes next")
     await settle()
     const raw = t.input.isRaw
     const screen = t.raw()
