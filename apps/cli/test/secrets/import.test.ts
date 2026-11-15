@@ -588,6 +588,48 @@ describe("an import file that is a link (security review S4, specs/008-cli-decis
     expect((await listed(m)).filter((line) => line.startsWith("OTHER_PROJECT_TOKEN"))).toEqual(["OTHER_PROJECT_TOKEN\tversion 2"])
   }, 60_000)
 
+  test("a link in a folder of the path (security review S5): config/.env, config a link to a folder elsewhere, is named, in plain output and at a terminal", async () => {
+    const m = await ready()
+    const outside = join(tempDir("outside"), "configs")
+    mkdirSync(outside)
+    const text = `OTHER_TOKEN=${secret("other")}\n`
+    writeFileSync(join(outside, ".env"), text)
+    symlinkSync(outside, join(m.project, "config"))
+    const real = realpathSync(join(outside, ".env"))
+    const [out, err] = [m.out.length, m.err.length]
+    expect(await m.zekno("secret", "import", "config/.env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(m.out.slice(out)).toEqual([
+      `config/.env (a link to ${real}), for web on dev`,
+      "new\tOTHER_TOKEN",
+      "Stored 1 value for web on dev. It takes effect on the next deploy.",
+      "config/.env still holds it in plain text. Delete it, or keep it out of git.",
+    ])
+    expect(m.err.slice(err)).toEqual([])
+
+    const plain = m.deps.ui
+    const t = terminal(300)
+    m.deps.ui = t.ui
+    const done = m.zekno("secret", "import", "config/.env", "--app", "web", "--server", "dev").finally(() => (m.deps.ui = plain))
+    await shows(t, "? Store 1 value? Values are never shown. (y/N)", 20_000)
+    expect(t.screen().slice(0, 3)).toEqual([`  config/.env (a link to ${real}), for web on dev`, "", "  replaces    OTHER_TOKEN"])
+    t.keys("y")
+    expect(await done).toBe(0)
+    await t.ui.close()
+    expect(t.lines().at(-1)).toBe("  config/.env still holds it in plain text. Delete it, or keep it out of git.")
+    for (const where of [m.out, m.err, [t.raw()]]) expect(where.filter((line) => line.includes(SENTINEL))).toEqual([])
+    expect(holding(m.home)).toEqual([])
+    expect(readFileSync(join(outside, ".env"), "utf8")).toBe(text)
+  }, 60_000)
+
+  test("a regular file in a regular folder names nothing, also when the project folder is under a link the system keeps (macOS's /var)", async () => {
+    const m = await ready()
+    mkdirSync(join(m.project, "env"))
+    writeFileSync(join(m.project, "env", "dev.env"), `ONE=${secret("one")}\n`)
+    const out = m.out.length
+    expect(await m.zekno("secret", "import", "env/dev.env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(m.out[out]).toBe("env/dev.env, for web on dev")
+  }, 60_000)
+
   test("the real path is cleaned as every shown path is: a folder named with an escape sequence draws none", async () => {
     const { m, real } = await linked("ev\x1b]52;c;ZXZpbA==\x07il\x1b[2J")
     expect(real).toContain("\x1b")

@@ -1,5 +1,3 @@
-import { resolve } from "node:path"
-
 import type { Deps } from "../cli/context"
 import { CliError, Left, UsageError } from "../cli/errors"
 import { listSecrets, prepareSecretImport, prepareSecretSet, removeSecret, setSecret, storeSecrets, type ImportPlan, type Where } from "../ops/secret"
@@ -65,7 +63,7 @@ export type ImportRead = { file: string; entries: ImportEntry[]; linkedTo?: stri
 export function readImport(cwd: string, file: string | undefined): ImportRead {
   if (!file) throw new UsageError(SAY_WHICH_FILE)
   const shown = sanitize(file)
-  const read = readImportFileAndLink(resolve(cwd, file), shown)
+  const read = readImportFileAndLink(file, shown, cwd)
   const parsed = parseImport(read.text)
   if (!("entries" in parsed)) throw importError(shown, parsed)
   return read.linkedTo === undefined ? { file: shown, entries: parsed.entries } : { file: shown, entries: parsed.entries, linkedTo: sanitize(read.linkedTo) }

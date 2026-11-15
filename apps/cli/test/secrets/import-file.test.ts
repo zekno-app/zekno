@@ -6,7 +6,7 @@
  * wrong line, and the error it becomes never holds it.
  */
 import { describe, expect, test } from "bun:test"
-import { closeSync, fstatSync, mkdirSync, openSync, realpathSync, symlinkSync, truncateSync, writeFileSync } from "node:fs"
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, realpathSync, symlinkSync, truncateSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { tempDir } from "../../../runner/test/support/helpers"
@@ -18,6 +18,7 @@ import {
   parseImport,
   readImportFile,
   readImportFileAndLink,
+  typedParts,
   whereLinkLeads,
   type ImportFailure,
   type ImportReason,
@@ -279,19 +280,67 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
     const outside = tempDir("outside")
     const target = join(outside, "other.env")
     writeFileSync(target, "OTHER=yes\n")
-    const link = join(folder, "outside-link.env")
-    symlinkSync(target, link)
-    expect(readImportFileAndLink(link, "outside-link.env")).toEqual({ text: "OTHER=yes\n", linkedTo: realpathSync(target) })
+    symlinkSync(target, join(folder, "outside-link.env"))
+    // Each path as typed, from the command's folder.
+    expect(readImportFileAndLink("outside-link.env", "outside-link.env", folder)).toEqual({ text: "OTHER=yes\n", linkedTo: realpathSync(target) })
     // A link to a link: the real path of the file at the end.
-    const twice = join(folder, "twice.env")
-    symlinkSync(link, twice)
-    expect(readImportFileAndLink(twice, "twice.env")).toEqual({ text: "OTHER=yes\n", linkedTo: realpathSync(target) })
+    symlinkSync(join(folder, "outside-link.env"), join(folder, "twice.env"))
+    expect(readImportFileAndLink("twice.env", "twice.env", folder)).toEqual({ text: "OTHER=yes\n", linkedTo: realpathSync(target) })
     // A relative link, as git checks one out.
-    const relative = join(folder, "relative.env")
-    symlinkSync("good.env", relative)
+    symlinkSync("good.env", join(folder, "relative.env"))
     at("good.env", "A=1\n")
-    expect(readImportFileAndLink(relative, "relative.env")).toEqual({ text: "A=1\n", linkedTo: realpathSync(join(folder, "good.env")) })
-    expect(readImportFileAndLink(at("plain.env", "A=1\n"), "plain.env")).toEqual({ text: "A=1\n" })
+    expect(readImportFileAndLink("relative.env", "relative.env", folder)).toEqual({ text: "A=1\n", linkedTo: realpathSync(join(folder, "good.env")) })
+    at("plain.env", "A=1\n")
+    expect(readImportFileAndLink("plain.env", "plain.env", folder)).toEqual({ text: "A=1\n" })
+  })
+
+  test("a link in a folder of the path is named too (security review S5); a `..`, and the folders above where the path starts, are not looked at", () => {
+    at("plain.env", "A=1\n")
+    const outside = join(tempDir("outside"), "configs")
+    mkdirSync(outside)
+    writeFileSync(join(outside, ".env"), "OTHER=yes\n")
+    const real = realpathSync(join(outside, ".env"))
+    // `config` is a link to a folder elsewhere; the file in it is not a link.
+    symlinkSync(outside, join(folder, "config"))
+    expect(readImportFileAndLink("config/.env", "config/.env", folder)).toEqual({ text: "OTHER=yes\n", linkedTo: real })
+    // Deeper: a real folder, then a link to a folder.
+    mkdirSync(join(folder, "deep"))
+    symlinkSync(outside, join(folder, "deep", "inner"))
+    expect(readImportFileAndLink("deep/inner/.env", "deep/inner/.env", folder)).toEqual({ text: "OTHER=yes\n", linkedTo: real })
+    // The same file by an absolute path through the link.
+    expect(readImportFileAndLink(join(realpathSync(folder), "config", ".env"), "shown", "/")).toEqual({ text: "OTHER=yes\n", linkedTo: real })
+    // `config/../plain.env` is cleaned to `plain.env` before it is opened, so the link is never passed through.
+    expect(readImportFileAndLink("config/../plain.env", "shown", folder)).toEqual({ text: "A=1\n" })
+    // From a folder below, `../plain.env`: a `..` holds no link of its own.
+    mkdirSync(join(folder, "below"))
+    expect(readImportFileAndLink("../plain.env", "shown", join(folder, "below"))).toEqual({ text: "A=1\n" })
+    // An absolute path whose folders hold no link names nothing.
+    expect(readImportFileAndLink(join(realpathSync(folder), "plain.env"), "shown", "/")).toEqual({ text: "A=1\n" })
+    // An absolute path through a link the system keeps (on macOS the temporary folders are under /var, a link to
+    // /private/var) is named: the person typed that folder. A relative path from such a folder is not: `folder` is
+    // one, and `plain.env` above was not named.
+    const system = realpathSync(folder) !== folder
+    expect(readImportFileAndLink(join(folder, "plain.env"), "shown", "/")).toEqual(system ? { text: "A=1\n", linkedTo: realpathSync(join(folder, "plain.env")) } : { text: "A=1\n" })
+  })
+
+  test("a name typed in another letter case than the disk keeps is no link, where the file system ignores case", () => {
+    at("plain.env", "A=1\n")
+    mkdirSync(join(folder, "Folder"))
+    writeFileSync(join(folder, "Folder", "case.env"), "A=1\n")
+    if (!existsSync(join(folder, "folder", "CASE.ENV"))) return
+    // realpath gives the disk's own case (Folder/case.env); no name is compared as text, so nothing is named.
+    expect(realpathSync(join(folder, "folder", "CASE.ENV"))).toBe(join(realpathSync(folder), "Folder", "case.env"))
+    expect(readImportFileAndLink("folder/CASE.ENV", "shown", folder)).toEqual({ text: "A=1\n" })
+  })
+
+  test("typedParts: where the path as typed starts, and its parts", () => {
+    expect(typedParts("/a/b", "c/d")).toEqual({ from: "/a/b", parts: ["c", "d"] })
+    expect(typedParts("/a/b", "../c/d")).toEqual({ from: "/a", parts: ["c", "d"] })
+    expect(typedParts("/a/b", "c/../d")).toEqual({ from: "/a/b", parts: ["d"] })
+    expect(typedParts("/a/b", "./c//d/")).toEqual({ from: "/a/b", parts: ["c", "d"] })
+    expect(typedParts("/a/b", "../../../x")).toEqual({ from: "/", parts: ["x"] })
+    expect(typedParts("/a/b", "/x/y")).toEqual({ from: "/", parts: ["x", "y"] })
+    expect(typedParts("/a/b", "/x/../y")).toEqual({ from: "/", parts: ["y"] })
   })
 
   test("a link to something that is not a regular file is refused as before: a folder and a pipe are I20, a link to nothing I19", () => {
@@ -322,12 +371,16 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
     }
     const link = join(folder, "swapped.env")
     symlinkSync(a, link)
-    expect(whereLinkLeads(link, opened(a))).toBe(realpathSync(a))
-    expect(whereLinkLeads(a, opened(a))).toBeUndefined()
+    expect(whereLinkLeads(folder, "swapped.env", opened(a))).toBe(realpathSync(a))
+    expect(whereLinkLeads(folder, "first.env", opened(a))).toBeUndefined()
     // The link now leads to the second file, while the first is the one open: no name is given.
-    expect(() => whereLinkLeads(link, opened(b))).toThrow("The link leads to another file than the one opened.")
+    expect(() => whereLinkLeads(folder, "swapped.env", opened(b))).toThrow("The link leads to another file than the one opened.")
     // The path is now another regular file than the one open.
-    expect(() => whereLinkLeads(b, opened(a))).toThrow("The path names another file than the one opened.")
+    expect(() => whereLinkLeads(folder, "second.env", opened(a))).toThrow("The path names another file than the one opened.")
+    // A folder link that now leads elsewhere: the same.
+    symlinkSync(folder, join(folder, "here"))
+    expect(whereLinkLeads(folder, "here/first.env", opened(a))).toBe(realpathSync(a))
+    expect(() => whereLinkLeads(folder, "here/second.env", opened(a))).toThrow("The link leads to another file than the one opened.")
   })
 
   test("a link changed over and over while it is read: each read names the file whose text it gives, or stops as unreadable", async () => {
@@ -352,7 +405,7 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
     const started = Date.now()
     while (Date.now() - started < 1000) {
       try {
-        const read = readImportFileAndLink(link, "race.env")
+        const read = readImportFileAndLink("race.env", "race.env", folder)
         expect(read.linkedTo).toBeDefined()
         expect(named[read.linkedTo!]).toBe(read.text)
         outcomes.add("named")
