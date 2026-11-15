@@ -6,15 +6,19 @@
  * the pseudo-terminal walkthrough, not here.
  */
 import { describe, expect, test } from "bun:test"
+import { mkdirSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
 
+import runnerPackage from "../../../runner/package.json"
 import { tempDir } from "../../../runner/test/helpers"
 import { run } from "../../src/cli"
 import { Left, NOTHING_DONE } from "../../src/errors"
 import { inkUi } from "../../src/ui/ink"
 import { plainUi } from "../../src/ui/plain"
 import type { ListRow } from "../../src/ui/types"
-import { machine, screenOf } from "../helpers"
+import { COMPOSE_V1, machine, screenOf } from "../helpers"
+import { realRunner, sshStandIn, standInServer, withSsh } from "../stand-in-server"
 import { shows, terminal, until } from "./terminal"
 
 const UP = "\x1b[A"
@@ -504,4 +508,103 @@ describe("the plain interface never asks (contracts/questions.md, 'The plain int
     expect(out).toEqual(["Using prod, your only server.", "Team code: J4QF-AM29", "Identifies your team.", "new\tA, B", "left out\tPATH (zekno keeps this name)"])
     expect(err).toEqual([])
   })
+})
+
+describe("mock-ups 1 and 2 through the commands", () => {
+  const RUNNING = '{"Service":"web","State":"running","ExitCode":0,"Health":""}\n'
+
+  /** A team with prod, a server over the stand-in `ssh` at deploy@203.0.113.7, and, unless `only`, staging on this machine. */
+  async function servers(options: { only?: boolean } = {}) {
+    const m = machine()
+    expect(await m.zekno("init", "--name", "Ada")).toBe(0)
+    const server = standInServer()
+    m.deps.release = { version: runnerPackage.version, files: { "linux-x64": { sha256: server.release(realRunner(m.docker.path)) }, "linux-arm64": { sha256: null } } }
+    const ssh = sshStandIn(server)
+    await withSsh(ssh, async () => expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@203.0.113.7")).toBe(0))
+    if (!options.only) expect(await m.zekno("server", "add", "staging", "--local", "--home", tempDir("staging"))).toBe(0)
+    const plain = m.deps.ui
+    return {
+      m,
+      ssh,
+      /** Runs `zekno <args>` on the stand-in terminal, with `ssh` meaning the stand-in. */
+      start(t: ReturnType<typeof terminal>, ...args: string[]) {
+        m.deps.ui = t.ui
+        return withSsh(ssh, () => m.zekno(...args)).finally(() => (m.deps.ui = plain))
+      },
+    }
+  }
+
+  test("zekno status with two servers: mock-up 1; Enter collapses it to ✔ Server  prod and the status follows; Esc ends with ✖ Nothing was done.", async () => {
+    const s = await servers()
+    const t = terminal()
+    const done = s.start(t, "status")
+    await shows(t, "? Which server?", 20_000)
+    expect(t.lines()).toEqual(MOCK_UP_1)
+    t.keys(ENTER)
+    expect(await done).toBe(0)
+    await t.ui.close()
+    const after = t.lines()
+    expect(after[0]).toBe("✔ Server  prod")
+    // prod's runner holds the list from before staging was added: status says so, as it always does.
+    expect(after[1]).toMatch(/^prod ● reachable team list v\d+/)
+    expect(after).not.toContain("? Which server?")
+
+    const left = terminal()
+    const leaving = s.start(left, "status")
+    await shows(left, "? Which server?", 20_000)
+    left.keys(ESC)
+    expect(await leaving).toBe(1)
+    await left.ui.close()
+    expect(left.lines()).toEqual(["✖ Nothing was done."])
+  }, 60_000)
+
+  test("zekno status with one server: it is used and said, and no list is drawn", async () => {
+    const s = await servers({ only: true })
+    const t = terminal()
+    expect(await s.start(t, "status")).toBe(0)
+    await t.ui.close()
+    expect(t.lines()[0]).toBe("  Using prod, your only server.")
+    expect(t.raw()).not.toContain("Which server?")
+  }, 60_000)
+
+  test("zekno logs and zekno deploy with --server prod: mock-up 2's rows, + a new app for deploy only, its name with the folder's filled in", async () => {
+    const s = await servers()
+    s.m.compose(COMPOSE_V1)
+    // api first and demo last, so this machine's latest deploy, demo, comes first, as in mock-up 2.
+    await withSsh(s.ssh, async () => {
+      for (let deploy = 0; deploy < 12; deploy++) expect(await s.m.zekno("deploy", "--app", "api", "--server", "prod")).toBe(0)
+      for (let deploy = 0; deploy < 4; deploy++) expect(await s.m.zekno("deploy", "--app", "demo", "--server", "prod")).toBe(0)
+    })
+    s.m.docker.ps("demo", RUNNING)
+    s.m.docker.ps("api", RUNNING)
+    const rows = ["  ❯ demo       deploy 4, running", "    api        deploy 12, running"]
+
+    const logs = terminal()
+    const following = s.start(logs, "logs", "--server", "prod", "--no-follow")
+    await shows(logs, "? Which app on prod?", 20_000)
+    expect(logs.lines()).toEqual(["? Which app on prod?", ...rows, "  ↑↓ move   enter choose   esc leave"])
+    logs.keys(ENTER)
+    expect(await following).toBe(0)
+    await logs.ui.close()
+    expect(logs.lines()[0]).toBe("✔ App  demo")
+
+    const folder = join(tempDir("folders"), "my-folder")
+    mkdirSync(folder)
+    writeFileSync(join(folder, "compose.yaml"), COMPOSE_V1)
+    s.m.deps.cwd = folder
+    const deploy = terminal()
+    const deploying = s.start(deploy, "deploy", "--server", "prod")
+    await shows(deploy, "? Which app on prod?", 20_000)
+    expect(deploy.lines()).toEqual(["? Which app on prod?", ...rows, "    + a new app", "  ↑↓ move   enter choose   esc leave"])
+    deploy.keys(DOWN)
+    await shows(deploy, "    api        deploy 12, running")
+    deploy.keys(DOWN)
+    await shows(deploy, "  ❯ + a new app")
+    deploy.keys(ENTER)
+    await shows(deploy, "? Name for the new app › my-folder")
+    deploy.keys(ESC)
+    expect(await deploying).toBe(1)
+    await deploy.ui.close()
+    expect(deploy.lines().at(-1)).toBe("✖ Nothing was done.")
+  }, 60_000)
 })

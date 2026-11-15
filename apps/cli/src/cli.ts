@@ -1,19 +1,23 @@
 import { CoreError, LIMITS, SECRET_NAME } from "@workspace/core"
 import { parseArgs } from "node:util"
 
+import { NO_TEAM_AT_TERMINAL, whichApp, whichServer } from "./asking/asking"
 import { deployAtTerminal } from "./asking/first-deploy"
 import { deploy, rollback } from "./commands/deploy"
 import { init } from "./commands/init"
 import { link } from "./commands/link"
-import { logs } from "./commands/logs"
+import { logs, parseTail } from "./commands/logs"
 import { secretList, secretRemove, secretSet } from "./commands/secret"
 import { serverAdd, serverList, serverUpdate } from "./commands/server"
 import { status } from "./commands/status"
 import { teamOnce, type Deps } from "./context"
 import { CliError, UsageError } from "./errors"
-import { checkNewest, NEWEST, newerExists, NOT_CHECKED } from "./version/newest"
-import { withProject } from "./project"
+import { checkTo } from "./ops/deploy"
+import { checkSecretName, sayWhichSecret } from "./ops/secret"
+import { profileStore } from "./profile"
+import { alreadyLinked, findProject, isHere, notSignedHere, standingOf, withProject, type ProjectLink } from "./project"
 import { RUNNER_RELEASE } from "./runner-release"
+import { checkNewest, NEWEST, newerExists, NOT_CHECKED } from "./version/newest"
 import { versionCells, versionLines, versionObject } from "./version/version"
 
 export const HELP = `zekno: deploy to your own servers. Secrets are encrypted and deploys are signed on this machine.
@@ -35,7 +39,8 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno version [--json]
   zekno --version [--json]
 
-In a folder linked with \`zekno link\`, --app, --server and -f come from its zekno.json. Flags win over it.`
+In a folder linked with \`zekno link\`, --app, --server and -f come from its zekno.json. Flags win over it.
+At a terminal a command asks for a server or an app it was not given, and \`zekno deploy\` sets up what a first deploy needs. In a script it asks nothing.`
 
 /** How many words each command takes, counting its own name. */
 const WORDS: Record<string, number> = {
@@ -62,6 +67,18 @@ const WORDS: Record<string, number> = {
 export function valueAsArgument(name: string | undefined): string {
   const shown = name !== undefined && SECRET_NAME.test(name) && name.length <= LIMITS.secretNameLength ? name : "<NAME>"
   return `A secret value is never given as an argument. It would stay in your shell history. Run \`zekno secret set ${shown}\` and type it when asked.`
+}
+
+/** The commands that work without a team, or make one: at a terminal every other command with no team says A3. */
+const WITHOUT_TEAM = new Set(["init", "deploy", "doctor", "version"])
+
+/** The project file that applies to `cwd`, or undefined, also when it cannot be read: for a check that may only stop a command early. */
+function readableProject(cwd: string): ProjectLink | undefined {
+  try {
+    return findProject(cwd)
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -131,13 +148,70 @@ export async function run(argv: string[], given: Deps): Promise<number> {
       return 0
     }
 
+    // At a terminal a command asks for a server or an app it was not given (specs/006-cli-small-features, contracts/questions.md,
+    // plan.md "What each command asks"). Where nobody can answer, `asks` is false and every command takes the path it always took.
+    const atTerminal = deps.ui.asks
+
     // Details not given as flags come from the project file, when it is signed by the team and in use here (contracts/commands.md). Flags win.
+    // At a terminal a file not signed by the team is named and left aside, and the command asks instead (research R6).
     const project = (wanted: Parameters<typeof withProject>[2]) =>
       withProject(deps.cwd, values, wanted, {
         profile: deps.home,
         trust: team.trust,
         confirm: (question, refusal) => deps.ui.confirm(question, refusal),
+        ...(atTerminal ? { leaveAside: (sentence: string) => deps.ui.warn(sentence) } : {}),
       })
+
+    /**
+     * The details a command acts on: the flags, then the project file, then,
+     * at a terminal, a question for each one still missing, the server first
+     * (`whichServer`: the one server is used and said) and then the app
+     * (`whichApp`, the server's apps). What is asked is handed on as if it
+     * had been typed. Given everything, nothing is read and nothing is asked.
+     */
+    const details = async (wanted: readonly ("app" | "server")[]) => {
+      const given = await project(wanted)
+      if (!atTerminal || wanted.every((detail) => given[detail] !== undefined)) return given
+      const opened = await team.peek()
+      const { server } = await whichServer(deps, opened, given)
+      if (!wanted.includes("app")) return { ...given, server: server.name }
+      const linked = given.app !== undefined && values.app === undefined
+      const { app } = await whichApp(deps, opened, server, { app: given.app, linked }, { offerNew: false, folder: deps.cwd })
+      return { ...given, server: server.name, app }
+    }
+
+    /**
+     * What `zekno link` acts on at a terminal: it asks for the server and the
+     * app only when no zekno.json applies here, or the one that applies is
+     * not signed by the team (named first, and never used). A file signed by
+     * the team is recorded as it always was, after the first-use question.
+     */
+    const linkDetails = async () => {
+      if (values.app !== undefined && values.server !== undefined) return values
+      const found = findProject(deps.cwd)
+      if (found && standingOf(found, await team.trust(), deps.home).kind !== "unsigned") return values
+      if (found) deps.ui.warn(notSignedHere(found, deps.cwd))
+      const opened = await team.peek()
+      const { server } = await whichServer(deps, opened, { server: values.server })
+      const { app } = await whichApp(deps, opened, server, { app: values.app }, { offerNew: false, folder: deps.cwd })
+      return { ...values, server: server.name, app }
+    }
+
+    if (atTerminal && Object.hasOwn(WORDS, name) && !WITHOUT_TEAM.has(name)) {
+      // With no team, the way to make one: `zekno deploy` makes it from nothing (A3).
+      if (!profileStore(deps.home).exists()) throw new CliError(NO_TEAM_AT_TERMINAL)
+      // What needs no answer is checked before any question (research R1). Only the order of failures at a terminal changes.
+      if (name === "secret set") checkSecretName(third)
+      if (name === "secret rm" && !third) throw new UsageError(sayWhichSecret("rm"))
+      if (name === "rollback") checkTo(values.to)
+      if (name === "logs") parseTail(values.tail)
+      if (name === "link" && !values.force) {
+        // Linking would have to replace a file here that is not the team's, which only `--force` does: said before anything is asked.
+        const here = readableProject(deps.cwd)
+        if (here && isHere(here, deps.cwd) && standingOf(here, await team.trust(), deps.home).kind === "unsigned") throw new CliError(alreadyLinked(deps.cwd))
+      }
+    }
+
     switch (name) {
       case "init":
         await init(deps, values)
@@ -146,34 +220,35 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         await serverAdd(deps, third, values)
         return 0
       case "server update":
-        await serverUpdate(deps, third, values)
+        // The positional name is the server: at a terminal it is asked for when missing, the one server used and said.
+        await serverUpdate(deps, atTerminal && third === undefined ? (await whichServer(deps, await team.peek(), {})).server.name : third, values)
         return 0
       case "server ls":
         await serverList(deps)
         return 0
       case "secret set":
-        await secretSet(deps, third, await project(["app", "server"]))
+        await secretSet(deps, third, await details(["app", "server"]))
         return 0
       case "secret rm":
-        await secretRemove(deps, third, await project(["app", "server"]))
+        await secretRemove(deps, third, await details(["app", "server"]))
         return 0
       case "secret ls":
-        await secretList(deps, await project(["app", "server"]))
+        await secretList(deps, await details(["app", "server"]))
         return 0
       case "deploy":
         // At a terminal it sets up what is missing and asks for what was not given (contracts/first-deploy.md); in a script it is as it always was.
         if (deps.ui.asks) return await deployAtTerminal(deps, team, { app: values.app, server: values.server, file: values.file })
         return await deploy(deps, { ...(await project(["app", "server", "file"])), typed: { app: values.app, server: values.server } })
       case "rollback":
-        return await rollback(deps, { ...(await project(["app", "server"])), typed: { app: values.app, server: values.server } })
+        return await rollback(deps, { ...(await details(["app", "server"])), typed: { app: values.app, server: values.server } })
       case "status":
-        await status(deps, await project(["server"]))
+        await status(deps, await details(["server"]))
         return 0
       case "logs":
-        await logs(deps, await project(["app", "server"]))
+        await logs(deps, await details(["app", "server"]))
         return 0
       case "link":
-        await link(deps, values)
+        await link(deps, atTerminal ? await linkDetails() : values)
         return 0
       default:
         throw new UsageError(`Unknown command "${positionals.join(" ")}".`)

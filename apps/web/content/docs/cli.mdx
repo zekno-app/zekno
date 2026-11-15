@@ -239,9 +239,29 @@ zekno --version [--json]
 
 `zekno --help`, `zekno -h` and `zekno help` print this list. In a folder
 linked with `zekno link`, `--app`, `--server` and `-f` come from its
-`zekno.json`. Flags win over it. A command that still lacks a detail stops and
-names the flag and the project file. A command never asks a question when
-there is no terminal.
+`zekno.json`. Flags win over it.
+
+At a terminal, a command that still lacks `--server` or `--app` asks for it:
+
+```text
+$ zekno status
+? Which server?
+  ❯ prod       deploy@203.0.113.7
+    staging    this machine
+  ↑↓ move   enter choose   esc leave
+```
+
+It lists your servers, then the apps on the server you chose, read from its
+runner (or, when the runner cannot be reached, the apps your machine deployed
+there). With one server, that server is used and named:
+`Using prod, your only server.` Esc or Ctrl-C leaves the question: nothing is
+done, and the command ends with "Nothing was done." and exit status 1. With no
+team yet, a command other than `zekno init` and `zekno deploy` says to run
+`zekno deploy` in a project folder, or `zekno init --name <you>`.
+
+With no terminal, with `--json`, or with input piped, a command never asks: one
+that still lacks a detail stops and names the flag and the project file, as
+before.
 
 Names of apps and servers are lowercase letters, digits and hyphens, starting
 with a letter or a digit.
@@ -521,7 +541,7 @@ With `--json` the answer is the field `latest`, whose `state` is `newest`,
 | Status | Means |
 | --- | --- |
 | `0` | Success. Also the app when you quit, and `zekno logs` stopped with Ctrl-C or a closed pipe |
-| `1` | Refused or failed, including a deploy whose app did not start |
+| `1` | Refused or failed, including a deploy whose app did not start, and a question left with Esc or Ctrl-C |
 | `2` | Wrong usage, including a `zekno.json` not signed by your team, one not used here yet when there is no terminal to ask on, and `zekno` with no arguments and no terminal |
 
 ### Output
@@ -551,6 +571,10 @@ from the first version:
 Docker's output is not printed during a deploy. On a failed start in plain
 mode, the lines Docker reported are written to standard error after the
 failure sentence.
+
+A script that gives zekno a terminal on both ends (`expect`, `script`,
+`docker run -t`) gets the questions a person gets. Pass `--server` and
+`--app`, or `--json`, or `< /dev/null`, so that nothing waits on a question.
 
 Lines that a runner, Docker or SSH write on standard error are passed on after
 the mark `remote:`, so they cannot pass for the tool's own. One place has no
@@ -619,8 +643,12 @@ Two things must both be true before zekno uses a `zekno.json`:
    > `zekno link --app <name> --server <name> --force`. To leave the file
    > aside, give --app and --server.
 
-   A command stops with exit status 2. The app shows the first two sentences
-   on Home, selects nothing, and `d` deploys nothing.
+   With no terminal a command stops with exit status 2. At a terminal it
+   names the file with its first two sentences, leaves it aside, and asks for
+   the server and the app as if it were not there; `zekno link` without
+   `--force` stops instead, since writing would replace the file. The app
+   shows the first two sentences on Home, selects nothing, and `d` deploys
+   nothing.
 2. **You used it in this folder on your machine before, or you say yes
    once.** A signature proves who wrote a file, not where it is: anyone who
    can read a repository can copy its `zekno.json` into another folder beside

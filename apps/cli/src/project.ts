@@ -603,6 +603,9 @@ export function projectText(link: { app: string; server: string; compose: string
   return text
 }
 
+/** Said when zekno.json would be written over one that is there, without `--force` (A15 of specs/006-cli-small-features). */
+export const alreadyLinked = (folder: string): string => `There is already a ${PROJECT_FILE} in ${shownPath(folder)}. Run \`zekno link --force\` to replace it.`
+
 /** File systems where a hard link cannot be made; writing there checks first, then renames. */
 const NO_HARD_LINKS = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "EMLINK", "ENOSYS"])
 
@@ -618,7 +621,7 @@ export function writeProject(folder: string, link: Parameters<typeof projectText
   const text = projectText(link)
   const path = join(folder, PROJECT_FILE)
   const shown = shownPath(path)
-  const already = new CliError(`There is already a ${PROJECT_FILE} in ${shownPath(folder)}. Run \`zekno link --force\` to replace it.`)
+  const already = new CliError(alreadyLinked(folder))
   const temporary = join(folder, `.${PROJECT_FILE}.${randomBytes(8).toString("hex")}.tmp`)
   try {
     // `wx` refuses a file or link that is already there under this name.

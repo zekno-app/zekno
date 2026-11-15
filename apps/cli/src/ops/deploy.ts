@@ -123,6 +123,15 @@ export async function prepareDeploy(deps: OpDeps, input: DeployInput): Promise<D
 }
 
 /**
+ * `--to`: a deploy number. At a terminal it is checked before any question
+ * (specs/006-cli-small-features, research R1); otherwise `prepareRollback`
+ * checks it once it found the server and the app, as it always has.
+ */
+export function checkTo(to: string | undefined): void {
+  if (to !== undefined && !/^[1-9][0-9]{0,15}$/.test(to)) throw new UsageError("`--to` takes a deploy number, such as `--to 3`.")
+}
+
+/**
  * Picks the earlier deploy to return to: the one before the latest, or
  * `to`. Only deploys the runner answered for count: one that was never
  * accepted is not something to return to. `from` is the number whose
@@ -135,9 +144,7 @@ export async function prepareRollback(
 ): Promise<DeployPlan & { from: number }> {
   const where = await locate(deps, input)
   const { team, server, app } = where
-  if (input.to !== undefined && !/^[1-9][0-9]{0,15}$/.test(input.to)) {
-    throw new UsageError("`--to` takes a deploy number, such as `--to 3`.")
-  }
+  checkTo(input.to)
   const history = team.store.history(server.serverId, app)
   const accepted = sentDeploys(team, server, app, history, callbacks.warning).filter((entry) => entry.outcome !== "sent")
   if (accepted.length === 0) throw new CliError(`${app} has not been deployed to ${server.name} from this machine.`)

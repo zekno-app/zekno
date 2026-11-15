@@ -61,16 +61,29 @@ export type SecretPlan = { team: Team; server: Server; app: string; name: string
 /** The result of setting or removing a secret. It takes effect on the next deploy. */
 export type SecretChange = { name: string; version: number; app: string; server: string }
 
-/** Checks where a secret goes and its name, before anyone is asked for its value. */
-export async function prepareSecretSet(deps: OpDeps, name: string | undefined, where: Where): Promise<SecretPlan> {
-  const { team, server, app, secrets } = await locate(deps, where)
-  if (!name) throw new UsageError("Say which secret: `zekno secret set <NAME> ...`.")
+/** Said when `zekno secret set` or `zekno secret rm` is not given a name. */
+export const sayWhichSecret = (command: "set" | "rm"): string => `Say which secret: \`zekno secret ${command} <NAME> ...\`.`
+
+/**
+ * The name `zekno secret set` stores a value under: given, held to the name
+ * rule and not reserved. At a terminal it is checked before any question
+ * (specs/006-cli-small-features, research R1); otherwise `prepareSecretSet`
+ * checks it once it found where the secret goes, as it always has.
+ */
+export function checkSecretName(name: string | undefined): string {
+  if (!name) throw new UsageError(sayWhichSecret("set"))
   // Checked now, as the core library will check it, so `NAME=value` is refused before a prompt repeats it and asks for more.
   if (!SECRET_NAME.test(name) || name.length > LIMITS.secretNameLength) throw new CliError(BAD_NAME)
   if (isReservedSecretName(name)) {
     throw new CliError(`"${name}" is reserved: the runner uses it to start Docker. Choose another name.`)
   }
-  return { team, server, app, name, secrets }
+  return name
+}
+
+/** Checks where a secret goes and its name, before anyone is asked for its value. */
+export async function prepareSecretSet(deps: OpDeps, name: string | undefined, where: Where): Promise<SecretPlan> {
+  const { team, server, app, secrets } = await locate(deps, where)
+  return { team, server, app, name: checkSecretName(name), secrets }
 }
 
 /** Seals and signs a value and keeps the record. The value goes nowhere else. */
@@ -90,7 +103,7 @@ export async function setSecret(plan: SecretPlan, value: string): Promise<Secret
 /** Signs the removal of a secret the app has now. */
 export async function removeSecret(deps: OpDeps, name: string | undefined, where: Where): Promise<SecretChange> {
   const { team, trust, server, app, secrets } = await locate(deps, where)
-  if (!name) throw new UsageError("Say which secret: `zekno secret rm <NAME> ...`.")
+  if (!name) throw new UsageError(sayWhichSecret("rm"))
   const current = currentSecrets({ trust, serverId: server.serverId, app, ...secrets })
   if (!current.secrets.some((record) => record.sealed.name === name)) {
     throw new CliError(`${app} on ${server.name} has no secret named ${name}.`)
