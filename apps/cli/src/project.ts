@@ -59,7 +59,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { z } from "zod"
 
 import { accept, isAccepted, sha256Of } from "./accepted"
-import { CliError, UsageError } from "./errors"
+import { CliError, NOTHING_DONE, UsageError } from "./errors"
 import { NAME } from "./profile"
 import { sanitize } from "./sanitize"
 
@@ -469,8 +469,8 @@ export function useQuestion(member: string, link: ProjectLink, cwd: string, uses
   return `${linked}${elsewhere} Use it here?`
 }
 
-/** Said when the question is answered no. */
-export const NOTHING_DONE = "Nothing was done."
+/** Said when the question is answered no. It lives in errors.ts, with `Left`, and is kept here for whoever imports it from here. */
+export { NOTHING_DONE } from "./errors"
 
 /**
  * What judging a project file needs, beyond the files: the verified team
@@ -483,6 +483,15 @@ export type ProjectJudge = {
   trust(): Promise<TeamTrust>
   confirm(question: string, refusal: string): Promise<boolean>
 }
+
+/**
+ * What a single command at a terminal adds (specs/006-cli-small-features,
+ * research R6): a file not signed by the team is then named with
+ * `leaveAside(sentence)` and left aside, as if it were not there, and the
+ * command asks for what is missing. Without it such a file stops the command
+ * (S1), as it always has where nobody can answer.
+ */
+export type ProjectAside = { leaveAside?: (sentence: string) => void }
 
 /**
  * The first time a file signed by the team is met in its folder on this
@@ -535,7 +544,7 @@ export async function withProject<T extends Details>(
   cwd: string,
   given: T,
   wanted: readonly (keyof Details)[],
-  places: ProjectPlaces & ProjectJudge
+  places: ProjectPlaces & ProjectJudge & ProjectAside
 ): Promise<T & FromProject> {
   const missing = wanted.filter((detail) => given[detail] === undefined)
   if (missing.length === 0) return given
@@ -555,7 +564,14 @@ export async function withProject<T extends Details>(
     return standingOf(link, await places.trust(), places.profile).kind === "used" ? { ...given, project: link } : given
   }
   const standing = standingOf(link, await places.trust(), places.profile)
-  if (standing.kind === "unsigned") throw new UsageError(notSigned(link))
+  if (standing.kind === "unsigned") {
+    // At a terminal the person names what is missing instead, as `--app` and `--server` would; nothing of the file is used.
+    if (places.leaveAside) {
+      places.leaveAside(notSignedHere(link, cwd))
+      return given
+    }
+    throw new UsageError(notSigned(link))
+  }
   if (standing.kind === "new") {
     // Where the command goes: a typed name wins, and is cleaned for the sentence. One the command does not take changes nothing.
     const uses = { app: wanted.includes("app") ? sanitize(given.app ?? link.app) : link.app, server: sanitize(given.server ?? link.server) }

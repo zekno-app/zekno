@@ -56,6 +56,13 @@ async function inFolder(cwd: string, argv: string[]) {
 
 const NO_TEAM = "No team on this machine yet. Run `zekno init --name <you>` first.\n"
 
+/** What `zekno --version` prints (contracts/version.md), from the two files the versions come from, read here as text. */
+function versionText(): string {
+  const cli = JSON.parse(readFileSync(join(import.meta.dir, "../package.json"), "utf8")) as { version: string }
+  const release = JSON.parse(readFileSync(join(import.meta.dir, "../src/runner-release.json"), "utf8")) as { version: string }
+  return `zekno ${cli.version}\nrunner ${release.version}, the runner release this zekno installs\n`
+}
+
 describe("the compiled zekno reads no configuration from the folder it starts in", () => {
   test("build.ts turns every config file a compiled program could read off", () => {
     const source = readFileSync(BUILD, "utf8")
@@ -84,5 +91,24 @@ describe("the compiled zekno reads no configuration from the folder it starts in
     const run = await inFolder(dir, [process.execPath, MAIN, "server", "ls"])
     expect(run.stderr).toBe(`The profile at ${join(dir, "their-profile", "profile.json")} is not readable.\n`)
     expect(existsSync(marker)).toBe(true)
+  })
+})
+
+describe("the version is built into zekno, never read from the folder it starts in (contracts/version.md, SC-008)", () => {
+  test("compiled and from source, in a folder holding another package.json, --version names apps/cli's own versions", async () => {
+    const dir = tempDir("their-package")
+    writeFileSync(join(dir, "package.json"), '{"name":"theirs","version":"9.9.9"}\n')
+    const compiled = await inFolder(dir, [binary, "--version"])
+    const source = await inFolder(dir, [process.execPath, MAIN, "--version"])
+    expect(compiled).toEqual({ code: 0, stdout: versionText(), stderr: "" })
+    expect(source).toEqual(compiled)
+    expect(compiled.stdout).not.toContain("9.9.9")
+  })
+
+  test("in the hostile folder the compiled zekno's --version prints the same, and the preload never runs", async () => {
+    const { dir, marker } = hostileFolder()
+    const run = await inFolder(dir, [binary, "--version"])
+    expect(run).toEqual({ code: 0, stdout: versionText(), stderr: "" })
+    expect(existsSync(marker)).toBe(false)
   })
 })

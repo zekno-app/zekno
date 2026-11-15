@@ -45,6 +45,9 @@ const MemberNameSchema = z
   .max(LIMITS.memberNameLength)
   .refine((name) => !/[\p{C}\u2028\u2029]/u.test(name) && name === name.trim())
 
+/** Whether `name` may be a member's name: the rule `--name` is held to, for the name a first deploy asks for. */
+export const isMemberName = (name: string): boolean => MemberNameSchema.safeParse(name).success
+
 const ServerSchema = z.strictObject({
   name: z.string().regex(NAME),
   serverId: z.string().regex(/^srv_[0-9a-f]{32}$/),

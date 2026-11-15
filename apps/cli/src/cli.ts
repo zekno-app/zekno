@@ -10,7 +10,11 @@ import { serverAdd, serverList, serverUpdate } from "./commands/server"
 import { status } from "./commands/status"
 import { teamOnce, type Deps } from "./context"
 import { CliError, UsageError } from "./errors"
+import { checkNewest, NEWEST, newerExists, NOT_CHECKED } from "./newest"
 import { withProject } from "./project"
+import { RUNNER_RELEASE } from "./runner-release"
+import { plainCell } from "./ui/types"
+import { versionLines, versionObject } from "./version"
 
 export const HELP = `zekno: deploy to your own servers. Secrets are encrypted and deploys are signed on this machine.
 
@@ -28,6 +32,8 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno status [--server <name>] [--json]
   zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
   zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
+  zekno version [--json]
+  zekno --version [--json]
 
 In a folder linked with \`zekno link\`, --app, --server and -f come from its zekno.json. Flags win over it.`
 
@@ -45,6 +51,7 @@ const WORDS: Record<string, number> = {
   status: 1,
   logs: 1,
   link: 1,
+  version: 1,
 }
 
 /**
@@ -88,10 +95,12 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         force: { type: "boolean" },
         json: { type: "boolean" },
         help: { type: "boolean", short: "h" },
+        version: { type: "boolean" },
       },
     })
     const [command, second, third] = positionals
-    if (values.help || !command || command === "help") {
+    // `--help` wins over everything, `--version` included (contracts/version.md).
+    if (values.help || (!command && !values.version) || command === "help") {
       deps.ui.info(HELP)
       return command || values.help ? 0 : 2
     }
@@ -102,6 +111,22 @@ export async function run(argv: string[], given: Deps): Promise<number> {
     // it would stay in the shell's history and show in the list of processes.
     if (positionals.length > (WORDS[name] ?? Infinity)) {
       throw new UsageError(name === "secret set" ? valueAsArgument(third) : `Unexpected "${positionals[WORDS[name]!]}" after \`zekno ${name}\`.`)
+    }
+
+    // The two versions built into the program, before anything opens the team: no keychain, no profile, no connection, no file.
+    // Only the command `version` then asks GitHub whether a newer release exists; `--version` never uses the network (FR-036).
+    if (values.version || command === "version") {
+      const runner = (deps.release ?? RUNNER_RELEASE).version
+      const latest = command === "version" ? await checkNewest(deps, runner) : undefined
+      if (values.json) {
+        deps.ui.json(latest === undefined ? versionObject(runner) : { ...versionObject(runner), latest })
+        return 0
+      }
+      for (const line of versionLines(runner)) deps.ui.line(line, [plainCell(line)])
+      if (latest?.state === "newest") deps.ui.success(NEWEST)
+      else if (latest?.state === "newer") deps.ui.warn(newerExists(latest.version))
+      else if (latest?.state === "not_checked") deps.ui.note(NOT_CHECKED)
+      return 0
     }
 
     // Details not given as flags come from the project file, when it is signed by the team and in use here (contracts/commands.md). Flags win.

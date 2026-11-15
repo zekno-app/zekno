@@ -83,10 +83,16 @@ type Invocation = { text: string; words: string[]; flags: string[] }
  * `~/.zekno` and `dist/zekno` are other things and are not counted. A
  * placeholder such as `<compose file>` and the brackets around an optional
  * part are read as a value, so that a `<` left over is a redirect.
+ *
+ * `zekno` runs a command only where a command starts: at the start of the
+ * code, after a `$ ` prompt, or after `|`, `;`, `&&` or `(`. Anywhere else it
+ * is a word of zekno's own output, such as `runner 0.1.0, the runner release
+ * this zekno installs` in `zekno version`'s lines (specs/006-cli-small-features,
+ * mock-up 6).
  */
 function invocationsIn(code: string): Invocation[] {
   const plain = code.replace(/<[^<>\n]*>/g, "VALUE").replace(/[[\]]/g, " ")
-  return [...plain.matchAll(/(?:^|[\s(])zekno(?=\s|$)([^|;&<>]*)/g)].map((match) => {
+  return [...plain.matchAll(/(?:^|[|;(]|&&|\$)\s*zekno(?=\s|$)([^|;&<>]*)/g)].map((match) => {
     const tokens = match[1]!.trim() === "" ? [] : match[1]!.trim().split(/\s+/)
     const words: string[] = []
     for (const token of tokens) {
@@ -139,6 +145,8 @@ async function runAlone(argv: string[]): Promise<{ code: number; out: string[] }
 const COMMANDS = commandsOf(HELP)
 const FLAGS = [...new Set([...COMMANDS.values()].flatMap((flags) => [...flags]))]
 const KEYS = keyColumn(read(CONTRACT))
+/** The flags `zekno` alone may take: the help's own, and those of a usage line with no command words, such as `zekno --version [--json]`. */
+const ALONE_FLAGS = [...HELP_FLAGS, ...(COMMANDS.get("") ?? [])]
 
 describe("what the docs are checked against", () => {
   test("the help lists the commands and flags, and the contract its keys", () => {
@@ -178,8 +186,8 @@ describe.each(DOCS)("%s", (file) => {
     const wrong: string[] = []
     for (const invocation of codeOf(text).flatMap(invocationsIn)) {
       if (invocation.words.length === 0 || (invocation.words.length === 1 && invocation.words[0] === HELP_WORD)) {
-        // `zekno` alone opens the app; with only a help flag, or as `zekno help`, it prints the help.
-        const extra = invocation.flags.filter((flag) => !HELP_FLAGS.includes(flag))
+        // `zekno` alone opens the app; with only a help flag, or as `zekno help`, it prints the help; `zekno --version` prints the versions.
+        const extra = invocation.flags.filter((flag) => !ALONE_FLAGS.includes(flag))
         if (extra.length > 0) wrong.push(`${file} names \`${invocation.text}\`, but ${extra.join(", ")} is not a flag of \`zekno\` alone`)
         continue
       }

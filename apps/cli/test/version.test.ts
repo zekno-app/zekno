@@ -1,0 +1,295 @@
+/**
+ * `zekno --version` and `zekno version` (specs/006-cli-small-features,
+ * contracts/version.md, FR-031, mock-up 6): the CLI's own version and the
+ * runner release it installs, with no key, no profile and no terminal.
+ */
+import { describe, expect, test } from "bun:test"
+import { RUNNER_VERSION_PATTERN } from "@workspace/core"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { PassThrough, Writable } from "node:stream"
+
+import { tempDir } from "../../runner/test/helpers"
+import { HELP, run } from "../src/cli"
+import type { Deps } from "../src/context"
+import type { Fetch } from "../src/newest"
+import { RUNNER_RELEASE } from "../src/runner-release"
+import { inkUi } from "../src/ui/ink"
+import { plainUi } from "../src/ui/plain"
+import { CLI_VERSION } from "../src/version"
+import { ready, screenOf } from "./helpers"
+
+const PACKAGE = join(import.meta.dir, "../package.json")
+
+/** The two lines of mock-up 6. */
+const LINES = [`zekno ${CLI_VERSION}`, `runner ${RUNNER_RELEASE.version}, the runner release this zekno installs`]
+
+/** A machine with nothing on it: no profile, a keychain that must not be read, and no server to reach. */
+function bare(fetch?: Fetch) {
+  const out: string[] = []
+  const err: string[] = []
+  const untouchable = () => {
+    throw new Error("the keychain was read")
+  }
+  const deps: Deps = {
+    home: tempDir("no-profile"),
+    cwd: tempDir("folder"),
+    keyStore: { get: untouchable, set: untouchable, delete: untouchable },
+    connect: () => {
+      throw new Error("a connection was made")
+    },
+    ui: plainUi(
+      (line) => out.push(line),
+      (line) => err.push(line)
+    ),
+    localRunner: [],
+    ...(fetch === undefined ? {} : { fetch }),
+  }
+  return { deps, out, err, zekno: (...argv: string[]) => run(argv, deps) }
+}
+
+/** A stand-in for GitHub's answer: a release tag, or a failure. It counts its calls and never reaches the network. */
+function github(tag: string | "fails") {
+  let calls = 0
+  const fetch: Fetch = async () => {
+    calls++
+    if (tag === "fails") throw new TypeError("fetch failed")
+    return new Response(JSON.stringify({ tag_name: tag, prerelease: false, draft: false }), { status: 200 })
+  }
+  return { fetch, calls: () => calls }
+}
+
+/** A fetch that must not be called: it counts its calls, and fails whatever calls it. */
+function forbidden() {
+  let calls = 0
+  const fetch: Fetch = () => {
+    calls++
+    throw new Error("the network was used")
+  }
+  return { fetch, calls: () => calls }
+}
+
+/** The release this zekno carries, pinned to runner 0.1.0 as mock-up 6 draws it, whatever runner-release.json says today. */
+const CARRIED = { ...RUNNER_RELEASE, version: "0.1.0" }
+const LINES_010 = [`zekno ${CLI_VERSION}`, "runner 0.1.0, the runner release this zekno installs"]
+
+/** Draws `zekno <argv>` with the interface a terminal gets, and gives back the lines on the screen. */
+async function drawn(deps: Deps, ...argv: string[]): Promise<{ code: number; lines: string[] }> {
+  let raw = ""
+  const stdout = Object.assign(
+    new Writable({
+      write(chunk, _encoding, done) {
+        raw += String(chunk)
+        done()
+      },
+    }),
+    { columns: 100, rows: 30 }
+  )
+  const ui = inkUi({ stdout: stdout as unknown as NodeJS.WriteStream, stdin: new PassThrough() as unknown as NodeJS.ReadStream })
+  const code = await run(argv, { ...deps, ui })
+  await ui.close()
+  return { code, lines: screenOf(raw).filter(Boolean) }
+}
+
+describe("the version (contracts/version.md)", () => {
+  test("CLI_VERSION is apps/cli/package.json's version, 0.1.0, and fits the version grammar", () => {
+    const version = (JSON.parse(readFileSync(PACKAGE, "utf8")) as { version: string }).version
+    expect(CLI_VERSION).toBe(version)
+    expect(CLI_VERSION).toBe("0.1.0")
+    expect(CLI_VERSION).toMatch(RUNNER_VERSION_PATTERN)
+  })
+
+  test("zekno --version prints the two lines with no profile, no keychain and no connection", async () => {
+    for (const argv of [["--version"], ["status", "--version"]]) {
+      const m = bare()
+      expect(await m.zekno(...argv)).toBe(0)
+      expect(m.out).toEqual(LINES)
+      expect(m.err).toEqual([])
+    }
+  })
+
+  test("with --json: one object on one line", async () => {
+    const m = bare()
+    expect(await m.zekno("--version", "--json")).toBe(0)
+    expect(m.out).toEqual([JSON.stringify({ zekno: CLI_VERSION, runner: RUNNER_RELEASE.version })])
+    expect(m.err).toEqual([])
+  })
+
+  test("--help wins over --version, and nothing may follow `zekno version`", async () => {
+    const help = bare()
+    expect(await help.zekno("--version", "--help")).toBe(0)
+    expect(help.out).toEqual([HELP])
+    const extra = bare()
+    expect(await extra.zekno("version", "extra")).toBe(2)
+    expect(extra.out).toEqual([])
+    expect(extra.err).toEqual(['Unexpected "extra" after `zekno version`.\nRun `zekno --help` for the list of commands.'])
+  })
+
+  test("at a terminal the two lines are drawn from column 0", async () => {
+    expect(await drawn(bare().deps, "--version")).toEqual({ code: 0, lines: LINES })
+  })
+})
+
+describe("zekno version says whether a newer release exists (contracts/version.md, mock-up 6)", () => {
+  test("plain: the two lines, then the newest, a newer release on standard error, or could not check; status 0 and one request each time", async () => {
+    const cases = [
+      { tag: "runner-v0.1.0", out: [...LINES_010, "This is the newest release."], err: [] },
+      { tag: "runner-v0.2.0", out: LINES_010, err: ["A newer release exists: 0.2.0. Update zekno to get it."] },
+      { tag: "fails", out: [...LINES_010, "Could not check for a newer release."], err: [] },
+    ] as const
+    for (const { tag, out, err } of cases) {
+      const answer = github(tag)
+      const m = bare(answer.fetch)
+      m.deps.release = CARRIED
+      expect(await m.zekno("version")).toBe(0)
+      expect({ tag, out: m.out, err: m.err }).toEqual({ tag, out: [...out], err: [...err] })
+      expect(answer.calls()).toBe(1)
+    }
+  })
+
+  test("with --json: one object, the result in latest", async () => {
+    const versions = { zekno: CLI_VERSION, runner: "0.1.0" }
+    const cases = [
+      { tag: "runner-v0.1.0", latest: { state: "newest" } },
+      { tag: "runner-v0.2.0", latest: { state: "newer", version: "0.2.0" } },
+      { tag: "fails", latest: { state: "not_checked" } },
+    ] as const
+    for (const { tag, latest } of cases) {
+      const answer = github(tag)
+      const m = bare(answer.fetch)
+      m.deps.release = CARRIED
+      expect(await m.zekno("version", "--json")).toBe(0)
+      expect(m.out).toEqual([JSON.stringify({ ...versions, latest })])
+      expect(m.err).toEqual([])
+      expect(answer.calls()).toBe(1)
+    }
+  })
+
+  test("hostile answers end as could not check, or as the right line, and the status is 0; nothing of the answer but a version is shown", async () => {
+    const release = (fields: Record<string, unknown>) => new Response(JSON.stringify({ prerelease: false, draft: false, ...fields }), { status: 200 })
+    const moved = (location: string) => new Response(null, { status: 302, headers: { location } })
+    const huge = `{"tag_name":"runner-v99.0.0","pad":"${"x".repeat(262_145)}"}`
+    const cases: { what: string; answer: () => Response; out: string[]; err: string[] }[] = [
+      { what: "a redirect to http", answer: () => moved("http://api.github.com/repos/zekno-app/zekno/releases/latest"), out: [...LINES, "Could not check for a newer release."], err: [] },
+      { what: "a redirect to another host", answer: () => moved("https://evil.example/latest"), out: [...LINES, "Could not check for a newer release."], err: [] },
+      { what: "a body that is not JSON", answer: () => new Response("<html>\x1b[2J</html>", { status: 200 }), out: [...LINES, "Could not check for a newer release."], err: [] },
+      { what: "a body larger than the limit", answer: () => new Response(huge, { status: 200 }), out: [...LINES, "Could not check for a newer release."], err: [] },
+      { what: "a tag that is not runner-v<version>", answer: () => release({ tag_name: "v99.0.0" }), out: [...LINES, "Could not check for a newer release."], err: [] },
+      { what: "a development version", answer: () => release({ tag_name: "runner-v99.0.0-dev.1" }), out: [...LINES, "Could not check for a newer release."], err: [] },
+      { what: "a version older than this zekno's", answer: () => release({ tag_name: "runner-v0.0.1" }), out: [...LINES, "This is the newest release."], err: [] },
+      { what: "a status other than 200", answer: () => new Response("rate limited", { status: 429 }), out: [...LINES, "Could not check for a newer release."], err: [] },
+      {
+        what: "a newer version among hostile fields",
+        answer: () => release({ tag_name: "runner-v99.0.0", name: "\x1b]52;c;ZXZpbA==\x07", body: "\x1b[2J", version: "9.9.9" }),
+        out: LINES,
+        err: ["A newer release exists: 99.0.0. Update zekno to get it."],
+      },
+    ]
+    for (const { what, answer, out, err } of cases) {
+      const m = bare(async () => answer())
+      expect({ what, code: await m.zekno("version"), out: m.out, err: m.err }).toEqual({ what, code: 0, out, err })
+      expect([...m.out, ...m.err].join("\n")).not.toMatch(/[\x00-\x08\x0b-\x1f\x7f]/)
+    }
+  })
+
+  test("with no fetch at all nothing is asked: could not check", async () => {
+    const m = bare()
+    expect(await m.zekno("version")).toBe(0)
+    expect(m.out).toEqual([...LINES, "Could not check for a newer release."])
+  })
+
+  test("zekno --version never uses the network", async () => {
+    for (const argv of [["--version"], ["status", "--version"], ["version", "--version", "--help"]]) {
+      const network = forbidden()
+      const m = bare(network.fetch)
+      expect(await m.zekno(...argv)).toBe(0)
+      expect(m.err).toEqual([])
+      expect(network.calls()).toBe(0)
+    }
+    const network = forbidden()
+    const m = bare(network.fetch)
+    expect(await m.zekno("--version", "--json")).toBe(0)
+    expect(m.out).toEqual([JSON.stringify({ zekno: CLI_VERSION, runner: RUNNER_RELEASE.version })])
+    expect(network.calls()).toBe(0)
+  })
+
+  test("at a terminal: mock-up 6's third line for each answer", async () => {
+    const carrying = (tag: string) => ({ ...bare(github(tag).fetch).deps, release: CARRIED })
+    const lines = LINES_010
+    expect(await drawn(carrying("runner-v0.1.0"), "version")).toEqual({ code: 0, lines: [...lines, "✔ This is the newest release."] })
+    expect(await drawn(carrying("runner-v0.2.0"), "version")).toEqual({ code: 0, lines: [...lines, "! A newer release exists: 0.2.0. Update zekno to get it."] })
+    expect(await drawn(carrying("fails"), "version")).toEqual({ code: 0, lines: [...lines, "  Could not check for a newer release."] })
+  })
+})
+
+/**
+ * Which `zekno` to run for each command of the help, to show it never asks
+ * GitHub (FR-036). A command the help gains and this table lacks fails the
+ * test below, so that it is added here.
+ */
+const NEVER_FETCHES: { [command: string]: string[] } = {
+  "": ["--version"],
+  init: ["init", "--name", "Bob"],
+  "server add": ["server", "add", "two", "--local", "--home", tempDir("two")],
+  "server update": ["server", "update", "dev", "--yes"],
+  "server ls": ["server", "ls"],
+  "secret set": ["secret", "set", "GREETING", "--app", "web", "--server", "dev"],
+  "secret rm": ["secret", "rm", "GREETING", "--app", "web", "--server", "dev"],
+  "secret ls": ["secret", "ls", "--app", "web", "--server", "dev"],
+  deploy: ["deploy", "--app", "web", "--server", "dev"],
+  rollback: ["rollback", "--app", "web", "--server", "dev"],
+  status: ["status", "--server", "dev"],
+  logs: ["logs", "--app", "web", "--server", "dev", "--no-follow"],
+  link: ["link", "--app", "web", "--server", "dev"],
+}
+
+/** The commands of the help, by their words, as docs.test.ts reads them. */
+function helpCommands(): string[] {
+  const commands = new Set<string>()
+  for (const line of HELP.split("\n")) {
+    const usage = /^\s+zekno\s+(.*)$/.exec(line)?.[1]
+    if (usage === undefined) continue
+    const words: string[] = []
+    for (const token of usage.split(/\s+/)) {
+      if (!/^[a-z]+$/.test(token)) break
+      words.push(token)
+    }
+    commands.add(words.join(" "))
+  }
+  return [...commands]
+}
+
+describe("no other command asks GitHub (FR-036)", () => {
+  test("every command of the help but version and doctor, against a ready machine, never calls the fetch", async () => {
+    const m = await ready()
+    const calls: string[] = []
+    m.deps.fetch = async (input) => {
+      calls.push(input)
+      throw new Error("the network was used")
+    }
+    const commands = helpCommands().filter((command) => command !== "version" && command !== "doctor")
+    expect(commands.filter((command) => NEVER_FETCHES[command] === undefined)).toEqual([])
+    for (const command of commands) {
+      if (command === "secret set") m.typing("hello")
+      await m.zekno(...NEVER_FETCHES[command]!)
+      expect({ command, calls }).toEqual({ command, calls: [] })
+    }
+  }, 60_000)
+
+  test("main.ts hands Bun's fetch to run, and is the only place that does", () => {
+    const main = readFileSync(join(import.meta.dir, "../src/main.ts"), "utf8")
+    expect(main).toMatch(/fetch: \(input, init\) => fetch\(input, init\)/)
+  })
+
+  test("only newest.ts uses the fetch, and only cli.ts asks it: the full-screen app and the operations never do", () => {
+    const source = join(import.meta.dir, "../src")
+    const files = [...new Bun.Glob("**/*.{ts,tsx}").scanSync(source)].sort()
+    expect(files.length).toBeGreaterThan(40)
+    const using = (pattern: RegExp) => files.filter((file) => pattern.test(readFileSync(join(source, file), "utf8")))
+    // A command added later that checks (zekno doctor) is added here, with its reason.
+    expect(using(/\bcheckNewest\(/)).toEqual(["cli.ts", "newest.ts"])
+    expect(using(/\.fetch\b/)).toEqual(["newest.ts"])
+    // A call with something to fetch. The installer's shell script has a function of its own named `fetch()`, which is not this.
+    expect(using(/\bfetch\([^)\s]/)).toEqual(["main.ts", "newest.ts"])
+  })
+})

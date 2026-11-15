@@ -22,6 +22,8 @@ does is also a single command, for scripts.
   which is not written yet.
 - **SSH is the route.** `zekno` talks to the runner directly, over SSH. No
   Zekno service is involved.
+- **Only `zekno version` reaches the network on its own:** it asks GitHub once
+  for the newest release, and sends nothing about you.
 - **State and logs come from your server.** Whether an app is running, and its
   logs, are read from the runner over SSH when you look. They never pass
   through Zekno, and your machine keeps none of it.
@@ -231,6 +233,8 @@ zekno rollback [--app <app>] [--server <name>] [--to <number>] [--json]
 zekno status [--server <name>] [--json]
 zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
 zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
+zekno version [--json]
+zekno --version [--json]
 ```
 
 `zekno --help`, `zekno -h` and `zekno help` print this list. In a folder
@@ -422,6 +426,43 @@ records it as used on your machine. See
 ```bash
 zekno link --app api --server prod
 ```
+
+### zekno version
+
+Prints the version of this zekno and of the runner release it installs.
+`zekno --version` prints the same. With `--json`, one object:
+`{"zekno":"0.1.0","runner":"0.1.0"}`. It needs no key, no profile and no
+terminal, and changes nothing.
+
+`zekno version` then asks GitHub once whether a newer release exists, and says
+so in one more line:
+
+```text
+$ zekno version
+zekno 0.1.0
+runner 0.1.0, the runner release this zekno installs
+✔ This is the newest release.
+```
+
+When a newer release exists, the last line is a warning instead: "! A newer
+release exists: 0.2.0. Update zekno to get it." When it could not find out, it
+is a dim `Could not check for a newer release.`: no network, no answer within 3
+seconds, or an answer that is not a version. The exit status is 0 in each case.
+With `--json` the answer is the field `latest`, whose `state` is `newest`,
+`newer` (with the `version`) or `not_checked`:
+`{"zekno":"0.1.0","runner":"0.1.0","latest":{"state":"newer","version":"0.2.0"}}`.
+
+- It asks `api.github.com` for the latest published release of
+  `zekno-app/zekno`, within 3 seconds. `zekno --version` never uses the
+  network.
+- The request carries the name `zekno` and nothing about you, your team, your
+  servers or your project. GitHub learns the address and the time of the
+  request.
+- Nothing else in zekno contacts GitHub on its own. There is no check in the
+  background, and nothing is stored.
+- zekno never downloads or installs a newer release. Until zekno is packaged,
+  updating it means getting the newer source and building it again: see
+  [Build from source](#build-from-source).
 
 ### Exit status
 

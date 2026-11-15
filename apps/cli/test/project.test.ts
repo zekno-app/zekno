@@ -36,6 +36,7 @@ import {
   composeFor,
   findProject,
   notSigned,
+  notSignedHere,
   notUsedHere,
   objectKeys,
   PROJECT_BYTES,
@@ -439,6 +440,37 @@ describe("flags win over the file, and only a file signed by the team and in use
     expect(judged.asked).toEqual([])
     // Its Compose file is not taken either.
     expect(await withProject<Details>(t.sub, { app: "demo", server: "dev" }, ["app", "server", "file"], places)).toEqual({ app: "demo", server: "dev" })
+  })
+
+  test("at a terminal, a file not signed by the team is left aside with the app's sentence: told once, what was given comes back, nothing is accepted (research R6)", async () => {
+    const t = tree()
+    const team = await signingTeam()
+    const judged = judge(team.trust, true)
+    const profile = tempDir("profile")
+    const told: string[] = []
+    const places = { profile, home: t.home, ...judged, leaveAside: (sentence: string) => void told.push(sentence) }
+    writeFileSync(join(t.project, "zekno.json"), json(LINK))
+    const link = findProject(t.project, t.home)!
+    for (const [folder, given] of [
+      [t.sub, {}],
+      [t.sub, { app: "demo" }],
+      [t.sub, { server: "dev" }],
+      [t.project, {}],
+    ] as [string, Details][]) {
+      told.length = 0
+      expect(await withProject<Details>(folder, given, ["app", "server", "file"], places)).toEqual(given)
+      expect(told).toEqual([notSignedHere(link, folder)])
+    }
+    expect(told).toEqual(["zekno.json here is not signed by your team, so zekno does not use it. It names demo on dev."])
+    expect(judged.asked).toEqual([])
+    expect(isAccepted(profile, link)).toBe(false)
+    expect(existsSync(join(profile, LINKS_FILE))).toBe(false)
+    // Given both names it is left aside without a word, as before.
+    told.length = 0
+    expect(await withProject<Details>(t.sub, { app: "demo", server: "dev" }, ["app", "server", "file"], places)).toEqual({ app: "demo", server: "dev" })
+    expect(told).toEqual([])
+    // Without leaveAside, as in a script: S1 and status 2, as before.
+    expect(await rejected(() => withProject(t.sub, {}, ["app", "server"], { profile, home: t.home, ...judged }))).toEqual({ status: 2, message: notSigned(link) })
   })
 
   test("not signed by the team: another team's, a removed member's, a plain field edited after signing, another server's, another kind of message", async () => {

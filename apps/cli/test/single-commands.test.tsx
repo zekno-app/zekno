@@ -20,7 +20,7 @@ import { inkUi } from "../src/ui/ink"
 import { plainUi, processPlainUi, wantsPlain } from "../src/ui/plain"
 import { ORDERED_VERSIONS } from "../../../packages/core/test/fixtures/versions"
 import runnerPackage from "../../runner/package.json"
-import { COMPOSE_V1, COMPOSE_V2, machine, ready } from "./helpers"
+import { COMPOSE_V1, COMPOSE_V2, machine, ready, screenOf } from "./helpers"
 import { realRunner, sshStandIn, standInServer, withSsh } from "./stand-in-server"
 
 type Machine = ReturnType<typeof machine>
@@ -32,46 +32,6 @@ const strip = (text: string) => text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").repl
 
 /** Every line, with the space at its end taken off. */
 const linesOf = (text: string) => text.split("\n").map((line) => line.trimEnd())
-
-/**
- * The lines a terminal shows once it has received `raw`, as far as Ink writes
- * outside the full-screen app: text, line breaks, erasing a line, moving up a
- * line and back to the first column. Colours and other modes are left out.
- */
-function screenOf(raw: string): string[] {
-  const rows = [""]
-  let row = 0
-  let column = 0
-  for (const token of raw.split(/(\x1b\[[0-9;?]*[A-Za-z]|\r|\n)/)) {
-    if (token === "") continue
-    if (token === "\n") {
-      row++
-      column = 0
-      rows[row] ??= ""
-      continue
-    }
-    if (token === "\r") {
-      column = 0
-      continue
-    }
-    const csi = /^\x1b\[([0-9;?]*)([A-Za-z])$/.exec(token)
-    if (csi) {
-      const [, count, final] = csi
-      if (final === "K") rows[row] = ""
-      if (final === "A") row = Math.max(0, row - Number(count || 1))
-      if (final === "G") column = 0
-      continue
-    }
-    for (const char of token) {
-      const line = [...(rows[row] ?? "")]
-      while (line.length < column) line.push(" ")
-      line[column] = char
-      rows[row] = line.join("")
-      column++
-    }
-  }
-  return rows.map((line) => line.trimEnd())
-}
 
 /** Nothing is drawn past the window. */
 function fits(text: string, columns: number) {

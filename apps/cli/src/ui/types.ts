@@ -34,6 +34,29 @@ export const quiet = (text: string, terminal?: string): StyledCell => (terminal 
 /** A cell in the terminal's text colour, where a table would make it faint. */
 export const plainCell = (text: string): StyledCell => ({ text, style: "plain" })
 
+/**
+ * One row of a list a person picks from (specs/006-cli-small-features,
+ * contracts/questions.md). `label` and `detail` are drawn as they are given:
+ * whoever builds a row cleans anything that came from a file or a server.
+ */
+export type ListRow<T> = { value: T; label: string; detail?: string }
+
+/**
+ * A list to pick one row from. `rows` is never empty: a caller with nothing
+ * to offer says so instead of asking. `collapsed` is the word of the line
+ * left behind once a row is chosen (`✔ Server  prod`). `missing` is what the
+ * plain interface throws: the sentence the command has for that detail.
+ */
+export type ListQuestion<T> = { question: string; rows: readonly ListRow<T>[]; collapsed: string; missing: Error }
+
+/**
+ * A one-line answer to type. `fill` is the answer so far when the question
+ * opens. `check` gives the reason an answer is wrong, or undefined for a good
+ * one; it is the same rule the matching flag is held to. `missing` is what
+ * the plain interface throws.
+ */
+export type TypedQuestion = { question: string; fill?: string; check(answer: string): string | undefined; missing: Error }
+
 /** One line of an app's logs, as `zekno logs` prints it. Each part is already cleaned or held to a pattern. */
 export type LogOutput = { time: string; service: string; text: string }
 
@@ -49,6 +72,13 @@ export interface Ui {
   warn(text: string): void
   /** Why a command failed. Goes to standard error in plain output. */
   error(text: string): void
+  /**
+   * One quiet line: something the person may like to know, that is neither a
+   * result nor a warning, such as `Using prod, your only server.` At a
+   * terminal it is dim and set in by two columns; plain output prints it on
+   * standard output.
+   */
+  note(text: string): void
   /** A labelled value worth reading carefully, such as a confirmation code. */
   field(label: string, value: string): void
   /** Rows of cells. Plain output joins cells with tabs. */
@@ -105,9 +135,47 @@ export interface Ui {
   /**
    * Asks a yes-or-no question at a terminal and resolves with the answer; no
    * is the default. Without a terminal it throws `refusal`: a command never
-   * asks where nobody can answer, and never takes yes for granted.
+   * asks where nobody can answer, and never takes yes for granted. Esc and
+   * Ctrl-C answer no, unless `leave` is given: then they throw `Left`.
    */
-  confirm(question: string, refusal: string): Promise<boolean>
+  confirm(question: string, refusal: string, options?: { leave?: boolean }): Promise<boolean>
+  /**
+   * Whether this interface can ask a person anything: true only at a
+   * terminal (`wantsPlain` false and the input a terminal). Every question
+   * below is reached only from code that checked this first; when it is
+   * false a command takes exactly the path it took before questions existed.
+   */
+  readonly asks: boolean
+  /**
+   * Asks the person to pick one row of a list, and resolves with that row's
+   * value. Esc and Ctrl-C throw `Left`. The plain interface throws
+   * `question.missing`.
+   */
+  choose<T>(question: ListQuestion<T>): Promise<T>
+  /**
+   * Asks for a one-line answer, checked with `question.check` where it is
+   * typed: a wrong one is asked again with its reason. Esc and Ctrl-C throw
+   * `Left`. The plain interface throws `question.missing`.
+   */
+  ask(question: TypedQuestion): Promise<string>
+  /**
+   * A hidden value that may be skipped (the first deploy's values): nothing
+   * of it is drawn. Resolves with the value, or undefined when Esc skips it.
+   * An empty value or one of several lines is refused and asked again. Ctrl-C
+   * throws `Left`. `name` is the secret's name, for the sentence that says how
+   * to set a value of several lines. The plain interface throws, as
+   * `askSecret` does without `--stdin`.
+   */
+  askValue(question: string, name: string): Promise<string | undefined>
+  /**
+   * A code and what it is for, such as the team code a first deploy shows:
+   * the code in bold, after its label, and the text under it.
+   */
+  code(label: string, value: string, about: string): void
+  /** Labelled lines, the text of each in a column of its own, such as the groups of an import. */
+  groups(rows: readonly (readonly [label: string, text: string])[]): void
+  /** One empty line between blocks at a terminal. Nothing in plain output. */
+  gap(): void
   /** Finishes drawing. Call once, before the process exits. */
   close(): Promise<void>
 }

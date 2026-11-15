@@ -22,6 +22,8 @@ const deps: OpDeps = {
   keyStore: osKeychain(),
   connect,
   localRunner,
+  // The one way to the network that zekno itself has: only `zekno version` and `zekno doctor` use it (newest.ts).
+  fetch: (input, init) => fetch(input, init),
 }
 
 /**

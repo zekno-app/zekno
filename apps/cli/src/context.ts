@@ -11,6 +11,7 @@ import { z } from "zod"
 
 import { CliError } from "./errors"
 import type { KeyStore } from "./keystore"
+import type { Fetch } from "./newest"
 import { profileStore, type Profile, type ProfileStore } from "./profile"
 import type { RunnerRelease } from "./runner-release"
 import type { ConnectOptions, Target, Transport } from "./transport"
@@ -39,6 +40,13 @@ export type Deps = {
    * an operation opens the team itself (`teamOf`), as the app's do.
    */
   team?: () => Promise<Team>
+  /**
+   * How `zekno version` and `zekno doctor` ask GitHub whether a newer release
+   * exists (newest.ts, research R14), and nothing else. Only main.ts sets it.
+   * Undefined: nothing is ever requested, so no test and no other code path
+   * can reach the network by mistake.
+   */
+  fetch?: Fetch
 }
 
 /**
@@ -165,18 +173,30 @@ export const teamOf = (deps: Pick<Deps, "home" | "keyStore" | "team">): Promise<
 
 /**
  * The verified team for one run of a command, opened at most once, when it
- * is first needed: judging zekno.json (`trust`) and the operation that
- * follows (`take`, handed to it as `Deps.team`) read the keychain once
- * between them. Once the operation has taken it, it is not kept here, so the
- * team, and the key in it, is held only as long as the operation holds it.
+ * is first needed: judging zekno.json (`trust`), the questions that list its
+ * servers (`peek`, specs/006-cli-small-features research R7) and the
+ * operation that follows (`take`, handed to it as `Deps.team`) read the
+ * keychain once between them. Once the operation has taken it, it is not
+ * kept here, so the team, and the key in it, is held only as long as the
+ * operation holds it. An open that failed is not kept either: the next one
+ * opens again, so a team made since (a first deploy makes one) is found.
  */
-export function teamOnce(deps: Pick<Deps, "home" | "keyStore">): { trust(): Promise<TeamTrust>; take(): Promise<Team> } {
+export function teamOnce(deps: Pick<Deps, "home" | "keyStore">): { trust(): Promise<TeamTrust>; peek(): Promise<Team>; take(): Promise<Team> } {
   let opened: Promise<Team> | undefined
+  const open = (): Promise<Team> => {
+    if (opened) return opened
+    const opening = openTeam(deps)
+    opened = opening
+    opening.catch(() => {
+      if (opened === opening) opened = undefined
+    })
+    return opening
+  }
   return {
     async trust() {
-      opened ??= openTeam(deps)
-      return (await opened).trust
+      return (await open()).trust
     },
+    peek: open,
     take() {
       const team = opened ?? openTeam(deps)
       opened = undefined

@@ -11,6 +11,21 @@ export class RunnerRefused extends CliError {
 /** The command was typed wrongly: shown with a hint, exit status 2. */
 export class UsageError extends Error {}
 
+/** Said when a person says no to a question, or leaves one, and nothing was done. */
+export const NOTHING_DONE = "Nothing was done."
+
+/**
+ * Thrown when a person leaves a question at a terminal with Esc or Ctrl-C
+ * (specs/006-cli-small-features, research R4). `run` prints its sentence as
+ * any other failure, at a terminal `✖ Nothing was done.`, and ends with exit
+ * status 1. Nothing more is done after it.
+ */
+export class Left extends CliError {
+  constructor() {
+    super(NOTHING_DONE)
+  }
+}
+
 /** Said when a command lacks a detail it needs (contracts/commands.md): the flag, and the project file. */
 export const MISSING_APP = "Say which app with `--app <name>`, or link this folder to it with `zekno link`, which keeps it in zekno.json."
 export const MISSING_SERVER = "Say which server with `--server <name>`, or link this folder to it with `zekno link`, which keeps it in zekno.json."

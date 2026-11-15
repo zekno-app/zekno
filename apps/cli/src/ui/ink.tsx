@@ -3,25 +3,39 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 
 import type { DeployProgress } from "../app/state"
 import { logClock } from "../app/time"
-import { CliError } from "../errors"
+import { CliError, Left } from "../errors"
 import { keptLines } from "./deploy"
 import { DeployBlock, type DeployShown } from "./deploy-view"
-import { readStdin } from "./plain"
+import { NO_TERMINAL_FOR_VALUE, readStdin } from "./plain"
+import { isCtrlC, ListPrompt, TypedPrompt, VALUE_EMPTY, valueHasLines, type Settled } from "./questions"
 import { applySecretInput } from "./secret-input"
 import { BRAND } from "./theme"
 import { discardTypedAhead } from "./type-ahead"
-import { REMOTE_MARK, type Cell, type LogOutput, type Ui } from "./types"
+import { REMOTE_MARK, type Cell, type ListRow, type LogOutput, type Ui } from "./types"
 
 type Item =
-  | { id: number; kind: "info" | "success" | "warn" | "error" | "remote"; text: string }
+  | { id: number; kind: "info" | "success" | "warn" | "error" | "remote" | "note"; text: string }
   | { id: number; kind: "field"; label: string; value: string }
   | { id: number; kind: "table"; rows: Cell[][] }
   | { id: number; kind: "log"; line: LogOutput; serviceWidth: number }
   | { id: number; kind: "line"; cells: readonly Cell[] }
   | { id: number; kind: "deploy"; shown: DeployShown }
+  | { id: number; kind: "asked"; question: string; answer: string }
+  | { id: number; kind: "answered"; question: string; yes: boolean }
+  | { id: number; kind: "hidden"; question: string; skipped: boolean }
+  | { id: number; kind: "code"; label: string; value: string; about: string }
+  | { id: number; kind: "groups"; rows: readonly (readonly [string, string])[] }
+  | { id: number; kind: "gap" }
 
 type Prompt = { question: string; settle(result: { value: string } | { error: Error }): void }
-type Question = { question: string; settle(yes: boolean): void }
+/** A yes-or-no question. With `leave`, Esc and Ctrl-C leave instead of answering no. */
+type Question = { question: string; leave: boolean; settle(answer: boolean | "left"): void }
+/** A list open on the screen. `id` makes each question a new one on the screen, never the one before it reused. */
+type ListOpen = { id: number; question: string; rows: readonly ListRow<unknown>[]; settle(result: Settled<number>): void }
+/** A one-line answer being typed. */
+type TypedOpen = { id: number; question: string; fill?: string; check(answer: string): string | undefined; settle(result: Settled<string>): void }
+/** The hidden prompt that can be skipped. `name` is the secret's, for the sentence about a value of several lines. */
+type ValueOpen = { id: number; question: string; name: string; settle(result: { kind: "value"; value: string } | { kind: "skipped" } | { kind: "left" }): void }
 /**
  * `generation` changes when lines already drawn are let go; Static then
  * starts afresh with what is left. `deploy` is a deploy still running, drawn
@@ -34,6 +48,9 @@ type State = {
   step?: { label: string; still: boolean }
   prompt?: Prompt
   question?: Question
+  list?: ListOpen
+  typed?: TypedOpen
+  value?: ValueOpen
   deploy?: DeployShown
 }
 
@@ -203,6 +220,67 @@ function Line({ item, columns }: { item: Item; columns: number }) {
     )
   }
   if (item.kind === "log") return <LogItem line={item.line} serviceWidth={item.serviceWidth} columns={columns} />
+  if (item.kind === "asked") {
+    return (
+      <Text>
+        <Text color={BRAND}>?</Text> {item.question} <Text dimColor>›</Text> {item.answer}
+      </Text>
+    )
+  }
+  if (item.kind === "answered") {
+    return (
+      <Text>
+        <Text color={BRAND}>?</Text> {item.question} <Text dimColor>(y/N)</Text> {item.yes ? "yes" : "no"}
+      </Text>
+    )
+  }
+  if (item.kind === "hidden") {
+    return (
+      <Text>
+        <Text color={BRAND}>?</Text> {item.question}
+        <Text dimColor>{item.skipped ? "skipped" : "(hidden)"}</Text>
+      </Text>
+    )
+  }
+  if (item.kind === "code") {
+    // The code at column 15, as mock-up 3 draws the team code and the server code; what it is for on the line under it.
+    return (
+      <Box flexDirection="column" width={columns}>
+        <Text>
+          {"  "}
+          <Text dimColor>{item.label.padEnd(CODE_LABEL)}</Text>
+          {"  "}
+          <Text bold>{item.value}</Text>
+        </Text>
+        <Box paddingLeft={2}>
+          <Text dimColor>{item.about}</Text>
+        </Box>
+      </Box>
+    )
+  }
+  if (item.kind === "groups") {
+    // Each text in a column of its own from column 14, as mock-up 4 draws the groups of an import.
+    return (
+      <Box flexDirection="column" width={columns}>
+        {item.rows.map(([label, text], index) => (
+          <Box key={index} paddingLeft={2}>
+            <Box width={GROUP_LABEL} flexShrink={0}>
+              <Text>{label}</Text>
+            </Box>
+            <Text>{text}</Text>
+          </Box>
+        ))}
+      </Box>
+    )
+  }
+  if (item.kind === "gap") return <Text> </Text>
+  if (item.kind === "note") {
+    return (
+      <Box paddingLeft={2} width={columns}>
+        <Text dimColor>{item.text}</Text>
+      </Box>
+    )
+  }
   if (item.kind === "deploy") return <DeployBlock shown={item.shown} columns={columns} />
 
   if (item.kind === "info") {
@@ -244,6 +322,26 @@ export function RemoteLine({ text, columns }: { text: string; columns?: number }
   )
 }
 
+/** The label column of a code (mock-up 3) and of the groups of an import (mock-up 4). */
+const CODE_LABEL = 11
+const GROUP_LABEL = 12
+
+/**
+ * What each question leaves on the screen once it is answered, above
+ * whatever comes next. A list collapses to `✔ Server  prod` (mock-ups 1 and
+ * 2). The rest is research Q1, built as recommended and not yet approved by
+ * the maintainer: a typed answer stays as `? Your name › ada`; a yes-or-no
+ * question as `? <question> (y/N) yes`, the questions that existed before
+ * included; the skippable hidden prompt as its line ending `(hidden)` or
+ * `skipped`. The hidden prompt of `zekno secret set` leaves nothing, as before.
+ */
+const LEFT_BEHIND = {
+  choose: (collapsed: string, label: string) => ({ kind: "success", text: `${collapsed}  ${label}` }),
+  ask: (question: string, answer: string) => ({ kind: "asked", question, answer }),
+  confirm: (question: string, yes: boolean) => ({ kind: "answered", question, yes }),
+  askValue: (question: string, skipped: boolean) => ({ kind: "hidden", question, skipped }),
+} satisfies Record<string, (...args: never[]) => Omit<Item, "id">>
+
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 function Spinner({ label }: { label: string }) {
@@ -272,9 +370,50 @@ function SecretPrompt({ prompt }: { prompt: Prompt }) {
   })
   return (
     <Text>
-      <Text color="cyan">?</Text> {prompt.question}
+      <Text color={BRAND}>?</Text> {prompt.question}
       <Text dimColor>(hidden)</Text>
     </Text>
+  )
+}
+
+/**
+ * The hidden prompt of a first deploy (contracts/questions.md): nothing of
+ * the value is drawn, not even its length, and it is never kept in React
+ * state. Esc skips the value; Ctrl-C leaves. Nothing, or several lines, is
+ * refused with its reason under the line, and the prompt stays open.
+ */
+function ValuePrompt({ open }: { open: ValueOpen }) {
+  const value = useRef("")
+  const [reason, setReason] = useState<string | undefined>(undefined)
+  useInput((input, key) => {
+    if (isCtrlC(input, key)) return open.settle({ kind: "left" })
+    if (key.escape) {
+      value.current = ""
+      return open.settle({ kind: "skipped" })
+    }
+    const next = applySecretInput(value.current, input, key)
+    if (next.kind === "typing") {
+      value.current = next.value
+      return
+    }
+    value.current = ""
+    if (next.kind === "done" && next.value !== "") return open.settle({ kind: "value", value: next.value })
+    setReason(next.kind === "done" ? VALUE_EMPTY : valueHasLines(open.name))
+  })
+  return (
+    <Box flexDirection="column">
+      <Text>
+        <Text color={BRAND}>?</Text> {open.question}
+        <Text dimColor>(hidden)</Text>
+        {"   "}
+        <Text dimColor>esc skips it</Text>
+      </Text>
+      {reason === undefined ? null : (
+        <Text>
+          <Text color={COLOR.warn}>{MARK.warn}</Text> {reason}
+        </Text>
+      )}
+    </Box>
   )
 }
 
@@ -287,15 +426,16 @@ export function yesOrNo(input: string, key: { return?: boolean; escape?: boolean
   return undefined
 }
 
-/** A yes-or-no question, answered with one key. */
+/** A yes-or-no question, answered with one key. Asked with `leave`, Esc and Ctrl-C leave it. */
 function QuestionPrompt({ question }: { question: Question }) {
   useInput((input, key) => {
+    if (question.leave && (key.escape || isCtrlC(input, key))) return question.settle("left")
     const answer = yesOrNo(input, key)
     if (answer !== undefined) question.settle(answer)
   })
   return (
     <Text>
-      <Text color="cyan">?</Text> {question.question} <Text dimColor>(y/N)</Text>
+      <Text color={BRAND}>?</Text> {question.question} <Text dimColor>(y/N)</Text>
     </Text>
   )
 }
@@ -313,8 +453,14 @@ function App({ store }: { store: ReturnType<typeof createStore> }) {
       {state.deploy ? <DeployBlock shown={state.deploy} columns={columns} /> : null}
       {state.prompt ? (
         <SecretPrompt prompt={state.prompt} />
+      ) : state.value ? (
+        <ValuePrompt key={state.value.id} open={state.value} />
       ) : state.question ? (
         <QuestionPrompt question={state.question} />
+      ) : state.list ? (
+        <ListPrompt key={state.list.id} question={state.list.question} rows={state.list.rows} settle={state.list.settle} />
+      ) : state.typed ? (
+        <TypedPrompt key={state.typed.id} question={state.typed.question} fill={state.typed.fill} check={state.typed.check} settle={state.typed.settle} />
       ) : state.step?.still ? (
         <Box marginLeft={2}>
           <Text>{state.step.label}…</Text>
@@ -332,6 +478,9 @@ function App({ store }: { store: ReturnType<typeof createStore> }) {
  */
 export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr" | "interactive"> = {}): Ui {
   const store = createStore()
+  // The input Ink reads keys from. Every question turns raw mode on and throws away what was typed before it on this
+  // same input, so a stand-in terminal in a test is treated as a person's terminal is.
+  const input = (streams.stdin ?? process.stdin) as NodeJS.ReadStream
   // Ink is not left to act on Ctrl-C: it would close the interface and leave the
   // command waiting for an answer that never comes. While the prompt is open
   // the prompt cancels the command; the rest of the time the terminal turns
@@ -340,12 +489,50 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
   const add = store.add
   // The service column grows to the longest name seen so far, up to a bound, so lines stay aligned.
   let serviceWidth = 0
+  // Each question is drawn as a new one, so nothing of the one before (a selection, an answer so far) carries over.
+  let questions = 0
+
+  /**
+   * Opens one question at a terminal (contracts/questions.md, "Keys typed
+   * before a question"): raw mode goes on first, so nothing typed from now on
+   * is echoed or held back by the terminal; what was typed before is thrown
+   * away; then the question is drawn by `open`, which settles once.
+   */
+  async function asking<T>(open: (resolve: (value: T) => void, reject: (error: Error) => void) => void): Promise<T> {
+    input.setRawMode(true)
+    try {
+      // What was typed before the question is drawn is not its answer, such as a `y` typed while the keychain asked.
+      await discardTypedAhead(input)
+      return await new Promise<T>((resolve, reject) => {
+        let settled = false
+        open(
+          (value) => {
+            if (settled) return
+            settled = true
+            resolve(value)
+          },
+          (error) => {
+            if (settled) return
+            settled = true
+            reject(error)
+          }
+        )
+      })
+    } finally {
+      input.setRawMode(false)
+    }
+  }
 
   return {
     info: (text) => add({ kind: "info", text }),
     success: (text) => add({ kind: "success", text }),
     warn: (text) => add({ kind: "warn", text }),
     error: (text) => add({ kind: "error", text }),
+    note: (text) => add({ kind: "note", text }),
+    code: (label, value, about) => add({ kind: "code", label, value, about }),
+    groups: (rows) => add({ kind: "groups", rows }),
+    gap: () => add({ kind: "gap" }),
+    asks: Boolean(input.isTTY),
     field: (label, value) => add({ kind: "field", label, value }),
     table: (rows) => add({ kind: "table", rows }),
     line: (_plain, cells) => {
@@ -425,15 +612,14 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
         store.set({ step: undefined })
       }
     },
-    askSecret(question, fromStdin) {
+    async askSecret(question, fromStdin) {
       if (fromStdin) return readStdin()
-      if (!process.stdin.isTTY) {
-        throw new CliError("There is no terminal to ask on. Pipe the value in and add `--stdin`.")
-      }
+      if (!input.isTTY) throw new CliError(NO_TERMINAL_FOR_VALUE)
       // Echo goes off before the question is drawn, not a moment after: nobody
-      // should be able to start typing at a prompt that still shows what is typed.
-      process.stdin.setRawMode(true)
-      return new Promise<string>((resolve, reject) => {
+      // should be able to start typing at a prompt that still shows what is
+      // typed. What was typed before it is thrown away, so it never becomes
+      // part of the value (specs/004-cli-app/security-review.md, "Left").
+      return asking<string>((resolve, reject) =>
         store.set({
           prompt: {
             question,
@@ -444,29 +630,80 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
             },
           },
         })
-      }).finally(() => process.stdin.setRawMode(false))
+      )
     },
-    async confirm(question, refusal) {
-      if (!process.stdin.isTTY) throw new CliError(refusal)
-      process.stdin.setRawMode(true)
-      try {
-        // What was typed before the question is drawn is not its answer, such as a `y` typed while the keychain asked.
-        await discardTypedAhead(process.stdin)
-        return await new Promise<boolean>((resolve) => {
-          store.set({
-            question: {
-              question,
-              settle(yes) {
-                store.set({ question: undefined })
-                add({ kind: "info", text: `${question} ${yes ? "yes" : "no"}` })
-                resolve(yes)
-              },
+    async askValue(question, name) {
+      if (!input.isTTY) throw new CliError(NO_TERMINAL_FOR_VALUE)
+      return asking<string | undefined>((resolve, reject) =>
+        store.set({
+          value: {
+            id: questions++,
+            question,
+            name,
+            settle(result) {
+              store.set({ value: undefined })
+              if (result.kind === "left") return reject(new Left())
+              add(LEFT_BEHIND.askValue(question, result.kind === "skipped"))
+              resolve(result.kind === "value" ? result.value : undefined)
             },
-          })
+          },
         })
-      } finally {
-        process.stdin.setRawMode(false)
-      }
+      )
+    },
+    async confirm(question, refusal, options) {
+      if (!input.isTTY) throw new CliError(refusal)
+      return asking<boolean>((resolve, reject) =>
+        store.set({
+          question: {
+            question,
+            leave: options?.leave === true,
+            settle(answer) {
+              store.set({ question: undefined })
+              if (answer === "left") return reject(new Left())
+              add(LEFT_BEHIND.confirm(question, answer))
+              resolve(answer)
+            },
+          },
+        })
+      )
+    },
+    async choose(question) {
+      if (!input.isTTY) throw question.missing
+      return asking((resolve, reject) =>
+        store.set({
+          list: {
+            id: questions++,
+            question: question.question,
+            rows: question.rows,
+            settle(result) {
+              store.set({ list: undefined })
+              if ("left" in result) return reject(new Left())
+              const row = question.rows[result.answer]!
+              add(LEFT_BEHIND.choose(question.collapsed, row.label))
+              resolve(row.value)
+            },
+          },
+        })
+      )
+    },
+    async ask(question) {
+      if (!input.isTTY) throw question.missing
+      return asking<string>((resolve, reject) =>
+        store.set({
+          typed: {
+            id: questions++,
+            question: question.question,
+            fill: question.fill,
+            check: question.check,
+            settle(result) {
+              store.set({ typed: undefined })
+              if ("left" in result) return reject(new Left())
+              add(LEFT_BEHIND.ask(question.question, result.answer))
+              resolve(result.answer)
+            },
+          },
+        })
+      )
     },
     async close() {
       app.unmount()

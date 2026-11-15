@@ -56,6 +56,9 @@ export function wantsPlain(argv: readonly string[], stdout: { isTTY?: boolean },
   return argv.includes("--json") || !stdout.isTTY || !stdin.isTTY || env.TERM === "dumb"
 }
 
+/** Said where a hidden value would be asked for and there is no terminal to ask on. */
+export const NO_TERMINAL_FOR_VALUE = "There is no terminal to ask on. Pipe the value in and add `--stdin`."
+
 /** Reads everything on standard input, without one trailing line break. */
 export async function readStdin(): Promise<string> {
   const text = await new Response(Bun.stdin.stream()).text()
@@ -81,6 +84,7 @@ export function plainUi(
     success: out,
     warn: err,
     error: err,
+    note: out,
     field: (label, value) => out(`${label}: ${value}`),
     table: (rows) => rows.forEach((row) => out(row.map(cellText).join("\t"))),
     line: (plain) => {
@@ -99,13 +103,31 @@ export function plainUi(
     step: (_label, work) => work(),
     askSecret(_question, fromStdin) {
       if (!fromStdin) {
-        throw new CliError("There is no terminal to ask on. Pipe the value in and add `--stdin`.")
+        throw new CliError(NO_TERMINAL_FOR_VALUE)
       }
       return readStdin()
     },
     async confirm(_question, refusal) {
       throw new CliError(refusal)
     },
+    // Nobody can answer here, so nothing is ever asked. No command reaches these with `asks` false; one
+    // that did would stop with the sentence it has for the missing detail, never wait (research R1).
+    asks: false,
+    async choose(question) {
+      throw question.missing
+    },
+    async ask(question) {
+      throw question.missing
+    },
+    async askValue() {
+      throw new CliError(NO_TERMINAL_FOR_VALUE)
+    },
+    code(label, value, about) {
+      out(`${label}: ${value}`)
+      out(about)
+    },
+    groups: (rows) => rows.forEach(([label, text]) => out(`${label}\t${text}`)),
+    gap: () => {},
     close: async () => {},
   }
   return ui
