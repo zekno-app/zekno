@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import type { DeployProgress } from "../app/state"
 import { logClock } from "../app/time"
 import { CliError, Left } from "../errors"
+import type { CheckLine, DoctorReport } from "../ops/doctor"
 import { keptLines } from "./deploy"
 import { DeployBlock, type DeployShown } from "./deploy-view"
 import { NO_TERMINAL_FOR_VALUE, readStdin } from "./plain"
@@ -11,7 +12,7 @@ import { isCtrlC, ListPrompt, QuestionWords, TypedPrompt, VALUE_EMPTY, valueHasL
 import { applySecretInput } from "./secret-input"
 import { BRAND } from "./theme"
 import { discardTypedAhead } from "./type-ahead"
-import { REMOTE_MARK, type Cell, type ListRow, type LogOutput, type Ui } from "./types"
+import { doctorCounts, REMOTE_MARK, SERVERS_SKIPPED, type Cell, type ListRow, type LogOutput, type Ui } from "./types"
 
 type Item =
   | { id: number; kind: "info" | "error" | "remote" | "note"; text: string }
@@ -34,6 +35,7 @@ type Item =
   | { id: number; kind: "code"; label: string; value: string; about: string }
   | { id: number; kind: "groups"; rows: readonly (readonly [string, string])[] }
   | { id: number; kind: "gap" }
+  | { id: number; kind: "doctor"; report: DoctorReport }
 
 type Prompt = { question: string; settle(result: { value: string } | { error: Error }): void }
 /** A yes-or-no question. With `leave`, Esc and Ctrl-C leave instead of answering no. */
@@ -298,6 +300,7 @@ function Line({ item, columns }: { item: Item; columns: number }) {
     )
   }
   if (item.kind === "gap") return <Text> </Text>
+  if (item.kind === "doctor") return <DoctorBlock report={item.report} columns={columns} />
   if (item.kind === "note") {
     return (
       <Box paddingLeft={2} width={columns}>
@@ -352,6 +355,102 @@ export function RemoteLine({ text, columns }: { text: string; columns?: number }
         <Text dimColor>{REMOTE_MARK}</Text>
       </Box>
       <Text dimColor>{text}</Text>
+    </Box>
+  )
+}
+
+/** Where a check's detail and its next step start in `zekno doctor`'s report: column 17 (mock-up 5). */
+const CHECK_DETAIL = 17
+
+/** The mark and colour of each result (mock-up 5): never colour alone, the mark says it too. */
+const CHECK_MARK = { good: [MARK.success, COLOR.success], warning: [MARK.warn, COLOR.warn], problem: [MARK.error, COLOR.error] } as const
+
+/**
+ * One check of `zekno doctor` (contracts/doctor.md, "At a terminal"; board
+ * "zekno doctor"): the mark in its colour, a space, the label, and the detail
+ * from column 17, which goes on in its own column when it is wider than the
+ * window; the next step dim under it, from column 17. A check not checked is
+ * `–`, two spaces, its label, and `not checked`, the mark and the words dim.
+ */
+function CheckRow({ check, columns }: { check: CheckLine; columns: number }) {
+  if (check.result === "not checked") {
+    return (
+      <Box width={columns}>
+        <Box width={CHECK_DETAIL} flexShrink={0}>
+          <Text>
+            <Text dimColor>–</Text>
+            {"  "}
+            {check.label}
+          </Text>
+        </Box>
+        <Text dimColor>not checked</Text>
+      </Box>
+    )
+  }
+  const [mark, color] = CHECK_MARK[check.result]
+  return (
+    <Box flexDirection="column" width={columns}>
+      <Box>
+        <Box width={CHECK_DETAIL} flexShrink={0}>
+          <Text>
+            <Text color={color}>{mark}</Text> {check.label}
+          </Text>
+        </Box>
+        <Text>{check.detail}</Text>
+      </Box>
+      {check.next === undefined ? null : (
+        <Box paddingLeft={CHECK_DETAIL}>
+          <Text dimColor>{check.next}</Text>
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+/**
+ * `zekno doctor`'s report at a terminal (mock-up 5, board "zekno doctor"):
+ * `This machine` and each server's name in bold from column 2, where the
+ * server is dim two spaces after its name, an empty line before each server
+ * and before the last line, which is bold. When no server was checked, D31,
+ * dim, in place of the servers.
+ */
+function DoctorBlock({ report, columns }: { report: DoctorReport; columns: number }) {
+  return (
+    <Box flexDirection="column" width={columns}>
+      <Box paddingLeft={2}>
+        <Text bold>This machine</Text>
+      </Box>
+      {report.machine.map((check, index) => (
+        <CheckRow key={`machine-${index}`} check={check} columns={columns} />
+      ))}
+      {report.serversSkipped ? (
+        <Box flexDirection="column">
+          <Text> </Text>
+          <Box paddingLeft={2}>
+            <Text dimColor>{SERVERS_SKIPPED}</Text>
+          </Box>
+        </Box>
+      ) : (
+        report.servers.map((server, at) => (
+          <Box key={`server-${at}`} flexDirection="column">
+            <Text> </Text>
+            <Box paddingLeft={2}>
+              <Text>
+                <Text bold>{server.name}</Text>
+                {"  "}
+                <Text dimColor>{server.where}</Text>
+              </Text>
+            </Box>
+            {server.checks.map((check, index) => (
+              <CheckRow key={`${at}-${index}`} check={check} columns={columns} />
+            ))}
+          </Box>
+        ))
+      )}
+      <Text> </Text>
+      <Box paddingLeft={2}>
+        <Text bold>{doctorCounts(report.problems, report.warnings)}</Text>
+      </Box>
     </Box>
   )
 }
@@ -567,6 +666,7 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
     code: (label, value, about) => add({ kind: "code", label, value, about }),
     groups: (rows) => add({ kind: "groups", rows }),
     gap: () => add({ kind: "gap" }),
+    doctorReport: (report) => add({ kind: "doctor", report }),
     asks: Boolean(input.isTTY),
     field: (label, value) => add({ kind: "field", label, value }),
     table: (rows) => add({ kind: "table", rows }),

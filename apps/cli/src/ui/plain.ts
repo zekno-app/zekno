@@ -1,6 +1,6 @@
 import { CliError } from "../errors"
 import { plainDeployView } from "./deploy"
-import { cellText, REMOTE_MARK, type Ui } from "./types"
+import { cellText, doctorCounts, REMOTE_MARK, SERVERS_SKIPPED, type Ui } from "./types"
 
 /**
  * Writes to a stream of this process. When it is backed up, such as a pipe
@@ -128,6 +128,15 @@ export function plainUi(
     },
     groups: (rows) => rows.forEach(([label, text]) => out(`${label}\t${text}`)),
     gap: () => {},
+    // contracts/doctor.md, "Plain output": where, the check, the result word, then the detail and the next step when there are any.
+    doctorReport(report) {
+      const row = (where: string, check: (typeof report.machine)[number]) =>
+        [where, check.check, check.result, ...(check.result === "not checked" ? [] : [check.detail]), ...(check.next === undefined ? [] : [check.next])].join("\t")
+      for (const check of report.machine) out(row("this machine", check))
+      if (report.serversSkipped) out(SERVERS_SKIPPED)
+      else for (const server of report.servers) for (const check of server.checks) out(row(server.name, check))
+      out(doctorCounts(report.problems, report.warnings))
+    },
     close: async () => {},
   }
   return ui

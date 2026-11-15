@@ -30,14 +30,14 @@ $ zekno doctor
 ✔ Profile        verified, team list v2
 ✔ This folder    linked to demo on prod, compose.yaml is readable
 
-  prod   deploy@203.0.113.7
+  prod  deploy@203.0.113.7
 ✔ Reachable      over SSH
 ✔ Docker         Compose 5.6.0
 ! Runner         0.1.0-dev.1, older than this zekno's 0.1.0
                  Run zekno server update prod
 ✔ Disk           133 GB free
 
-  staging   deploy@198.51.100.4
+  staging  deploy@198.51.100.4
 ✖ Reachable      SSH needs an answer
                  Open zekno and press enter on staging
 –  Docker        not checked
@@ -51,15 +51,18 @@ Drawn by `Ui.doctorReport(report)` once every check is done; while servers are c
 `Checking <name>` (or `Checking <k> servers`) shows the spinner. The text of each line, counted
 from column 0, exactly as the mock-up:
 
-- A section heading: two spaces and `This machine`; for a server two spaces, its name, three
-  spaces, and where it is (its SSH destination, or `this machine`). An empty line before each
+- A section heading: two spaces and `This machine`, bold; for a server two spaces, its name in
+  bold, two spaces, and where it is (its SSH destination, or `this machine`), dim. The board
+  "zekno doctor" decides the look: it draws two spaces between the name and where it is (this page
+  and mock-up 5 in design.md had three), and the headings bold. An empty line before each
   server's heading and before the last line.
 - Good, warning, problem: the mark (`✔` green, `!` yellow, `✖` red), a space, the label padded to
   15 columns, the detail. So the detail starts at column 17.
-- Not checked: `–`, two spaces, the label padded to 14 columns, `not checked`, dim. The detail also
+- Not checked: `–`, two spaces, the label padded to 14 columns, `not checked`; the `–` and
+  `not checked` dim, the label in the text colour, as the board draws them. The detail also
   starts at column 17.
 - A next step: 17 spaces and the sentence, dim, on the line under its check.
-- The last line: two spaces and D30.
+- The last line: two spaces and D30, bold (board).
 
 When the profile did not verify, no server is contacted and, in place of the server sections, one
 dim line: two spaces and D31.
@@ -87,6 +90,11 @@ Two connections, both in SSH's batch mode (`batchOnly(deps.connect, lines)` from
 words `check <runner path>`, then a session. At most four servers are checked at the same time; the
 report keeps profile.json's order. A server on this machine (`--local`) is reached by its local
 runner as every command does; it has no script, so its Docker and Disk lines are not checked.
+When its session cannot be opened, its Reachable line is the problem, with D43 (or D27) and D51;
+any other failure of its runner is its Runner line's, with D51 (as built; needs approval). A
+runner over SSH that does not answer its session within the limit is a Runner problem with D27
+and D44. Only the runner of a server over SSH is compared with this zekno; a runner from before
+sessions is also asked its one-shot `status`, which only reads.
 
 | Check | Reads | Result and detail | Next step |
 |-------|-------|-------------------|-----------|
@@ -294,7 +302,7 @@ zekno carries).
 | D40 | `Put the runner back at that path, as apps/runner/README.md describes` |
 | D41 | `answered as a different server than the one connected as <server>` |
 | D42 | `Check that <dest> is the server you added as <server>` |
-| D43 | the session's sentence, cut at its first full stop and without it (for example `did not answer as expected`) |
+| D43 | the session's sentence, cut at its first full stop and without it, and without a leading `The runner ` (or `The runner on that server `), since the line's label says it (for example `did not answer as expected`) |
 | D44 | `Run zekno server update <server> to replace it` |
 | D45 | `free space could not be read` |
 | D46 | `Free some space on <server> before the next deploy` |
@@ -302,6 +310,7 @@ zekno carries).
 | D48 | `Free some space on <server>: updating the runner needs 256 MiB` |
 | D49 | `the user zekno logs in as has no home folder` (detail of both), next step `Log in as a user with a home folder` |
 | D50 | `A newer release exists: <version>. Update zekno to get it.` (mock-up 6, V2 of contracts/version.md) |
+| D51 | `Run zekno status --server <server> to see why`: the next step of a problem with a runner on this machine (`--local`), which `zekno server update` cannot replace. Added while building, not in the plan: needs approval |
 
 `SSH needs an answer` and `Open zekno and press enter on <server>`, `over SSH`, `Compose <v>`,
 `<free> free` and `not checked` are mock-up words.

@@ -1,3 +1,4 @@
+import type { DoctorReport } from "../ops/doctor"
 import type { DeployStart, DeployView } from "./deploy"
 
 /**
@@ -56,6 +57,20 @@ export type ListQuestion<T> = { question: string; rows: readonly ListRow<T>[]; c
  * the plain interface throws.
  */
 export type TypedQuestion = { question: string; fill?: string; check(answer: string): string | undefined; missing: Error }
+
+/**
+ * D30, the last line of `zekno doctor` (specs/006-cli-small-features,
+ * contracts/doctor.md): each count written `no` when it is 0, the first
+ * letter in capitals. `1 problem, 1 warning.` is the mock-up's.
+ */
+export function doctorCounts(problems: number, warnings: number): string {
+  const count = (n: number, word: string) => (n === 0 ? `no ${word}s` : `${n} ${word}${n === 1 ? "" : "s"}`)
+  const text = `${count(problems, "problem")}, ${count(warnings, "warning")}.`
+  return text[0]!.toUpperCase() + text.slice(1)
+}
+
+/** D31: in place of the servers, when the profile did not verify and no server was contacted. Needs approval (research Q4). */
+export const SERVERS_SKIPPED = "No server was checked, because the profile could not be verified."
 
 /** One line of an app's logs, as `zekno logs` prints it. Each part is already cleaned or held to a pattern. */
 export type LogOutput = { time: string; service: string; text: string }
@@ -191,6 +206,12 @@ export interface Ui {
   groups(rows: readonly (readonly [label: string, text: string])[]): void
   /** One empty line between blocks at a terminal. Nothing in plain output. */
   gap(): void
+  /**
+   * `zekno doctor`'s report, once every check is done (contracts/doctor.md):
+   * at a terminal the sections, marks and next steps of mock-up 5; in plain
+   * output one line per check, its cells separated by tabs, then the last line.
+   */
+  doctorReport(report: DoctorReport): void
   /** Finishes drawing. Call once, before the process exits. */
   close(): Promise<void>
 }

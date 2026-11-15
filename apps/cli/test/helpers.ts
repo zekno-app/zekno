@@ -152,7 +152,7 @@ export type Asked = { kind: "choose" | "ask" | "confirm" | "askValue"; question:
  * reason, and the next answer is tried. `"leave"` is Esc: it leaves a list, a
  * typed answer, the hidden prompt and a yes-or-no question asked with
  * `leave`, and answers no to one asked without. Every question is kept in
- * `asked`, and what `note`, `code`, `groups` and `gap` were given in `lines`;
+ * `asked`, and what `note`, `code`, `groups`, `gap` and `doctorReport` were given in `lines`;
  * the plain interface still writes them, so `m.out` keeps them in order with
  * everything else. A question with no answer left fails the test.
  */
@@ -224,6 +224,10 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
     gap() {
       lines.push(["gap"])
       plain.gap()
+    },
+    doctorReport(report) {
+      lines.push(["doctorReport", `${report.problems} problems`, `${report.warnings} warnings`])
+      plain.doctorReport(report)
     },
   }
   m.deps.ui = ui

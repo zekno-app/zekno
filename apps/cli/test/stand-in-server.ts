@@ -10,7 +10,21 @@
  * command with `sh -c` in that home folder, as a server would, and can fail
  * in batch mode the way SSH does when it would have to ask a question.
  */
-import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
 import { join } from "node:path"
 
 import { RUNNER_MAIN, tempDir } from "../../runner/test/helpers"
@@ -114,6 +128,33 @@ exec env ZEKNO_DOCKER="${docker}" "${process.execPath}" "${RUNNER_MAIN}" "$@"
 
 export const sha256 = (bytes: Uint8Array | string): string => new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
 
+/**
+ * Every entry under `root`, with its bytes (as a hash) and its mode, a link
+ * by where it leads, a folder by its mode: what "byte for byte the same"
+ * compares (specs/006-cli-small-features, SC-005). Under a stand-in server's
+ * root the stand-ins' own logs are left out: they are the test's notes of
+ * each call, not part of the server.
+ */
+export function snapshot(root: string): string[] {
+  const entries: string[] = []
+  const walk = (dir: string) => {
+    if (!existsSync(dir)) return
+    for (const name of readdirSync(dir).sort()) {
+      const path = join(dir, name)
+      const relative = path.slice(root.length)
+      if (/^\/state\/(.*\.log|wget\.urls)$/.test(relative)) continue
+      const stat = lstatSync(path)
+      if (stat.isSymbolicLink()) entries.push(`${relative} -> ${readlinkSync(path)}`)
+      else if (stat.isDirectory()) {
+        entries.push(`${relative}/ ${(stat.mode & 0o7777).toString(8)}`)
+        walk(path)
+      } else entries.push(`${relative} ${(stat.mode & 0o7777).toString(8)} ${sha256(readFileSync(path))}`)
+    }
+  }
+  walk(root)
+  return entries
+}
+
 export type ScriptRun = { lines: string[]; stderr: string; code: number }
 
 /**
@@ -130,7 +171,7 @@ const STAND_IN_TEXT: Record<string, string> = {
   docker: `printf '%s\\n' "$*" >> "$state/docker.log"
 if [ "$1" = compose ] && [ -f "$state/no-compose" ]; then echo "docker: 'compose' is not a docker command." >&2; exit 1; fi
 if [ "$1 $2" = "compose version" ]; then
-  if [ "$3" = --short ]; then echo 2.40.3; else echo 'Docker Compose version v2.40.3'; fi
+  if [ "$3" = --short ]; then if [ -f "$state/compose" ]; then cat "$state/compose"; else echo 2.40.3; fi; else echo 'Docker Compose version v2.40.3'; fi
   exit 0
 fi
 exit 1
@@ -278,6 +319,10 @@ export function standInServer() {
     noCompose() {
       writeFileSync(at("no-compose"), "")
     },
+    /** `docker compose version --short` prints this, instead of 2.40.3. */
+    composeVersion(text: string) {
+      writeFileSync(at("compose"), `${text}\n`)
+    },
     remove(tool: string) {
       rmSync(join(standIns, tool), { force: true })
     },
@@ -302,9 +347,13 @@ export function standInServer() {
      * `done` it sends `afterDone`; then it closes the script's input. An
      * update's input is closed right after the script, as the CLI does.
      * `env` adds to or replaces the server's variables, such as a locale
-     * SSH passed on.
+     * SSH passed on. `script` sends another script than the installer, such
+     * as `zekno doctor`'s check, whose input is closed right after it.
      */
-    async run(words: readonly string[], options: { shell?: string; file?: Uint8Array; afterDone?: string; env?: Record<string, string> } = {}): Promise<ScriptRun> {
+    async run(
+      words: readonly string[],
+      options: { shell?: string; file?: Uint8Array; afterDone?: string; env?: Record<string, string>; script?: string } = {}
+    ): Promise<ScriptRun> {
       const child = Bun.spawn([options.shell ?? "/bin/sh", "-s", "--", ...words], {
         stdin: "pipe",
         stdout: "pipe",
@@ -312,14 +361,15 @@ export function standInServer() {
         env: { ...env(), ...options.env },
         cwd: home,
       })
-      child.stdin.write(INSTALL_SCRIPT)
+      child.stdin.write(options.script ?? INSTALL_SCRIPT)
       await child.stdin.flush()
-      if (words[0] === "update") await child.stdin.end()
+      const closedAtOnce = words[0] === "update" || options.script !== undefined
+      if (closedAtOnce) await child.stdin.end()
       const stderr = new Response(child.stderr).text()
       const out: string[] = []
       const decoder = new TextDecoder()
       let rest = ""
-      let closed = words[0] === "update"
+      let closed = closedAtOnce
       const close = async () => {
         if (closed) return
         closed = true

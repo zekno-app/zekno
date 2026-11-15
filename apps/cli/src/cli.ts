@@ -4,6 +4,7 @@ import { parseArgs } from "node:util"
 import { NO_TEAM_AT_TERMINAL, whichApp, whichServer } from "./asking/asking"
 import { deployAtTerminal } from "./asking/first-deploy"
 import { deploy, rollback } from "./commands/deploy"
+import { doctor } from "./commands/doctor"
 import { init } from "./commands/init"
 import { link } from "./commands/link"
 import { logs, parseTail } from "./commands/logs"
@@ -37,6 +38,7 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno status [--server <name>] [--json]
   zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
   zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
+  zekno doctor [--server <name>] [--json]
   zekno version [--json]
   zekno --version [--json]
 
@@ -58,6 +60,7 @@ const WORDS: Record<string, number> = {
   status: 1,
   logs: 1,
   link: 1,
+  doctor: 1,
   version: 1,
 }
 
@@ -260,6 +263,9 @@ export async function run(argv: string[], given: Deps): Promise<number> {
       case "link":
         await link(deps, atTerminal ? await linkDetails() : values)
         return 0
+      case "doctor":
+        // It never asks and takes nothing from zekno.json: no `withProject`, no asking step (contracts/doctor.md).
+        return await doctor(deps, { server: values.server, json: values.json })
       default:
         throw new UsageError(`Unknown command "${positionals.join(" ")}".`)
     }

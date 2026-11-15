@@ -88,14 +88,29 @@ type Identity = z.infer<typeof IdentitySchema>
 export const writeIdentity = (keyStore: KeyStore, keyName: string, identity: Omit<Identity, "v">): Promise<void> =>
   keyStore.set(keyName, JSON.stringify({ v: 1, ...identity } satisfies Identity))
 
-async function readIdentity(keyStore: KeyStore, keyName: string): Promise<Identity> {
+/**
+ * Why the keychain entry could not be read, with the sentence every command
+ * says. `reason` lets `zekno doctor` say what to do about each
+ * (specs/006-cli-small-features, contracts/doctor.md, D5 to D10).
+ */
+export class KeyEntryError extends CliError {
+  constructor(
+    readonly reason: "unreadable" | "missing" | "form",
+    message: string
+  ) {
+    super(message)
+  }
+}
+
+/** Reads the signing key and the team code from the keychain entry `keyName`. Exported for `zekno doctor`'s Key line. */
+export async function readIdentity(keyStore: KeyStore, keyName: string): Promise<Identity> {
   let entry: string | null
   try {
     entry = await keyStore.get(keyName)
   } catch {
-    throw new CliError("The system keychain could not be read. The signing key is kept nowhere else.")
+    throw new KeyEntryError("unreadable", "The system keychain could not be read. The signing key is kept nowhere else.")
   }
-  if (!entry) throw new CliError("The signing key is not in the system keychain on this machine.")
+  if (!entry) throw new KeyEntryError("missing", "The signing key is not in the system keychain on this machine.")
   let json: unknown
   try {
     json = JSON.parse(entry)
@@ -103,7 +118,7 @@ async function readIdentity(keyStore: KeyStore, keyName: string): Promise<Identi
     json = undefined
   }
   const identity = IdentitySchema.safeParse(json)
-  if (!identity.success) throw new CliError("The keychain entry for the signing key is not in a form this version reads.")
+  if (!identity.success) throw new KeyEntryError("form", "The keychain entry for the signing key is not in a form this version reads.")
   return identity.data
 }
 

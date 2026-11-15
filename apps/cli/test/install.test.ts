@@ -669,6 +669,13 @@ describe("the script, run with sh against stand-ins", () => {
     // took a version JavaScript refuses. Exported, so `expr` and `sed` read bytes too.
     expect(INSTALL_SCRIPT.startsWith("{\nset -eu\nLC_ALL=C\nexport LC_ALL\n")).toBe(true)
   })
+
+  test("the installer's script is the one features 004 and 005 reviewed", () => {
+    // Measured at 03443f2 (specs/006-cli-small-features, T037): `zekno doctor` has a script of its own
+    // (server/check-script.ts), so no feature after 005 changes this one unseen.
+    expect(INSTALL_SCRIPT.length).toBe(8810)
+    expect(sha256(INSTALL_SCRIPT)).toBe("46bbf2f774a427f4e0140e2bd0746a7f2400cc6696ad2526892e0d209996f548")
+  })
 })
 
 // ---------------------------------------------------------------------------

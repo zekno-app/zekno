@@ -710,7 +710,7 @@ type Line = { kind: "line"; text: string } | { kind: "too_long" } | { kind: "end
  * session that follows, and says false when bytes beyond the last line were
  * already read: nothing may arrive before the session's first request.
  */
-function scriptLines(stream: ReadableStream<Uint8Array>) {
+export function scriptLines(stream: ReadableStream<Uint8Array>) {
   const reader = stream.getReader()
   let held = new Uint8Array(0)
   let done = false

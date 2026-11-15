@@ -17,8 +17,8 @@ single command, for scripts.
   written yet.
 - **SSH is the route.** zekno talks to the runner directly, over SSH. No Zekno service is
   involved.
-- **Only `zekno version` reaches the network on its own:** it asks GitHub once for the newest
-  release, and sends nothing about you.
+- **Only `zekno version` and `zekno doctor` reach the network on their own:** each asks GitHub
+  once for the newest release, and sends nothing about you.
 - **State and logs come from your server.** Whether an app is running, and its logs, are read
   from the runner over SSH when you look. They never pass through Zekno, and this machine keeps
   none of it.
@@ -213,6 +213,7 @@ zekno rollback [--app <app>] [--server <name>] [--to <number>] [--json]
 zekno status [--server <name>] [--json]
 zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
 zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
+zekno doctor [--server <name>] [--json]
 zekno version [--json]
 zekno --version [--json]
 ```
@@ -496,6 +497,65 @@ See [The project file](#the-project-file-zeknojson).
 zekno link --app api --server prod
 ```
 
+### `zekno doctor`
+
+Checks this machine and each connected server, one line per check, and says what to do for each
+thing that is wrong. It changes nothing, on this machine or on any server.
+
+```text
+$ zekno doctor
+  This machine
+✔ zekno          0.1.0, installs runner 0.1.0
+✔ Key            in your system keychain
+✔ Profile        verified, team list v2
+✔ This folder    linked to demo on prod, compose.yaml is readable
+
+  prod  deploy@203.0.113.7
+✔ Reachable      over SSH
+✔ Docker         Compose 5.6.0
+! Runner         0.1.0-dev.1, older than this zekno's 0.1.0
+                 Run zekno server update prod
+✔ Disk           133 GB free
+
+  staging  deploy@198.51.100.4
+✖ Reachable      SSH needs an answer
+                 Open zekno and press enter on staging
+–  Docker        not checked
+–  Runner        not checked
+–  Disk          not checked
+
+  1 problem, 1 warning.
+```
+
+- **This machine.** zekno's version and the runner release it installs; the key (in the system
+  keychain, and the one the profile names); the profile (it verifies, and its team list version);
+  and this folder, when it has a `zekno.json` or a `compose.yaml` (the link is signed by your team
+  and used here, and the Compose file can be read).
+- **Each server.** Whether it can be reached; Docker with Compose, and its version; the runner,
+  and how its version stands to this zekno's; and the free disk space where the runner keeps its
+  state. It finds these with a short fixed script that only reads, and by asking the runner its
+  version and status.
+- **Results.** `✔` good, `!` a warning, `✖` a problem, `–` not checked: a check that depends on
+  one that failed is not checked, not wrong. Every warning and problem has a line under it that
+  says what to do. A warning does not fail the command; only a problem does, with exit status 1.
+- **No questions.** It reaches servers in SSH's batch mode and never asks for anything, so it never
+  waits on a password. A server where SSH would have to ask says "SSH needs an answer": open the
+  app with `zekno` and press `enter` on that server, where SSH can ask.
+- **Nothing changes.** No file is written on this machine, `links.json` included; nothing is
+  written, installed or started on a server; no deploy number is used.
+- `--server <name>` checks this machine and that one server. `--json` prints one object:
+  `zekno`, `runner`, `machine` (the checks of this machine), `servers` (each with `name`, `where`
+  and `checks`), `serversSkipped`, `latest`, `problems` and `warnings`. Each check has `check`,
+  `result` (`good`, `warning`, `problem` or `not_checked`), and `detail` and `next` where there
+  are any.
+- It also asks GitHub once whether a newer release exists, as `zekno version` does. A newer one
+  makes the `zekno` line a warning, with "A newer release exists" under it; no answer is not a
+  warning.
+
+```bash
+zekno doctor --server prod
+```
+
 ### `zekno version`
 
 Prints the version of this zekno and of the runner release it installs. `zekno --version`
@@ -523,8 +583,8 @@ that is not a version. The exit status is 0 in each case. With `--json` the answ
   seconds. `zekno --version` never uses the network.
 - The request carries the name `zekno` and nothing about you, your team, your servers or your
   project. GitHub learns the address and the time of the request.
-- Nothing else in zekno contacts GitHub on its own. There is no check in the background, and
-  nothing is stored.
+- Only `zekno version` and `zekno doctor` contact GitHub, each once per run. Nothing else in zekno
+  does so on its own, there is no check in the background, and nothing is stored.
 - zekno never downloads or installs a newer release. Until zekno is packaged, updating it means
   getting the newer source and building it again: see [Build from source](#build-from-source).
 

@@ -302,13 +302,13 @@ describe("no other command asks GitHub (FR-036)", () => {
     expect(main).toMatch(/fetch: \(input, init\) => fetch\(input, init\)/)
   })
 
-  test("only version/newest.ts uses the fetch, and only cli.ts asks it: the full-screen app and the operations never do", () => {
+  test("only version/newest.ts uses the fetch, and only cli.ts and ops/doctor.ts ask it: the full-screen app and the other operations never do", () => {
     const source = join(import.meta.dir, "../../src")
     const files = [...new Bun.Glob("**/*.{ts,tsx}").scanSync(source)].sort()
     expect(files.length).toBeGreaterThan(40)
     const using = (pattern: RegExp) => files.filter((file) => pattern.test(readFileSync(join(source, file), "utf8")))
-    // A command added later that checks (zekno doctor) is added here, with its reason.
-    expect(using(/\bcheckNewest\(/)).toEqual(["cli.ts", "version/newest.ts"])
+    // cli.ts for `zekno version`; ops/doctor.ts for `zekno doctor`'s first line, once per run (contracts/version.md, "In zekno doctor").
+    expect(using(/\bcheckNewest\(/)).toEqual(["cli.ts", "ops/doctor.ts", "version/newest.ts"])
     expect(using(/\.fetch\b/)).toEqual(["version/newest.ts"])
     // A call with something to fetch. The installer's shell script has a function of its own named `fetch()`, which is not this.
     expect(using(/\bfetch\([^)\s]/)).toEqual(["main.ts", "version/newest.ts"])
