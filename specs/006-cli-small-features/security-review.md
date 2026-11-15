@@ -489,3 +489,145 @@ program's error style; A9 and A10 of the first deploy's hidden prompt are drawn 
 reason. Nothing of a value is drawn, as before (`test/ui/ink/questions.test.tsx`,
 `test/asking/first-deploy.test.ts`).
 
+## 7. Second review: the decisions of feature 008
+
+**Written by the same independent reviewer as parts 1 to 5**, not by the implementer. Parts 1 to 6
+are unchanged.
+
+### Scope and method
+
+**Commits.** `d10a89f`, `bddaef6`, `1ddf9d4` and `3b6c63e` on `008-cli-decisions`: everything in
+`git log dev..HEAD`. In `apps/cli/src` that is six files: `version/newest.ts`,
+`version/runner-release.ts`, `secrets/import-file.ts`, `commands/secret.ts`,
+`ui/ink/hidden-prompts.tsx` and `ui/ink/questions.tsx`. The moves of feature 007 were not reviewed.
+
+**Read**: the diff of those six files and each file in full; `specs/008-cli-decisions/spec.md`; the
+amended `contracts/version.md`, `contracts/import.md` and `contracts/questions.md`; part 6 above;
+and, to see that they did not change, `ui/ink/raw-mode.tsx`, `ui/ink/ink.tsx` (`askValue`) and
+`ui/ink/left-behind.ts`.
+
+**Run**:
+
+- The five test files feature 008 touched or relies on: `test/secrets/import-file.test.ts`,
+  `test/secrets/import.test.ts`, `test/version/newest.test.ts`, `test/version/version.test.ts`,
+  `test/ui/ink/questions.test.tsx`. 111 tests, all pass.
+- Four throwaway probes in a scratch folder outside the repository:
+  - the redirect rule, with 17 `Location` values, and the strict reader, with 23 hostile files,
+    through `checkNewest` and a stand-in `fetch` (nothing left the process);
+  - Bun's own `fetch` with `checkNewest`'s request, against an HTTP server on 127.0.0.1 (loopback
+    only, ephemeral port): what is sent, a redirect, a compressed body, a 64 MiB compressed body,
+    a stalled body;
+  - `readImport` on a link in a folder of the path, a link to a link, a hard link, a target whose
+    folder name holds control characters, and a real path of 934 characters;
+  - the plain output of a whole import through a folder link.
+- Not used: the system keychain, `ssh`, the network, a real terminal.
+
+### Findings
+
+| Id | Severity | Finding | Confirmed |
+|----|----------|---------|-----------|
+| S5 | Informational | A link in a folder of the import path is not named, so S4's case is still reachable that way | Yes, by a probe |
+
+No finding is rated low, medium, high or critical.
+
+#### S5. A link in a folder of the path is not named (Informational)
+
+**Why informational**: it is S4 again, by another route; links are followed by design and the
+person still confirms the names.
+
+**Where**: `apps/cli/src/secrets/import-file.ts:78-87` (`whereLinkLeads`). `lstat` of the path
+follows every folder of it and looks only at the last part. When that part is not a link, nothing
+is named.
+
+**Who**: the author of a cloned repository. Git keeps a link to a folder as it keeps a link to a
+file.
+
+**Steps** (probe): `config` is a link to a folder outside the project that holds `.env`. Then
+`zekno secret import config/.env --app web --server dev --yes`.
+
+**Result**: `config/.env, for web on dev`, then `new OTHER_TOKEN`, stored. Nothing names the
+folder the value came from. The same file, reached by a link as the last part, is named:
+`chain.env (a link to /private/var/…/other.env)`. Part 6 and `contracts/import.md` say this case
+is not named, but not what a person sees then. It is what S4 described.
+
+**Smallest fix**: name the real path when any part of the path as typed is a link: check each
+prefix of the typed path with `lstat`, relative to the current folder when the path is relative.
+Then compare `realpath` of the whole path with the descriptor, as `whereLinkLeads` already does.
+An absolute path through a system link, such as `/tmp` on macOS, would then be named too, which
+says nothing false.
+
+### Needs validation
+
+- **A tag named `main`.** The address is `…/zekno-app/zekno/main/…`. It was not checked which ref
+  `raw.githubusercontent.com` serves when the repository has both a branch and a tag named `main`.
+  Git itself prefers the tag. If GitHub does too, whoever can push a tag named `main` decides what
+  the check reads. That bypasses `main`'s rules (no force push, `check-main` required) and any tag
+  rule written only for `runner-v*`. The effect is the one sentence below. Missing: one request
+  against a test repository with both refs. Hardening that needs no answer:
+  `…/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json`, which names the
+  branch only. That form was also not run here.
+- **"Older builds never say something false" after a move.** This holds only if the old path is
+  removed from `main`. A stale copy left at the old path would be read, and builds would say "This
+  is the newest release." when it is not. The effect is one sentence; it is a step for the
+  procedure, not code.
+- **Device and inode on unusual file systems.** The import's check relies on `dev` and `ino`
+  naming one file. While the file is open its inode cannot be reused, so on a local file system a
+  match is the same file. A FUSE or network file system that reports the same or made-up inode
+  numbers for different files was not tried. On such a mount, someone who can swap a link there
+  could have one file named and another read.
+
+### What holds
+
+**1. The newer-release check reads the release file** (`version/newest.ts`):
+
+| Property | Holds at | Checked |
+|----------|----------|---------|
+| One GET of a fixed address, with no credentials, cookie, query or body, and one header, `User-Agent: zekno` | `:43`, `:49`, `:152` | Loopback probe: Bun sent `accept: */*`, `accept-encoding`, `connection`, `host` and `user-agent: zekno`, nothing else; `newest.test.ts` |
+| Only `zekno version` and `zekno doctor` ask, and `zekno --version` never does | unchanged (`cli.ts`, `ops/doctor.ts`) | `version.test.ts`, "no other command asks GitHub", "zekno --version never uses the network" |
+| Bun does not follow a redirect itself | `:152`, `redirect: "manual"` | Loopback probe: one request, then not checked |
+| A redirect is followed only to `https:` on `raw.githubusercontent.com` exactly, with no port and no user name or password, at most three times | `:96-106`, `:153-158` | Stand-in probe. Not followed: `api.github.com`, `github.com`, `gist.githubusercontent.com`, a trailing dot, port 8443, a user name, `…@evil.example`, backslashes, `http:`, a `#@` trick, `%2e`, a look-alike `xn--` host. Followed: another account's path on the same host, written absolute, relative or protocol-relative, in capitals, or with `:443` |
+| Only whoever answers the first request can redirect, and they could answer the file directly, so a redirect gives them nothing more | `:153-158` | Read. The same was true of the API, where `/repos/<other>/<repo>/releases/latest` is another account's data on the same host |
+| One 3-second limit over connecting, redirects and the body | `:183-187`, `:117` | Loopback probe: a stalled body ended at 1.5 s with a 1.5 s limit |
+| Status 200 only | `:160-163` | `newest.test.ts` |
+| The body is read up to 16 KiB, after Bun has unpacked it | `:55`, `:109-133` | Loopback probe: a small compressed file was read, a 64 MiB compressed body ended as not checked, about 1 MiB of growth. Stand-in probe: 16,384 bytes read, 16,385 not |
+| Strict UTF-8, then `JSON.parse`, inside the `try` | `:166`, `:182-190` | Stand-in probe: a byte order mark is dropped by the decoder; an array 8,000 deep and a deep value inside `files` end as not checked |
+| The reader of untrusted text is safe | `runner-release.ts:17-23` | Stand-in probe. Its patterns are anchored and bounded (`RUNNER_VERSION_PATTERN`, `{64}`); `__proto__` and `constructor` keys and extra fields are refused at every level; `safeParse` never threw; the issues it returns did not include the input, and `releaseIn` discards them anyway (`:141-142`). A duplicate `version` key is read as JSON reads it: the last one |
+| Only the version leaves the reader; the checksums are only looked at | `:140-146` | Read |
+| A higher version without both checksums is not announced; a development version is not checked | `:144-145`, `:168-170` | Stand-in probe: one checksum or none gives `newest`; `0.2.0-dev.1` gives `not_checked`; `newest.test.ts` |
+| What reaches the terminal or `--json` is one sentence and `latest`, the version digits and dots of at most 29 characters | `:166-170` | Stand-in probe: an escape sequence, a newline, a leading zero, upper-case hex and a ten-digit number are all refused; `999999999.999999999.999999999` is the largest that passes |
+
+**What whoever answers for the address can do.** That is whoever can change the file on `main`, or
+answer for `raw.githubusercontent.com`: GitHub, its CDN, a proxy, or a certificate this machine
+was made to trust. They choose which of three things `zekno version` says: V1, V2 with any version
+of the grammar, or V3. They choose `latest` in `zekno version --json` and `zekno doctor --json`. In
+`zekno doctor` a `newer` state also changes the `zekno` line from good to a warning, gives it D50
+as its next step (and so hides D2 when both apply), and adds one to the warnings count. That is
+in the contract and unchanged from part 1. They cannot change an exit status, cause a download,
+name a URL, or reach anything that installs: installs use the checksums built into the program
+(`runner-release.ts:30-34`), never the fetched file. They can also hide a real newer release by
+answering V1 or V3. Before, the same power belonged to whoever could publish a GitHub release; now
+it belongs to whoever can change `main` (see "Needs validation" for a tag named `main`).
+
+**2. The import names where a link leads** (`secrets/import-file.ts`, `commands/secret.ts`):
+
+| Property | Holds at | Checked |
+|----------|----------|---------|
+| The name shown is a name of the file read: `realpath`, used only when `stat` of it gives the descriptor's device and inode; reading is from the descriptor after the check | `import-file.ts:78-87`, `:114-118` | `import-file.test.ts`, "a link changed over and over while it is read …" (a second process swaps the link; every read names the file whose text it gave, or stops) |
+| A swap between the open and the check, a link removed, or a dangling link after a swap stops the import with I20 or I19, before anything is read | `:82`, `:86`, `:136-137` | `import-file.test.ts`, "a path that no longer names the file opened gives no name …"; probe (a missing link: I19) |
+| A link to a link names the file at the end | `:85` (`realpath` resolves the whole chain) | Probe; `import-file.test.ts` |
+| Inode reuse cannot pass the check on a local file system: the open descriptor keeps the inode in use | `:80`, `:86`, `:114` (`bigint` stats, so large inode numbers compare exactly) | Read (see "Needs validation" for other file systems) |
+| A hard link is the same file under another name; no link is named | `:80-83` | Probe: `hard.env`, no name |
+| The real path is cleaned before it is shown, at a terminal and in plain output | `commands/secret.ts:71` (`sanitize`) | Probe: a folder named with ESC, `[2J`, a newline and U+202E is shown as `abcd`; `import.test.ts`, "an import file that is a link" |
+| The real path is bounded | the system's path limit: `stat` of it must succeed (1,024 bytes on macOS, 4,096 on Linux) | Probe: 934 characters, shown whole |
+| No value can reach the first line | I1 is built from the typed path, the real path, the app and the server only (`commands/secret.ts:31-32`, `:96`); the name is taken before any byte is read, and `whereLinkLeads`'s errors become I20 (`import-file.ts:136-137`) | Read; `import.test.ts` searches every output for each value |
+
+**3. A refused hidden value is drawn without `!`** (`ui/ink/hidden-prompts.tsx`, `questions.tsx`):
+
+| Property | Holds at | Checked |
+|----------|----------|---------|
+| The `Reason` line draws only A9 (a constant) or A10, built from the secret's name, cleaned and held to the name rule; `withoutBackticks` removes backticks only, with a bounded pattern | `hidden-prompts.tsx:68-75`, `questions.tsx:25-26`, `:121-127`, `marks.tsx:15` | Read; `questions.test.tsx` |
+| A refusal empties the value: nothing typed or pasted stays | `hidden-prompts.tsx:68` | Read |
+| Leaving after a refusal leaves the question line only: the reason goes with the prompt, and the line left behind holds no answer | `ink.tsx:167-170`, `left-behind.ts` (`left(question, "hidden")`) | Read |
+| Raw mode, the discard of typed-ahead keys and the hold between two hidden values are as before | `raw-mode.tsx`, unchanged by feature 008 (not in `git diff dev HEAD`) | `questions.test.tsx`, "keys typed before a question …" and "between two hidden values of one flow" |
+| The hidden prompt of `zekno secret set` draws no reason of its own | `hidden-prompts.tsx:30-41` | Read |
+
