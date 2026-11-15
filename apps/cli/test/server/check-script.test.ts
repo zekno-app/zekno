@@ -10,7 +10,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { CliError } from "../../src/cli/errors"
-import { INSTALL_SCRIPT } from "../../src/server/install/install"
+import { INSTALL_SCRIPT } from "../../src/server/install/script"
 import { RUNNER_RELEASE } from "../../src/version/runner-release"
 import { CHECK_PATH_INVALID, CHECK_SCRIPT, checkWords, runCheck } from "../../src/server/check-script"
 import type { RunnerProcess, Transport } from "../../src/server/transport"

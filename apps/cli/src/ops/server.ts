@@ -15,17 +15,10 @@ import { join, resolve } from "node:path"
 
 import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
 import { CliError, RunnerRefused, UsageError } from "../cli/errors"
-import {
-  isRunnerFileName,
-  notNamedRunner,
-  readRunnerFile,
-  releaseFiles,
-  RUNNER_PATHS,
-  runInstaller,
-  type InstallEvent,
-  type InstallRequest,
-  type InstallSource,
-} from "../server/install/install"
+import { isRunnerFileName, readRunnerFile, releaseFiles, RUNNER_PATHS, type InstallRequest, type InstallSource } from "../server/install/checks"
+import { notNamedRunner } from "../server/install/failures"
+import { runInstaller } from "../server/install/install"
+import type { InstallEvent } from "../server/install/lines"
 import { NAME, type Server } from "../profile/profile"
 import { RUNNER_RELEASE, type RunnerRelease } from "../version/runner-release"
 import { openSession, type Session, type SessionMode } from "../server/session"

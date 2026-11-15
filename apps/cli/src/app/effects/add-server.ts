@@ -4,7 +4,7 @@
  */
 import { openTeam, type Team } from "../../cli/context"
 import { addServer, foundDetail, prepareServerAdd } from "../../ops/server"
-import type { InstallEvent } from "../../server/install/install"
+import type { InstallEvent } from "../../server/install/lines"
 import { megabytes } from "../../shared/sizes"
 import { seconds } from "../../shared/time"
 import type { Effect } from "../state/events"

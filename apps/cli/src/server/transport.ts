@@ -289,7 +289,7 @@ function transport(
 }
 
 /**
- * A word after `sh -s --`: install.ts checks each value against its own
+ * A word after `sh -s --`: install/checks.ts checks each value against its own
  * pattern first. This holds even for a caller that got around that: plain
  * characters only, nothing a shell would expand but a leading `~`, and never
  * a leading `-`.
