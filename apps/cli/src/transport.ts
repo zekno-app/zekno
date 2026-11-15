@@ -52,8 +52,12 @@ export type RunnerProcess = {
 
 /** The ways of reaching one runner. */
 export type Transport = {
-  /** Runs one runner command with one message on its standard input, and reads its one answer. */
-  run(command: RunnerCommand, input?: string): Promise<{ exitCode: number; stdout: string }>
+  /**
+   * Runs one runner command with one message on its standard input, and
+   * reads its one answer. `signal`, when given, stops the process at once
+   * whenever it comes, and the call rejects without waiting for it further.
+   */
+  run(command: RunnerCommand, input?: string, signal?: AbortSignal): Promise<{ exitCode: number; stdout: string }>
   /** Starts `zekno-runner session` and keeps it running. */
   open(): RunnerProcess
   /**
@@ -184,8 +188,33 @@ function quietly(work: () => unknown): void {
   }
 }
 
-async function run(argv: string[], input: string | undefined, env: Record<string, string | undefined> | undefined, out: ErrorLines) {
+async function run(argv: string[], input: string | undefined, env: Record<string, string | undefined> | undefined, out: ErrorLines, signal?: AbortSignal) {
+  if (signal?.aborted) throw signal.reason
   const child = spawn(argv, env)
+  const answer = answerOf(child, input, out)
+  if (signal === undefined) return answer
+  // The signal stops the process at once, whenever it comes, and nothing more of it is waited for: a runner
+  // that never answers cannot keep a command that promised a limit waiting (specs/006-cli-small-features,
+  // security review S2). What it might still send is read and thrown away by the answer below.
+  let abort = () => {}
+  const stopped = new Promise<never>((_, reject) => {
+    abort = () => {
+      quietly(() => child.kill())
+      reject(signal.reason)
+    }
+  })
+  void answer.catch(() => {})
+  void stopped.catch(() => {})
+  signal.addEventListener("abort", abort, { once: true })
+  try {
+    return await Promise.race([answer, stopped])
+  } finally {
+    signal.removeEventListener("abort", abort)
+  }
+}
+
+/** Hands `input` to a runner command started as `child`, and reads its answer and its exit status. */
+async function answerOf(child: ReturnType<typeof spawn>, input: string | undefined, out: ErrorLines) {
   const errors = passOn(child.stderr, out)
   try {
     if (input !== undefined) child.stdin.write(input)
@@ -253,7 +282,7 @@ function transport(
     return argv(word)
   }
   return {
-    run: async (word, input) => run(command(word), input, env(), out),
+    run: async (word, input, signal) => run(command(word), input, env(), out, signal),
     open: () => open(command("session"), env(), out),
     firstAnswerMs,
   }
@@ -317,14 +346,16 @@ export function connect(target: Target, localRunner: string[], options: ConnectO
 /**
  * Calls the runner and reads its one JSON line. A refusal becomes an error
  * with a plain explanation; anything else must match the expected message.
+ * `signal`, when given, stops the call at once (`Transport.run`).
  */
 export async function ask<Schema extends z.ZodType>(
   transport: Transport,
   command: RunnerCommand,
   schema: Schema,
-  message?: unknown
+  message?: unknown,
+  signal?: AbortSignal
 ): Promise<z.infer<Schema>> {
-  const { stdout } = await transport.run(command, message === undefined ? undefined : JSON.stringify(message))
+  const { stdout } = await transport.run(command, message === undefined ? undefined : JSON.stringify(message), signal)
   const line = stdout.trim().split("\n").at(-1) ?? ""
   const report = parseMessage(RunnerReportSchema, line)
   if (report.ok && report.value.outcome === "refused") throw new RunnerRefused(report.value.reason!)

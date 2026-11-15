@@ -126,6 +126,39 @@ exec env ZEKNO_DOCKER="${docker}" "${process.execPath}" "${RUNNER_MAIN}" "$@"
 `
 }
 
+/**
+ * A runner that answers its session with a line that is not a frame, so the
+ * CLI takes it for a runner from before sessions, and then never answers its
+ * one-shot `status` (specs/006-cli-small-features, security review S2). Each
+ * process started for `status` writes its id to `pids` before it waits, so
+ * a test can see whether any is left running (`stillRunning`).
+ */
+export function stallingRunner(pids: string): string {
+  return `#!/bin/sh
+case $1 in
+  session) echo hello ;;
+  status) echo $$ >> "${pids}"; exec sleep 30 ;;
+  *) exit 2 ;;
+esac
+`
+}
+
+/** The processes named in `pids` that are still running once `ms` have passed for them to go. */
+export async function stillRunning(pids: string, ms = 3000): Promise<number[]> {
+  const ids = existsSync(pids) ? readFileSync(pids, "utf8").trim().split("\n").filter(Boolean).map(Number) : []
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+  const until = Date.now() + ms
+  while (ids.some(alive) && Date.now() < until) await Bun.sleep(25)
+  return ids.filter(alive)
+}
+
 export const sha256 = (bytes: Uint8Array | string): string => new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
 
 /**

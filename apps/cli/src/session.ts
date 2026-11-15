@@ -341,14 +341,24 @@ function live(started: Extract<Started, { kind: "session" }>, signal: AbortSigna
   }
 }
 
-/** The one-shot commands of a runner from before sessions, one process each. */
-function oneShot(transport: Transport): Session {
+/**
+ * The one-shot commands of a runner from before sessions, one process each.
+ * `signal` stops a request's process at once, as it stops a session: a
+ * runner that answered as one from before sessions and then never answers
+ * keeps nobody who gave a limit waiting (security review S2). Without a
+ * signal, a request waits for its process as it always has.
+ */
+function oneShot(transport: Transport, signal: AbortSignal | undefined): Session {
   return {
     mode: "one-shot",
     runner: undefined,
     request(command, schema, options = {}) {
       if (command === "setup" || command === "sync" || command === "apply" || command === "status") {
-        return ask(transport, command, schema, options.input)
+        if (signal === undefined) return ask(transport, command, schema, options.input)
+        if (signal.aborted) return Promise.reject(new CliError(ENDED))
+        return ask(transport, command, schema, options.input, signal).catch((error: unknown) => {
+          throw signal.aborted ? new CliError(ENDED) : error
+        })
       }
       return Promise.reject(new CliError(TOO_OLD))
     },
@@ -362,7 +372,8 @@ export type OpenOptions = {
    * or asks, before the runner has answered, or later. The runner process,
    * or SSH, is stopped outright, and a request in progress rejects. Opening
    * rejects too; whoever signalled knows why. A runner from before sessions
-   * has nothing kept open to stop.
+   * has nothing kept open to stop; a request it is carrying stops at once,
+   * its process stopped outright.
    */
   signal?: AbortSignal
 }
@@ -380,7 +391,7 @@ export async function openSession(transport: Transport, options: OpenOptions = {
   if (started.kind === "session" && started.late) started = await start(transport, undefined, signal)
   if (started.kind === "session") return live(started, signal)
   if (signal?.aborted) throw new CliError(ENDED)
-  return oneShot(transport)
+  return oneShot(transport, signal)
 }
 
 /** Runs `work` with one session and closes it afterwards, however the work ends. */

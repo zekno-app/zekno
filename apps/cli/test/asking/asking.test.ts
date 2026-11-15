@@ -4,13 +4,14 @@
  * command offers"; data-model.md, "Server row and app row").
  */
 import { describe, expect, test } from "bun:test"
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 
 import { runner, tempDir } from "../../../runner/test/helpers"
 import { READ_LIMIT_MS } from "../../src/app/effects"
 import {
   APP_NAME_RULE as A11,
+  appRows,
   appTaken as A12,
   ASKING_LIMIT_MS,
   folderName,
@@ -27,7 +28,7 @@ import { isMemberName, type Server } from "../../src/profile"
 import type { ListQuestion } from "../../src/ui/types"
 import runnerPackage from "../../../runner/package.json"
 import { answering, COMPOSE_V1, filesUnder, machine, ready, twin, type Answer, type Asked } from "../helpers"
-import { realRunner, sshStandIn, standInServer, withSsh } from "../stand-in-server"
+import { realRunner, sshStandIn, stallingRunner, standInServer, stillRunning, withSsh } from "../stand-in-server"
 
 /** The version the repository's runner reports, which a stand-in release made from it carries. */
 const OWN = runnerPackage.version
@@ -186,6 +187,22 @@ describe("the building blocks: which app", () => {
     expect(Date.now() - started).toBeLessThan(3000)
     expect(silent.asked).toEqual([{ kind: "choose", question: "Which app on dev?", rows: ["web\tdeploy 2"] }])
   })
+
+  test("a runner that answers as one from before sessions, then never answers status (security review S2): the limit holds, and no process is left", async () => {
+    const { m, team, server } = await deployedTwice()
+    const pids = join(tempDir("pids"), "pids")
+    const stalling = join(tempDir("stalling"), "zekno-runner")
+    writeFileSync(stalling, stallingRunner(pids))
+    chmodSync(stalling, 0o755)
+    m.deps.localRunner = [stalling]
+    const started = Date.now()
+    const rows = await appRows(m.deps, team, server, { limitMs: 1000 })
+    expect(Date.now() - started).toBeLessThan(3000)
+    // The runner asked for its status, and was stopped at the limit: the list is this machine's history.
+    expect(existsSync(pids)).toBe(true)
+    expect(rows).toEqual([{ value: "web", label: "web", detail: "deploy 2" }])
+    expect(await stillRunning(pids)).toEqual([])
+  }, 20_000)
 
   test("names a runner sends that are not app names are never drawn: its answer is refused, and the history is offered", async () => {
     const { m, team, server } = await deployedTwice()

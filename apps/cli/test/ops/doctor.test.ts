@@ -27,7 +27,7 @@ import { doctorCounts, SERVERS_SKIPPED } from "../../src/ui/types"
 import type { Fetch } from "../../src/version/newest"
 import { CLI_VERSION } from "../../src/version/version"
 import { answering, machine, twin } from "../helpers"
-import { olderRunner, realRunner, reportingRunner, snapshot, sshStandIn, standInServer, withSsh, type StandInServer } from "../stand-in-server"
+import { olderRunner, realRunner, reportingRunner, snapshot, sshStandIn, stallingRunner, standInServer, stillRunning, withSsh, type StandInServer } from "../stand-in-server"
 import { terminal } from "../ui/terminal"
 
 /** The version the repository's runner reports, and so the one a stand-in release made from it carries: this zekno's. */
@@ -494,6 +494,40 @@ describe("each check, and each result (contracts/doctor.md, The checks)", () => 
       next: "Check that deploy@203.0.113.7 is the server you added as prod",
     })
   }, 90_000)
+
+  test("a runner that answers as one from before sessions, then never answers status (security review S2): the limit holds, and no process is left", async () => {
+    // On this machine.
+    const f = await fleet()
+    expect(await f.m.zekno("server", "add", "dev", "--local")).toBe(0)
+    f.m.deps.fetch = github(`runner-v${OWN}`).fetch
+    const pids = join(tempDir("pids"), "pids")
+    const stalling = join(tempDir("stalling"), "zekno-runner")
+    writeFileSync(stalling, stallingRunner(pids))
+    chmodSync(stalling, 0o755)
+    f.m.deps.localRunner = [stalling]
+    let started = Date.now()
+    let done = await report(f, { limitMs: 1000 })
+    expect(Date.now() - started).toBeLessThan(4000)
+    expect(existsSync(pids)).toBe(true)
+    expect(done.servers[0]!.checks[2]).toMatchObject({ check: "runner", result: "problem", detail: "did not answer within 20 seconds" })
+    expect(await stillRunning(pids)).toEqual([])
+
+    // Over SSH: the check script answers, then the runner at the path stalls.
+    const prod = await f.add("prod", "deploy@203.0.113.7")
+    prod.server.df(ROOMY)
+    const remote = join(tempDir("pids"), "pids")
+    writeFileSync(prod.server.runnerPath, stallingRunner(remote))
+    started = Date.now()
+    done = await report(f, { limitMs: 3000 })
+    expect(Date.now() - started).toBeLessThan(10_000)
+    expect(existsSync(remote)).toBe(true)
+    expect(done.servers[1]!.checks.slice(0, 3)).toMatchObject([
+      { check: "reachable", result: "good" },
+      { check: "docker", result: "good" },
+      { check: "runner", result: "problem", detail: "did not answer within 20 seconds" },
+    ])
+    expect(await stillRunning(remote)).toEqual([])
+  }, 45_000)
 
   test("Disk: free space that cannot be read (D45), and little room left (D46); a user with no home folder (D49)", async () => {
     const { f, prod } = await baseline()
