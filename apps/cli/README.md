@@ -889,6 +889,9 @@ On this machine:
 
 The profile folder has mode 700 and its files mode 600. App state and logs are never stored.
 
+The file you give `zekno secret import` is read once and never copied: its values are kept only
+as the encrypted records above. `zekno doctor` writes nothing, on this machine or on a server.
+
 The files in `~/.zekno` are safe to read but are not believed as they stand. Every command
 rebuilds the team from the signed team lists, starting from the team code in the keychain, and
 checks each secret and each history entry against it. A file changed by something other than

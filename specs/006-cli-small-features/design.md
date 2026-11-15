@@ -56,7 +56,7 @@ $ zekno deploy
 ? A name for it › prod
 ✔ Connected over SSH
 ✔ Docker with Compose found
-✔ Runner installed   52 MB, checksum verified
+✔ Runner installed  52 MB, checksum verified
 ✔ Added prod to the signed team list
   Server code  MM4G-GPD7-M9VM-ACGJ-Y48R
   Identifies this server's key. Teammates compare it before they trust the server.
@@ -106,7 +106,7 @@ $ zekno doctor
 ✔ Profile        verified, team list v2
 ✔ This folder    linked to demo on prod, compose.yaml is readable
 
-  prod   deploy@203.0.113.7
+  prod  deploy@203.0.113.7
 ✔ Reachable      over SSH
 ✔ Docker         Compose 5.6.0
 ! Runner         0.1.0-dev.1, older than this zekno's 0.1.0
