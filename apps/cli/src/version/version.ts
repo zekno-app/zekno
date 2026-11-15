@@ -28,11 +28,11 @@ export function versionLines(runner: string): [string, string] {
 
 /**
  * The same two lines as a terminal draws them (board "The version, and a
- * newer release"): the versions in the text colour, the words after the
- * runner's version dim.
+ * newer release"): the versions in the text colour, and dim from the comma
+ * after the runner's version on, that comma included.
  */
 export function versionCells(runner: string): [Cell[], Cell[]] {
-  return [[plainCell(`zekno ${CLI_VERSION}`)], [plainCell(`runner ${runner},`), quiet("the runner release this zekno installs")]]
+  return [[plainCell(`zekno ${CLI_VERSION}`)], [plainCell(`runner ${runner}`), { ...quiet(", the runner release this zekno installs"), tight: true }]]
 }
 
 /** The same, as one object for `--json`. */

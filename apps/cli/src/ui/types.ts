@@ -22,7 +22,17 @@ export type MarkedCell = { text: string; mark: string; tone: "success" | "danger
  * needs, such as "version 1, not deployed yet" where plain output keeps
  * "version 1".
  */
-export type StyledCell = { text: string; style: "strong" | "plain" | "quiet"; terminal?: string }
+export type StyledCell = {
+  text: string
+  style: "strong" | "plain" | "quiet"
+  terminal?: string
+  /**
+   * In a line (`Ui.line`), drawn right after the cell before it, with no
+   * space between, such as the dim `, the runner release ...` after the
+   * runner's version (board "The version, and a newer release").
+   */
+  tight?: boolean
+}
 export type Cell = string | MarkedCell | StyledCell
 
 /** The words of a cell, as plain output prints them. */
@@ -39,8 +49,11 @@ export const plainCell = (text: string): StyledCell => ({ text, style: "plain" }
  * One row of a list a person picks from (specs/006-cli-small-features,
  * contracts/questions.md). `label` and `detail` are drawn as they are given:
  * whoever builds a row cleans anything that came from a file or a server.
+ * `asksNext`: choosing it asks a question of its own, such as `+ a new app`,
+ * so at a terminal it leaves no line behind and that question is drawn in
+ * the list's place (mock-up 2).
  */
-export type ListRow<T> = { value: T; label: string; detail?: string }
+export type ListRow<T> = { value: T; label: string; detail?: string; asksNext?: boolean }
 
 /**
  * A list to pick one row from. `rows` is never empty: a caller with nothing

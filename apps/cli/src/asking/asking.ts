@@ -164,7 +164,7 @@ export async function whichApp(
     if (!options.offerNew) throw new CliError(noApps(server.name))
     return { app: await named("Name for this app", []), how: "asked", fresh: true }
   }
-  const offered: ListRow<string | null>[] = options.offerNew ? [...rows, { value: null, label: NEW_APP }] : rows
+  const offered: ListRow<string | null>[] = options.offerNew ? [...rows, { value: null, label: NEW_APP, asksNext: true }] : rows
   const chosen = await deps.ui.choose({ question: `Which app on ${server.name}?`, rows: offered, collapsed: "App", missing: new UsageError(MISSING_APP) })
   if (chosen !== null) return { app: chosen, how: "asked", fresh: false }
   return {

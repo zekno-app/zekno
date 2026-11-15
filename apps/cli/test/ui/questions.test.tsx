@@ -76,7 +76,7 @@ describe("a list (mock-up 1)", () => {
     await t.ui.close()
   })
 
-  test("Esc and Ctrl-C leave", async () => {
+  test("Esc and Ctrl-C leave; the question's line stays, as the board draws it above Nothing was done.", async () => {
     for (const key of [ESC, CTRL_C]) {
       const t = terminal()
       const chosen = t.ui.choose(whichServer())
@@ -85,9 +85,28 @@ describe("a list (mock-up 1)", () => {
       expect(chosen).rejects.toBeInstanceOf(Left)
       await chosen.catch(() => {})
       await settle()
-      expect(t.lines()).toEqual([])
+      expect(t.lines()).toEqual(["? Which server?"])
       await t.ui.close()
     }
+  })
+
+  test("a row that asks a question of its own, such as + a new app, leaves no line when chosen: that question follows the list", async () => {
+    const t = terminal()
+    const chosen = t.ui.choose({ ...whichServer([...SERVERS, { value: "new", label: "+ a new app", asksNext: true }]), question: "Which app on prod?", collapsed: "App" })
+    await shows(t, "? Which app on prod?")
+    t.keys(DOWN)
+    t.keys(DOWN)
+    await shows(t, "  ❯ + a new app")
+    t.keys(ENTER)
+    expect(await chosen).toBe("new")
+    const named = t.ui.ask({ question: "Name for the new app", fill: "my-folder", check: () => undefined, missing })
+    await shows(t, "? Name for the new app › my-folder")
+    expect(t.lines()).toEqual(["? Name for the new app › my-folder"])
+    t.keys(ENTER)
+    await named
+    await settle()
+    expect(t.lines()).toEqual(["? Name for the new app › my-folder"])
+    await t.ui.close()
   })
 
   test("the label column is max(11, longest label + 2); a row with no detail ends after its label", async () => {
@@ -187,14 +206,21 @@ describe("a typed answer (mock-up 2)", () => {
     await t.ui.close()
   })
 
-  test("Esc and Ctrl-C leave", async () => {
+  test("Esc and Ctrl-C leave; the question's line stays with what was typed, without the cursor", async () => {
     for (const key of [ESC, CTRL_C]) {
       const t = terminal()
       const answered = t.ui.ask(nameForTheNewApp())
       await shows(t, "? Name for the new app › my-folder")
+      t.keys("-x")
+      await shows(t, "? Name for the new app › my-folder-x")
       t.keys(key)
       expect(answered).rejects.toBeInstanceOf(Left)
       await answered.catch(() => {})
+      await settle()
+      expect(t.lines()).toEqual(["? Name for the new app › my-folder-x"])
+      const raw = t.raw()
+      const last = raw.slice(raw.lastIndexOf("Name for the new app"))
+      expect(last.slice(0, last.indexOf("\n"))).not.toContain("\x1b[7m")
       await t.ui.close()
     }
   })
@@ -642,7 +668,7 @@ describe("mock-ups 1 and 2 through the commands", () => {
     left.keys(ESC)
     expect(await leaving).toBe(1)
     await left.ui.close()
-    expect(left.lines()).toEqual(["✖ Nothing was done."])
+    expect(left.lines()).toEqual(["? Which server?", "✖ Nothing was done."])
   }, 60_000)
 
   test("zekno status with one server: it is used and said, and no list is drawn", async () => {
@@ -689,9 +715,11 @@ describe("mock-ups 1 and 2 through the commands", () => {
     await shows(deploy, "  ❯ + a new app")
     deploy.keys(ENTER)
     await shows(deploy, "? Name for the new app › my-folder")
+    // Choosing + a new app leaves no line of its own: the typed question follows the list straight away (mock-up 2).
+    expect(deploy.lines()).toEqual(["? Name for the new app › my-folder"])
     deploy.keys(ESC)
     expect(await deploying).toBe(1)
     await deploy.ui.close()
-    expect(deploy.lines().at(-1)).toBe("✖ Nothing was done.")
+    expect(deploy.lines()).toEqual(["? Name for the new app › my-folder", "✖ Nothing was done."])
   }, 60_000)
 })

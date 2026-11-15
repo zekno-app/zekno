@@ -16,6 +16,7 @@ import { applySelectKey, MARKER } from "./select"
 import { applyTextInput } from "./text-input"
 import { BRAND } from "./theme"
 import type { ListRow } from "./types"
+import { Wrapped, type Piece } from "./wrap"
 
 /** A9: the hidden prompt that can be skipped, given nothing. Needs approval (research Q4). */
 export const VALUE_EMPTY = "A value cannot be empty. Press esc to skip it."
@@ -86,21 +87,38 @@ export function firstSentence(text: string): { first: string; rest: string } {
  * Words whose first sentence is bold and the rest in the text colour, as the
  * boards of feature 006 draw a question (`Remember this folder? It writes
  * zekno.json, ...`; a question of one sentence is bold whole) and the newer
- * release `zekno version` reports (board "The version, and a newer release").
+ * release `zekno version` reports (board "The version, and a newer release"),
+ * as pieces for words that wrap (`Wrapped`).
  */
-export function QuestionWords({ text }: { text: string }) {
+export function questionPieces(text: string): Piece[] {
   const { first, rest } = firstSentence(text)
-  if (rest === "") return <Text bold>{first}</Text>
+  return rest === "" ? [{ text: first, bold: true }] : [{ text: first, bold: true }, { text: rest }]
+}
+
+/**
+ * A question's line: `?` in the brand colour, then its words, which go on
+ * under themselves, from column 2, when the window is narrower than the line
+ * (`Wrapped`). `columns` is the window's width.
+ */
+export function QuestionLine({ pieces, columns }: { pieces: readonly Piece[]; columns: number | undefined }) {
   return (
-    <Text>
-      <Text bold>{first}</Text>
-      {rest}
-    </Text>
+    <Box>
+      <Box flexShrink={0} marginRight={1}>
+        <Text color={BRAND}>?</Text>
+      </Box>
+      <Wrapped pieces={pieces} columns={columns === undefined ? undefined : columns - 2} />
+    </Box>
   )
 }
 
-/** How a question ends: with an answer, or left (Esc, Ctrl-C). */
-export type Settled<T> = { answer: T } | { left: true }
+/** The pieces of a typed answer's line after its question: the dim `›`, then the answer. */
+export const answerPieces = (answer: string): Piece[] => [{ text: " " }, { text: "›", dim: true }, { text: ` ${answer}` }]
+
+/**
+ * How a question ends: with an answer, or left (Esc, Ctrl-C). `typed` is the
+ * answer so far of a typed question that was left, kept on its line.
+ */
+export type Settled<T> = { answer: T } | { left: true; typed?: string }
 
 /** A key, as Ink reports it, of the kinds a question reads. */
 type QuestionKey = { upArrow?: boolean; downArrow?: boolean; return?: boolean; escape?: boolean; ctrl?: boolean; meta?: boolean; backspace?: boolean; delete?: boolean }
@@ -140,9 +158,7 @@ export function ListPrompt<T>({ question, rows, settle }: { question: string; ro
   const shown = listWindow(rows.length, selected, Math.max(FEWEST_ROWS, height - LIST_SPARE_LINES))
   return (
     <Box flexDirection="column">
-      <Text>
-        <Text color={BRAND}>?</Text> <QuestionWords text={question} />
-      </Text>
+      <QuestionLine pieces={questionPieces(question)} columns={columns} />
       {shown.above > 0 ? <Text dimColor>{moreLine("↑", shown.above)}</Text> : null}
       {rows.slice(shown.from, shown.to).map((row, offset) => {
         const at = shown.from + offset === selected
@@ -193,6 +209,7 @@ export function TypedPrompt({
   // Several keys read at once reach here before React draws again, so the answer so far is kept here too.
   const current = useRef(fill ?? "")
   const settled = useRef(false)
+  const { columns } = useWindowSize()
   const end = (result: Settled<string>) => {
     if (settled.current) return
     settled.current = true
@@ -200,9 +217,9 @@ export function TypedPrompt({
   }
   useInput((input, key) => {
     if (settled.current) return
-    if (isCtrlC(input, key)) return end({ left: true })
+    if (isCtrlC(input, key)) return end({ left: true, typed: current.current })
     const next = applyTextInput(current.current, input, key)
-    if (next.kind === "cancelled") return end({ left: true })
+    if (next.kind === "cancelled") return end({ left: true, typed: current.current })
     current.current = next.value
     setAnswer(next.value)
     if (next.kind !== "done") return
@@ -212,13 +229,10 @@ export function TypedPrompt({
   })
   return (
     <Box flexDirection="column">
-      <Text>
-        <Text color={BRAND}>?</Text> <QuestionWords text={question} /> <Text dimColor>›</Text> {answer}
-        <Text inverse> </Text>
-      </Text>
+      <QuestionLine pieces={[...questionPieces(question), ...answerPieces(answer), { text: " ", inverse: true, keep: true }]} columns={columns} />
       {reason === undefined ? null : (
         <Box paddingLeft={2}>
-          <Text color="yellow">{reason}</Text>
+          <Wrapped pieces={[{ text: reason, color: "yellow" }]} columns={columns - 2} />
         </Box>
       )}
     </Box>

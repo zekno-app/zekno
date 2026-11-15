@@ -8,11 +8,12 @@ import type { CheckLine, DoctorReport } from "../ops/doctor"
 import { keptLines } from "./deploy"
 import { DeployBlock, type DeployShown } from "./deploy-view"
 import { NO_TERMINAL_FOR_VALUE, readStdin } from "./plain"
-import { isCtrlC, ListPrompt, QuestionWords, TypedPrompt, VALUE_EMPTY, valueHasLines, type Settled } from "./questions"
+import { answerPieces, isCtrlC, ListPrompt, QuestionLine, questionPieces, TypedPrompt, VALUE_EMPTY, valueHasLines, type Settled } from "./questions"
 import { applySecretInput } from "./secret-input"
 import { BRAND } from "./theme"
 import { discardTypedAhead } from "./type-ahead"
 import { doctorCounts, REMOTE_MARK, SERVERS_SKIPPED, type Cell, type ListRow, type LogOutput, type Ui } from "./types"
+import { Wrapped, type Piece } from "./wrap"
 
 type Item =
   | { id: number; kind: "info" | "error" | "remote" | "note"; text: string }
@@ -30,6 +31,8 @@ type Item =
   | { id: number; kind: "deploy"; shown: DeployShown }
   | { id: number; kind: "chosen"; collapsed: string; label: string }
   | { id: number; kind: "asked"; question: string; answer: string }
+  /** A question left with Esc or Ctrl-C: its line stays, above what is said next (board "Questions in single commands"). `answer`: a typed answer so far. */
+  | { id: number; kind: "left"; question: string; answer?: string }
   | { id: number; kind: "answered"; question: string; yes: boolean }
   | { id: number; kind: "hidden"; question: string; skipped: boolean }
   | { id: number; kind: "code"; label: string; value: string; about: string }
@@ -145,26 +148,63 @@ const SENTENCE_END = /\.(?=\s)/
  * below, in line with that sentence. Commands are drawn as the board draws
  * them, without the backticks plain output keeps around them.
  */
-export function ErrorLine({ text }: { text: string }) {
-  const shown = text.replace(/`([^`\n]+)`/g, "$1")
+export function ErrorLine({ text, columns }: { text: string; columns?: number }) {
+  const shown = withoutBackticks(text)
   const end = shown.search(SENTENCE_END)
   const first = end === -1 ? shown : shown.slice(0, end + 1)
   const rest = end === -1 ? "" : shown.slice(end + 1).trim()
   return (
     <Box flexDirection="column">
-      <Box>
-        <Box flexShrink={0} marginRight={1}>
-          <Text color={COLOR.error}>{MARK.error}</Text>
-        </Box>
-        <Text bold>{first}</Text>
-      </Box>
+      <MarkedLine mark={MARK.error} color={COLOR.error} pieces={[{ text: first, bold: true }]} columns={columns} />
       {rest ? (
         <Box paddingLeft={2}>
-          <Text dimColor>{rest}</Text>
+          <Wrapped pieces={[{ text: rest, dim: true }]} columns={inside(columns, 2)} />
         </Box>
       ) : null}
     </Box>
   )
+}
+
+/** A command in a sentence, as the boards draw it at a terminal: without the backticks plain output keeps around it. */
+const withoutBackticks = (text: string): string => text.replace(/`([^`\n]+)`/g, "$1")
+
+/** The width left inside a window `columns` wide once `taken` columns are set in, or none when the window's is not known. */
+const inside = (columns: number | undefined, taken: number): number | undefined => (columns === undefined ? undefined : columns - taken)
+
+/**
+ * A line after a mark (`✔`, `!`, `✖`): the mark in its colour, a space, and
+ * the words, which go on under themselves, never under the mark, when the
+ * window is narrower than the line.
+ */
+function MarkedLine({ mark, color, pieces, columns }: { mark: string; color?: string; pieces: readonly Piece[]; columns: number | undefined }) {
+  return (
+    <Box>
+      <Box flexShrink={0} marginRight={1}>
+        <Text color={color}>{mark}</Text>
+      </Box>
+      <Wrapped pieces={pieces} columns={inside(columns, 2)} />
+    </Box>
+  )
+}
+
+/**
+ * A line of cells (`Ui.line`) as a terminal draws it: each cell in its look,
+ * a space apart, unless a cell is drawn right after the one before it
+ * (`tight`), such as the dim comma of `zekno --version`.
+ */
+export function linePieces(cells: readonly Cell[]): Piece[] {
+  return cells.flatMap((cell, index): Piece[] => {
+    const piece = cellPieces(cell, drawnCell(cell), "plain")
+    const tight = typeof cell === "object" && "style" in cell && cell.tight === true
+    return index > 0 && !tight ? [{ text: " " }, piece] : [piece]
+  })
+}
+
+/** A cell as pieces in its look, as `CellText` draws it. */
+function cellPieces(cell: Cell, text: string, bare: "plain" | "quiet"): Piece {
+  if (typeof cell === "string") return { text, dim: bare === "quiet" }
+  if ("mark" in cell) return cell.tone === "quiet" ? { text, dim: true } : { text, color: TONE[cell.tone] }
+  return { text, bold: cell.style === "strong", dim: cell.style === "quiet" }
 }
 
 /** How often, at most, the live line under a running deploy is redrawn. */
@@ -220,49 +260,20 @@ function Line({ item, columns }: { item: Item; columns: number }) {
       </Box>
     )
   }
-  if (item.kind === "line") {
-    return (
-      <Text>
-        {item.cells.map((cell, index) => (
-          <Text key={index}>
-            {index > 0 ? " " : ""}
-            <CellText cell={cell} text={drawnCell(cell)} bare="plain" />
-          </Text>
-        ))}
-      </Text>
-    )
-  }
+  if (item.kind === "line") return <Wrapped pieces={linePieces(item.cells)} columns={columns} />
   if (item.kind === "log") return <LogItem line={item.line} serviceWidth={item.serviceWidth} columns={columns} />
   if (item.kind === "chosen") {
-    return (
-      <Text>
-        <Text color={COLOR.success}>{MARK.success}</Text> <Text dimColor>{item.collapsed}</Text>
-        {"  "}
-        {item.label}
-      </Text>
-    )
+    return <MarkedLine mark={MARK.success} color={COLOR.success} pieces={[{ text: item.collapsed, dim: true }, { text: `  ${item.label}` }]} columns={columns} />
   }
-  if (item.kind === "asked") {
-    return (
-      <Text>
-        <Text color={BRAND}>?</Text> <QuestionWords text={item.question} /> <Text dimColor>›</Text> {item.answer}
-      </Text>
-    )
+  if (item.kind === "asked") return <QuestionLine pieces={[...questionPieces(item.question), ...answerPieces(item.answer)]} columns={columns} />
+  if (item.kind === "left") {
+    return <QuestionLine pieces={[...questionPieces(item.question), ...(item.answer === undefined ? [] : answerPieces(item.answer))]} columns={columns} />
   }
   if (item.kind === "answered") {
-    return (
-      <Text>
-        <Text color={BRAND}>?</Text> <QuestionWords text={item.question} /> <Text dimColor>(y/N)</Text> {item.yes ? "yes" : "no"}
-      </Text>
-    )
+    return <QuestionLine pieces={[...questionPieces(item.question), ...yesOrNoPieces, { text: ` ${item.yes ? "yes" : "no"}` }]} columns={columns} />
   }
   if (item.kind === "hidden") {
-    return (
-      <Text>
-        <Text color={BRAND}>?</Text> <QuestionWords text={item.question} />
-        <Text dimColor>{item.skipped ? "skipped" : "(hidden)"}</Text>
-      </Text>
-    )
+    return <QuestionLine pieces={[...questionPieces(item.question), { text: item.skipped ? "skipped" : "(hidden)", dim: true }]} columns={columns} />
   }
   if (item.kind === "code") {
     // The code at column 15, as mock-up 3 draws the team code and the server code; what it is for on the line under it.
@@ -275,7 +286,7 @@ function Line({ item, columns }: { item: Item; columns: number }) {
           <Text bold>{item.value}</Text>
         </Text>
         <Box paddingLeft={2}>
-          <Text dimColor>{item.about}</Text>
+          <Wrapped pieces={[{ text: item.about, dim: true }]} columns={columns - 2} />
         </Box>
       </Box>
     )
@@ -289,14 +300,8 @@ function Line({ item, columns }: { item: Item; columns: number }) {
             <Box width={GROUP_LABEL} flexShrink={0}>
               <Text dimColor>{label}</Text>
             </Box>
-            <Text>
-              {/* A reason in brackets, such as "(zekno keeps this name)", is dim (board "zekno secret import"). */}
-              {text.split(/(\([^()]*\))/).map((part, at) => (
-                <Text key={at} dimColor={at % 2 === 1}>
-                  {part}
-                </Text>
-              ))}
-            </Text>
+            {/* A reason in brackets, such as "(zekno keeps this name)", is dim (board "zekno secret import"). */}
+            <Wrapped pieces={text.split(/(\([^()]*\))/).map((part, at) => ({ text: part, dim: at % 2 === 1 }))} columns={columns - 2 - GROUP_LABEL} />
           </Box>
         ))}
       </Box>
@@ -307,7 +312,7 @@ function Line({ item, columns }: { item: Item; columns: number }) {
   if (item.kind === "note") {
     return (
       <Box paddingLeft={2} width={columns}>
-        <Text dimColor>{item.text}</Text>
+        <Wrapped pieces={[{ text: item.text, dim: true }]} columns={columns - 2} />
       </Box>
     )
   }
@@ -317,31 +322,23 @@ function Line({ item, columns }: { item: Item; columns: number }) {
     // Indented as a block, so text of several lines stays aligned with the marked lines.
     return (
       <Box marginLeft={2}>
-        <Text>{item.text}</Text>
+        <Wrapped pieces={[{ text: item.text }]} columns={columns - 2} />
       </Box>
     )
   }
   if (item.kind === "remote") return <RemoteLine text={item.text} columns={columns} />
-  if (item.kind === "error") return <ErrorLine text={item.text} />
-  return (
-    <Box>
-      <Box flexShrink={0} marginRight={1}>
-        <Text color={COLOR[item.kind]}>{MARK[item.kind]}</Text>
-      </Box>
-      {(item.kind === "warn" || item.kind === "success") && item.firstBold ? (
-        <QuestionWords text={item.text} />
-      ) : item.kind === "success" && item.detail !== undefined ? (
-        <Text>
-          {item.text}
-          {"  "}
-          <Text dimColor>{item.detail}</Text>
-        </Text>
-      ) : (
-        <Text>{item.text}</Text>
-      )}
-    </Box>
-  )
+  if (item.kind === "error") return <ErrorLine text={item.text} columns={columns} />
+  const pieces: Piece[] =
+    (item.kind === "success" || item.kind === "warn") && item.firstBold === true
+      ? questionPieces(item.text)
+      : item.kind === "success" && item.detail !== undefined
+        ? [{ text: `${item.text}  ` }, { text: item.detail, dim: true }]
+        : [{ text: item.text }]
+  return <MarkedLine mark={MARK[item.kind]} color={COLOR[item.kind]} pieces={pieces} columns={columns} />
 }
+
+/** The dim `(y/N)` after a yes-or-no question, a space before it. */
+const yesOrNoPieces: Piece[] = [{ text: " " }, { text: "(y/N)", dim: true }]
 
 /**
  * A line from a server: dim, after the mark. A line wider than the terminal
@@ -399,11 +396,12 @@ function CheckRow({ check, columns }: { check: CheckLine; columns: number }) {
             <Text color={color}>{mark}</Text> {check.label}
           </Text>
         </Box>
-        <Text>{check.detail}</Text>
+        <Wrapped pieces={[{ text: check.detail }]} columns={columns - CHECK_DETAIL} />
       </Box>
       {check.next === undefined ? null : (
         <Box paddingLeft={CHECK_DETAIL}>
-          <Text dimColor>{check.next}</Text>
+          {/* A command in a next step is drawn as an error line draws one: without its backticks. Plain output keeps them. */}
+          <Wrapped pieces={[{ text: withoutBackticks(check.next), dim: true }]} columns={columns - CHECK_DETAIL} />
         </Box>
       )}
     </Box>
@@ -465,14 +463,19 @@ const GROUP_LABEL = 12
 /**
  * What each question leaves on the screen once it is answered, above
  * whatever comes next. A list collapses to `✔ Server  prod` (mock-ups 1 and
- * 2). The rest is research Q1, built as recommended and not yet approved by
- * the maintainer: a typed answer stays as `? Your name › ada`; a yes-or-no
- * question as `? <question> (y/N) yes`, the questions that existed before
- * included; the skippable hidden prompt as its line ending `(hidden)` or
- * `skipped`. The hidden prompt of `zekno secret set` leaves nothing, as before.
+ * 2), except for a row that asks a question of its own (`+ a new app`). A
+ * list or a typed answer left with Esc or Ctrl-C keeps its question's line,
+ * a typed answer with what was typed, above `✖ Nothing was done.` (board
+ * "Questions in single commands"). The rest is research Q1, built as
+ * recommended and not yet approved by the maintainer: a typed answer stays as
+ * `? Your name › ada`; a yes-or-no question as `? <question> (y/N) yes`, the
+ * questions that existed before included; the skippable hidden prompt as its
+ * line ending `(hidden)` or `skipped`. The hidden prompt of `zekno secret set`
+ * leaves nothing, as before.
  */
 const LEFT_BEHIND = {
   choose: (collapsed: string, label: string) => ({ kind: "chosen", collapsed, label }),
+  left: (question: string, answer?: string) => ({ kind: "left", question, ...(answer === undefined ? {} : { answer }) }),
   ask: (question: string, answer: string) => ({ kind: "asked", question, answer }),
   confirm: (question: string, yes: boolean) => ({ kind: "answered", question, yes }),
   askValue: (question: string, skipped: boolean) => ({ kind: "hidden", question, skipped }),
@@ -497,6 +500,7 @@ function Spinner({ label }: { label: string }) {
 function SecretPrompt({ prompt }: { prompt: Prompt }) {
   // Kept out of React state: nothing is drawn from it, so nothing redraws as it grows.
   const value = useRef("")
+  const { columns } = useWindowSize()
   useInput((input, key) => {
     const next = applySecretInput(value.current, input, key)
     if (next.kind === "typing") value.current = next.value
@@ -504,12 +508,7 @@ function SecretPrompt({ prompt }: { prompt: Prompt }) {
     else if (next.kind === "cancelled") prompt.settle({ error: new CliError("Cancelled.") })
     else prompt.settle({ error: new CliError(next.reason) })
   })
-  return (
-    <Text>
-      <Text color={BRAND}>?</Text> <QuestionWords text={prompt.question} />
-      <Text dimColor>(hidden)</Text>
-    </Text>
-  )
+  return <QuestionLine pieces={[...questionPieces(prompt.question), { text: "(hidden)", dim: true }]} columns={columns} />
 }
 
 /**
@@ -520,6 +519,7 @@ function SecretPrompt({ prompt }: { prompt: Prompt }) {
  */
 function ValuePrompt({ open }: { open: ValueOpen }) {
   const value = useRef("")
+  const { columns } = useWindowSize()
   const [reason, setReason] = useState<string | undefined>(undefined)
   useInput((input, key) => {
     if (isCtrlC(input, key)) return open.settle({ kind: "left" })
@@ -538,17 +538,8 @@ function ValuePrompt({ open }: { open: ValueOpen }) {
   })
   return (
     <Box flexDirection="column">
-      <Text>
-        <Text color={BRAND}>?</Text> <QuestionWords text={open.question} />
-        <Text dimColor>(hidden)</Text>
-        {"   "}
-        <Text dimColor>esc skips it</Text>
-      </Text>
-      {reason === undefined ? null : (
-        <Text>
-          <Text color={COLOR.warn}>{MARK.warn}</Text> {reason}
-        </Text>
-      )}
+      <QuestionLine pieces={[...questionPieces(open.question), { text: "(hidden)", dim: true }, { text: "   " }, { text: "esc skips it", dim: true }]} columns={columns} />
+      {reason === undefined ? null : <MarkedLine mark={MARK.warn} color={COLOR.warn} pieces={[{ text: reason }]} columns={columns} />}
     </Box>
   )
 }
@@ -584,16 +575,13 @@ export function yesOrNo(input: string, key: { return?: boolean; escape?: boolean
 
 /** A yes-or-no question, answered with one key. Asked with `leave`, Esc and Ctrl-C leave it. */
 function QuestionPrompt({ question }: { question: Question }) {
+  const { columns } = useWindowSize()
   useInput((input, key) => {
     if (question.leave && (key.escape || isCtrlC(input, key))) return question.settle("left")
     const answer = yesOrNo(input, key)
     if (answer !== undefined) question.settle(answer)
   })
-  return (
-    <Text>
-      <Text color={BRAND}>?</Text> <QuestionWords text={question.question} /> <Text dimColor>(y/N)</Text>
-    </Text>
-  )
+  return <QuestionLine pieces={[...questionPieces(question.question), ...yesOrNoPieces]} columns={columns} />
 }
 
 function App({ store, interrupt }: { store: ReturnType<typeof createStore>; interrupt(): void }) {
@@ -880,9 +868,13 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
             rows: question.rows,
             settle(result) {
               store.set({ list: undefined })
-              if ("left" in result) return reject(new Left())
+              if ("left" in result) {
+                add(LEFT_BEHIND.left(question.question))
+                return reject(new Left())
+              }
               const row = question.rows[result.answer]!
-              add(LEFT_BEHIND.choose(question.collapsed, row.label))
+              // A row that asks a question of its own, such as `+ a new app`, leaves no line: that question takes its place (mock-up 2).
+              if (row.asksNext !== true) add(LEFT_BEHIND.choose(question.collapsed, row.label))
               resolve(row.value)
             },
           },
@@ -900,7 +892,10 @@ export function inkUi(streams: Pick<RenderOptions, "stdout" | "stdin" | "stderr"
             check: question.check,
             settle(result) {
               store.set({ typed: undefined })
-              if ("left" in result) return reject(new Left())
+              if ("left" in result) {
+                add(LEFT_BEHIND.left(question.question, result.typed))
+                return reject(new Left())
+              }
               add(LEFT_BEHIND.ask(question.question, result.answer))
               resolve(result.answer)
             },
