@@ -20,6 +20,17 @@ in a script.
 
 1. Opened once with `O_RDONLY | O_NONBLOCK`, links followed (as `-f`). `fstat` must say a regular
    file. At most 1,048,576 bytes (1 MiB), checked by `fstat` and while reading.
+   - **Where a link leads** (security review S4; decision 2 of
+     [specs/008-cli-decisions](../../008-cli-decisions/spec.md)). Right after `fstat`, the path
+     typed is looked at again with `lstat`. When it is a symbolic link, its real path is
+     `realpath` of the path, and that name is used only when `stat` of it gives the same device
+     and inode as `fstat` gave for the open descriptor: it is the real path of the file that was
+     opened. When it is not a link, `lstat` must give that same device and inode. Otherwise the
+     path changed between the open and this check, and the import stops with I20,
+     ``<file> could not be read.``, before anything is read. Node cannot ask a descriptor for its
+     path on every system (macOS has no `/proc`), so the name is looked up again, and checked
+     against the descriptor before it is used. A link in a folder of the path, whose last part is
+     not a link, is not named.
 2. Decoded as UTF-8 with `fatal: true`. A byte order mark (EF BB BF) at the very start is dropped.
 3. Split into lines at LF. A CR right before an LF is dropped. A last line without an LF counts.
    Lines are numbered from 1.
@@ -133,7 +144,8 @@ The `.env` of this example (and of the tests and the walkthrough) has a comment 
 `DATABASE_URL`, `SESSION_KEY`, `STRIPE_KEY`, `API_URL`, `PATH` and `my-var` on lines 2 to 7, so
 `my-var` is named `line 7`.
 
-- `note(I1)` (dim, set in by two columns, as the board "zekno secret import" draws it), `gap()`,
+- `note(I1)` (dim, set in by two columns, as the board "zekno secret import" draws it; with a
+  link, I1 names where it leads, as in "Sentences" below), `gap()`,
   then `groups(...)`: two spaces, the label padded to 12 columns, then the names joined with `, `,
   wrapping in their own column (from column 14). A group with no name has no line. `gap()`.
 - `confirm(I15, I16)` unless `--yes`. "No" (`n`, Enter, Esc, Ctrl-C): `Nothing was done.`, status
@@ -144,7 +156,8 @@ The `.env` of this example (and of the tests and the walkthrough) has a comment 
 
 ## With no terminal
 
-Plain lines on standard output, the same words, no symbols, no empty lines:
+Plain lines on standard output, the same words, no symbols, no empty lines (with a link, the
+first line is I1's link form, as at a terminal):
 
 ```text
 .env, for demo on prod
@@ -170,11 +183,13 @@ Without `--yes`: the summary lines, then I16 on standard error, status 1, nothin
 
 ## Sentences
 
-`<file>` is the path as typed, cleaned (`sanitize`). `<n>` and `<m>` are line numbers.
+`<file>` is the path as typed, cleaned (`sanitize`). `<real path>` is the real path of the file
+that was opened when `<file>` is a symbolic link ("Reading the file", step 1), cleaned the same way.
+`<n>` and `<m>` are line numbers.
 
 | Id | Sentence | Status |
 |----|----------|--------|
-| I1 | `<file>, for <app> on <server>` | mock-up |
+| I1 | `<file>, for <app> on <server>`; when `<file>` is a symbolic link, `<file> (a link to <real path>), for <app> on <server>`, at a terminal and in plain output alike | mock-up; the link form approved on 2026-11-15 (specs/008-cli-decisions) |
 | I2 | `<file>, line <n>: this is not a NAME=value line. Nothing was stored.` | needs approval |
 | I3 | `<file>, line <n>: a quoted value does not end on this line. Write a line break as \n inside double quotes. Nothing was stored.` | needs approval |
 | I4 | `<file>, line <n>: there is text after the closing quote. Nothing was stored.` | needs approval |
@@ -191,7 +206,7 @@ Without `--yes`: the summary lines, then I16 on standard error, status 1, nothin
 | I15 | `Store 1 value? Values are never shown.` / `Store <k> values? Values are never shown.` | mock-up (the second) |
 | I16 | ``There is no terminal to ask on. Add `--yes` to store the values from <file>.`` | needs approval |
 | I17 | `Stored 1 value for <app> on <server>. It takes effect on the next deploy.` / `Stored <k> values for <app> on <server>. They take effect on the next deploy.` | mock-up (the second) |
-| I18 | `<file> still holds them in plain text. Delete it, or keep it out of git.` (with one value: `still holds it`) | mock-up |
+| I18 | `<file> still holds them in plain text. Delete it, or keep it out of git.` (with one value: `still holds it`). `<file>` is the path as typed, also for a link | mock-up |
 | I19 | `No file at <file>.` | needs approval |
 | I20 | `<file> is not a file.` / `<file> could not be read.` | needs approval |
 | I21 | `<file> is larger than the 1 MiB an import file may be. Nothing was stored.` | needs approval |

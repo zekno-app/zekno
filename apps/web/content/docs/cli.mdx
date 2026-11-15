@@ -398,7 +398,9 @@ $ zekno secret import .env
   terminal are asked for when missing.
 - **The file.** It may be anywhere. `zekno` reads it once, at most 1 MiB, and
   never changes, copies or deletes it. It still holds the values in plain text
-  afterwards: delete it, or keep it out of git.
+  afterwards: delete it, or keep it out of git. When the file you give is a
+  link, the first line says where it leads:
+  `.env (a link to /home/ada/elsewhere/other.env), for demo on prod`.
 
 ```bash
 zekno secret import .env --app api --server prod --yes
@@ -643,15 +645,17 @@ With `--json` the answer is the field `latest`, whose `state` is `newest`,
 `newer` (with the `version`) or `not_checked`:
 `{"zekno":"0.1.0","runner":"0.1.0","latest":{"state":"newer","version":"0.2.0"}}`.
 
-- It asks `api.github.com` for the latest published release of
-  `zekno-app/zekno`, within 3 seconds. `zekno --version` never uses the
-  network.
+- It reads one small file from `raw.githubusercontent.com`, GitHub's host for
+  files in a repository: the runner release file on the `main` branch of
+  `zekno-app/zekno`, within 3 seconds. A newer version counts only once both
+  its checksums are in that file, so a release that cannot be installed yet is
+  not announced. `zekno --version` never uses the network.
 - The request carries the name `zekno` and nothing about you, your team, your
   servers or your project. GitHub learns the address and the time of the
   request.
-- Only `zekno version` and `zekno doctor` contact GitHub, each once per run.
-  Nothing else in zekno does so on its own, there is no check in the background,
-  and nothing is stored.
+- Only `zekno version` and `zekno doctor` contact GitHub, at
+  `raw.githubusercontent.com`, each once per run. Nothing else in zekno does so
+  on its own, there is no check in the background, and nothing is stored.
 - zekno never downloads or installs a newer release. Until zekno is packaged,
   updating it means getting the newer source and building it again: see
   [Build from source](#build-from-source).

@@ -379,7 +379,11 @@ release exists: <v>. Update zekno to get it.`, or, dim, `Could not check for a n
 the exit status stays 0. `doctor` makes the same check once, at the same time as its other
 checks; a newer release makes its `zekno` line a warning with that sentence. Both `--json` objects
 carry `latest`. The fetch is `deps.fetch`, set only by `main.ts`: with none, nothing is asked and
-the result is "not checked", so no test and no other code path can reach the network.
+the result is "not checked", so no test and no other code path can reach the network. (Changed
+on 2026-11-15 by specs/008-cli-decisions, decision 1: the check now reads the runner release file
+on `main` from `raw.githubusercontent.com`, with `User-Agent: zekno` only and at most 16 KiB of
+answer, and announces a newer version only when the file holds both its checksums;
+contracts/version.md has the rules.)
 
 ## What does not change
 

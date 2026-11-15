@@ -322,7 +322,7 @@ no keychain, no real SSH host, no network.
 | S1 | fixed | `9f26e59` |
 | S2 | fixed | `9445411` |
 | S3 | fixed | `fbb5a99`, follow-up `b260fe6` |
-| S4 | waiting for the maintainer | none |
+| S4 | answered by the maintainer's decision on 2026-11-15, built in specs/008-cli-decisions | `bddaef6` |
 | Echo between the first deploy's hidden prompts ("Needs validation") | fixed | `45f57d1` |
 
 **S1, a piece of a value becomes a secret's name.** The review's smallest fix, as written:
@@ -404,7 +404,7 @@ after it was written stays, with A12 alone. Both fail before the follow-up. The 
 was not built.
 
 **S4, the import names the link.** Not changed: waiting for the maintainer, as the brief for these
-fixes says.
+fixes says. Answered later the same day: see "After the review, feature 008" at the end.
 
 **Echo between the first deploy's hidden prompts.** Fixed, in `ui/ink.tsx` only. After a value is
 given or skipped at `askValue`, the prompt is replaced in the same update by a component that reads
@@ -425,3 +425,67 @@ one typed) ran through it at both sizes. The existing type-ahead helper in `ques
 raw mode after the flow draws its next line. Still true: what is typed before the first prompt
 appears, while raw mode is off, is echoed (feature 003's accepted limit); during the hold, Ctrl-Z
 and Ctrl-\ do nothing (for 2 seconds at most).
+
+### After the review, feature 008: S4 answered, and the newer-release check's host
+
+**Written by the implementer of [specs/008-cli-decisions](../008-cli-decisions/spec.md), not by the
+reviewer.** On `008-cli-decisions`, from `dev` after feature 007, with the in-memory key store, the
+stand-in runners and a stand-in `fetch`; no keychain, no real SSH host, no network. The maintainer
+approved the three decisions on 2026-11-15.
+
+**S4, the import names the link: answered** (`bddaef6`). The review's smallest fix, as the
+maintainer chose it; links inside the current folder are still followed, not refused. When the
+path typed for `zekno secret import` is a symbolic link, I1 reads `<file> (a link to <real path>),
+for <app> on <server>`, at a terminal and in plain output; I18 still names the path as typed. The
+real path is the one of the file that was opened: `readImportFileAndLink` in
+`secrets/import-file.ts`, right after `fstat` of the open descriptor, takes `lstat` of the path;
+for a link it takes `realpath` and uses that name only when `stat` of it gives the same device and
+inode as the descriptor's `fstat` (`whereLinkLeads`); for a path that is not a link, `lstat` must
+give them. Node cannot ask a descriptor for its path on macOS, so this is a second lookup, checked
+against the descriptor. What a race can still do: someone who can change the link or a folder on
+its way between the open and the check makes the import stop with I20 (`<file> could not be
+read.`), before anything is read; they cannot make it name one file and read another. After the
+check the path may be changed to name something else, but the values were read from the file the
+shown name named at the check. A file with several hard links is the same file under each name,
+so the name shown may be any of them. A link in a folder of the path, with a last part that is not
+a link (`config/.env` where `config` is a link), is not named: the decision names the path typed
+being a link. The real path is cleaned with `sanitize`, as every shown path is. Tests:
+`test/secrets/import-file.test.ts` (a link, a link to a link, a relative link, a regular file with
+no name; a link to a folder, a pipe or nothing refused as before; `whereLinkLeads` refusing a link
+or a path that names another file than the one opened; a second process renaming the link between
+two files over and over while it is read: every read names the file whose text it gave, or stops
+as unreadable, and the test fails within milliseconds when the device and inode check is taken
+out), `test/secrets/import.test.ts`, "an import file that is a link" (plain and at a stand-in
+terminal; a real path holding escape sequences shown cleaned; no value anywhere but sealed).
+
+**The newer-release check's host changed** (`d10a89f`). It reads
+`https://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json`
+instead of the REST API, because the API's 60 unauthenticated requests an hour per address run out
+on a shared address (research R14, "Change of decision"). The attacker of part 1 is now whoever
+answers for `raw.githubusercontent.com`. Kept, each with its test in `test/version/newest.test.ts`
+unless named: one GET with Bun's own `fetch` handed in by `main.ts` only (`version.test.ts`, "main.ts
+hands Bun's fetch to run"); no `deps.fetch`, no request; no credentials, no cookie, no query, no
+body; a fixed generic `User-Agent: zekno`, now the only header (the API-only `Accept` and
+`X-GitHub-Api-Version` went); `redirect: "manual"`, and a redirect followed only to `https:` on
+`raw.githubusercontent.com`, with no port and no user name or password, at most three; one 3-second
+limit over connecting, every redirect and the body; status 200 only; the body read from its
+stream up to a smaller limit, 16 KiB (the file is under 300 bytes), the reading cancelled past it;
+strict UTF-8; `JSON.parse` inside the bound; the version held to `RUNNER_VERSION_PATTERN`, a
+development version not taken, compared with `compareRunnerVersions`; any failure "Could not check
+for a newer release." with the exit status unchanged; never a download, nothing written; only
+`zekno version` and `zekno doctor` ask, and `zekno --version` never does (`version.test.ts`, "no
+other command asks GitHub" and "zekno --version never uses the network"). The answer is now held to
+the release file's whole form by the CLI's own strict reader of that file (`RunnerReleaseSchema`,
+`version/runner-release.ts`, exported for this and used with `safeParse`): no field the form does
+not have at any level, a `__proto__` key included, each checksum 64 lowercase hex characters or
+null. A higher version is announced only when both checksums are there; without them it is "This
+is the newest release.", since it cannot be installed yet. The checksums are only looked at,
+never kept or shown. Known and accepted: if the file moves again, older builds say they could not
+check; anything this machine trusts to answer for the host can still name a false version, and
+the effect is one sentence, as before.
+
+**Two looks** (`1ddf9d4`). No security effect: the board for "Nothing more was done." now draws the
+program's error style; A9 and A10 of the first deploy's hidden prompt are drawn as a typed answer's
+reason. Nothing of a value is drawn, as before (`test/ui/ink/questions.test.tsx`,
+`test/asking/first-deploy.test.ts`).
+

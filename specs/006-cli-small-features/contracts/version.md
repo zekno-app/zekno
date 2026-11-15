@@ -1,7 +1,10 @@
 # Version Contract: `zekno --version`, `zekno version`, and the newer release
 
 FR-031 to FR-036, SC-008. Mock-up 6 in [design.md](../design.md) is binding. The check for a newer
-release is `checkNewest` in `apps/cli/src/version/newest.ts` (research R14).
+release is `checkNewest` in `apps/cli/src/version/newest.ts` (research R14). Where it asks and what
+it reads changed on 2026-11-15 ([specs/008-cli-decisions](../../008-cli-decisions/spec.md),
+decision 1): it reads the runner release file on `main` from GitHub's raw file host, no longer the
+REST API.
 
 ## `zekno --version`
 
@@ -71,19 +74,33 @@ With `--json`, one object on one line, the result in `latest`:
 |------|------|
 | Who calls it | `zekno version` and `zekno doctor` only, each once per run. Nothing checks in the background: no cache file, no timer |
 | No fetch | when `deps.fetch` is not set: `not_checked`, nothing requested. `main.ts` sets it to Bun's `fetch`; tests set a stand-in or nothing |
-| Request | `GET https://api.github.com/repos/zekno-app/zekno/releases/latest`, a fixed string; headers exactly `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2026-03-10`, `User-Agent: zekno`; no `Authorization`, no cookie, no query, no body; `redirect: "manual"` |
-| Redirects | a 301, 302, 307 or 308 whose `Location` is an `https:` URL on the host `api.github.com` is followed with the same headers, at most three times; any other redirect: `not_checked` |
+| Request | `GET https://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json`, a fixed string (`RELEASE_FILE`); one header, exactly `User-Agent: zekno`; no `Authorization`, no cookie, no query, no body; `redirect: "manual"` |
+| Redirects | a 301, 302, 307 or 308 whose `Location` is an `https:` URL on the host `raw.githubusercontent.com`, with no port and no user name or password, is followed with the same header, at most three times; any other redirect: `not_checked` |
 | Time | one `AbortSignal.timeout(limitMs ?? 3000)` for the whole: connecting, redirects, reading the body |
 | Status | only 200; anything else (403, 404, 410, 429, 5xx): `not_checked` |
-| Body | read from its stream up to 262,144 bytes; past that the reading is cancelled: `not_checked`; decoded as UTF-8 (`fatal: true`), then `JSON.parse` inside `try` |
-| Version | the object's `tag_name` must be a string matching `^runner-v(<version>)$`, `<version>` the core's grammar (`RUNNER_VERSION_PATTERN` without its anchors), and not a development version (`isDevVersion`); `prerelease` and `draft`, when present, must be `false`; nothing else of the answer is read or kept |
-| Result | `compareRunnerVersions(answer, carried) > 0`: `newer` with the answer's version; else `newest` (also when the answer is older than what this zekno carries) |
+| Body | read from its stream up to 16,384 bytes (16 KiB; the file is under 300); past that the reading is cancelled: `not_checked`; decoded as UTF-8 (`fatal: true`), then `JSON.parse` inside `try` |
+| Form | the release file's form, held by the CLI's own strict reader of that file (`RunnerReleaseSchema` in `version/runner-release.ts`, with `safeParse`): `{ "version": "<version>", "files": { "linux-x64": { "sha256": <checksum> }, "linux-arm64": { "sha256": <checksum> } } }`, no other field at any level, `<version>` matching `RUNNER_VERSION_PATTERN`, each `<checksum>` 64 lowercase hex characters or `null`. Anything else: `not_checked` |
+| Version | not a development version (`isDevVersion`; on `main` the file never names one, the `check-main` workflow holds that): a development version is `not_checked`. Only the version is kept; the checksums are only looked at |
+| Result | `compareRunnerVersions(file, carried) > 0` and both checksums present: `newer` with the file's version. Higher without both checksums (a release started whose second build has not run, so it cannot be installed yet): `newest`, not announced. The same or a lower version: `newest` |
 | Anything else | any thrown error, any refusal of the rules above: `not_checked`. Never an exception out of `checkNewest` |
 
 `carried` is the runner release this zekno carries, `(deps.release ?? RUNNER_RELEASE).version`; a
-zekno that carries `0.1.0-dev.1` is told that `0.1.0` exists. The answer's version is never placed
-anywhere but V2 and the `latest` field, and after the grammar it is digits and dots only. zekno
-never downloads, installs or runs anything because of it (FR-035).
+zekno that carries `0.1.0-dev.1` is told that `0.1.0` exists, once the file holds both its
+checksums. The answer's version is never placed anywhere but V2 and the `latest` field, and after
+the grammar it is digits and dots only. zekno never downloads, installs or runs anything because
+of it (FR-035).
+
+What a person sees, by what the file on `main` names (decision 1 of specs/008-cli-decisions):
+
+| The file names | `zekno version` says | `latest` |
+|----------------|----------------------|----------|
+| a higher version with both checksums | V2, `A newer release exists: <version>. Update zekno to get it.` | `newer` |
+| a higher version without both checksums | V1, `This is the newest release.` | `newest` |
+| the carried version, or a lower one | V1, `This is the newest release.` | `newest` |
+| anything that is not the file's form, or no answer | V3, `Could not check for a newer release.` | `not_checked` |
+
+Known and accepted: the address names a path in the repository. If that file moves again, older
+builds say "Could not check for a newer release."; they never say something false.
 
 ## In `zekno doctor`
 
@@ -112,8 +129,8 @@ above (contracts/doctor.md).
 | Version | Source | In the compiled program |
 |---------|--------|-------------------------|
 | `CLI_VERSION` | `apps/cli/package.json` `version` (set to `0.1.0` in this feature; it was `0.0.0`), imported by `apps/cli/src/version/version.ts` and held to `RUNNER_VERSION_PATTERN` | bundled by `Bun.build`; no `package.json` is read at run time (`autoloadPackageJson: false` in `build.ts`) |
-| `RUNNER_RELEASE.version` | `apps/cli/src/runner-release.json`, as today (`runner-release.ts`) | bundled, as today |
-| the newest release | the answer of the request above, for one line only | asked at run time by `zekno version` and `zekno doctor` |
+| `RUNNER_RELEASE.version` | `apps/cli/src/version/runner-release.json`, as today (`runner-release.ts`) | bundled, as today |
+| the newest release | the release file on `main`, read by the request above, for one line only | asked at run time by `zekno version` and `zekno doctor` |
 
 ## Tests
 
@@ -126,7 +143,11 @@ above (contracts/doctor.md).
   `zekno version extra` returns 2; through `inkUi` the lines of mock-up 6, the two versions at
   column 0; every other command of `HELP` (but `doctor`) run against a ready machine never calls
   `deps.fetch`; `main.ts` hands `fetch` to `run`.
-- `apps/cli/test/version/newest.test.ts`: every row of "The check" with a stand-in fetch, no network.
+- `apps/cli/test/version/newest.test.ts`: every row of "The check" with a stand-in fetch, no network:
+  a higher version with both checksums, with one, with none; the same and a lower version; a
+  development version; extra fields, wrong types, a version outside the grammar, checksums that
+  are not 64 lowercase hex characters; a body over the limit; a redirect to another host, to
+  http, with a port, with a user name; a hang; status 404 and the others; text that is not JSON.
 - `apps/cli/test/compiled.test.ts`: the compiled program and the program run from source, each
   started in a folder holding only a `package.json` with `"version": "9.9.9"`, print the same two
   lines for `--version`, naming `apps/cli/package.json`'s version and `runner-release.json`'s; and

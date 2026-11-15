@@ -161,9 +161,9 @@ returned by `checkNewest(deps, carried)` in `apps/cli/src/version/newest.ts` (co
 
 | Field | Rule |
 |-------|------|
-| `version` (only for `newer`) | taken from the answer's `tag_name` after `runner-v`; matches `RUNNER_VERSION_PATTERN`; not a development version; newer than `carried` by `compareRunnerVersions` |
-| `state: "newest"` | the answer's version is the same as, or older than, `carried` |
-| `state: "not_checked"` | no `deps.fetch`; any error; status other than 200; a redirect off `https://api.github.com`; more than three redirects; over 3 seconds; a body over 262,144 bytes, not UTF-8, not JSON, not an object; `tag_name` missing or not of the form; `prerelease` or `draft` not `false` |
+| `version` (only for `newer`) | the release file's `version` (specs/008-cli-decisions, decision 1: the file on `main`, no longer the REST API's `tag_name`); matches `RUNNER_VERSION_PATTERN`; not a development version; newer than `carried` by `compareRunnerVersions`; and the file holds both checksums |
+| `state: "newest"` | the file's version is the same as, or older than, `carried`; or it is newer and the file does not hold both checksums (it cannot be installed yet) |
+| `state: "not_checked"` | no `deps.fetch`; any error; status other than 200; a redirect off `https://raw.githubusercontent.com`, or with a port or a user name; more than three redirects; over 3 seconds; a body over 16,384 bytes, not UTF-8, not JSON; not the release file's form as `RunnerReleaseSchema` reads it (a field it does not have, a wrong type, a version outside the grammar, a checksum that is not null or 64 lowercase hex characters); a development version |
 
 Nothing else of the answer is kept, and nothing is written: no cache, no file, no time of the last
 check. `Deps` gains `fetch?: typeof fetch`, set by `main.ts` only (research R14).

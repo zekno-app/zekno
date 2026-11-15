@@ -221,6 +221,10 @@ maintainer; each has a recommended answer.
   bytes are read from that one open file. The limit is 1 MiB (1,048,576 bytes). The bytes are
   decoded as UTF-8 with `fatal: true`; a byte order mark at the very start is dropped. The file is
   read once, never copied, never written, and the text is dropped once parsed.
+- **A link** (security review S4; decision 2 of specs/008-cli-decisions, 2026-11-15). When the path
+  typed is a symbolic link, the summary's first line names the real path of the file that was
+  opened. It is taken right after `fstat`: `realpath` of the path, used only when its device and
+  inode are those of the open descriptor (contracts/import.md, "Reading the file").
 - **The folder's own `zekno.json`** needs no case of its own: its first line, `{`, is not a
   `NAME=value` line, so nothing is stored and line 1 is named.
 
@@ -349,7 +353,8 @@ Sources, each read on 2026-11-15:
 | Size of the answer | a JSON object with the release notes (at most 64 KiB, feature 005) and the file list | about 300 bytes |
 | What GitHub learns | the address the request comes from, its time, the `User-Agent` (`zekno`), and that this repository's latest release was asked for: someone at that address runs zekno now | the same, for that file |
 
-- **Decision: the REST API.** `GET https://api.github.com/repos/zekno-app/zekno/releases/latest` with
+- **Decision: the REST API** (changed later the same day: see "Change of decision" at the end of
+  R14). `GET https://api.github.com/repos/zekno-app/zekno/releases/latest` with
   `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2026-03-10` (the version with no end
   date; after its end GitHub answers 410 and the check says it could not check, it never fails) and
   `User-Agent: zekno` (the application's name, as GitHub recommends; no version, nothing about the
@@ -383,6 +388,23 @@ Sources, each read on 2026-11-15:
 - **Alternatives considered.** The raw file (above). `github.com/zekno-app/zekno/releases/latest`,
   which the docs describe as a link to share, not an interface. A feed or a host of our own (none
   exists, and the decisions name GitHub).
+- **Change of decision: the raw file** (approved by the maintainer on 2026-11-15, decision 1 of
+  [specs/008-cli-decisions](../008-cli-decisions/spec.md)). Why: on 2026-11-15, from a shared
+  address (a VPN, iCloud Private Relay or an office share one), the API answered 403 "rate limit
+  exceeded", and `zekno version` said "Could not check for a newer release."; the limit of 60
+  unauthenticated requests an hour per address is the table's "Limits" row coming true. The raw
+  file host answered 200 from the same address, with `cache-control: max-age=300`. The check now
+  reads `https://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json`
+  (the file's place after feature 007; on `main` it never names a development version, which the
+  `check-main` workflow holds). The file is held to the form the CLI's own strict reader accepts
+  (`RunnerReleaseSchema`), and a version counts as published only when both checksums are there,
+  which answers the table's "What newest means" row: between a release being started and its
+  second build the checksums are null, and such a version is not announced. The API-only headers
+  (`Accept`, `X-GitHub-Api-Version`) go; `User-Agent: zekno` stays. The body limit is 16 KiB. Every
+  other part of "The request" and "The answer is hostile text" above stays, with the host now
+  `raw.githubusercontent.com`. Known and accepted: the address names a path in the repository; if
+  the file moves again, older builds say "Could not check for a newer release.", never something
+  false. The host's own limits are not published (the 2025-05-08 changelog above).
 
 ## R15. Testing **(maintainer: `bun test`, both halves for every command)**
 

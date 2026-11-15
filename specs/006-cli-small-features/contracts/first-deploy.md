@@ -149,6 +149,20 @@ a run never replaces a zekno.json that was there before it.
 `sync`), zekno.json, or a value stored: after any of them "Nothing was done." would not be true,
 so leaving says F8.
 
+At a terminal F8 is drawn as every error is (`ui.error`), in the common error style: `✖` in the
+error colour, the first sentence bold, the rest dim on the next line from column 2, the command
+without its backticks:
+
+```text
+✖ Nothing more was done.
+  What was set up so far is kept: run zekno deploy again to carry on.
+```
+
+The board "zekno deploy from nothing" draws it so since 2026-11-15 (decision 3a of
+[specs/008-cli-decisions](../../008-cli-decisions/spec.md); it drew one line in the text colour
+before). No code changed for this. F9 follows a failure's own sentence in the same error, so it
+is in the dim part under that sentence.
+
 ## Sentences
 
 | Id | Sentence | Status |

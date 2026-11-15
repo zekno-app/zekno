@@ -78,11 +78,31 @@ colour (`BRAND`, `ui/theme.ts`), `✔` green, `!` yellow, `✖` red, hints and s
 - `?`, a space, the question as `zekno secret set` words it (``Value for <NAME> (<app> on
   <server>): ``), `(hidden)` dim, three spaces, `esc skips it` dim. Nothing of the value is drawn,
   not even its length.
-- Input follows `applySecretInput` (`ui/secret-input.ts`). Enter with a value: the value. Enter
-  with nothing: `! <A9>` under the line and the prompt stays open. A paste of several lines:
-  `! <A10>` and the prompt stays open, the value so far dropped. Esc: skipped. Ctrl-C: leave.
+- Input follows `applySecretInput` (`ui/parts/secret-input.ts`). Enter with a value: the value.
+  Enter with nothing: A9 under the line and the prompt stays open. A paste of several lines: A10
+  and the prompt stays open, the value so far dropped. Esc: skipped. Ctrl-C: leave.
+- A9 and A10 are drawn as a refused typed answer's reason is (decision 3b of
+  [specs/008-cli-decisions](../../008-cli-decisions/spec.md), 2026-11-15; this page said `! <A9>`
+  and `! <A10>` before): in the warning colour (yellow), set in by two columns, in line with the
+  question's words, with no `!`, going on under itself when wider than the window. A10's command
+  is drawn without its backticks, as an error line and doctor's next steps draw one at a
+  terminal:
+
+  ```text
+  ? Value for DATABASE_URL (demo on prod): (hidden)   esc skips it
+    That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin.
+  ```
+
+  The reason goes once the prompt is answered, skipped or left: what stays is the line below, or,
+  when it is left, the line as it was drawn ("Leaving").
 - After a value: `? Value for DATABASE_URL (demo on prod): (hidden)`. After Esc: the same line
   ending `skipped` instead of `(hidden)` (research Q1).
+
+The hidden prompt of `zekno secret set` (`Ui.askSecret`) draws no reason of its own: a paste of
+several lines ends the command with its error (``That value has more than one line. Pipe it in and
+add `--stdin`.``, drawn as every error: `✖`, the first sentence bold, the rest dim under it), and
+Enter with nothing ends it with ``No value was given, so nothing was set.``. Decision 3b of
+specs/008-cli-decisions leaves it as it is.
 
 ## Keys typed before a question
 
@@ -165,8 +185,8 @@ new (research Q4). `<server>`, `<app>`, `<NAME>` are names held to their pattern
 | A6 | reason, `Your name` | `A name is 1 to 64 characters, with no control character and no space at either end.` | needs approval |
 | A7 | reason, `Where is the server?` | `That SSH destination is not valid. Use the form user@host.` | existing (`prepareServerAdd`) |
 | A8 | reasons, `A name for it` | `Give the server a name of lowercase letters, digits and hyphens.`; `A server named "<name>" is already connected.` | existing (`prepareServerAdd`) |
-| A9 | reason, hidden prompt, nothing typed | `A value cannot be empty. Press esc to skip it.` | needs approval |
-| A10 | reason, hidden prompt, several lines pasted | ``That value has more than one line. Press esc to skip it, and set it later with `zekno secret set <NAME> --stdin`.`` | needs approval |
+| A9 | reason, hidden prompt, nothing typed | `A value cannot be empty. Press esc to skip it.` (drawn as a typed answer's reason: yellow, column 2, no `!`) | needs approval |
+| A10 | reason, hidden prompt, several lines pasted | ``That value has more than one line. Press esc to skip it, and set it later with `zekno secret set <NAME> --stdin`.`` (drawn as A9, the command without its backticks) | needs approval |
 | A11 | reason, an app name | `Use lowercase letters, digits and hyphens, starting with a letter or a digit.` | needs approval |
 | A12 | reason, `Name for the new app`, a name the list has | `<server> already has an app named <app>. Choose it from the list, or give another name.` | needs approval |
 | A13 | a list taller than the window | `↑ <n> more`, `↓ <n> more` (dim, two spaces in) | needs approval |

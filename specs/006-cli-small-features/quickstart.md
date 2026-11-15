@@ -178,6 +178,12 @@ sentence. (b) `! A value cannot be empty. Press esc to skip it.` (`!` yellow, wo
 colour); a refused typed answer is `  Use lowercase letters, ...` in yellow at column 2, no `!`.
 (c) `–  Docker        not checked`: the label at column 3, `not checked` at column 17.
 
+Points (a) and (b) were decided on 2026-11-15 (specs/008-cli-decisions, decision 3): the board
+now draws F8 as the program does, and A9 and A10 are now drawn as a refused typed answer's
+reason, `  A value cannot be empty. Press esc to skip it.` in yellow at column 2 with no `!`, A10
+without its backticks. The walkthrough above was not run again for them; the stand-in terminal
+tests show the new lines.
+
 Type-ahead (in-memory key store slowed to 3 s, keys written while it read, before the question was
 drawn), at both sizes: `y` Enter before `Which server?` (`zekno status`), before
 `Store 4 values?` (`zekno secret import`), before `Name for this app › tafolder` (`zekno deploy`,
