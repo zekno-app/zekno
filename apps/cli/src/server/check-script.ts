@@ -1,7 +1,7 @@
 /**
  * What `zekno doctor` runs on a server to look at it (specs/006-cli-small-features,
  * contracts/doctor.md, "CHECK_SCRIPT"; research R11). It follows the rules of
- * the installer's script (install.ts), and adds one: it only reads.
+ * the installer's script (install/script.ts), and adds one: it only reads.
  *
  * - The script's text is fixed, below: one `{ ... }` block, so the shell has
  *   read all of it before it runs any of it, with no `${` and no backquote,
@@ -28,7 +28,8 @@
  * a person: where SSH would ask, it ends at once, and that is reported.
  */
 import { CliError } from "../cli/errors"
-import { INSTALL_LINE_LIMIT, isInstallPath, scriptLines } from "./install/install"
+import { isInstallPath } from "./install/checks"
+import { INSTALL_LINE_LIMIT, scriptLines } from "./install/lines"
 import type { Transport } from "./transport"
 
 /** The script, exactly as contracts/doctor.md writes it. */
