@@ -257,7 +257,7 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 - [x] Project file `zekno.json`, signed by a member of your team and asked about once the first time it is used in a folder
 - [x] Installing the runner over SSH from a release, checked against a checksum the CLI holds, and the release workflow
 - [x] Publish the first runner release: 0.1.0, confirmed by a second build and proven on a real server
-- [ ] CLI: asks for what is missing, one command from nothing, `zekno secret import`, `zekno doctor`, `zekno --version`
+- [x] CLI: asks for what is missing, one command from nothing, `zekno secret import`, `zekno doctor`, `zekno --version`
 - [ ] Desktop app: connect a server, set secrets, deploy, roll back, logs
 - [ ] Website: landing pages and docs, then the signed-in dashboard
 - [ ] Local mock of the control plane for development

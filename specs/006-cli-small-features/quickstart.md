@@ -104,7 +104,17 @@ Added by the tasks as they complete.
 
 ### Phase results
 
-(not yet run)
+Checked by the orchestrator after each phase, from the repository root, without the cache
+(`bun run typecheck`, `bun run lint`, `bun run test --force`); every run passed.
+
+| After | CLI tests | core | runner | web |
+|---|---|---|---|---|
+| Phases 1 and 2 (T001 to T021), and the move into folders | 743 | 102 | 147, 1 skipped | 28 |
+| US1 and US2 (T022 to T030) | 787 | 102 | 147, 1 skipped | 28 |
+| US3 and US4 (T031 to T043) | 870 | 102 | 147, 1 skipped | 28 |
+| The fixes after the review and the walkthrough | 896 | 102 | 147, 1 skipped | 28 |
+
+The CLI had 663 tests before this feature.
 
 ### The pseudo-terminal walkthrough
 
@@ -228,8 +238,33 @@ before (`m4-esc-*-2-final`, from a scene added beside the drivers in the scratch
 
 ### The agent end-to-end tests
 
-(not yet run)
+Run once on 2026-11-15, at commit `f4dfeb6`, on Bun 1.4.4: `cd apps/cli && bun run test:e2e`.
+
+- 11 of 11 tests passed, in 6 files, in 9.85 s.
+- All 12 recorded goals replayed from the cache. The model was not called, so the run cost
+  nothing.
+- This is as expected: the tests drive the full-screen app, and `apps/cli/src/app/` did not
+  change in this feature.
+- `bun run test:e2e:docker` (the one test with a real container) was not run.
 
 ### Checks at the end
 
-(not yet run)
+Run on 2026-11-15, at commit `f4dfeb6`, from the repository root, without the cache.
+
+| Command | Covers | Result |
+|---|---|---|
+| `bun run typecheck --force` | `apps/cli`, `apps/runner`, `apps/web`, `packages/core`, `packages/ui` | 5 of 5 pass |
+| `bun run lint --force` | `apps/web`, `packages/ui` only (the CLI, the runner and the core have no lint task) | 2 of 2 pass |
+| `bun run test --force` | CLI 896 pass; core 102 pass; runner 147 pass, 1 skipped (the real build); web 28 pass | 0 fail |
+| `bun run compile` in `apps/cli` | builds `apps/cli/dist/zekno` | built; `./dist/zekno --version` prints `zekno 0.1.0` and `runner 0.1.0, the runner release this zekno installs` |
+| `bun run build` | would run `next build` for `apps/web` | not run: the maintainer's rule is that `next build` is never run in these sessions |
+
+`git diff --stat 03443f2 -- apps/cli/src/app apps/runner packages/core apps/cli/src/runner-release.json`
+prints nothing: the full-screen app, the runner, the core and the runner release this zekno
+carries are unchanged (FR-029).
+
+Not checked in this feature: a real server (everything ran against the stand-in server and the
+stand-in Docker); a real request to GitHub that got an answer (the one real run of
+`zekno version` was refused by GitHub's rate limit for this network address and said "Could not
+check for a newer release.", exit status 0); `/bin/dash` for the check script (not on this
+machine); a light terminal; a window resized while a question is open.
