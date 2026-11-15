@@ -108,7 +108,84 @@ Added by the tasks as they complete.
 
 ### The pseudo-terminal walkthrough
 
-(not yet run)
+Run on 2026-11-15, branch `006-cli-small-features` at 8dfa178, macOS, Bun 1.4.4, Python 3.14 (T047).
+
+**How.** A driver in the scratchpad (`drive.ts`, not in the repository) calls `run` from
+`apps/cli/src/cli.ts` with `inkUi()` on its own stdin and stdout (the plain interface where
+`wantsPlain` picks it, as main.ts does), with `machine()`'s `memoryKeyStore()` and temporary profile
+folder, the stand-in servers and `sshStandIn` of `apps/cli/test/stand-in-server.ts` behind a routing
+stand-in `ssh` (first on `PATH`, and every `ssh` the CLI starts is sent to it), releases made of the
+real runner with the stand-in Docker, and a stand-in `deps.fetch`. A Python driver runs it in a
+pseudo-terminal (`pty.fork`, `TERM=xterm-256color`, `COLORTERM=truecolor`, no `CI`), reads it the
+whole time in a `select` loop, types one key at a time 70 ms apart, and applies every byte to a
+screen model of cells (character, colour, bold, dim, inverse). The driver writes a `$ zekno ...`
+line before each command, as a shell would. The real keychain, a real host and the network were
+never used.
+
+Values from the set-up are not differences: the codes, `1 MB` (the stand-in release is a small
+script), durations, deploy numbers, temporary paths, `team list v3` in mock-up 5 (two servers added
+make version 3). Strong text on the boards (`#ffffff`, weight 600) is drawn bold in the terminal's
+own text colour (`ui/theme.ts`), counted as matching. Colours seen: `?` and `❯`
+`38;2;35;131;226` (`#2383e2`), `✔` green, `!` yellow, `✖` red, hints and second lines dim.
+
+| Mock-up | What was run | 100 by 30 | 80 by 24 |
+|---------|--------------|-----------|----------|
+| 1 | two servers (`prod` over the stand-in `ssh`, `staging` on this machine), `zekno status`: ↓, ↓, ↑, Enter; again with Esc; again with Ctrl-C; one server; piped | matched every line, column and colour, `✔ Server  prod`, `✖ Nothing was done.` and status 1, `  Using prod, your only server.` dim; piped: `MISSING_SERVER` and status 2. Difference 1 | as 100 by 30 |
+| 2 | two servers, apps `demo` (deploy 4) and `api` (deploy 12) running on `prod`, a folder `my-folder`; `zekno deploy`: Enter (`prod`), ↓ ↓ Enter, `My App`, `demo`, Esc; again choosing `demo` | matched the rows, `+ a new app` last and dim, the hint line, `? Name for the new app › my-folder`, A11 and A12 yellow at column 2 with no `!`, `✔ App  demo`. Differences 2 and 3 | as 100 by 30; A12 goes on under itself at column 2. Difference 6 (F5) |
+| 3 | empty profile, a folder `demo` expecting `DATABASE_URL`; `zekno deploy`, each answer typed; then `zekno deploy` again | matched every line of mock-up 3 and the contract (F4 included), in order, with the empty lines where they are, every look of the board; status 0; the second run asked nothing and deployed (Deploy 2) | the same lines; Difference 6 (F1, F5) |
+| 4 | a folder linked to `demo` on `prod`, `API_URL` set, mock-up 4's `.env`; `zekno secret import .env`, `y`; then a `.env` whose line 7 is bad | matched every line and look, columns 2 and 14; `✖ .env, line 7: this is not a NAME=value line.` / `  Nothing was stored.`; no value and nothing of line 7 in the bytes written. Note 5 | as 100 by 30 |
+| 5 | `prod` with `reportingRunner(docker, "0.1.0-dev.1", 2)`, `composeVersion("5.6.0")`, `df(129882813)`, `staging` where SSH would ask; `zekno doctor` | matched every line, column and colour, the `–` lines included (known point c); status 1 | as 100 by 30 |
+| 6 | `zekno --version`; `zekno version` with a stand-in fetch answering 0.2.0, 0.1.0, failing; both with `--json`; `zekno doctor` with 0.2.0 on one good server | matched: the two lines at column 0, `✔` green, `!` yellow with its first sentence bold, the dim `  Could not check for a newer release.`, status 0 each; `--version` made no request; doctor's `! zekno` with the sentence dim at column 17, status 0. Difference 4 | as 100 by 30 |
+
+Differences (board or contract, then what the program draws):
+
+1. Leaving a list (board "Questions in single commands", "Leaving with esc"): the board keeps
+   `? Which server?` above `✖ Nothing was done.`; the program erases the question and draws only
+   `✖ Nothing was done.` (also after Ctrl-C, and when leaving a typed question). Look.
+2. Choosing `+ a new app` (mock-up 2 and its board go from the list to the typed question): the
+   program draws `✔ App  + a new app`, then `? Name for the new app › my-folder`; after Esc there
+   it stays above `✖ Nothing was done.`. It follows questions.md's rule for any choice. Words.
+3. A refused typed answer (board "Questions in single commands"): the board draws
+   `? Name for the new app › My App` with no cursor; the program keeps the inverse cursor after
+   `My App` while the reason is shown (the question is still open, as questions.md says). Look.
+4. `runner 0.1.0, the runner release this zekno installs` (board "The version"): the board draws
+   the comma dim with the rest; the program draws `runner 0.1.0, ` in the text colour and dims from
+   `the`. Look.
+5. Note, not a defect by the contract: mock-up 4 and its board show
+   `? Store 4 values? Values are never shown. (y/N)` with nothing after it; the program leaves
+   `... (y/N) yes`, as questions.md (research Q1) says.
+6. At 80 columns, a line exactly as wide as the room for it wraps with the space at the start of
+   the next line, one column right of the paragraph's text (no board shows a wrapped line):
+   F1 `  Nothing is set up on this machine yet. Three things first: your key, a server,` then
+   `   this app.` (column 3); F5 `? Remember this folder? ... deploys demo to prod.` then ` (y/N)`
+   and ` (y/N) yes` (column 1); A6 `   end.` (column 3); feature 004's status line ` to date)`
+   (column 1). A10 goes on at column 0 under `!` at 100 columns, and at column 1 at 80. Look.
+
+Known points, as drawn: (a) F8 is `✖ Nothing more was done.` (bold), then
+`  What was set up so far is kept: run zekno deploy again to carry on.` (dim, backticks dropped),
+where the board draws one line in the text colour; F9 is drawn the same way after the installer's
+sentence. (b) `! A value cannot be empty. Press esc to skip it.` (`!` yellow, words in the text
+colour); a refused typed answer is `  Use lowercase letters, ...` in yellow at column 2, no `!`.
+(c) `–  Docker        not checked`: the label at column 3, `not checked` at column 17.
+
+Type-ahead (in-memory key store slowed to 3 s, keys written while it read, before the question was
+drawn), at both sizes: `y` Enter before `Which server?` (`zekno status`), before
+`Store 4 values?` (`zekno secret import`), before `Name for this app › tafolder` (`zekno deploy`,
+one server, no apps); `abc` Enter before the hidden prompts of `zekno secret set GREETING` and of
+`zekno deploy` (`Value for DATABASE_URL`). None answered: each question was still open, unchanged;
+keys typed after it was drawn answered it; the deploys then carried `typed-after`, the value typed
+after the prompt, not `abc`. Raw mode was off and the cursor shown after every run. Seen: in line
+mode before raw mode goes on, the terminal echoes what is typed; one line typed ahead leaves an
+empty line above the question, two lines leave the first (`abc`) on the screen above it.
+
+Every sentence marked "needs approval" in questions.md, first-deploy.md, import.md and doctor.md
+was reached and saved as drawn, with the research Q1, Q3 and Q5 lines and the plain output of
+`zekno doctor` and `zekno secret import`, in the scratchpad's `walkthrough-006/sentences.txt`.
+
+Also seen: every command at a terminal ends with one empty line under its last line (two after a
+deploy), Ink's last frame. Not checked: a light terminal; resizing the window while a question is
+open; D51's form on the `Reachable` line (it was reached on the `Runner` line); feature 004's lines
+that come after a choice (the status lines) beyond reading them.
 
 ### The agent end-to-end tests
 
