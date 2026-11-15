@@ -74,7 +74,7 @@ With `--json`, one object on one line, the result in `latest`:
 |------|------|
 | Who calls it | `zekno version` and `zekno doctor` only, each once per run. Nothing checks in the background: no cache file, no timer |
 | No fetch | when `deps.fetch` is not set: `not_checked`, nothing requested. `main.ts` sets it to Bun's `fetch`; tests set a stand-in or nothing |
-| Request | `GET https://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json`, a fixed string (`RELEASE_FILE`); one header, exactly `User-Agent: zekno`; no `Authorization`, no cookie, no query, no body; `redirect: "manual"` |
+| Request | `GET https://raw.githubusercontent.com/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json`, a fixed string (`RELEASE_FILE`; the branch named by its full ref, so a tag named `main` cannot stand in for it); one header, exactly `User-Agent: zekno`; no `Authorization`, no cookie, no query, no body; `redirect: "manual"` |
 | Redirects | a 301, 302, 307 or 308 whose `Location` is an `https:` URL on the host `raw.githubusercontent.com`, with no port and no user name or password, is followed with the same header, at most three times; any other redirect: `not_checked` |
 | Time | one `AbortSignal.timeout(limitMs ?? 3000)` for the whole: connecting, redirects, reading the body |
 | Status | only 200; anything else (403, 404, 410, 429, 5xx): `not_checked` |

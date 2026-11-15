@@ -15,7 +15,8 @@ are built after feature 007 (code in folders), on a branch from `dev`.
   address it answered 403, and `zekno version` said "Could not check for a newer release." (seen
   on 2026-11-15).
 - **What it is now.** The check reads the runner release file on `main`:
-  `https://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json`.
+  `https://raw.githubusercontent.com/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json`.
+  The branch is named by its full ref, so a tag named `main` cannot stand in for it.
   The file is held to the form the CLI's own reader of it accepts. A higher version is announced
   only when both checksums are there. Without them it cannot be installed yet, so it is not
   announced.
@@ -29,13 +30,15 @@ are built after feature 007 (code in folders), on a branch from `dev`.
   UTF-8, the version grammar, a development version not taken, the exit status, no download,
   nothing written. The API-only headers go. The body limit is now 16 KiB.
 
-## 2. An import file that is a link (security review S4)
+## 2. An import file that is a link (security review S4 and S5)
 
 - **What it was.** `zekno secret import .env` followed a link and named only `.env`.
-- **What it is now.** When the path typed is a symbolic link, the first line of the summary reads
-  `<file> (a link to <real path>), for <app> on <server>`, at a terminal and in plain output. The
-  real path is the one of the file that was opened, cleaned as every shown path is.
-- **What stays the same.** A file that is not a link: the line is unchanged. Links are still
+- **What it is now.** When a part of the path typed is a symbolic link, the file or a folder on its
+  way (`config/.env` with `config` a link, security review S5), the first line of the summary
+  reads `<file> (a link to <real path>), for <app> on <server>`, at a terminal and in plain output.
+  The real path is the one of the file that was opened, cleaned as every shown path is.
+- **What stays the same.** A file reached through no link that was typed: the line is unchanged.
+  Links in the folders above the command's own folder are not looked at. Links are still
   followed. The last line ("still holds them in plain text") names the path as typed. A link to
   something that is not a regular file is refused as before.
 

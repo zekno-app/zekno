@@ -449,7 +449,7 @@ check the path may be changed to name something else, but the values were read f
 shown name named at the check. A file with several hard links is the same file under each name,
 so the name shown may be any of them. A link in a folder of the path, with a last part that is not
 a link (`config/.env` where `config` is a link), is not named: the decision names the path typed
-being a link. The real path is cleaned with `sanitize`, as every shown path is. Tests:
+being a link (changed after the second review: it is named now, see part 8, S5). The real path is cleaned with `sanitize`, as every shown path is. Tests:
 `test/secrets/import-file.test.ts` (a link, a link to a link, a relative link, a regular file with
 no name; a link to a folder, a pipe or nothing refused as before; `whereLinkLeads` refusing a link
 or a path that names another file than the one opened; a second process renaming the link between
@@ -460,7 +460,7 @@ terminal; a real path holding escape sequences shown cleaned; no value anywhere 
 
 **The newer-release check's host changed** (`d10a89f`). It reads
 `https://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json`
-instead of the REST API, because the API's 60 unauthenticated requests an hour per address run out
+(now `…/refs/heads/main/…`, see part 8) instead of the REST API, because the API's 60 unauthenticated requests an hour per address run out
 on a shared address (research R14, "Change of decision"). The attacker of part 1 is now whoever
 answers for `raw.githubusercontent.com`. Kept, each with its test in `test/version/newest.test.ts`
 unless named: one GET with Bun's own `fetch` handed in by `main.ts` only (`version.test.ts`, "main.ts
@@ -631,3 +631,69 @@ it belongs to whoever can change `main` (see "Needs validation" for a tag named 
 | Raw mode, the discard of typed-ahead keys and the hold between two hidden values are as before | `raw-mode.tsx`, unchanged by feature 008 (not in `git diff dev HEAD`) | `questions.test.tsx`, "keys typed before a question …" and "between two hidden values of one flow" |
 | The hidden prompt of `zekno secret set` draws no reason of its own | `hidden-prompts.tsx:30-41` | Read |
 
+## 8. After the second review: what was fixed
+
+**Written by the implementer of specs/008-cli-decisions, not by the reviewer.** Parts 1 to 7 are the
+reviewer's and are unchanged, but for two notes in the implementer's part of part 6 that point
+here. Run on `008-cli-decisions` after `1134b55`, with the in-memory key store, the stand-in runners
+and a stand-in `fetch`; no keychain, no real SSH host, no network.
+
+| Item of part 7 | Status | Commit |
+|----------------|--------|--------|
+| S5 | fixed | `3eec089` |
+| A tag named `main` (needs validation) | hardened: the address names `refs/heads/main` | the commit that adds this part |
+| "Older builds never say something false" after a move (needs validation) | left as it is: `apps/runner/RELEASING.md` now says not to move the file (`ac9ef73`) | none |
+| Device and inode on unusual file systems (needs validation) | left as it is: not tried | none |
+
+**S5, a link in a folder of the path: fixed** (`3eec089`). I1 now names the real path whenever any
+part of the path as typed is a symbolic link, the file or a folder on its way. How "reached through
+a link" is told, in `secrets/import-file.ts`:
+
+- `typedParts(cwd, typed)` gives where the typed path starts and its parts: the command's folder
+  (`deps.cwd`, which `main.ts` sets to `process.cwd()`, the folder's real path as the system gives
+  it) for a relative path, the root for an absolute one. The path is cleaned as `resolve` cleans
+  it, which is the path opened, and each leading `..` moves the start up one folder.
+- `whereLinkLeads(cwd, typed, opened)` takes `lstat` of each part, from the first folder to the
+  file. When one is a link, it takes `realpath` of the path and uses that name only when `stat` of
+  it gives the open descriptor's device and inode, as before. When none is, `lstat` of the path
+  must give them. Otherwise the import stops with I20, before anything is read, as before.
+- I did not compare the real path with the typed path made absolute, as text. On this machine
+  Bun's `realpathSync` gives a name in the letter case the disk keeps (`config/X.ENV` came back as
+  `Config/x.env` on a file system that ignores case), and a name may be kept in another Unicode
+  form than it is typed; a text comparison would name a path with no link. `lstat` asks the file
+  system, so neither is a link. A test pins the letter case.
+
+When the line names a path although the person may see no link: an absolute path through a link
+the system keeps, such as `/tmp`, `/var` or `/etc` on macOS (links to `/private/...`):
+`zekno secret import /tmp/x.env` says `(a link to /private/tmp/x.env)`. That folder was typed, and
+the line says nothing false. Links in the command's own folder or above it are never looked at
+for a relative path, so a project under a linked folder, or a test's folder under macOS's `/var`,
+names nothing for `.env`. `config/../.env` is opened as `.env`, so a link `config` is not passed
+through and not named. What a race can still do is as part 6 says, with one addition: someone who
+can change the folders of the path while the import runs can turn a link into a folder (or back)
+between the walk and the check. Then the line may leave out "(a link to …)" for a file read through
+a link, or say it for one that was not; it never names a file other than the one read, since the
+name shown is always checked against the descriptor.
+
+Tests: `test/secrets/import-file.test.ts`, "a link in a folder of the path is named too (security
+review S5) …" (a folder link, a link deeper down, an absolute path through the link, `config/..`,
+`..` from a folder below, an absolute path with no link, and an absolute path through macOS's
+`/var` when the temporary folder is under it), "a name typed in another letter case …", and
+"typedParts"; "a path that no longer names the file opened …" gained a folder link; the race test
+now reads the path as typed from its folder and still fails within milliseconds without the device
+and inode check. `test/secrets/import.test.ts`: the reviewer's case, `config/.env` with `config` a
+link to a folder elsewhere, in plain output and at a stand-in terminal, I18 naming the path as
+typed and no value anywhere but sealed; and a regular file in a regular folder (`env/dev.env`),
+named as typed. The existing tests for a regular file are unchanged.
+
+**The address names the branch exactly.** `RELEASE_FILE` is now
+`https://raw.githubusercontent.com/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json`.
+Part 7 could not rule out that the host serves a tag named `main` before the branch when both
+exist; Git itself prefers the tag, and whoever can push such a tag would then decide what the check
+reads, outside `main`'s rules. The full ref names the branch only. The orchestrator checked with one
+request on 2026-11-15 that the host serves this form directly (status 200, no redirect); it was not
+run here. Nothing else of the check changed; its tests name the new address.
+
+**Left as they are.** A stale copy of the file left at an old path after a move: the release guide
+now says not to move it (`ac9ef73`); no code. Device and inode on a FUSE or network file system: not
+tried.

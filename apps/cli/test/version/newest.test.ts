@@ -80,7 +80,7 @@ describe("the request", () => {
     expect(await checkNewest({ fetch }, "0.1.0")).toEqual(NEWEST)
     expect(calls).toHaveLength(1)
     const [{ url, init }] = calls as [Call]
-    expect(url).toBe("https://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json")
+    expect(url).toBe("https://raw.githubusercontent.com/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json")
     expect(RELEASE_FILE).toBe(url)
     expect(init.method === undefined || init.method === "GET").toBe(true)
     // The API's own headers (Accept, X-GitHub-Api-Version) are gone: only the application's name is sent.
@@ -242,7 +242,7 @@ describe("the answer", () => {
 
 describe("redirects", () => {
   const moved = (status: number, location?: string) => new Response(null, { status, headers: location === undefined ? {} : { location } })
-  const ELSEWHERE = "https://raw.githubusercontent.com/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json"
+  const ELSEWHERE = "https://raw.githubusercontent.com/zekno-app/zekno/refs/heads/release/apps/cli/src/version/runner-release.json"
 
   test("a redirect to https on raw.githubusercontent.com is followed, with the same headers", async () => {
     for (const status of [301, 302, 307, 308]) {
@@ -256,8 +256,8 @@ describe("redirects", () => {
 
   test("a redirect anywhere else, or with no Location, is not followed: another host, http, a port, a user name", async () => {
     for (const location of [
-      "http://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json",
-      "https://evil.example/zekno-app/zekno/main/apps/cli/src/version/runner-release.json",
+      "http://raw.githubusercontent.com/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json",
+      "https://evil.example/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json",
       "https://raw.githubusercontent.com.evil.example/x",
       "https://api.github.com/repos/zekno-app/zekno/releases/latest",
       "https://github.com/zekno-app/zekno/raw/main/apps/cli/src/version/runner-release.json",

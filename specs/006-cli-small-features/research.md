@@ -221,10 +221,11 @@ maintainer; each has a recommended answer.
   bytes are read from that one open file. The limit is 1 MiB (1,048,576 bytes). The bytes are
   decoded as UTF-8 with `fatal: true`; a byte order mark at the very start is dropped. The file is
   read once, never copied, never written, and the text is dropped once parsed.
-- **A link** (security review S4; decision 2 of specs/008-cli-decisions, 2026-11-15). When the path
-  typed is a symbolic link, the summary's first line names the real path of the file that was
-  opened. It is taken right after `fstat`: `realpath` of the path, used only when its device and
-  inode are those of the open descriptor (contracts/import.md, "Reading the file").
+- **A link** (security review S4 and S5; decision 2 of specs/008-cli-decisions, 2026-11-15). When
+  a part of the path as typed is a symbolic link (the file, or a folder on its way), the summary's
+  first line names the real path of the file that was opened. It is taken right after `fstat`:
+  `lstat` of each typed part, then `realpath` of the path, used only when its device and inode are
+  those of the open descriptor (contracts/import.md, "Reading the file").
 - **The folder's own `zekno.json`** needs no case of its own: its first line, `{`, is not a
   `NAME=value` line, so nothing is stored and line 1 is named.
 
@@ -394,9 +395,13 @@ Sources, each read on 2026-11-15:
   exceeded", and `zekno version` said "Could not check for a newer release."; the limit of 60
   unauthenticated requests an hour per address is the table's "Limits" row coming true. The raw
   file host answered 200 from the same address, with `cache-control: max-age=300`. The check now
-  reads `https://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json`
+  reads `https://raw.githubusercontent.com/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json`
   (the file's place after feature 007; on `main` it never names a development version, which the
-  `check-main` workflow holds). The file is held to the form the CLI's own strict reader accepts
+  `check-main` workflow holds). The branch is named by its full ref, `refs/heads/main`: the second
+  security review (part 7) could not rule out that the host serves a tag named `main` before the
+  branch when both exist, which would let whoever can push a tag decide what the check reads. The
+  orchestrator checked with one request on 2026-11-15 that the host serves the `refs/heads/main`
+  form directly (status 200, no redirect). The file is held to the form the CLI's own strict reader accepts
   (`RunnerReleaseSchema`), and a version counts as published only when both checksums are there,
   which answers the table's "What newest means" row: between a release being started and its
   second build the checksums are null, and such a version is not announced. The API-only headers

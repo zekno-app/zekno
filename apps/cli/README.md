@@ -360,8 +360,8 @@ $ zekno secret import .env
   commands, and at a terminal are asked for when missing.
 - **The file.** It may be anywhere. zekno reads it once, at most 1 MiB, and never changes,
   copies or deletes it. It still holds the values in plain text afterwards: delete it, or keep it
-  out of git. When the file you give is a link, the first line says where it leads:
-  `.env (a link to /home/ada/elsewhere/other.env), for demo on prod`.
+  out of git. When the file you give is a link, or is in a folder that is one, the first line
+  says where it leads: `.env (a link to /home/ada/elsewhere/other.env), for demo on prod`.
 
 ```bash
 zekno secret import .env --app api --server prod --yes

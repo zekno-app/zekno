@@ -23,3 +23,9 @@
 - [X] T008 Feature 006: `contracts/version.md`, `contracts/import.md`, `contracts/questions.md`, `contracts/first-deploy.md`, `research.md` (R14, R10), `data-model.md` (Latest), `plan.md` (a note), `design.md` (mock-up 4), `quickstart.md`, `design/README.md`, `security-review.md` (part 6)
 - [X] T009 `apps/cli/README.md` and `apps/web/content/docs/cli.mdx`: the host and the file asked for; one line on a linked import file
 - [X] T010 `bun run typecheck`, `bun run lint`, `bun run test` from the repository root
+
+## After the second security review (part 7 of feature 006's security review)
+
+- [X] T011 S5: name the real path when any part of the path as typed is a link (`typedParts`, `whereLinkLeads` in `apps/cli/src/secrets/import-file.ts`); tests for a folder link, `..`, letter case, an absolute path, the race; contracts and docs
+- [X] T012 The address names the branch exactly: `refs/heads/main` in `RELEASE_FILE`, its tests, `contracts/version.md`, `research.md` R14, `spec.md`
+- [X] T013 The implementer's part 8 of the security review; typecheck, lint and every test from the root

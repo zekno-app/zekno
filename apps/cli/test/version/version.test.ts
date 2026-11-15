@@ -176,7 +176,7 @@ describe("zekno version says whether a newer release exists (contracts/version.m
     const cases: { what: string; answer: () => Response; out: string[]; err: string[] }[] = [
       {
         what: "a redirect to http",
-        answer: () => moved("http://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json"),
+        answer: () => moved("http://raw.githubusercontent.com/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json"),
         out: [...LINES, "Could not check for a newer release."],
         err: [],
       },

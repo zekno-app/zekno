@@ -20,17 +20,26 @@ in a script.
 
 1. Opened once with `O_RDONLY | O_NONBLOCK`, links followed (as `-f`). `fstat` must say a regular
    file. At most 1,048,576 bytes (1 MiB), checked by `fstat` and while reading.
-   - **Where a link leads** (security review S4; decision 2 of
-     [specs/008-cli-decisions](../../008-cli-decisions/spec.md)). Right after `fstat`, the path
-     typed is looked at again with `lstat`. When it is a symbolic link, its real path is
-     `realpath` of the path, and that name is used only when `stat` of it gives the same device
-     and inode as `fstat` gave for the open descriptor: it is the real path of the file that was
-     opened. When it is not a link, `lstat` must give that same device and inode. Otherwise the
-     path changed between the open and this check, and the import stops with I20,
-     ``<file> could not be read.``, before anything is read. Node cannot ask a descriptor for its
-     path on every system (macOS has no `/proc`), so the name is looked up again, and checked
-     against the descriptor before it is used. A link in a folder of the path, whose last part is
-     not a link, is not named.
+   - **Where a link leads** (security review S4 and S5; decision 2 of
+     [specs/008-cli-decisions](../../008-cli-decisions/spec.md)). Right after `fstat`, each part
+     of the path as typed is looked at with `lstat`, from the first folder to the file: is it a
+     symbolic link? A relative path starts from the command's folder, an absolute one from the
+     root. The path is cleaned as it is for the open (`config/../.env` is `.env`), and a leading
+     `..` only moves the start up one folder: it holds no link of its own. The folders above where
+     the path starts (the command's own folder and those above it) are not looked at: the person
+     did not type them. No name is compared as text, so a name typed in another letter case or
+     Unicode form than the disk keeps is no link.
+   - When a part is a link, the file's real path is `realpath` of the path, and that name is used
+     only when `stat` of it gives the same device and inode as `fstat` gave for the open
+     descriptor: it is the real path of the file that was opened. When no part is a link, `lstat`
+     of the path must give that same device and inode. Otherwise the path changed between the
+     open and this check, and the import stops with I20, ``<file> could not be read.``, before
+     anything is read. Node cannot ask a descriptor for its path on every system (macOS has no
+     `/proc`), so the name is looked up again, and checked against the descriptor before it is
+     used.
+   - An absolute path through a link the system keeps is named too: on macOS `/tmp`, `/var` and
+     `/etc` are links to `/private/...`, so `zekno secret import /tmp/x.env` names
+     `/private/tmp/x.env`. The person typed that folder, and the line says nothing false.
 2. Decoded as UTF-8 with `fatal: true`. A byte order mark (EF BB BF) at the very start is dropped.
 3. Split into lines at LF. A CR right before an LF is dropped. A last line without an LF counts.
    Lines are numbered from 1.
@@ -145,7 +154,7 @@ The `.env` of this example (and of the tests and the walkthrough) has a comment 
 `my-var` is named `line 7`.
 
 - `note(I1)` (dim, set in by two columns, as the board "zekno secret import" draws it; with a
-  link, I1 names where it leads, as in "Sentences" below), `gap()`,
+  file reached through a link, I1 names where it leads, as in "Sentences" below), `gap()`,
   then `groups(...)`: two spaces, the label padded to 12 columns, then the names joined with `, `,
   wrapping in their own column (from column 14). A group with no name has no line. `gap()`.
 - `confirm(I15, I16)` unless `--yes`. "No" (`n`, Enter, Esc, Ctrl-C): `Nothing was done.`, status
@@ -156,8 +165,8 @@ The `.env` of this example (and of the tests and the walkthrough) has a comment 
 
 ## With no terminal
 
-Plain lines on standard output, the same words, no symbols, no empty lines (with a link, the
-first line is I1's link form, as at a terminal):
+Plain lines on standard output, the same words, no symbols, no empty lines (for a file reached
+through a link, the first line is I1's link form, as at a terminal):
 
 ```text
 .env, for demo on prod
@@ -184,12 +193,13 @@ Without `--yes`: the summary lines, then I16 on standard error, status 1, nothin
 ## Sentences
 
 `<file>` is the path as typed, cleaned (`sanitize`). `<real path>` is the real path of the file
-that was opened when `<file>` is a symbolic link ("Reading the file", step 1), cleaned the same way.
+that was opened when a part of `<file>` is a symbolic link, the file or a folder on its way
+("Reading the file", step 1), cleaned the same way.
 `<n>` and `<m>` are line numbers.
 
 | Id | Sentence | Status |
 |----|----------|--------|
-| I1 | `<file>, for <app> on <server>`; when `<file>` is a symbolic link, `<file> (a link to <real path>), for <app> on <server>`, at a terminal and in plain output alike | mock-up; the link form approved on 2026-11-15 (specs/008-cli-decisions) |
+| I1 | `<file>, for <app> on <server>`; when a part of `<file>` is a symbolic link (the file, or a folder on its way: `config/.env` with `config` a link), `<file> (a link to <real path>), for <app> on <server>`, at a terminal and in plain output alike | mock-up; the link form approved on 2026-11-15 (specs/008-cli-decisions) |
 | I2 | `<file>, line <n>: this is not a NAME=value line. Nothing was stored.` | needs approval |
 | I3 | `<file>, line <n>: a quoted value does not end on this line. Write a line break as \n inside double quotes. Nothing was stored.` | needs approval |
 | I4 | `<file>, line <n>: there is text after the closing quote. Nothing was stored.` | needs approval |

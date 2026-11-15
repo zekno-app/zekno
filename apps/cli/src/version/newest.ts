@@ -37,10 +37,11 @@ import { RunnerReleaseSchema } from "./runner-release"
 /**
  * The runner release file on `main`, where feature 007 put it. On `main` it
  * never names a development version (the `check-main` workflow holds that).
- * If the file moves again, older builds say they could not check; they never
- * say something false.
+ * The branch is named by its full ref, `refs/heads/main`, so a tag named
+ * `main` can never stand in for it. If the file moves again, older builds say
+ * they could not check; they never say something false.
  */
-export const RELEASE_FILE = "https://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json"
+export const RELEASE_FILE = "https://raw.githubusercontent.com/zekno-app/zekno/refs/heads/main/apps/cli/src/version/runner-release.json"
 
 /** The only host a redirect may lead to. */
 const HOST = "raw.githubusercontent.com"

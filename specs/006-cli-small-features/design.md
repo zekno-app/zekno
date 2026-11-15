@@ -98,8 +98,9 @@ looks like a name may be the end of a value wrapped onto its own line. One line 
 not allow stops the whole import: the message names the line's number and never repeats the line. In a script,
 `--yes` stores without the question.
 
-When the file given is a link, the first line says where it leads, the real path of the file that
-was read (approved by the maintainer on 2026-11-15, specs/008-cli-decisions):
+When the file given is a link, or is reached through a folder that is one, the first line says
+where it leads, the real path of the file that was read (approved by the maintainer on
+2026-11-15, specs/008-cli-decisions):
 
 ```text
   .env (a link to /home/ada/elsewhere/other.env), for demo on prod
