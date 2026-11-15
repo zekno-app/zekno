@@ -18,7 +18,7 @@ approved. The boards add how it looks: the colours, what is bold and what is dim
 and the alignment, in the style of the boards "zekno deploy: success and failure" and "Status,
 lists, errors and piped output" from feature 004. Where a board and `../design.md` disagree
 about a word, `../design.md` is right; where they disagree about how something looks, the board
-is right. The maintainer reviews the look on the canvas.
+is right. The maintainer approved the boards on the canvas on 2026-11-15.
 
 Colours: background `#0b0d10`, text `#d7dde4`, strong text `#ffffff`, dim `#8b949e`, the brand
 blue `#2383e2` for `?` and `❯`, green `#3fb950` for `✔`, yellow `#d29922` for `!`, red `#f85149`
