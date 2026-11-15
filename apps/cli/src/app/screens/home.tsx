@@ -543,7 +543,7 @@ export function homeHints(server: ServerRow | undefined, narrow = false, pane: "
   return [...hints.slice(0, at), ["u", "update runner"], ...hints.slice(at)]
 }
 
-/** The answers to "update the runner?", the reducer's own (state.ts `CHOICES`). */
+/** The answers to "update the runner?", the reducer's own (state/questions.ts `CHOICES`). */
 const UPDATE_HINTS: readonly KeyHint[] = CHOICES["update-runner"].map((choice) => [choice.key, choice.does] as const)
 
 /**

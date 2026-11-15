@@ -277,7 +277,7 @@ export function runningNow(deploys: readonly DeployRow[] | undefined, state: Run
   return deploys?.some((deploy) => deploy.sequence === accepted && deploy.outcome === "started") ? accepted : undefined
 }
 
-/** The answers to "remove this secret?", the reducer's own (state.ts `CHOICES`). */
+/** The answers to "remove this secret?", the reducer's own (state/questions.ts `CHOICES`). */
 const REMOVE_HINTS: readonly KeyHint[] = CHOICES["remove-secret"].map((choice) => [choice.key, choice.does] as const)
 
 /**

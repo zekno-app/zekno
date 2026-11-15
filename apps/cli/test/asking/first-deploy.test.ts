@@ -12,7 +12,7 @@ import { join, resolve } from "node:path"
 
 import runnerPackage from "../../../runner/package.json"
 import { runner, tempDir } from "../../../runner/test/support/helpers"
-import { foundDetail, megabytes as appMegabytes } from "../../src/app/effects/effects"
+import { foundDetail, megabytes as appMegabytes } from "../../src/app/effects/add-server"
 import { acceptedLinks } from "../../src/project/accepted"
 import { appTaken } from "../../src/asking/asking"
 import {

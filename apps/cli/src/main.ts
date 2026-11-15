@@ -69,7 +69,7 @@ async function app(): Promise<number> {
   const { detectBackground } = await import("./ui/terminal/background")
   let closed: Promise<number> | undefined
   await withoutDev(async () => {
-    const [{ loadStart }, { openApp }] = await Promise.all([import("./app/effects/effects"), import("./app/app")])
+    const [{ loadStart }, { openApp }] = await Promise.all([import("./app/effects/profile"), import("./app/app")])
     const start = await loadStart(deps)
     const background = await detectBackground()
     closed = openApp(deps, { start, background })

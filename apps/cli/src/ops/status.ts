@@ -100,7 +100,7 @@ async function readStates(session: Session, whole: boolean): Promise<AppStates |
 /**
  * Asks a server what it holds and what is running, over a session that is
  * open, and checks that it is the server that was connected and on this
- * team. The app keeps one session per server for this (effects.ts); see
+ * team. The app keeps one session per server for this (app/effects/servers.ts); see
  * `readStates` for `whole`.
  */
 export async function readOver(session: Session, { team, server }: Checked, options: { whole?: boolean } = {}): Promise<StatusResult> {

@@ -188,7 +188,7 @@ export type FirstUse = Linked & { member: string; path: string; sha256: string; 
 
 /**
  * How the app starts: the profile has been read and verified, or not
- * (effects.ts `loadStart`). `problem` is why this folder's zekno.json could
+ * (effects/profile.ts `loadStart`). `problem` is why this folder's zekno.json could
  * not be used, shown as a line on Home. `firstUse` is a file signed by the
  * team to ask about. `trust` is the verified team list the file was judged
  * against; it holds no key, and lets a later `d` judge the file again

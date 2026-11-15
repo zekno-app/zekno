@@ -205,7 +205,7 @@ function restoreInput(stdin: NodeJS.ReadStream): void {
 }
 
 export type AppOptions = {
-  /** What the app starts on: effects.ts `loadStart`. */
+  /** What the app starts on: effects/profile.ts `loadStart`. */
   start: Parameters<typeof initialState>[0]
   background: Background
   stdin?: NodeJS.ReadStream

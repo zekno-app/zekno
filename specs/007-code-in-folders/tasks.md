@@ -12,7 +12,7 @@
 ## Phase B: the splits and the directions (US1)
 
 - [X] T005 [US1] `apps/cli/src/app/state/`: split `state.ts` by screen, the reducer's behaviour unchanged; use the core's secret-name rule and remove the app's copy
-- [ ] T006 [US1] `apps/cli/src/app/effects/`: split `effects.ts` by concern
+- [X] T006 [US1] `apps/cli/src/app/effects/`: split `effects.ts` by concern
 - [ ] T007 [US1] Nothing outside `app/` imports `app/`: what `ui/`, `asking/`, `ops/` and `shared/` take from it moves to `shared/` or `server/`; copies made in feature 006 to avoid loading Ink are replaced by the one original
 - [ ] T008 [P] [US1] `apps/cli/src/server/install/`: split `install.ts` into its script, its steps and its checks; `INSTALL_SCRIPT` byte for byte
 - [ ] T009 [US1] `apps/cli/src/ui/ink/`: split `ink.tsx` by what it draws

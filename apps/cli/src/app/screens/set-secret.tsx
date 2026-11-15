@@ -19,7 +19,7 @@ type SkipQuestion = Extract<Question, { kind: "skip-values" }>
 /** The width of the name column in the list of missing values. */
 const NAME_WIDTH = 26
 
-/** The answers to "deploy without them?", the reducer's own (state.ts `CHOICES`). */
+/** The answers to "deploy without them?", the reducer's own (state/questions.ts `CHOICES`). */
 const SKIP_HINTS: readonly KeyHint[] = CHOICES["skip-values"].map((choice) => [choice.key, choice.does] as const)
 
 const PASTING = "Pasting is fine. Nothing shows, not even the length."

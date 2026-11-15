@@ -17,7 +17,7 @@ import { dirname, join } from "node:path"
 
 import runnerPackage from "../../../runner/package.json"
 import { tempDir } from "../../../runner/test/support/helpers"
-import { READ_LIMIT_MS } from "../../src/app/effects/effects"
+import { READ_LIMIT_MS } from "../../src/app/effects/servers"
 import { doctorJson } from "../../src/commands/doctor"
 import { readCompose } from "../../src/project/compose-read"
 import { DOCTOR_LIMIT_MS, freeText, runDoctor, sessionSentence, type DoctorReport } from "../../src/ops/doctor"

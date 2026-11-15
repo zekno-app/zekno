@@ -8,7 +8,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFile
 import { dirname, join, resolve } from "node:path"
 
 import { runner, tempDir } from "../../../runner/test/support/helpers"
-import { READ_LIMIT_MS } from "../../src/app/effects/effects"
+import { READ_LIMIT_MS } from "../../src/app/effects/servers"
 import {
   APP_NAME_RULE as A11,
   appRows,

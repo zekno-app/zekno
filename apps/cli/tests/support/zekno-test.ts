@@ -138,7 +138,7 @@ async function command(): Promise<number> {
 /** The full-screen app, as main.ts opens it: the profile verified, then the terminal asked, then the first frame. */
 async function app(): Promise<number> {
   const { detectBackground } = await import("../../src/ui/terminal/background")
-  const [{ loadStart }, { openApp }] = await Promise.all([import("../../src/app/effects/effects"), import("../../src/app/app")])
+  const [{ loadStart }, { openApp }] = await Promise.all([import("../../src/app/effects/profile"), import("../../src/app/app")])
   const start = await loadStart(deps)
   const background = await detectBackground()
   try {

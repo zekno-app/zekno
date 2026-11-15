@@ -222,7 +222,7 @@ export function DeployScreen({
   )
 }
 
-/** The answers to "remember this folder?", the reducer's own (state.ts `CHOICES`). */
+/** The answers to "remember this folder?", the reducer's own (state/questions.ts `CHOICES`). */
 const REMEMBER_HINTS: readonly KeyHint[] = CHOICES["remember-folder"].map((choice) => [choice.key, choice.does] as const)
 
 /**
@@ -260,7 +260,7 @@ export function DeployElsewhereScreen({
   )
 }
 
-/** The answers to "use it here?", the reducer's own (state.ts `CHOICES`). */
+/** The answers to "use it here?", the reducer's own (state/questions.ts `CHOICES`). */
 const USE_LINK_HINTS: readonly KeyHint[] = CHOICES["use-link"].map((choice) => [choice.key, choice.does] as const)
 
 /**
