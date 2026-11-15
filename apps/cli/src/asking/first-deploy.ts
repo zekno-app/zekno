@@ -34,7 +34,7 @@ import { readCompose } from "../compose-read"
 import { openTeam, remoteThroughUi, reopenTeam, type Deps, type Team, type teamOnce } from "../context"
 import { CliError, Left, MISSING_SERVER, NOTHING_DONE, UsageError } from "../errors"
 import type { InstallEvent } from "../install"
-import { checkApp, prepareDeploy } from "../ops/deploy"
+import { AppTaken, checkApp, prepareDeploy } from "../ops/deploy"
 import { createTeam } from "../ops/init"
 import { linkFolder } from "../ops/link"
 import { listSecrets, prepareSecretSet, setSecret } from "../ops/secret"
@@ -240,6 +240,7 @@ export async function deployAtTerminal(deps: Deps, team: ReturnType<typeof teamO
   let made = false
   let server: Server
   let app: string
+  let fresh = false
   try {
     // 3. The key.
     if (current === undefined) {
@@ -289,6 +290,7 @@ export async function deployAtTerminal(deps: Deps, team: ReturnType<typeof teamO
     // 5. The app, and 6. whether to remember the folder.
     const chosen = await whichApp(shown, current, server, { app: details.app, linked: details.app !== undefined && flags.app === undefined }, { offerNew: true, folder: deps.cwd })
     app = chosen.app
+    fresh = chosen.fresh
     if ((serverHow === "asked" || serverHow === "made" || chosen.how === "asked") && !fileHere && flags.file === undefined) {
       if (await ui.confirm(rememberFolder(app, server.name), NOTHING_DONE, { leave: true })) {
         await linkFolder(ops(), { app, server: server.name }, (question, refusal) => ui.confirm(question, refusal))
@@ -318,10 +320,16 @@ export async function deployAtTerminal(deps: Deps, team: ReturnType<typeof teamO
     throw keptSoFar(error, made)
   }
 
-  // 8. The deploy, with the text read in step 1. It ends as any `zekno deploy` does.
+  // 8. The deploy, with the text read in step 1. It ends as any `zekno deploy` does. A name typed as new is compared
+  // with what the runner holds, on the deploy's own connection, before anything is signed (security review S3): when
+  // the runner holds it, the deploy stops with A12, and what was made in this run is kept, as leaving says.
   const plan = await prepareDeploy(ops(), { app, server: server.name, read })
   const typed = { app: flags.app, server: flags.server }
-  return send(ops(), plan, { typed }, { app: plan.app, server: plan.server.name, file: shownFile(deps.cwd, plan.from), flags: flagsAgain(typed) })
+  try {
+    return await send(ops(), { ...plan, fresh }, { typed }, { app: plan.app, server: plan.server.name, file: shownFile(deps.cwd, plan.from), flags: flagsAgain(typed) })
+  } catch (error) {
+    throw error instanceof AppTaken ? keptSoFar(error, made) : error
+  }
 }
 
 /**

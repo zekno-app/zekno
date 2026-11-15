@@ -1,6 +1,7 @@
 import { CoreError, createDeploy, currentSecrets, readSignedDeploy, RunnerReportSchema, RunnerStatusSchema, type RunnerReport } from "@workspace/core"
 import { resolve } from "node:path"
 
+import { appTaken } from "../asking/asking"
 import { readCompose, type ComposeText } from "../compose-read"
 import { reach, teamOf, type OpDeps, type Team } from "../context"
 import { CliError, MISSING_APP, UsageError } from "../errors"
@@ -30,8 +31,25 @@ export type DeployCallbacks = {
   warning?: (text: string) => void
 }
 
-/** A deploy that has passed every check made on this machine, and has not been signed or sent. */
-export type DeployPlan = { team: Team; server: Server; app: string; compose: string }
+/**
+ * A deploy that has passed every check made on this machine, and has not been
+ * signed or sent. `fresh`: the app's name was typed at a terminal as a new
+ * one (asking/first-deploy.ts), so the deploy stops before anything is signed
+ * when the runner says it holds that app already (`AppTaken`).
+ */
+export type DeployPlan = { team: Team; server: Server; app: string; compose: string; fresh?: boolean }
+
+/**
+ * A12, said by the deploy itself: an app typed as new is one the runner
+ * already holds. When the server's apps could not be read before the
+ * question, the name was checked against this machine's history only, and a
+ * deploy would replace the app on the server (security review S3).
+ */
+export class AppTaken extends CliError {
+  constructor(server: string, app: string) {
+    super(appTaken(server, app))
+  }
+}
 
 export type DeployResult = DeployInfo & {
   outcome: "started" | "start_failed"
@@ -180,6 +198,8 @@ export async function sendDeploy(deps: OpDeps, plan: DeployPlan, callbacks: Depl
     const history = store.history(server.serverId, app)
     const signed = sentDeploys(team, server, app, history, callbacks.warning).at(-1)?.sequence ?? 0
     const accepted = Object.hasOwn(status.lastSequence, app) ? status.lastSequence[app]! : 0
+    // Read on this connection, which the person's answers already made: a name typed as new is never one the runner holds.
+    if (plan.fresh === true && accepted >= 1) throw new AppTaken(server.name, app)
     if (accepted > signed + MAX_AHEAD) {
       throw new CliError(
         `${server.name} says it has accepted deploy ${accepted} of ${app}, far beyond the ${signed} this machine has signed. Nothing was signed.`
