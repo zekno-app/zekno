@@ -9,17 +9,17 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
 
-import { tempDir } from "../../runner/test/helpers"
-import { HELP, run } from "../src/cli"
-import type { Deps } from "../src/context"
-import type { Fetch } from "../src/newest"
-import { RUNNER_RELEASE } from "../src/runner-release"
-import { inkUi } from "../src/ui/ink"
-import { plainUi } from "../src/ui/plain"
-import { CLI_VERSION } from "../src/version"
-import { ready, screenOf } from "./helpers"
+import { tempDir } from "../../../runner/test/helpers"
+import { HELP, run } from "../../src/cli"
+import type { Deps } from "../../src/context"
+import type { Fetch } from "../../src/version/newest"
+import { RUNNER_RELEASE } from "../../src/runner-release"
+import { inkUi } from "../../src/ui/ink"
+import { plainUi } from "../../src/ui/plain"
+import { CLI_VERSION } from "../../src/version/version"
+import { ready, screenOf } from "../helpers"
 
-const PACKAGE = join(import.meta.dir, "../package.json")
+const PACKAGE = join(import.meta.dir, "../../package.json")
 
 /** The two lines of mock-up 6. */
 const LINES = [`zekno ${CLI_VERSION}`, `runner ${RUNNER_RELEASE.version}, the runner release this zekno installs`]
@@ -277,19 +277,19 @@ describe("no other command asks GitHub (FR-036)", () => {
   }, 60_000)
 
   test("main.ts hands Bun's fetch to run, and is the only place that does", () => {
-    const main = readFileSync(join(import.meta.dir, "../src/main.ts"), "utf8")
+    const main = readFileSync(join(import.meta.dir, "../../src/main.ts"), "utf8")
     expect(main).toMatch(/fetch: \(input, init\) => fetch\(input, init\)/)
   })
 
-  test("only newest.ts uses the fetch, and only cli.ts asks it: the full-screen app and the operations never do", () => {
-    const source = join(import.meta.dir, "../src")
+  test("only version/newest.ts uses the fetch, and only cli.ts asks it: the full-screen app and the operations never do", () => {
+    const source = join(import.meta.dir, "../../src")
     const files = [...new Bun.Glob("**/*.{ts,tsx}").scanSync(source)].sort()
     expect(files.length).toBeGreaterThan(40)
     const using = (pattern: RegExp) => files.filter((file) => pattern.test(readFileSync(join(source, file), "utf8")))
     // A command added later that checks (zekno doctor) is added here, with its reason.
-    expect(using(/\bcheckNewest\(/)).toEqual(["cli.ts", "newest.ts"])
-    expect(using(/\.fetch\b/)).toEqual(["newest.ts"])
+    expect(using(/\bcheckNewest\(/)).toEqual(["cli.ts", "version/newest.ts"])
+    expect(using(/\.fetch\b/)).toEqual(["version/newest.ts"])
     // A call with something to fetch. The installer's shell script has a function of its own named `fetch()`, which is not this.
-    expect(using(/\bfetch\([^)\s]/)).toEqual(["main.ts", "newest.ts"])
+    expect(using(/\bfetch\([^)\s]/)).toEqual(["main.ts", "version/newest.ts"])
   })
 })

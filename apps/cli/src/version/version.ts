@@ -11,8 +11,8 @@
  */
 import { RUNNER_VERSION_PATTERN } from "@workspace/core"
 
-import cli from "../package.json"
-import { plainCell, quiet, type Cell } from "./ui/types"
+import cli from "../../package.json"
+import { plainCell, quiet, type Cell } from "../ui/types"
 
 if (typeof cli.version !== "string" || !RUNNER_VERSION_PATTERN.test(cli.version)) {
   throw new Error("apps/cli/package.json has a version zekno does not read.")

@@ -23,7 +23,7 @@
  */
 import { compareRunnerVersions, isDevVersion, RUNNER_VERSION_PATTERN } from "@workspace/core"
 
-import type { Deps } from "./context"
+import type { Deps } from "../context"
 
 /** GitHub's latest published release of zekno: the newest that is neither a pre-release nor a draft. */
 export const RELEASES_LATEST = "https://api.github.com/repos/zekno-app/zekno/releases/latest"

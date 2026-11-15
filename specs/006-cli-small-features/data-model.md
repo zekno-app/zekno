@@ -148,14 +148,14 @@ or, at any point after `connected`, `fail usage` or `fail home`.
 
 ## Version
 
-`CLI_VERSION` (`apps/cli/src/version.ts`): `apps/cli/package.json`'s `version`, held to the version
+`CLI_VERSION` (`apps/cli/src/version/version.ts`): `apps/cli/package.json`'s `version`, held to the version
 grammar (`RUNNER_VERSION_PATTERN`). `RUNNER_RELEASE.version` (`runner-release.ts`): the runner this
 zekno installs. Both are part of the program, never read from the working folder.
 
 ## Latest (the newer-release check)
 
 `Latest = { state: "newest" } | { state: "newer"; version: string } | { state: "not_checked" }`,
-returned by `checkNewest(deps, carried)` in `apps/cli/src/newest.ts` (contracts/version.md).
+returned by `checkNewest(deps, carried)` in `apps/cli/src/version/newest.ts` (contracts/version.md).
 
 | Field | Rule |
 |-------|------|

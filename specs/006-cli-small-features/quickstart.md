@@ -15,13 +15,13 @@ stand-ins of `apps/cli/test/stand-in-server.ts`.
 
 ```bash
 cd apps/cli
-bun test test/version.test.ts test/compiled.test.ts            # the version (Phase 1)
-bun test test/newest.test.ts                                     # the newer-release check (Phase 1)
-bun test test/questions.test.tsx                                 # the four kinds of question (Phase 2)
-bun test test/first-deploy.test.ts                               # User Story 1
-bun test test/asking.test.ts                                     # User Story 2
-bun test test/import-file.test.ts test/import.test.ts           # User Story 3
-bun test test/check-script.test.ts test/doctor.test.ts           # User Story 4
+bun test test/version/version.test.ts test/compiled.test.ts            # the version (Phase 1)
+bun test test/version/newest.test.ts                                     # the newer-release check (Phase 1)
+bun test test/ui/questions.test.tsx                                 # the four kinds of question (Phase 2)
+bun test test/asking/first-deploy.test.ts                               # User Story 1
+bun test test/asking/asking.test.ts                                     # User Story 2
+bun test test/secrets/import-file.test.ts test/secrets/import.test.ts           # User Story 3
+bun test test/server/check-script.test.ts test/ops/doctor.test.ts           # User Story 4
 bun test test/docs.test.ts                                       # commands, flags and docs in step
 bun test                                                         # everything in apps/cli
 ```

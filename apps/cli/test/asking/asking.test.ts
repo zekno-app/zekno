@@ -7,8 +7,8 @@ import { describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 
-import { runner, tempDir } from "../../runner/test/helpers"
-import { READ_LIMIT_MS } from "../src/app/effects"
+import { runner, tempDir } from "../../../runner/test/helpers"
+import { READ_LIMIT_MS } from "../../src/app/effects"
 import {
   APP_NAME_RULE as A11,
   appTaken as A12,
@@ -20,12 +20,12 @@ import {
   onlyServer as A1,
   whichApp,
   whichServer,
-} from "../src/asking"
-import { openTeam, teamOnce, type Team } from "../src/context"
-import { MISSING_SERVER } from "../src/errors"
-import { isMemberName, type Server } from "../src/profile"
-import type { ListQuestion } from "../src/ui/types"
-import { answering, machine, ready } from "./helpers"
+} from "../../src/asking/asking"
+import { openTeam, teamOnce, type Team } from "../../src/context"
+import { MISSING_SERVER } from "../../src/errors"
+import { isMemberName, type Server } from "../../src/profile"
+import type { ListQuestion } from "../../src/ui/types"
+import { answering, machine, ready } from "../helpers"
 
 const PROD: Server = { name: "prod", serverId: `srv_${"1".repeat(32)}`, target: { kind: "ssh", destination: "deploy@203.0.113.7", runnerPath: "~/.local/bin/zekno-runner" } }
 const STAGING: Server = { name: "staging", serverId: `srv_${"2".repeat(32)}`, target: { kind: "local", home: "/tmp/staging" } }
@@ -131,7 +131,7 @@ describe("the building blocks: the sentences and the limit", () => {
     const tsx = new Bun.Transpiler({ loader: "tsx" })
     const seen = new Set<string>()
     const reached: string[] = []
-    const queue = [resolve(import.meta.dir, "../src/main.ts")]
+    const queue = [resolve(import.meta.dir, "../../src/main.ts")]
     while (queue.length > 0) {
       const file = queue.shift()!
       if (seen.has(file)) continue

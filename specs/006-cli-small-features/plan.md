@@ -119,18 +119,22 @@ specs/006-cli-small-features/
 apps/cli/
 ├── package.json                      # version 0.1.0
 ├── src/
-│   ├── version.ts                    # new: CLI_VERSION, versionLines()
-│   ├── newest.ts                     # new: checkNewest (the one request to GitHub)
+│   ├── version/                      # new folder: the version and the newer-release check
+│   │   ├── version.ts                # new: CLI_VERSION, versionLines()
+│   │   └── newest.ts                 # new: checkNewest (the one request to GitHub)
+│   ├── asking/                       # new folder: what a single command asks at a terminal
+│   │   ├── asking.ts                 # new: whichServer, whichApp, the rows, the folder's name, A1 to A5
+│   │   └── first-deploy.ts           # new: deployAtTerminal (every zekno deploy at a terminal)
+│   ├── secrets/                      # new folder: reading a file of secrets
+│   │   └── import-file.ts            # new: readImportFile, parseImport (the grammar)
+│   ├── server/                       # new folder: what zekno runs on a server to look at it
+│   │   └── check-script.ts           # new: CHECK_SCRIPT, checkWords, runCheck
 │   ├── main.ts                       # hands Bun's fetch to run as deps.fetch
 │   ├── cli.ts                        # HELP, WORDS, --version, the asking step for each command, secret import, doctor, version
 │   ├── errors.ts                     # Left, NOTHING_DONE (moved here, re-exported by project.ts)
 │   ├── context.ts                    # Deps.fetch (optional); readIdentity exported; teamOnce gains peek() and forgets a failed open
 │   ├── profile.ts                    # isMemberName exported
 │   ├── project.ts                    # withProject: optional leaveAside for a file not signed by the team
-│   ├── asking.ts                     # new: whichServer, whichApp, the rows, the folder's name, A1 to A5
-│   ├── first-deploy.ts               # new: deployAtTerminal (every zekno deploy at a terminal)
-│   ├── import-file.ts                # new: readImportFile, parseImport (the grammar)
-│   ├── check-script.ts               # new: CHECK_SCRIPT, checkWords, runCheck
 │   ├── install.ts                    # scriptLines exported; INSTALL_SCRIPT unchanged
 │   ├── ops/secret.ts                 # prepareSecretImport, storeSecrets
 │   ├── ops/doctor.ts                 # new: runDoctor (data only)
@@ -144,25 +148,29 @@ apps/cli/
 │       └── questions.tsx             # new: ListQuestion and TypedQuestion components, pure key logic
 └── test/
     ├── helpers.ts                    # answering(m, answers)
-    ├── questions.test.tsx            # new: the four kinds, drawn and driven by keys; type-ahead; plain throws
-    ├── asking.test.ts                # new: every command of the list, at a terminal and with no terminal
-    ├── first-deploy.test.ts          # new: from nothing to running, every state, second run, failures
-    ├── import-file.test.ts           # new: the grammar case by case, reading the file, no value in an error
-    ├── import.test.ts                # new: the groups, all or nothing, the command, no value anywhere
-    ├── check-script.test.ts          # new: CHECK_SCRIPT under sh and dash against the stand-in server
-    ├── doctor.test.ts                # new: each check and result, --json, plain, nothing changed
-    ├── version.test.ts               # new: the two lines, the third line of `zekno version`, no other command fetches
-    ├── newest.test.ts                # new: the request and every answer, with a stand-in fetch
+    ├── ui/questions.test.tsx         # new: the four kinds, drawn and driven by keys; type-ahead; plain throws
+    ├── asking/asking.test.ts         # new: every command of the list, at a terminal and with no terminal
+    ├── asking/first-deploy.test.ts   # new: from nothing to running, every state, second run, failures
+    ├── secrets/import-file.test.ts   # new: the grammar case by case, reading the file, no value in an error
+    ├── secrets/import.test.ts        # new: the groups, all or nothing, the command, no value anywhere
+    ├── server/check-script.test.ts   # new: CHECK_SCRIPT under sh and dash against the stand-in server
+    ├── ops/doctor.test.ts            # new: each check and result, --json, plain, nothing changed
+    ├── version/version.test.ts       # new: the two lines, the third line of `zekno version`, no other command fetches
+    ├── version/newest.test.ts        # new: the request and every answer, with a stand-in fetch
+    ├── plain/                        # new: plain-unchanged.test.ts and its scenes and transcripts (FR-028)
     ├── compiled.test.ts              # the version, compiled and from source
     └── docs.test.ts                  # flags of zekno alone include those of `zekno --version`
 
 apps/cli/README.md, apps/web/content/docs/cli.mdx, README.md   # docs
 ```
 
-**Structure Decision**: no new package. New modules sit beside the ones they use: `asking.ts` and
-`first-deploy.ts` next to `project.ts` and `context.ts`, the reader next to `compose-read.ts`, the
-check script next to `install.ts`, the doctor's checks in `ops/` (data only) and its drawing in
-`commands/`, as every other command is split. `install.ts` only exports its line reader
+**Structure Decision**: no new package. Every new module is in a folder named for its subject
+(constitution 1.3.0, "Code in folders", the maintainer's rule of 2026-11-15): `version/`,
+`asking/`, `secrets/` and `server/` in `apps/cli/src`, with tests in folders of the same names;
+the doctor's checks in `ops/` (data only) and its drawing in `commands/`, as every other command
+is split. The files that existed before this feature (`install.ts`, `project.ts`, `session.ts`
+and the others beside `main.ts`, and the flat `apps/cli/test/`) are not moved here: a feature of
+its own moves them right after this one. `install.ts` only exports its line reader
 (`scriptLines`) for `check-script.ts`; its script stays byte for byte as it is.
 
 ## What each command asks
@@ -355,7 +363,7 @@ or, for the keychain, one entry; no question is drawn while one is being written
 
 ## The version
 
-`apps/cli/package.json` becomes `0.1.0`. `apps/cli/src/version.ts` imports it (`CLI_VERSION`), so
+`apps/cli/package.json` becomes `0.1.0`. `apps/cli/src/version/version.ts` imports it (`CLI_VERSION`), so
 `Bun.build` bundles the version into `dist/zekno`; nothing reads a `package.json` at run time
 (research R13). `zekno --version` and `zekno version` print mock-up 6's two lines, `--json` one
 object, before anything opens the team ([contracts/version.md](./contracts/version.md)). `doctor`

@@ -7,7 +7,7 @@
  */
 import { describe, expect, test } from "bun:test"
 
-import { checkNewest, RELEASES_LATEST, type Latest } from "../src/newest"
+import { checkNewest, RELEASES_LATEST, type Latest } from "../../src/version/newest"
 
 type Call = { url: string; init: RequestInit }
 

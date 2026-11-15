@@ -10,10 +10,10 @@ import { serverAdd, serverList, serverUpdate } from "./commands/server"
 import { status } from "./commands/status"
 import { teamOnce, type Deps } from "./context"
 import { CliError, UsageError } from "./errors"
-import { checkNewest, NEWEST, newerExists, NOT_CHECKED } from "./newest"
+import { checkNewest, NEWEST, newerExists, NOT_CHECKED } from "./version/newest"
 import { withProject } from "./project"
 import { RUNNER_RELEASE } from "./runner-release"
-import { versionCells, versionLines, versionObject } from "./version"
+import { versionCells, versionLines, versionObject } from "./version/version"
 
 export const HELP = `zekno: deploy to your own servers. Secrets are encrypted and deploys are signed on this machine.
 

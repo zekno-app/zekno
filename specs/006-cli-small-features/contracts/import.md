@@ -1,7 +1,7 @@
 # Import Contract: `zekno secret import <file>`
 
 User Story 3 (FR-015 to FR-021). Mock-up 4 in [design.md](../design.md) is binding. The reader is
-`apps/cli/src/import-file.ts`; storing is `prepareSecretImport` and `storeSecrets` in
+`apps/cli/src/secrets/import-file.ts`; storing is `prepareSecretImport` and `storeSecrets` in
 `apps/cli/src/ops/secret.ts`; the command is `secretImport` in `apps/cli/src/commands/secret.ts`.
 
 ## Usage

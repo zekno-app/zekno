@@ -147,7 +147,7 @@ maintainer; each has a recommended answer.
 
 ## R7. The first deploy from nothing **(maintainer: in `zekno deploy` only, in the order of mock-up 3, with the existing operations)**
 
-- **Decision.** A new module `apps/cli/src/first-deploy.ts` with `deployAtTerminal(deps, team,
+- **Decision.** A new module `apps/cli/src/asking/first-deploy.ts` with `deployAtTerminal(deps, team,
   values)`, called by `run` for `deploy` when `deps.ui.asks`. It covers every `zekno deploy` at a
   terminal: from nothing, with some things missing, and with nothing missing. The plain path of
   `deploy` stays as it is. The states and steps are in
@@ -214,7 +214,7 @@ maintainer; each has a recommended answer.
 
 ## R10. Reading the import file
 
-- **Decision.** `readImportFile(path)` in `apps/cli/src/import-file.ts` opens the path the person
+- **Decision.** `readImportFile(path)` in `apps/cli/src/secrets/import-file.ts` opens the path the person
   typed, resolved from the current folder, as `readGiven` in `compose-read.ts` does: links are
   followed (it is the person's path, like `-f`), `O_RDONLY | O_NONBLOCK` so a pipe cannot hold the
   read up, `fstat` must say a regular file, the size is checked before and while reading, and the
@@ -237,7 +237,7 @@ maintainer; each has a recommended answer.
   version, or how much disk is free.
 - **Decision.** Two connections per server, both in SSH's batch mode, each limited to
   `READ_LIMIT_MS`:
-  1. **A new fixed script, `CHECK_SCRIPT`**, in a new file `apps/cli/src/check-script.ts`, sent
+  1. **A new fixed script, `CHECK_SCRIPT`**, in a new file `apps/cli/src/server/check-script.ts`, sent
      the way the installer is (`transport.script(words)` runs `sh -s -- <words>` and the text goes
      on standard input). Its only words are `check` and the runner's path from the profile,
      checked by `isInstallPath` (`install.ts`) before they are placed and by the transport's
@@ -289,7 +289,7 @@ maintainer; each has a recommended answer.
 
 ## R13. The CLI's version **(maintainer: `apps/cli/package.json`, set to 0.1.0)**
 
-- **Decision.** `apps/cli/src/version.ts` imports `../package.json` and exports
+- **Decision.** `apps/cli/src/version/version.ts` imports `../package.json` and exports
   `CLI_VERSION = version` after checking it against `RUNNER_VERSION_PATTERN` (the one version
   grammar, `0.1.0` and `0.1.0-dev.1` both fit). `runner-release.ts` already imports
   `runner-release.json` the same way.
@@ -370,7 +370,7 @@ Sources, each read on 2026-11-15:
 - **No request by accident.** The fetch is a new optional member of `Deps`, `fetch`. `main.ts` sets
   it to Bun's `fetch`; when it is not set the check is "not checked" and nothing is requested. So no
   test, no operation and no other command can reach the network unless it is handed a fetch and
-  calls the one function that uses it, `checkNewest` in `apps/cli/src/newest.ts`, which only
+  calls the one function that uses it, `checkNewest` in `apps/cli/src/version/newest.ts`, which only
   `zekno version` and `zekno doctor` call. The full-screen app is handed the same `deps` and never
   calls it (FR-036); a test runs every command of `HELP` but these two with a fetch that fails the
   test if called.

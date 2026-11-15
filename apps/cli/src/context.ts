@@ -11,7 +11,7 @@ import { z } from "zod"
 
 import { CliError } from "./errors"
 import type { KeyStore } from "./keystore"
-import type { Fetch } from "./newest"
+import type { Fetch } from "./version/newest"
 import { profileStore, type Profile, type ProfileStore } from "./profile"
 import type { RunnerRelease } from "./runner-release"
 import type { ConnectOptions, Target, Transport } from "./transport"
@@ -42,7 +42,7 @@ export type Deps = {
   team?: () => Promise<Team>
   /**
    * How `zekno version` and `zekno doctor` ask GitHub whether a newer release
-   * exists (newest.ts, research R14), and nothing else. Only main.ts sets it.
+   * exists (version/newest.ts, research R14), and nothing else. Only main.ts sets it.
    * Undefined: nothing is ever requested, so no test and no other code path
    * can reach the network by mistake.
    */

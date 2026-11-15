@@ -1,6 +1,6 @@
 # First-Deploy Contract: `zekno deploy` at a terminal
 
-User Story 1 (FR-010 to FR-014). `deployAtTerminal` in `apps/cli/src/first-deploy.ts` runs every
+User Story 1 (FR-010 to FR-014). `deployAtTerminal` in `apps/cli/src/asking/first-deploy.ts` runs every
 `zekno deploy` at a terminal: from nothing, with something missing, and with nothing missing. With
 no terminal `zekno deploy` is exactly as today (plan.md, "What each command asks"). Mock-up 3 in
 [design.md](../design.md) is binding; the question looks are in [questions.md](./questions.md).

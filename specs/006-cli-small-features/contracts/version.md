@@ -1,7 +1,7 @@
 # Version Contract: `zekno --version`, `zekno version`, and the newer release
 
 FR-031 to FR-036, SC-008. Mock-up 6 in [design.md](../design.md) is binding. The check for a newer
-release is `checkNewest` in `apps/cli/src/newest.ts` (research R14).
+release is `checkNewest` in `apps/cli/src/version/newest.ts` (research R14).
 
 ## `zekno --version`
 
@@ -109,13 +109,13 @@ above (contracts/doctor.md).
 
 | Version | Source | In the compiled program |
 |---------|--------|-------------------------|
-| `CLI_VERSION` | `apps/cli/package.json` `version` (set to `0.1.0` in this feature; it was `0.0.0`), imported by `apps/cli/src/version.ts` and held to `RUNNER_VERSION_PATTERN` | bundled by `Bun.build`; no `package.json` is read at run time (`autoloadPackageJson: false` in `build.ts`) |
+| `CLI_VERSION` | `apps/cli/package.json` `version` (set to `0.1.0` in this feature; it was `0.0.0`), imported by `apps/cli/src/version/version.ts` and held to `RUNNER_VERSION_PATTERN` | bundled by `Bun.build`; no `package.json` is read at run time (`autoloadPackageJson: false` in `build.ts`) |
 | `RUNNER_RELEASE.version` | `apps/cli/src/runner-release.json`, as today (`runner-release.ts`) | bundled, as today |
 | the newest release | the answer of the request above, for one line only | asked at run time by `zekno version` and `zekno doctor` |
 
 ## Tests
 
-- `apps/cli/test/version.test.ts`: `CLI_VERSION` equals `apps/cli/package.json`'s version and fits
+- `apps/cli/test/version/version.test.ts`: `CLI_VERSION` equals `apps/cli/package.json`'s version and fits
   the version grammar; `zekno --version` (with and without `--json`) prints the two lines or the
   object above, returns 0, and never calls `deps.fetch` (a stand-in that fails the test when
   called); `zekno version` with a stand-in fetch answering a newer, the same, an older version and
@@ -124,7 +124,7 @@ above (contracts/doctor.md).
   `zekno version extra` returns 2; through `inkUi` the lines of mock-up 6, the two versions at
   column 0; every other command of `HELP` (but `doctor`) run against a ready machine never calls
   `deps.fetch`; `main.ts` hands `fetch` to `run`.
-- `apps/cli/test/newest.test.ts`: every row of "The check" with a stand-in fetch, no network.
+- `apps/cli/test/version/newest.test.ts`: every row of "The check" with a stand-in fetch, no network.
 - `apps/cli/test/compiled.test.ts`: the compiled program and the program run from source, each
   started in a folder holding only a `package.json` with `"version": "9.9.9"`, print the same two
   lines for `--version`, naming `apps/cli/package.json`'s version and `runner-release.json`'s; and

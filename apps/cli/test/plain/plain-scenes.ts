@@ -12,13 +12,13 @@
 import { realpathSync } from "node:fs"
 import { join } from "node:path"
 
-import { tempDir } from "../../runner/test/helpers"
-import { HELP, run } from "../src/cli"
-import type { Deps } from "../src/context"
-import type { KeyStore } from "../src/keystore"
-import { plainUi } from "../src/ui/plain"
-import type { Ui } from "../src/ui/types"
-import { COMPOSE_V1, machine, twin } from "./helpers"
+import { tempDir } from "../../../runner/test/helpers"
+import { HELP, run } from "../../src/cli"
+import type { Deps } from "../../src/context"
+import type { KeyStore } from "../../src/keystore"
+import { plainUi } from "../../src/ui/plain"
+import type { Ui } from "../../src/ui/types"
+import { COMPOSE_V1, machine, twin } from "../helpers"
 
 type Machine = ReturnType<typeof machine>
 

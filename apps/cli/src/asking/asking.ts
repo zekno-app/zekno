@@ -16,15 +16,15 @@
 import { realpathSync } from "node:fs"
 import { basename } from "node:path"
 
-import { batchOnly } from "./app/hand-over"
-import { appsOf, latestFirst } from "./app/views"
-import { reach, type Deps, type Team } from "./context"
-import { CliError, MISSING_APP, MISSING_SERVER, UsageError } from "./errors"
-import { readOver, stateOf, type RunState } from "./ops/status"
-import { findServer, NAME, type Profile, type Server } from "./profile"
-import { sanitize } from "./sanitize"
-import { withSession } from "./session"
-import type { ListRow } from "./ui/types"
+import { batchOnly } from "../app/hand-over"
+import { appsOf, latestFirst } from "../app/views"
+import { reach, type Deps, type Team } from "../context"
+import { CliError, MISSING_APP, MISSING_SERVER, UsageError } from "../errors"
+import { readOver, stateOf, type RunState } from "../ops/status"
+import { findServer, NAME, type Profile, type Server } from "../profile"
+import { sanitize } from "../sanitize"
+import { withSession } from "../session"
+import type { ListRow } from "../ui/types"
 
 /** A1: the one server, used without asking (mock-up 1). */
 export const onlyServer = (server: string): string => `Using ${server}, your only server.`

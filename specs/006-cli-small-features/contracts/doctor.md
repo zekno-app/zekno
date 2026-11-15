@@ -2,7 +2,7 @@
 
 User Story 4 (FR-022 to FR-026, FR-032). Mock-up 5 in [design.md](../design.md) is binding. The
 checks are in `apps/cli/src/ops/doctor.ts` (`runDoctor`, which returns a `DoctorReport` and draws
-nothing), the server script in `apps/cli/src/check-script.ts`, the command in
+nothing), the server script in `apps/cli/src/server/check-script.ts`, the command in
 `apps/cli/src/commands/doctor.ts`. Research R11 and R12 say why each only reads.
 
 ## Usage
