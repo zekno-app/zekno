@@ -24,5 +24,5 @@
 - [X] T012 Independent review of the whole diff as moved text: nothing signed, sealed, sent, checked or drawn changed; recorded in `specs/007-code-in-folders/review.md`
 - [X] T013 Docs: the "Develop" parts of the READMEs name the folders; the feature map
 - [ ] T014 Final checks as T004, recorded in `specs/007-code-in-folders/results.md`
-- [ ] T015 After the review (R4): split `apps/cli/src/app/screens/home.tsx` and `apps/cli/src/project/project.ts` by subject, as moved text
+- [X] T015 After the review (R4): split `apps/cli/src/app/screens/home.tsx` and `apps/cli/src/project/project.ts` by subject, as moved text
 - [ ] T016 After the review (R1): the layering test gains rule 6 of plan.md and fails on what would hide a breach
