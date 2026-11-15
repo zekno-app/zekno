@@ -20,7 +20,7 @@
 
 ## Phase C: the end
 
-- [ ] T011 `apps/cli/test/build/layers.test.ts`: the directions of plan.md, checked on every import
+- [X] T011 `apps/cli/test/build/layers.test.ts`: the directions of plan.md, checked on every import
 - [ ] T012 Independent review of the whole diff as moved text: nothing signed, sealed, sent, checked or drawn changed; recorded in `specs/007-code-in-folders/review.md`
 - [ ] T013 Docs: the "Develop" parts of the READMEs name the folders; the feature map
 - [ ] T014 Final checks as T004, recorded in `specs/007-code-in-folders/results.md`
