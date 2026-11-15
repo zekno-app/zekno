@@ -12,17 +12,11 @@ import { changedNote } from "../../src/app/screens/app"
 import { lastLines, numberUsed, stagesOf } from "../../src/app/screens/deploy"
 import { inkRows, rowsOf } from "../../src/app/screens/home"
 import { HINTS } from "../../src/app/screens/placeholder"
-import {
-  hiddenPromptOpen,
-  initialState,
-  secretNameProblem,
-  top,
-  update,
-  type AppEvent,
-  type DeployProgress,
-  type State,
-  type TeamView,
-} from "../../src/app/state/state"
+import type { AppEvent } from "../../src/app/state/events"
+import { hiddenPromptOpen, top } from "../../src/app/state/reading"
+import { secretNameProblem } from "../../src/app/state/set-secret"
+import { initialState, update } from "../../src/app/state/state"
+import type { DeployProgress, State, TeamView } from "../../src/app/state/types"
 import { clockTime, relativeTime } from "../../src/shared/time"
 import { appDetails, appsOf, composeServices } from "../../src/shared/views"
 import { openTeam, type OpDeps } from "../../src/cli/context"

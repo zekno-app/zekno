@@ -1,7 +1,7 @@
 import { Box, render, Static, Text, useInput, useWindowSize, type RenderOptions } from "ink"
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react"
 
-import type { DeployProgress } from "../../app/state/state"
+import type { DeployProgress } from "../../app/state/types"
 import { logClock } from "../../shared/time"
 import { CliError, Left } from "../../cli/errors"
 import type { CheckLine, DoctorReport } from "../../ops/doctor"

@@ -11,7 +11,7 @@ import { join } from "node:path"
 import { PassThrough, Writable } from "node:stream"
 
 import { runner, RUNNER_MAIN, tempDir } from "../../../../runner/test/support/helpers"
-import type { DeployProgress } from "../../../src/app/state/state"
+import type { DeployProgress } from "../../../src/app/state/types"
 import { HELP } from "../../../src/cli/cli"
 import { sshUnreachable } from "../../../src/server/session"
 import { secretsWords, type DeployStart } from "../../../src/shared/deploy"

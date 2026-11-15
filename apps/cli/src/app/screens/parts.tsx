@@ -8,7 +8,7 @@ import type { ReactNode } from "react"
 
 import { MARKER } from "../../ui/parts/select"
 import { useTheme } from "../../ui/terminal/theme"
-import type { RunState } from "../state/state"
+import type { RunState } from "../state/types"
 
 /**
  * A pane of Home or the app screen: a rounded box with its title on its

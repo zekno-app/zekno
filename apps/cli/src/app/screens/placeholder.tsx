@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 
 import type { KeyHint } from "../../ui/parts/key-hints"
 import { Frame, Header, Trail } from "../frame"
-import type { Screen, State } from "../state/state"
+import type { Screen, State } from "../state/types"
 
 /** Each screen's key hints, as its board's last line shows them. */
 export const HINTS: Record<Exclude<Screen["name"], "help" | "profile-error">, readonly KeyHint[]> = {

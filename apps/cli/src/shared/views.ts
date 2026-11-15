@@ -20,7 +20,7 @@ import { COMPOSE_READ_BYTES, tooManyAliases } from "../project/compose-file"
 import type { Team } from "../cli/context"
 import type { History, Server } from "../profile/profile"
 import { sanitize } from "../server/sanitize"
-import type { AppRow, DeployRow, SecretRow } from "../app/state/state"
+import type { AppRow, DeployRow, SecretRow } from "../app/state/types"
 
 /** A history file's name: an app name and `.json`. Anything else in the folder is not an app. */
 const HISTORY_FILE = /^([a-z0-9][a-z0-9-]{0,62})\.json$/

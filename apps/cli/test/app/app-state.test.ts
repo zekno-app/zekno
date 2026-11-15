@@ -1,19 +1,10 @@
 import { describe, expect, test } from "bun:test"
 
 import { toAppKey, type AppKey } from "../../src/app/keys"
-import {
-  initialState,
-  LOG_LINES,
-  RUNNER_LINES,
-  top,
-  update,
-  type AppEvent,
-  type Effect,
-  type Screen,
-  type State,
-  type Step,
-  type TeamView,
-} from "../../src/app/state/state"
+import type { AppEvent, Effect, Step } from "../../src/app/state/events"
+import { top } from "../../src/app/state/reading"
+import { initialState, update } from "../../src/app/state/state"
+import { LOG_LINES, RUNNER_LINES, type Screen, type State, type TeamView } from "../../src/app/state/types"
 
 // ---------------------------------------------------------------------------
 // Fixtures

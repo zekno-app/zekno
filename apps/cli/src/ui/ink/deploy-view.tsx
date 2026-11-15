@@ -9,7 +9,7 @@ import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
 import { numberUsed, stagesOf, Summary } from "../../app/screens/deploy"
-import type { DeployProgress } from "../../app/state/state"
+import type { DeployProgress } from "../../app/state/types"
 import { seconds } from "../../shared/time"
 import { earlierLeftOut, failedNext, startedNext, type DeployStart } from "../../shared/deploy"
 import { Panel } from "../parts/panel"

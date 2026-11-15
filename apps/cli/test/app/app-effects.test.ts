@@ -6,7 +6,7 @@ import { join } from "node:path"
 
 import { tempDir } from "../../../runner/test/support/helpers"
 import { createEffects, loadStart, routeErrorLines, tilde } from "../../src/app/effects/effects"
-import type { AppEvent } from "../../src/app/state/state"
+import type { AppEvent } from "../../src/app/state/events"
 import { openTeam, TAMPERED } from "../../src/cli/context"
 import { memoryKeyStore } from "../../src/profile/keystore"
 import { openSession } from "../../src/server/session"

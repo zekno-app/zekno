@@ -13,7 +13,9 @@ import type { Key } from "ink"
 
 import { isLateAnswer } from "../ui/terminal/background"
 import { applySecretInput } from "../ui/parts/secret-input"
-import { promptedName, top, type AppEvent, type State } from "./state/state"
+import type { AppEvent } from "./state/events"
+import { promptedName, top } from "./state/reading"
+import type { State } from "./state/types"
 
 /** The value typed so far, and whether a finished value is being stored. */
 export type HiddenValue = { value: string; saving: boolean }

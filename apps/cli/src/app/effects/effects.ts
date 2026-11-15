@@ -31,19 +31,18 @@ import { sanitize } from "../../server/sanitize"
 import { openSession, SshUnreachable, type Session, type SessionMode } from "../../server/session"
 import type { ErrorLines, Target } from "../../server/transport"
 import { askingConnect, batchOnly, oneAtATime, recording, wouldHaveAsked, type Terminal } from "../hand-over"
+import type { AppEvent, Effect } from "../state/events"
 import {
   DEPLOY_LINES,
   LOG_LINES,
   LOG_TEXT_KEPT,
   type AddStepName,
-  type AppEvent,
-  type Effect,
   type LogLine as ShownLine,
   type Notice,
   type RunnerRow,
   type Start,
   type TeamView,
-} from "../state/state"
+} from "../state/types"
 import { seconds } from "../../shared/time"
 import { appDetails, appNames, appsOf, latestAccepted, secretNamesOf } from "../../shared/views"
 

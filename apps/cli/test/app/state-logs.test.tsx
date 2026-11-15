@@ -16,20 +16,11 @@ import { acceptedFor, createEffects, LOG_BATCH_MS, loadStart, needsAnswer, noAns
 import type { Terminal } from "../../src/app/hand-over"
 import type { AppKey } from "../../src/app/keys"
 import { logRows, logsHints, STRAIGHT, STRAIGHT_HERE } from "../../src/app/screens/logs"
-import {
-  initialState,
-  LOG_LINES,
-  LOG_TEXT_KEPT,
-  refreshAllowed,
-  top,
-  update,
-  visibleLines,
-  type AppEvent,
-  type DeployRow,
-  type LogLine,
-  type State,
-  type TeamView,
-} from "../../src/app/state/state"
+import type { AppEvent } from "../../src/app/state/events"
+import { visibleLines } from "../../src/app/state/logs"
+import { refreshAllowed, top } from "../../src/app/state/reading"
+import { initialState, update } from "../../src/app/state/state"
+import { LOG_LINES, LOG_TEXT_KEPT, type DeployRow, type LogLine, type State, type TeamView } from "../../src/app/state/types"
 import { logClock } from "../../src/shared/time"
 import { parseTail } from "../../src/commands/logs"
 import { stateCell } from "../../src/commands/status"

@@ -7,7 +7,7 @@ import { Spinner } from "../../ui/parts/stages"
 import { TextQuestion } from "../../ui/parts/text-input"
 import { useTheme } from "../../ui/terminal/theme"
 import { Frame, Header } from "../frame"
-import type { Screen } from "../state/state"
+import type { Screen } from "../state/types"
 import { HINTS } from "./placeholder"
 
 type WelcomeState = Extract<Screen, { name: "welcome" }>

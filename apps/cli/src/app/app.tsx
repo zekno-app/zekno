@@ -26,19 +26,10 @@ import { ProfileErrorScreen } from "./screens/profile-error"
 import { SetSecretScreen } from "./screens/set-secret"
 import { TooSmall } from "./screens/too-small"
 import { WelcomeScreen } from "./screens/welcome"
-import {
-  hiddenPromptOpen,
-  initialState,
-  MIN_COLUMNS,
-  MIN_ROWS,
-  REFRESH_MS,
-  tooSmall,
-  top,
-  update,
-  type AppEvent,
-  type Effect,
-  type State,
-} from "./state/state"
+import type { AppEvent, Effect } from "./state/events"
+import { hiddenPromptOpen, tooSmall, top } from "./state/reading"
+import { initialState, update } from "./state/state"
+import { MIN_COLUMNS, MIN_ROWS, REFRESH_MS, type State } from "./state/types"
 
 /** Holds the state, runs the reducer for each event and hands its effects on. */
 export function createStore(initial: State, run: (effect: Effect) => void) {
