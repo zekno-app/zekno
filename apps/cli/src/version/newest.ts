@@ -1,56 +1,62 @@
 /**
  * Whether a release newer than the one this zekno carries has been published
- * (specs/006-cli-small-features, contracts/version.md and research R14). Only
- * `zekno version` and `zekno doctor` ask, once per run each. Nothing checks in
- * the background, nothing is cached and nothing is written.
+ * (specs/006-cli-small-features, contracts/version.md and research R14, as
+ * changed by specs/008-cli-decisions). Only `zekno version` and `zekno doctor`
+ * ask, once per run each. Nothing checks in the background, nothing is cached
+ * and nothing is written.
  *
- * It is one GET of a fixed address on GitHub's REST API, with a fixed generic
+ * It is one GET of a fixed address: the runner release file on the
+ * repository's `main`, on GitHub's raw file host, with a fixed generic
  * `User-Agent` and no credentials, so the request says nothing about the
  * developer, their team, their servers or their project. GitHub learns the
- * address and time of the request, and that zekno runs there.
+ * address and time of the request, and that zekno runs there. The raw file
+ * host is used rather than GitHub's REST API because the API allows 60
+ * unauthenticated requests an hour per network address, and a shared address
+ * (a VPN, a relay, an office) runs out of them.
  *
- * The answer is hostile text: whoever answers for api.github.com (GitHub, a
- * proxy, a certificate someone made this machine trust) may send anything.
- * So it is bounded in time and size, parsed as JSON within the bound, and only
- * one field is read: `tag_name`, which must be `runner-v` followed by a prod
- * version of the one version grammar. After that check the version is digits
- * and dots, and it is used for one sentence and the `latest` field only.
+ * The answer is hostile text: whoever answers for raw.githubusercontent.com
+ * (GitHub, a proxy, a certificate someone made this machine trust) may send
+ * anything. So it is bounded in time and size, parsed as JSON within the
+ * bound, and held to the form of the release file by the CLI's own strict
+ * reader of it (`RunnerReleaseSchema`, runner-release.ts): no other field,
+ * a version of the one version grammar, each checksum null or 64 lowercase
+ * hex characters. A version counts as published only when both checksums are
+ * there. After that check the version is digits and dots, and it is used for
+ * one sentence and the `latest` field only; the checksums are only looked at.
  * Nothing is downloaded, installed or run because of it. Any failure, of any
  * kind, is "not checked"; this never throws.
  *
  * The fetch is `deps.fetch`, which only main.ts sets. Without it nothing is
  * requested, so no test and no other code path can reach the network.
  */
-import { compareRunnerVersions, isDevVersion, RUNNER_VERSION_PATTERN } from "@workspace/core"
+import { compareRunnerVersions, isDevVersion } from "@workspace/core"
 
 import type { Deps } from "../cli/context"
-
-/** GitHub's latest published release of zekno: the newest that is neither a pre-release nor a draft. */
-export const RELEASES_LATEST = "https://api.github.com/repos/zekno-app/zekno/releases/latest"
-
-/** The only host a redirect may lead to. */
-const HOST = "api.github.com"
+import { RunnerReleaseSchema } from "./runner-release"
 
 /**
- * Every header the request carries. GitHub asks for a `User-Agent`, and for
- * the application's name in it; it says nothing about this machine. The API
- * version is pinned; once GitHub stops serving it, it answers 410 and the
- * check says it could not check.
+ * The runner release file on `main`, where feature 007 put it. On `main` it
+ * never names a development version (the `check-main` workflow holds that).
+ * If the file moves again, older builds say they could not check; they never
+ * say something false.
  */
-const HEADERS = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2026-03-10", "User-Agent": "zekno" } as const
+export const RELEASE_FILE = "https://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json"
+
+/** The only host a redirect may lead to. */
+const HOST = "raw.githubusercontent.com"
+
+/** Every header the request carries: the application's name, and nothing about this machine. */
+const HEADERS = { "User-Agent": "zekno" } as const
 
 /** How long the whole check may take: connecting, every redirect and reading the body. */
 export const NEWEST_LIMIT_MS = 3000
 
-/** The most of an answer that is read. A release's answer with its notes is well under it. */
-export const NEWEST_BODY_LIMIT = 262_144
+/** The most of an answer that is read: 16 KiB. The release file is under 300 bytes. */
+export const NEWEST_BODY_LIMIT = 16_384
 
 /** How many redirects in a row are followed. */
 const REDIRECTS = 3
 const REDIRECT_STATUSES = new Set([301, 302, 307, 308])
-
-/** A release tag: `runner-v` and a version of the core's grammar, nothing before or after. */
-const TAG = new RegExp(`^runner-v(${RUNNER_VERSION_PATTERN.source.replace(/^\^/, "").replace(/\$$/, "")})$`)
 
 /** What the check found out. */
 export type Latest = { state: "newest" } | { state: "newer"; version: string } | { state: "not_checked" }
@@ -83,9 +89,9 @@ function drop(response: Response): void {
 }
 
 /**
- * The next address for a redirect, only when it is `https:` on api.github.com
- * itself: no other host, no port, no name and password, which the request
- * would then carry.
+ * The next address for a redirect, only when it is `https:` on
+ * raw.githubusercontent.com itself: no other host, no port, no name and
+ * password, which the request would then carry.
  */
 function nextAddress(location: string | null, current: string): string | undefined {
   if (location === null) return undefined
@@ -126,23 +132,22 @@ async function bodyOf(response: Response, stop: Promise<never>): Promise<Uint8Ar
   return bytes
 }
 
-/** The version a release answer names, when it is one object whose `tag_name` is a prod release tag and that is neither a pre-release nor a draft. */
-function versionIn(json: unknown): string | undefined {
-  if (typeof json !== "object" || json === null || Array.isArray(json)) return undefined
-  const answer = json as { [field: string]: unknown }
-  const tag = Object.hasOwn(answer, "tag_name") ? answer.tag_name : undefined
-  if (typeof tag !== "string") return undefined
-  const version = TAG.exec(tag)?.[1]
-  if (version === undefined || isDevVersion(version)) return undefined
-  for (const field of ["prerelease", "draft"]) {
-    if (Object.hasOwn(answer, field) && answer[field] !== false) return undefined
-  }
-  return version
+/**
+ * The release a file names: its version, and whether it is published (both
+ * checksums there). Undefined when the file is not in the form the CLI's own
+ * reader accepts, or names a development version.
+ */
+function releaseIn(json: unknown): { version: string; published: boolean } | undefined {
+  const read = RunnerReleaseSchema.safeParse(json)
+  if (!read.success) return undefined
+  const { version, files } = read.data
+  if (isDevVersion(version)) return undefined
+  return { version, published: files["linux-x64"].sha256 !== null && files["linux-arm64"].sha256 !== null }
 }
 
 /** The request and its answer, as "The check" in contracts/version.md says. Throws on anything that is not a good answer. */
 async function ask(fetch: Fetch, carried: string, signal: AbortSignal, stop: Promise<never>): Promise<Latest> {
-  let address = RELEASES_LATEST
+  let address = RELEASE_FILE
   for (let followed = 0; ; followed++) {
     const response = await Promise.race([fetch(address, { method: "GET", headers: HEADERS, redirect: "manual", signal }), stop])
     if (REDIRECT_STATUSES.has(response.status)) {
@@ -158,9 +163,11 @@ async function ask(fetch: Fetch, carried: string, signal: AbortSignal, stop: Pro
     }
     const bytes = await bodyOf(response, stop)
     if (bytes === undefined) return notChecked
-    const version = versionIn(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)))
-    if (version === undefined) return notChecked
-    return compareRunnerVersions(version, carried) > 0 ? { state: "newer", version } : { state: "newest" }
+    const release = releaseIn(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)))
+    if (release === undefined) return notChecked
+    const higher = compareRunnerVersions(release.version, carried) > 0
+    // A higher version without both checksums cannot be installed yet (its second build has not run): it is not announced.
+    return higher && release.published ? { state: "newer", version: release.version } : { state: "newest" }
   }
 }
 

@@ -49,13 +49,16 @@ function bare(fetch?: Fetch) {
   return { deps, out, err, zekno: (...argv: string[]) => run(argv, deps) }
 }
 
-/** A stand-in for GitHub's answer: a release tag, or a failure. It counts its calls and never reaches the network. */
-function github(tag: string | "fails") {
+/** The release file's form (specs/008-cli-decisions): a version, and both checksums unless given otherwise. */
+const releaseFile = (version: unknown, sha256: unknown = "0123456789abcdef".repeat(4)) => ({ version, files: { "linux-x64": { sha256 }, "linux-arm64": { sha256 } } })
+
+/** A stand-in for GitHub's answer: the release file on main naming a published version, or a failure. It counts its calls and never reaches the network. */
+function github(version: string | "fails") {
   let calls = 0
   const fetch: Fetch = async () => {
     calls++
-    if (tag === "fails") throw new TypeError("fetch failed")
-    return new Response(JSON.stringify({ tag_name: tag, prerelease: false, draft: false }), { status: 200 })
+    if (version === "fails") throw new TypeError("fetch failed")
+    return new Response(JSON.stringify(releaseFile(version)), { status: 200 })
   }
   return { fetch, calls: () => calls }
 }
@@ -134,16 +137,16 @@ describe("the version (contracts/version.md)", () => {
 describe("zekno version says whether a newer release exists (contracts/version.md, mock-up 6)", () => {
   test("plain: the two lines, then the newest, a newer release on standard error, or could not check; status 0 and one request each time", async () => {
     const cases = [
-      { tag: "runner-v0.1.0", out: [...LINES_010, "This is the newest release."], err: [] },
-      { tag: "runner-v0.2.0", out: LINES_010, err: ["A newer release exists: 0.2.0. Update zekno to get it."] },
-      { tag: "fails", out: [...LINES_010, "Could not check for a newer release."], err: [] },
+      { version: "0.1.0", out: [...LINES_010, "This is the newest release."], err: [] },
+      { version: "0.2.0", out: LINES_010, err: ["A newer release exists: 0.2.0. Update zekno to get it."] },
+      { version: "fails", out: [...LINES_010, "Could not check for a newer release."], err: [] },
     ] as const
-    for (const { tag, out, err } of cases) {
-      const answer = github(tag)
+    for (const { version, out, err } of cases) {
+      const answer = github(version)
       const m = bare(answer.fetch)
       m.deps.release = CARRIED
       expect(await m.zekno("version")).toBe(0)
-      expect({ tag, out: m.out, err: m.err }).toEqual({ tag, out: [...out], err: [...err] })
+      expect({ version, out: m.out, err: m.err }).toEqual({ version, out: [...out], err: [...err] })
       expect(answer.calls()).toBe(1)
     }
   })
@@ -151,12 +154,12 @@ describe("zekno version says whether a newer release exists (contracts/version.m
   test("with --json: one object, the result in latest", async () => {
     const versions = { zekno: CLI_VERSION, runner: "0.1.0" }
     const cases = [
-      { tag: "runner-v0.1.0", latest: { state: "newest" } },
-      { tag: "runner-v0.2.0", latest: { state: "newer", version: "0.2.0" } },
-      { tag: "fails", latest: { state: "not_checked" } },
+      { version: "0.1.0", latest: { state: "newest" } },
+      { version: "0.2.0", latest: { state: "newer", version: "0.2.0" } },
+      { version: "fails", latest: { state: "not_checked" } },
     ] as const
-    for (const { tag, latest } of cases) {
-      const answer = github(tag)
+    for (const { version, latest } of cases) {
+      const answer = github(version)
       const m = bare(answer.fetch)
       m.deps.release = CARRIED
       expect(await m.zekno("version", "--json")).toBe(0)
@@ -167,23 +170,30 @@ describe("zekno version says whether a newer release exists (contracts/version.m
   })
 
   test("hostile answers end as could not check, or as the right line, and the status is 0; nothing of the answer but a version is shown", async () => {
-    const release = (fields: Record<string, unknown>) => new Response(JSON.stringify({ prerelease: false, draft: false, ...fields }), { status: 200 })
+    const release = (fields: unknown) => new Response(JSON.stringify(fields), { status: 200 })
     const moved = (location: string) => new Response(null, { status: 302, headers: { location } })
-    const huge = `{"tag_name":"runner-v99.0.0","pad":"${"x".repeat(262_145)}"}`
+    const huge = `${JSON.stringify(releaseFile("99.0.0"))}${" ".repeat(16_385)}`
     const cases: { what: string; answer: () => Response; out: string[]; err: string[] }[] = [
-      { what: "a redirect to http", answer: () => moved("http://api.github.com/repos/zekno-app/zekno/releases/latest"), out: [...LINES, "Could not check for a newer release."], err: [] },
+      {
+        what: "a redirect to http",
+        answer: () => moved("http://raw.githubusercontent.com/zekno-app/zekno/main/apps/cli/src/version/runner-release.json"),
+        out: [...LINES, "Could not check for a newer release."],
+        err: [],
+      },
       { what: "a redirect to another host", answer: () => moved("https://evil.example/latest"), out: [...LINES, "Could not check for a newer release."], err: [] },
       { what: "a body that is not JSON", answer: () => new Response("<html>\x1b[2J</html>", { status: 200 }), out: [...LINES, "Could not check for a newer release."], err: [] },
       { what: "a body larger than the limit", answer: () => new Response(huge, { status: 200 }), out: [...LINES, "Could not check for a newer release."], err: [] },
-      { what: "a tag that is not runner-v<version>", answer: () => release({ tag_name: "v99.0.0" }), out: [...LINES, "Could not check for a newer release."], err: [] },
-      { what: "a development version", answer: () => release({ tag_name: "runner-v99.0.0-dev.1" }), out: [...LINES, "Could not check for a newer release."], err: [] },
-      { what: "a version older than this zekno's", answer: () => release({ tag_name: "runner-v0.0.1" }), out: [...LINES, "This is the newest release."], err: [] },
+      { what: "a version that is not of the grammar", answer: () => release(releaseFile("v99.0.0")), out: [...LINES, "Could not check for a newer release."], err: [] },
+      { what: "a development version", answer: () => release(releaseFile("99.0.0-dev.1")), out: [...LINES, "Could not check for a newer release."], err: [] },
+      { what: "a version older than this zekno's", answer: () => release(releaseFile("0.0.1")), out: [...LINES, "This is the newest release."], err: [] },
+      { what: "a newer version without its checksums", answer: () => release(releaseFile("99.0.0", null)), out: [...LINES, "This is the newest release."], err: [] },
+      { what: "a checksum that is not 64 lowercase hex characters", answer: () => release(releaseFile("99.0.0", "\x1b[2J")), out: [...LINES, "Could not check for a newer release."], err: [] },
       { what: "a status other than 200", answer: () => new Response("rate limited", { status: 429 }), out: [...LINES, "Could not check for a newer release."], err: [] },
       {
-        what: "a newer version among hostile fields",
-        answer: () => release({ tag_name: "runner-v99.0.0", name: "\x1b]52;c;ZXZpbA==\x07", body: "\x1b[2J", version: "9.9.9" }),
-        out: LINES,
-        err: ["A newer release exists: 99.0.0. Update zekno to get it."],
+        what: "a newer version among fields the file does not have",
+        answer: () => release({ ...releaseFile("99.0.0"), name: "\x1b]52;c;ZXZpbA==\x07", body: "\x1b[2J" }),
+        out: [...LINES, "Could not check for a newer release."],
+        err: [],
       },
     ]
     for (const { what, answer, out, err } of cases) {
@@ -215,17 +225,17 @@ describe("zekno version says whether a newer release exists (contracts/version.m
   })
 
   test("at a terminal: mock-up 6's third line for each answer", async () => {
-    const carrying = (tag: string) => ({ ...bare(github(tag).fetch).deps, release: CARRIED })
+    const carrying = (version: string) => ({ ...bare(github(version).fetch).deps, release: CARRIED })
     const lines = LINES_010
-    expect(await drawn(carrying("runner-v0.1.0"), "version")).toEqual({ code: 0, lines: [...lines, "✔ This is the newest release."] })
-    expect(await drawn(carrying("runner-v0.2.0"), "version")).toEqual({ code: 0, lines: [...lines, "! A newer release exists: 0.2.0. Update zekno to get it."] })
+    expect(await drawn(carrying("0.1.0"), "version")).toEqual({ code: 0, lines: [...lines, "✔ This is the newest release."] })
+    expect(await drawn(carrying("0.2.0"), "version")).toEqual({ code: 0, lines: [...lines, "! A newer release exists: 0.2.0. Update zekno to get it."] })
     expect(await drawn(carrying("fails"), "version")).toEqual({ code: 0, lines: [...lines, "  Could not check for a newer release."] })
   })
 
   test("at a terminal a newer release is drawn as the board draws it: its first sentence bold, the rest plain; no other warning is", async () => {
     // Colour and bold are not written to a test's stream (no terminal to colour), so what is checked is what the interface is told.
     expect(firstSentence(newerExists("0.2.0"))).toEqual({ first: "A newer release exists: 0.2.0.", rest: " Update zekno to get it." })
-    const m = { ...bare(github("runner-v0.2.0").fetch) }
+    const m = { ...bare(github("0.2.0").fetch) }
     m.deps.release = CARRIED
     const warned: { text: string; options?: { firstBold?: boolean } }[] = []
     const plain = m.deps.ui

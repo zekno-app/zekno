@@ -9,8 +9,12 @@ import release from "./runner-release.json"
  * the right one, so they come from here and never from the download. They are
  * recorded in the repository after a release is published; `null` means no
  * release has been published for this version yet.
+ *
+ * The same reader holds the copy of this file on `main` that the newer-release
+ * check reads (newest.ts): it is strict, and its strings are held to bounded
+ * patterns, so it takes any parsed JSON with `safeParse` and never throws.
  */
-const ReleaseSchema = z.strictObject({
+export const RunnerReleaseSchema = z.strictObject({
   version: z.string().regex(RUNNER_VERSION_PATTERN),
   files: z.strictObject({
     "linux-x64": z.strictObject({ sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable() }),
@@ -21,9 +25,9 @@ const ReleaseSchema = z.strictObject({
 export type RunnerArch = "x64" | "arm64"
 
 /** A runner release: its version, and the SHA-256 of each file, or `null` before it is published. */
-export type RunnerRelease = z.infer<typeof ReleaseSchema>
+export type RunnerRelease = z.infer<typeof RunnerReleaseSchema>
 
-export const RUNNER_RELEASE: RunnerRelease = ReleaseSchema.parse(release)
+export const RUNNER_RELEASE: RunnerRelease = RunnerReleaseSchema.parse(release)
 
 export function expectedSha256(arch: RunnerArch): string | null {
   return RUNNER_RELEASE.files[`linux-${arch}`].sha256

@@ -37,8 +37,8 @@ const COMPOSE = "services:\n  web:\n    image: example/web:1\n"
 /** 133 GB free, as mock-up 5 shows: 129,882,813 KiB is 133,000,000,512 bytes. */
 const ROOMY = 129_882_813
 
-/** A stand-in for GitHub's answer about the latest release: `fails`, or a release tag. Counts its calls. */
-function github(tag: string | "fails", wait = 0) {
+/** A stand-in for GitHub's answer about the newest release: `fails`, or the release file on main naming a published version (both checksums). Counts its calls. */
+function github(version: string | "fails", wait = 0) {
   let calls = 0
   let settled = false
   const fetch: Fetch = async () => {
@@ -46,8 +46,9 @@ function github(tag: string | "fails", wait = 0) {
     settled = false
     if (wait > 0) await Bun.sleep(wait)
     settled = true
-    if (tag === "fails") throw new TypeError("fetch failed")
-    return new Response(JSON.stringify({ tag_name: tag, prerelease: false, draft: false }), { status: 200 })
+    if (version === "fails") throw new TypeError("fetch failed")
+    const sha256 = "0123456789abcdef".repeat(4)
+    return new Response(JSON.stringify({ version, files: { "linux-x64": { sha256 }, "linux-arm64": { sha256 } } }), { status: 200 })
   }
   return { fetch, calls: () => calls, settled: () => settled }
 }
@@ -144,7 +145,7 @@ async function baseline() {
   prod.server.df(ROOMY)
   f.m.compose(COMPOSE)
   expect(await f.m.zekno("link", "--app", "demo", "--server", "prod")).toBe(0)
-  f.m.deps.fetch = github(`runner-v${OWN}`).fetch
+  f.m.deps.fetch = github(OWN).fetch
   return { f, prod }
 }
 
@@ -369,7 +370,7 @@ describe("each check, and each result (contracts/doctor.md, The checks)", () => 
     f.m.deps.release = { ...release, files: { "linux-x64": { sha256: null }, "linux-arm64": { sha256: null } } }
     let done = await report(f)
     expect(done.machine[0]).toEqual({ check: "zekno", label: "zekno", result: "warning", detail: `${CLI_VERSION}, installs runner ${OWN}`, next: `This build holds no checksum for runner ${OWN}, so it cannot install a runner` })
-    f.m.deps.fetch = github("runner-v9.0.0").fetch
+    f.m.deps.fetch = github("9.0.0").fetch
     done = await report(f)
     expect(done.machine[0]!.next).toBe("A newer release exists: 9.0.0. Update zekno to get it.")
   }, 60_000)
@@ -495,7 +496,7 @@ describe("each check, and each result (contracts/doctor.md, The checks)", () => 
     // On this machine.
     const f = await fleet()
     expect(await f.m.zekno("server", "add", "dev", "--local")).toBe(0)
-    f.m.deps.fetch = github(`runner-v${OWN}`).fetch
+    f.m.deps.fetch = github(OWN).fetch
     const pids = join(tempDir("pids"), "pids")
     const stalling = join(tempDir("stalling"), "zekno-runner")
     writeFileSync(stalling, stallingRunner(pids))
@@ -573,7 +574,7 @@ exec "${real}" "$@"
   test("a server on this machine: on this machine, its runner's version never compared, Docker and Disk not checked", async () => {
     const f = await fleet()
     expect(await f.m.zekno("server", "add", "dev", "--local")).toBe(0)
-    f.m.deps.fetch = github(`runner-v${OWN}`).fetch
+    f.m.deps.fetch = github(OWN).fetch
     expect(await doctor(f)).toEqual({
       code: 0,
       out: [
@@ -632,7 +633,7 @@ function mockUp5(): Promise<Fleet> {
     staging.stand.ask()
     f.m.compose(COMPOSE)
     expect(await f.m.zekno("link", "--app", "demo", "--server", "prod")).toBe(0)
-    f.m.deps.fetch = github(`runner-v${OWN}`).fetch
+    f.m.deps.fetch = github(OWN).fetch
     return f
   })()
   return mockUp
@@ -796,7 +797,7 @@ describe("mock-up 5: --json, plain lines, the drawn report, --server", () => {
 describe("the newer release on doctor's first line (contracts/version.md, In zekno doctor; mock-up 6)", () => {
   test("a newer release: a warning with D50 under the zekno line, counted, and not failing the command", async () => {
     const { f } = await baseline()
-    const asked = github("runner-v0.2.0")
+    const asked = github("0.2.0")
     f.m.deps.fetch = asked.fetch
     const done = await doctor(f)
     expect(done.code).toBe(0)
@@ -819,8 +820,8 @@ describe("the newer release on doctor's first line (contracts/version.md, In zek
 
   test("the newest, or no answer: the line stays good with no next step, and no count changes; with no fetch, not checked", async () => {
     const { f } = await baseline()
-    for (const tag of [`runner-v${OWN}`, "fails"]) {
-      const asked = github(tag)
+    for (const version of [OWN, "fails"]) {
+      const asked = github(version)
       f.m.deps.fetch = asked.fetch
       expect(await doctor(f)).toEqual({ code: 0, out: BASELINE, err: [] })
       expect(asked.calls()).toBe(1)
@@ -834,7 +835,7 @@ describe("the newer release on doctor's first line (contracts/version.md, In zek
   test("--json carries latest in each of its three states", async () => {
     const { f } = await baseline()
     const states: unknown[] = []
-    for (const fetch of [github(`runner-v${OWN}`).fetch, github("runner-v0.2.0").fetch, github("fails").fetch]) {
+    for (const fetch of [github(OWN).fetch, github("0.2.0").fetch, github("fails").fetch]) {
       f.m.deps.fetch = fetch
       const done = await doctor(f, "--json")
       states.push(JSON.parse(done.out[0]!).latest)
@@ -844,7 +845,7 @@ describe("the newer release on doctor's first line (contracts/version.md, In zek
 
   test("the check is asked once, beside the server checks: a slow answer does not wait for them, nor they for it", async () => {
     const { f } = await baseline()
-    const asked = github(`runner-v${OWN}`, 300)
+    const asked = github(OWN, 300)
     f.m.deps.fetch = asked.fetch
     let connectedWhileAsking: boolean | undefined
     const connect = f.m.deps.connect
