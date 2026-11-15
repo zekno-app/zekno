@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>zekno deploy from nothing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1200px; height: 820px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #8b949e">$</span> zekno deploy</div>
+      <div style="color: #8b949e; padding-left: 17px">Nothing is set up on this machine yet. Three things first: your key, a server, this app.</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Your name</span> <span style="color: #8b949e">›</span> ada</div>
+      <div><span style="color: #3fb950">✔</span> Key created. It is in your system keychain.</div>
+      <div style="padding-left: 17px"><span style="color: #8b949e">Team code&nbsp;&nbsp;</span>&nbsp; <span style="color: #ffffff; font-weight: 600">J4QF-AM29-F01W-PYWM-CS8P</span></div>
+      <div style="color: #8b949e; padding-left: 17px">Identifies your team. A server checks it before it agrees to obey your team.</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Where is the server?</span> <span style="color: #8b949e">›</span> deploy@203.0.113.7</div>
+      <div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">A name for it</span> <span style="color: #8b949e">›</span> prod</div>
+      <div><span style="color: #3fb950">✔</span> Connected over SSH</div>
+      <div><span style="color: #3fb950">✔</span> Docker with Compose found</div>
+      <div><span style="color: #3fb950">✔</span> Runner installed <span style="color: #8b949e">&nbsp;52 MB, checksum verified</span></div>
+      <div><span style="color: #3fb950">✔</span> Added prod to the signed team list</div>
+      <div style="padding-left: 17px"><span style="color: #8b949e">Server code</span>&nbsp; <span style="color: #ffffff; font-weight: 600">MM4G-GPD7-M9VM-ACGJ-Y48R</span></div>
+      <div style="color: #8b949e; padding-left: 17px">Identifies this server’s key. Teammates compare it before they trust the server.</div>
+      <div style="color: #8b949e; padding-left: 17px">You reached this server over SSH, so its identity rests on SSH’s host verification.</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Name for this app</span> <span style="color: #8b949e">›</span> demo</div>
+      <div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Remember this folder?</span> It writes zekno.json, so it always deploys demo to prod. <span style="color: #8b949e">(y/N)</span> yes</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #d29922">!</span> compose.yaml expects 1 value that has no secret yet.</div>
+      <div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Value for DATABASE_URL (demo on prod):</span> <span style="color: #8b949e">(hidden)&nbsp;&nbsp; esc skips it</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="border: 1px solid #2a313a; border-radius: 6px; padding: 8px 12px; width: 420px; display: grid; grid-template-columns: 90px 1fr; row-gap: 2px"><span style="color: #ffffff; font-weight: 600; grid-column: span 2">Deploy 1</span><span style="color: #8b949e">app</span><span>demo</span><span style="color: #8b949e">server</span><span>prod</span><span style="color: #8b949e">secrets</span><span>1</span></div>
+      <div style="display: flex; gap: 16px"><span><span style="color: #3fb950">✔</span> Checked</span><span><span style="color: #3fb950">✔</span> Signed</span><span><span style="color: #3fb950">✔</span> Sent</span><span><span style="color: #3fb950">✔</span> Started</span></div>
+      <div><span style="color: #3fb950">✔</span> <span style="color: #ffffff; font-weight: 600">demo is live on prod</span> <span style="color: #8b949e">in 6.1s</span></div>
+    </div>
+  </div>
+  <div style="width: 1px; background: #2a313a"></div>
+  <div style="width: 300px; display: flex; flex-direction: column; gap: 14px; color: #8b949e">
+    <div style="font-weight: 600">How it behaves</div>
+    <div>Only what is missing is asked. With a key already, the first block is not shown, and the opening line counts what is left: “Two things first: a server, this app.”</div>
+    <div>Each thing is finished before the next question. Leaving keeps what was made:</div>
+    <div style="color: #d7dde4"><span style="color: #f85149">✖</span> Nothing more was done. What was set up so far is kept: run zekno deploy again to carry on.</div>
+    <div>At the hidden prompt, <span style="color: #d7dde4">esc</span> skips that value and <span style="color: #d7dde4">ctrl-c</span> leaves.</div>
+    <div>Only <span style="color: #d7dde4">zekno deploy</span> starts from nothing. Another command says:</div>
+    <div style="color: #d7dde4">No team on this machine yet. Run `zekno deploy` in a project folder, or `zekno init`.</div>
+    <div>In a script nothing is asked: the command stops with the sentence and exit status it has today.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":820}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

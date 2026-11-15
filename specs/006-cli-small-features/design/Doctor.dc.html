@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>zekno doctor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1200px; height: 640px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+    <div><span style="color: #8b949e">$</span> zekno doctor</div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <div style="color: #ffffff; font-weight: 600; padding-left: 17px">This machine</div>
+      <div style="display: grid; grid-template-columns: 16px 110px 1fr; column-gap: 8px"><span style="color: #3fb950">✔</span><span style="">zekno</span><span style="">0.1.0, installs runner 0.1.0</span><span style="color: #3fb950">✔</span><span style="">Key</span><span style="">in your system keychain</span><span style="color: #3fb950">✔</span><span style="">Profile</span><span style="">verified, team list v2</span><span style="color: #3fb950">✔</span><span style="">This folder</span><span style="">linked to demo on prod, compose.yaml is readable</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <div style="padding-left: 17px"><span style="color: #ffffff; font-weight: 600">prod</span> <span style="color: #8b949e">&nbsp;deploy@203.0.113.7</span></div>
+      <div style="display: grid; grid-template-columns: 16px 110px 1fr; column-gap: 8px"><span style="color: #3fb950">✔</span><span style="">Reachable</span><span style="">over SSH</span><span style="color: #3fb950">✔</span><span style="">Docker</span><span style="">Compose 5.6.0</span><span style="color: #d29922">!</span><span style="">Runner</span><span style="">0.1.0-dev.1, older than this zekno’s 0.1.0</span><span style=""></span><span style=""></span><span style="color: #8b949e">Run zekno server update prod</span><span style="color: #3fb950">✔</span><span style="">Disk</span><span style="">133 GB free</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <div style="padding-left: 17px"><span style="color: #ffffff; font-weight: 600">staging</span> <span style="color: #8b949e">&nbsp;deploy@198.51.100.4</span></div>
+      <div style="display: grid; grid-template-columns: 16px 110px 1fr; column-gap: 8px"><span style="color: #f85149">✖</span><span style="">Reachable</span><span style="">SSH needs an answer</span><span style=""></span><span style=""></span><span style="color: #8b949e">Open zekno and press enter on staging</span><span style="color: #8b949e">–</span><span style="">Docker</span><span style="color: #8b949e">not checked</span><span style="color: #8b949e">–</span><span style="">Runner</span><span style="color: #8b949e">not checked</span><span style="color: #8b949e">–</span><span style="">Disk</span><span style="color: #8b949e">not checked</span></div>
+    </div>
+    <div style="padding-left: 17px"><span style="color: #ffffff; font-weight: 600">1 problem, 1 warning.</span></div>
+  </div>
+  <div style="width: 1px; background: #2a313a"></div>
+  <div style="width: 300px; display: flex; flex-direction: column; gap: 14px; color: #8b949e">
+    <div style="font-weight: 600">How it behaves</div>
+    <div>It changes nothing, on this machine or on any server, and never asks for a password.</div>
+    <div><span style="color: #3fb950">✔</span> good&nbsp;&nbsp; <span style="color: #d29922">!</span> a warning&nbsp;&nbsp; <span style="color: #f85149">✖</span> a problem&nbsp;&nbsp; – not checked</div>
+    <div>Every warning and problem has one line under it saying what to do.</div>
+    <div>A warning does not fail the command. Only a problem does: exit status 1.</div>
+    <div>A check that depends on one that failed is not checked, not wrong.</div>
+    <div><span style="color: #d7dde4">zekno doctor --server prod</span> checks one server. <span style="color: #d7dde4">--json</span> gives the same results as data.</div>
+    <div>When everything is in order:</div>
+    <div style="color: #ffffff; font-weight: 600">No problems, no warnings.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":640}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
