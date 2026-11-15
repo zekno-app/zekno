@@ -376,7 +376,7 @@ export const threats = {
       outcomeLabel: "Not protected",
       result: notProtected,
       reason:
-        "The client is the trust anchor. Public code and signed releases reduce this risk; they do not remove it.",
+        "The client is the trust anchor. Public code and checksum-verified releases reduce this risk; they do not remove it.",
       compromised: "release",
     },
   ] satisfies ThreatScenario[],
@@ -494,7 +494,7 @@ export const faq = {
       id: "limits",
       question: "What does Zekno not protect against?",
       answer:
-        "A compromised team member's machine, because it holds a signing key. A compromised server of yours, because secrets are plaintext in memory where the app runs. A tampered Zekno app or runner release, which public code and signed releases reduce but do not remove.",
+        "A compromised team member's machine, because it holds a signing key. A compromised server of yours, because secrets are plaintext in memory where the app runs. A tampered Zekno app or runner release, which public code and checksum-verified releases reduce but do not remove.",
     },
     {
       id: "providers",
