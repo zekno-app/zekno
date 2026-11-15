@@ -6,7 +6,7 @@
  * wrong line, and the error it becomes never holds it.
  */
 import { describe, expect, test } from "bun:test"
-import { mkdirSync, symlinkSync, truncateSync, writeFileSync } from "node:fs"
+import { closeSync, fstatSync, mkdirSync, openSync, realpathSync, symlinkSync, truncateSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { tempDir } from "../../../runner/test/support/helpers"
@@ -17,6 +17,8 @@ import {
   importLineSentence,
   parseImport,
   readImportFile,
+  readImportFileAndLink,
+  whereLinkLeads,
   type ImportFailure,
   type ImportReason,
 } from "../../src/secrets/import-file"
@@ -272,6 +274,97 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
     symlinkSync(join(folder, "nothing-here"), dangling)
     expect(refused(dangling)).toBe("No file at shown.")
   })
+
+  test("a link: the real path of the file read comes back with the text; a regular file has none (security review S4)", () => {
+    const outside = tempDir("outside")
+    const target = join(outside, "other.env")
+    writeFileSync(target, "OTHER=yes\n")
+    const link = join(folder, "outside-link.env")
+    symlinkSync(target, link)
+    expect(readImportFileAndLink(link, "outside-link.env")).toEqual({ text: "OTHER=yes\n", linkedTo: realpathSync(target) })
+    // A link to a link: the real path of the file at the end.
+    const twice = join(folder, "twice.env")
+    symlinkSync(link, twice)
+    expect(readImportFileAndLink(twice, "twice.env")).toEqual({ text: "OTHER=yes\n", linkedTo: realpathSync(target) })
+    // A relative link, as git checks one out.
+    const relative = join(folder, "relative.env")
+    symlinkSync("good.env", relative)
+    at("good.env", "A=1\n")
+    expect(readImportFileAndLink(relative, "relative.env")).toEqual({ text: "A=1\n", linkedTo: realpathSync(join(folder, "good.env")) })
+    expect(readImportFileAndLink(at("plain.env", "A=1\n"), "plain.env")).toEqual({ text: "A=1\n" })
+  })
+
+  test("a link to something that is not a regular file is refused as before: a folder and a pipe are I20, a link to nothing I19", () => {
+    const outside = tempDir("outside")
+    const toFolder = join(folder, "to-folder.env")
+    symlinkSync(outside, toFolder)
+    expect(refused(toFolder)).toBe("shown is not a file.")
+    const pipe = join(outside, "a-pipe")
+    expect(Bun.spawnSync(["mkfifo", pipe]).exitCode).toBe(0)
+    const toPipe = join(folder, "to-pipe.env")
+    symlinkSync(pipe, toPipe)
+    expect(refused(toPipe)).toBe("shown is not a file.")
+    const toNothing = join(folder, "to-nothing.env")
+    symlinkSync(join(outside, "nothing-here"), toNothing)
+    expect(refused(toNothing)).toBe("No file at shown.")
+  })
+
+  test("a path that no longer names the file opened gives no name: whereLinkLeads refuses it, for a link and for a file", () => {
+    const a = at("first.env", "A=1\n")
+    const b = at("second.env", "B=2\n")
+    const opened = (path: string) => {
+      const fd = openSync(path, "r")
+      try {
+        return fstatSync(fd, { bigint: true })
+      } finally {
+        closeSync(fd)
+      }
+    }
+    const link = join(folder, "swapped.env")
+    symlinkSync(a, link)
+    expect(whereLinkLeads(link, opened(a))).toBe(realpathSync(a))
+    expect(whereLinkLeads(a, opened(a))).toBeUndefined()
+    // The link now leads to the second file, while the first is the one open: no name is given.
+    expect(() => whereLinkLeads(link, opened(b))).toThrow("The link leads to another file than the one opened.")
+    // The path is now another regular file than the one open.
+    expect(() => whereLinkLeads(b, opened(a))).toThrow("The path names another file than the one opened.")
+  })
+
+  test("a link changed over and over while it is read: each read names the file whose text it gives, or stops as unreadable", async () => {
+    const a = at("race-a.env", "WHICH=a\n")
+    const b = at("race-b.env", "WHICH=b\n")
+    const link = join(folder, "race.env")
+    symlinkSync(a, link)
+    // Another process points the link at one file, then the other, each time by renaming a new link over it.
+    const swapper = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `const { symlinkSync, renameSync } = require("node:fs"); const [a, b, link] = process.argv.slice(1); const end = Date.now() + 1500; for (let i = 0; Date.now() < end; i++) { const next = link + ".next"; symlinkSync(i % 2 ? a : b, next); renameSync(next, link) }`,
+        a,
+        b,
+        link,
+      ],
+      { stdout: "ignore", stderr: "ignore" }
+    )
+    const named = { [realpathSync(a)]: "WHICH=a\n", [realpathSync(b)]: "WHICH=b\n" }
+    const outcomes = new Set<string>()
+    const started = Date.now()
+    while (Date.now() - started < 1000) {
+      try {
+        const read = readImportFileAndLink(link, "race.env")
+        expect(read.linkedTo).toBeDefined()
+        expect(named[read.linkedTo!]).toBe(read.text)
+        outcomes.add("named")
+      } catch (error) {
+        expect((error as Error).message).toBe("race.env could not be read.")
+        outcomes.add("unreadable")
+      }
+      await Bun.sleep(0)
+    }
+    await swapper.exited
+    expect(outcomes.has("named")).toBe(true)
+  }, 10_000)
 
   test("the folder's own zekno.json is not a file of values: line 1 is named", async () => {
     const m = await ready()

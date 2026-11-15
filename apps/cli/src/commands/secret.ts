@@ -4,7 +4,7 @@ import type { Deps } from "../cli/context"
 import { CliError, Left, UsageError } from "../cli/errors"
 import { listSecrets, prepareSecretImport, prepareSecretSet, removeSecret, setSecret, storeSecrets, type ImportPlan, type Where } from "../ops/secret"
 import { sanitize } from "../server/sanitize"
-import { importError, parseImport, readImportFile, type ImportEntry } from "../secrets/import-file"
+import { importError, parseImport, readImportFileAndLink, type ImportEntry } from "../secrets/import-file"
 import { quiet } from "../ui/types"
 
 export async function secretSet(deps: Deps, name: string | undefined, options: Where & { stdin?: boolean }): Promise<void> {
@@ -23,8 +23,13 @@ export async function secretRemove(deps: Deps, name: string | undefined, options
 /** I10: `zekno secret import` with no file. A usage error. Needs approval (research Q4). */
 export const SAY_WHICH_FILE = "Say which file: `zekno secret import <file>`."
 
-/** I1: the first line of an import's summary (mock-up 4). */
-export const importFor = (file: string, app: string, server: string): string => `${file}, for ${app} on ${server}`
+/**
+ * I1: the first line of an import's summary (mock-up 4). When the path typed
+ * is a link, it says where the link leads: the real path of the file read
+ * (security review S4, specs/008-cli-decisions).
+ */
+export const importFor = (file: string, app: string, server: string, linkedTo?: string): string =>
+  linkedTo === undefined ? `${file}, for ${app} on ${server}` : `${file} (a link to ${linkedTo}), for ${app} on ${server}`
 
 /** I11: every name of the file was left out. Needs approval (research Q4). */
 export const nothingToImport = (file: string): string => `No value in ${file} can be stored, so nothing was stored.`
@@ -48,8 +53,8 @@ export const importStillThere = (file: string, count: number): string =>
 /** The labels of an import's groups (mock-up 4). */
 const GROUPS = { fresh: "new", replaces: "replaces", leftOut: "left out" } as const
 
-/** An import file, read and parsed whole: the path as typed, cleaned, and its entries. */
-export type ImportRead = { file: string; entries: ImportEntry[] }
+/** An import file, read and parsed whole: the path as typed, cleaned, its entries, and, when the path is a link, the real path of the file read, cleaned. */
+export type ImportRead = { file: string; entries: ImportEntry[]; linkedTo?: string }
 
 /**
  * Reads and parses the file of `zekno secret import <file>` whole, before
@@ -60,9 +65,10 @@ export type ImportRead = { file: string; entries: ImportEntry[] }
 export function readImport(cwd: string, file: string | undefined): ImportRead {
   if (!file) throw new UsageError(SAY_WHICH_FILE)
   const shown = sanitize(file)
-  const parsed = parseImport(readImportFile(resolve(cwd, file), shown))
+  const read = readImportFileAndLink(resolve(cwd, file), shown)
+  const parsed = parseImport(read.text)
   if (!("entries" in parsed)) throw importError(shown, parsed)
-  return { file: shown, entries: parsed.entries }
+  return read.linkedTo === undefined ? { file: shown, entries: parsed.entries } : { file: shown, entries: parsed.entries, linkedTo: sanitize(read.linkedTo) }
 }
 
 /** The lines of an import's summary, for `Ui.groups`: the names of each group in the file's order, a group with no name left out. */
@@ -87,7 +93,7 @@ export function importGroups(plan: Pick<ImportPlan, "values" | "leftOut">): [str
 export async function secretImport(deps: Deps, read: ImportRead, where: Where, options: { yes: boolean }): Promise<void> {
   const plan = await prepareSecretImport(deps, where, read.entries, read.file)
   const server = plan.server.name
-  deps.ui.note(importFor(read.file, plan.app, server))
+  deps.ui.note(importFor(read.file, plan.app, server, read.linkedTo))
   deps.ui.gap()
   deps.ui.groups(importGroups(plan))
   deps.ui.gap()

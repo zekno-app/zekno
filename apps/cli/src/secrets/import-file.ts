@@ -5,7 +5,10 @@
  * The file is the path the person typed, as with `-f`: it may be anywhere,
  * and a link is followed. It is opened once, without waiting on a pipe, held
  * to a regular file and to 1 MiB, read from that one open file, decoded as
- * strict UTF-8, and never copied, changed or deleted.
+ * strict UTF-8, and never copied, changed or deleted. When the path typed is
+ * a link, the real path of the file that was opened is given back with the
+ * text, so the summary can say where the values come from (security review
+ * S4, specs/008-cli-decisions).
  *
  * The text holds values, so nothing here ever puts a piece of it into an
  * error, a log or a sentence. A line that does not fit the grammar is named by
@@ -14,7 +17,7 @@
  * way a value leaves this module is inside an entry, which goes to the secret
  * operation and nowhere else.
  */
-import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs"
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, statSync, type BigIntStats } from "node:fs"
 
 import { CliError } from "../cli/errors"
 
@@ -60,12 +63,44 @@ export function importLineSentence(file: string, failure: ImportFailure): string
 /** The error for a line that does not fit, built from the line's number and the reason only. */
 export const importError = (file: string, failure: ImportFailure): CliError => new CliError(importLineSentence(file, failure))
 
+/** An import file as read: its text, and, when the path typed is a link, the real path of the file that was read. */
+export type ImportFileRead = { text: string; linkedTo?: string }
+
+/**
+ * Where the path typed leads, when it is a symbolic link: the real path of
+ * the open file. Node cannot ask a descriptor for its path on every system,
+ * so the path is looked up again, and the name found is used only when it is
+ * the open file itself, the same device and inode `fstat` gave for the
+ * descriptor. Otherwise the path changed since the open, and this throws, so
+ * the import stops: a name shown is always the name of the file read. A path
+ * that is not a link must still name the open file too.
+ */
+export function whereLinkLeads(path: string, opened: BigIntStats): string | undefined {
+  const isOpened = (found: BigIntStats) => found.dev === opened.dev && found.ino === opened.ino
+  const typed = lstatSync(path, { bigint: true })
+  if (!typed.isSymbolicLink()) {
+    if (!isOpened(typed)) throw new Error("The path names another file than the one opened.")
+    return undefined
+  }
+  const real = realpathSync(path)
+  if (!isOpened(statSync(real, { bigint: true }))) throw new Error("The link leads to another file than the one opened.")
+  return real
+}
+
 /**
  * Reads the import file at `path` once, as contracts/import.md, "Reading the
  * file", says. `shown` is the path as typed, cleaned, for the sentences.
  * Returns the text without a leading byte order mark.
  */
 export function readImportFile(path: string, shown: string): string {
+  return readImportFileAndLink(path, shown).text
+}
+
+/**
+ * The same, and, when the path typed is a link, the real path of the file
+ * that was read (`linkedTo`), taken at the open from the open file.
+ */
+export function readImportFileAndLink(path: string, shown: string): ImportFileRead {
   let fd: number
   try {
     // A link is followed (it is the person's own path), and a pipe cannot hold the read up.
@@ -76,9 +111,11 @@ export function readImportFile(path: string, shown: string): string {
   }
   const buffer = Buffer.alloc(IMPORT_FILE_LIMIT + 1)
   try {
-    const opened = fstatSync(fd)
+    const opened = fstatSync(fd, { bigint: true })
     if (!opened.isFile()) throw new CliError(notImportFile(shown))
-    if (opened.size > IMPORT_FILE_LIMIT) throw new CliError(importTooLarge(shown))
+    if (opened.size > BigInt(IMPORT_FILE_LIMIT)) throw new CliError(importTooLarge(shown))
+    // Where a link leads, from the open file. A path that changed since the open stops the import here, as unreadable.
+    const link = whereLinkLeads(path, opened)
     // Up to one byte past the limit, from the one open file, so a file that grew after `fstat` is still caught.
     let length = 0
     while (length < buffer.length) {
@@ -93,7 +130,8 @@ export function readImportFile(path: string, shown: string): string {
     } catch {
       throw new CliError(importNotText(shown))
     }
-    return text.startsWith("﻿") ? text.slice(1) : text
+    const read = text.startsWith("﻿") ? text.slice(1) : text
+    return link === undefined ? { text: read } : { text: read, linkedTo: link }
   } catch (error) {
     if (error instanceof CliError) throw error
     throw new CliError(importUnreadable(shown))

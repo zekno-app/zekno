@@ -8,7 +8,7 @@
  * process started are searched for each one.
  */
 import { describe, expect, spyOn, test } from "bun:test"
-import { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { tempDir } from "../../../runner/test/support/helpers"
@@ -27,6 +27,7 @@ import { openTeam, type Team } from "../../src/cli/context"
 import { MISSING_APP, NOTHING_DONE } from "../../src/cli/errors"
 import { importTooMany, importTooManyRecords, importTooManySecrets, prepareSecretImport, storeSecrets } from "../../src/ops/secret"
 import { profileStore } from "../../src/profile/profile"
+import { sanitize } from "../../src/server/sanitize"
 import { parseImport, type ImportEntry } from "../../src/secrets/import-file"
 import { answering, filesUnder, machine, ready } from "../support/helpers"
 import { shows, terminal } from "../support/terminal"
@@ -540,4 +541,79 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     expect(lines.filter((line) => line.includes(SENTINEL))).toEqual([])
     expect(holding(m.home)).toEqual([])
   }, 30_000)
+})
+
+describe("an import file that is a link (security review S4, specs/008-cli-decisions)", () => {
+  /** A ready machine whose project's `.env` is a link to a file of values in a folder outside the project. */
+  async function linked(folderName = "elsewhere") {
+    const m = await ready()
+    const outside = join(tempDir("outside"), folderName)
+    mkdirSync(outside)
+    const target = join(outside, "other.env")
+    const text = `OTHER_PROJECT_TOKEN=${secret("other")}\n`
+    writeFileSync(target, text)
+    symlinkSync(target, join(m.project, ".env"))
+    return { m, target, text, real: realpathSync(target) }
+  }
+
+  test("a link inside the folder to a file outside it: I1 names the real path of the file read, in plain output and at a terminal; I18 the path as typed; no value anywhere", async () => {
+    const { m, target, text, real } = await linked()
+    const [out, err] = [m.out.length, m.err.length]
+    expect(await m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(m.out.slice(out)).toEqual([
+      `.env (a link to ${real}), for web on dev`,
+      "new\tOTHER_PROJECT_TOKEN",
+      "Stored 1 value for web on dev. It takes effect on the next deploy.",
+      ".env still holds it in plain text. Delete it, or keep it out of git.",
+    ])
+    expect(m.err.slice(err)).toEqual([])
+
+    // At a terminal, with the one question; the window is wide enough for the line.
+    const plain = m.deps.ui
+    const t = terminal(300)
+    m.deps.ui = t.ui
+    const done = m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev").finally(() => (m.deps.ui = plain))
+    await shows(t, "? Store 1 value? Values are never shown. (y/N)", 20_000)
+    expect(t.screen().slice(0, 5)).toEqual([`  .env (a link to ${real}), for web on dev`, "", "  replaces    OTHER_PROJECT_TOKEN", "", "? Store 1 value? Values are never shown. (y/N)"])
+    t.keys("y")
+    expect(await done).toBe(0)
+    await t.ui.close()
+    expect(t.lines().slice(-2)).toEqual(["✔ Stored 1 value for web on dev. It takes effect on the next deploy.", "  .env still holds it in plain text. Delete it, or keep it out of git."])
+
+    // The value is nowhere but sealed; the link and its file are as they were.
+    for (const where of [m.out, m.err, [t.raw()]]) expect(where.filter((line) => line.includes(SENTINEL))).toEqual([])
+    expect(holding(m.home)).toEqual([])
+    expect(lstatSync(join(m.project, ".env")).isSymbolicLink()).toBe(true)
+    expect(readFileSync(target, "utf8")).toBe(text)
+    expect((await listed(m)).filter((line) => line.startsWith("OTHER_PROJECT_TOKEN"))).toEqual(["OTHER_PROJECT_TOKEN\tversion 2"])
+  }, 60_000)
+
+  test("the real path is cleaned as every shown path is: a folder named with an escape sequence draws none", async () => {
+    const { m, real } = await linked("ev\x1b]52;c;ZXZpbA==\x07il\x1b[2J")
+    expect(real).toContain("\x1b")
+    const out = m.out.length
+    expect(await m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    const first = m.out[out]!
+    expect(first).toBe(`.env (a link to ${sanitize(real)}), for web on dev`)
+    expect(first).not.toMatch(/[\x00-\x1f\x7f-\x9f]/)
+  }, 60_000)
+
+  test("a link to a folder, a pipe or nothing is refused as before, naming the path as typed, and nothing is stored", async () => {
+    const m = await ready()
+    const outside = tempDir("outside")
+    const pipe = join(outside, "a-pipe")
+    expect(Bun.spawnSync(["mkfifo", pipe]).exitCode).toBe(0)
+    for (const [name, to, said] of [
+      ["to-folder.env", outside, "to-folder.env is not a file."],
+      ["to-pipe.env", pipe, "to-pipe.env is not a file."],
+      ["to-nothing.env", join(outside, "nothing-here"), "No file at to-nothing.env."],
+    ] as const) {
+      symlinkSync(to, join(m.project, name))
+      const [out, err] = [m.out.length, m.err.length]
+      expect(await m.zekno("secret", "import", name, "--app", "web", "--server", "dev", "--yes")).toBe(1)
+      expect(m.out.slice(out)).toEqual([])
+      expect(m.err.slice(err)).toEqual([said])
+    }
+    expect(existsSync(storeOf(m).path)).toBe(false)
+  }, 60_000)
 })
