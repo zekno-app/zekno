@@ -258,3 +258,60 @@ claims in the spec.
 - Running the tag's own `release.ts` in the clone, which has no `node_modules`, started Bun's
   automatic install. It found the packages it needed; the review cannot say whether that used only
   Bun's cache or also reached the package registry.
+
+## 5. After the review: what was done
+
+Written by the implementer of T015 and T016, not by the reviewer, after the review above. The
+reviewer's text above is unchanged.
+
+**R1, the layering test.** `apps/cli/test/layers/layers.test.ts` now also holds rule 6 of plan.md
+and refuses what let the five passes through. Made with T016, in the commit that adds this part.
+
+- Rule 6, on every import: `cli/cli.ts` is imported by `main.ts` only; every file of `cli/` but
+  `cli/cli.ts` (today `cli/context.ts` and `cli/errors.ts`) imports nothing from `ops/`,
+  `commands/`, `asking/` or `app/`, and from `ui/` only `ui/types.ts`; `cli/` holds exactly those
+  three files; and none of its files but `cli/cli.ts` re-exports from another folder of `src`,
+  whether written `export … from "…"` (a list, `*` or `* as name`, `type` or not) or as an
+  imported name listed again in an `export { … }`. The code as it stands breaks none of this: no
+  exception was named.
+- Every file of `apps/cli/src` is `.ts` or `.tsx`, or a data file the test names
+  (`version/runner-release.json`, and `apps/cli/package.json`, which `version/version.ts`
+  imports); every import lands on such a file; an import that lands outside `src` on code is
+  refused, since the imports of that file are not read.
+- Every `import(…)` and `require(…)` has a plain string as its argument, read in the text Bun's
+  transpiler gives back without comments and types.
+- Every import that is not relative is a `node:` or `bun` built-in, or a package that
+  `apps/cli/package.json` names in `dependencies`, read from that file; a subpath
+  (`react/jsx-dev-runtime`) counts as its package.
+- The test's own self-test runs each check over made-up input, with one case for each of the five
+  passes in the table of R1, and each is caught. Each of the five was also added alone to a copy
+  of `apps/cli/src` outside the repository, and the test then failed: (1) `server/batch.ts`
+  importing `run` from `../cli/cli` fails "cli/cli.ts is imported by main.ts only"; (2)
+  `cli/context.ts` re-exporting `prepareDeploy` from `../ops/deploy`, imported by
+  `ui/parts/panel.tsx` from `../../cli/context`, fails the second rule 6 test and the re-export
+  test; (3) `import(where)` and (4) `require(there)` fail the plain-string test; (5) `./bridge.js`
+  fails the test of files and of where imports land, also when nothing imports it. The test has 22
+  tests, 14 before.
+
+**R4, two long files.** Both were split by subject, as moved text (T015). Comparing the trimmed
+lines of each old file with the union of its new files, the only lines on one side are imports,
+the new files' opening comments, and the word `export` added to what another new file now uses.
+
+- `apps/cli/src/project/project.ts` (665 lines), commit 9a6e201: `file.ts` (the file's name, form,
+  and how it is found and read, 284 lines), `signed.ts` (who signed it and how it stands here, 57),
+  `project.ts` (the first-use question and `withProject`, 221, with the opening comment of the old
+  file), `write.ts` (`composeFor`, `projectText`, `writeProject`, 127), `shown.ts` (`tilde`,
+  `shownPath`, 13). The checks run in the same order, under the same conditions, from the same
+  text.
+- `apps/cli/src/app/screens/home.tsx` (673 lines), commit fd37244: `app/screens/home/`, with
+  `home.tsx` (`HomeScreen`, 119), `widths.ts`, `servers.tsx`, `apps.tsx`, `details.tsx`,
+  `hints.ts`, `update.tsx` and `rows.ts`, each under 200 lines.
+
+No file of `apps/cli/src`, `apps/runner/src` or `packages/core/src` is now longer than 450 lines
+but `apps/cli/src/ops/doctor.ts`, 480 lines.
+
+**R2.** No change, the workflow runs the tag's own script. Recorded by the orchestrator in spec.md.
+
+**R3.** FR-003 now states it. Recorded by the orchestrator in spec.md.
+
+**R5.** FR-008 now states it. Recorded by the orchestrator in spec.md.
