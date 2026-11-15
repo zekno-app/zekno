@@ -90,6 +90,11 @@ A release is checked against these two branches. The workflow and the second bui
 tagged commit on them, and `apps/cli/src/version/runner-release.json` on each decides what every zekno
 built from it installs.
 
+That file on `main` is also what `zekno version` and `zekno doctor` read, over HTTPS from GitHub's
+raw file host, to say whether a newer release exists. They announce a version only once both of
+its checksums are recorded there. Do not move or rename the file: a zekno already installed asks
+for it at this path, and would say "Could not check for a newer release." from then on.
+
 1. **[outward]** **Settings**, **Rules**, **Rulesets**, **New ruleset**, **New branch ruleset**.
 2. Name it `release branches`. Enforcement status: **Active**.
 3. Target branches: **Add target**, **Include by pattern**, `dev`. Again for `main`.
