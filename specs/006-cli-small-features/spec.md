@@ -10,6 +10,19 @@
 
 **Design**: every question, list and report this feature adds is something a person sees. The maintainer approves how each looks and reads before it is built. The approved mock-ups are kept in this feature's folder, and where this document and a mock-up disagree about how something looks or reads, the mock-up is right.
 
+## Clarifications
+
+### Session 2026-11-15
+
+- Q: How do the questions, the first-deploy flow, the import summary and the doctor's report look? → A: As the six mock-ups in [design.md](./design.md), approved by the maintainer.
+- Q: With exactly one server, is it asked for? → A: No. It is used, and one line says which.
+- Q: What does leaving a question do? → A: It prints "Nothing was done." and the command ends with exit status 1.
+- Q: Which commands can start from nothing? → A: `zekno deploy` only. Another command run with no team says to run `zekno deploy` in a project folder, or `zekno init`.
+- Q: What does the import do to a name that already has a secret? → A: It stores a new version, after the one question. `--yes` answers the question in a script.
+- Q: What does one bad line in the import file do? → A: It stops the whole import. The message names the line's number and never its content.
+- Q: Does a warning fail `zekno doctor`? → A: No. Only a problem does. It also takes `--server <name>` and `--json`.
+- Q: Is there a way to check the version? → A: Yes, asked for by the maintainer: `zekno --version` and `zekno version` print the CLI's own version and the runner release it installs, and `zekno doctor` shows both on its first line.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Deploy a project from nothing with one command (Priority: P1)
@@ -145,6 +158,11 @@ Something does not work. The developer runs `zekno doctor`. It checks this machi
 - **FR-025**: It MUST end with success only when no check is wrong, and MUST offer the same results as data for scripts.
 - **FR-026**: It MUST be possible to check one server only.
 
+**The version**
+
+- **FR-031**: `zekno --version` and `zekno version` MUST print the CLI's own version and the runner release it installs, and MUST offer both as data for scripts. They MUST work with no key, no profile and no terminal, and change nothing.
+- **FR-032**: `zekno doctor` MUST show the same two versions on its first line, and for each server how its runner's version relates to them (FR-022).
+
 **Everywhere**
 
 - **FR-027**: Everything from a server that reaches the screen in these features MUST be cleaned as elsewhere, and marked as the server's where it is the server's own words.
@@ -171,6 +189,7 @@ Something does not work. The developer runs `zekno doctor`. It checks this machi
 - **SC-005**: `zekno doctor` leaves this machine and every server byte for byte as they were.
 - **SC-006**: Every script that used a Zekno command before this feature behaves the same after it: same output, same exit status.
 - **SC-007**: The maintainer confirms each question, list and report against its approved mock-up.
+- **SC-008**: The version a person reads from `zekno --version`, from `zekno doctor` and from a server's runner in `zekno status` agree with what was built and installed, checked for each.
 
 ## Assumptions
 
