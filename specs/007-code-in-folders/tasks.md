@@ -5,7 +5,7 @@
 ## Phase A: the move
 
 - [X] T001 Move the loose files of `apps/cli/src`, `apps/runner/src` and `packages/core/src` into the folders of plan.md with `git mv`, and rewrite every relative import
-- [X] T002 Move the tests of the three packages into folders of the same names (`test/support/`, `test/scenarios/`, `test/build/`, `test/docs/` for the rest)
+- [X] T002 Move the tests of the three packages into folders of the same names (`test/support/`, `test/scenarios/`, `test/compiled/`, `test/docs/` for the rest)
 - [X] T003 Fix every path named as text: `apps/cli/build.ts`, tests that open or start a file, and `apps/cli/src/version/runner-release.json` in `apps/runner/scripts/`, their tests, `apps/runner/RELEASING.md`, the READMEs, `apps/web/content/docs/cli.mdx` and the workflows' comments
 - [X] T004 Typecheck, lint, every test without the cache, `bun run compile` in `apps/cli`, the agent end-to-end replay; commit
 
@@ -20,7 +20,7 @@
 
 ## Phase C: the end
 
-- [X] T011 `apps/cli/test/build/layers.test.ts`: the directions of plan.md, checked on every import
+- [X] T011 `apps/cli/test/layers/layers.test.ts`: the directions of plan.md, checked on every import
 - [ ] T012 Independent review of the whole diff as moved text: nothing signed, sealed, sent, checked or drawn changed; recorded in `specs/007-code-in-folders/review.md`
 - [ ] T013 Docs: the "Develop" parts of the READMEs name the folders; the feature map
 - [ ] T014 Final checks as T004, recorded in `specs/007-code-in-folders/results.md`

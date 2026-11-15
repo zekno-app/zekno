@@ -298,3 +298,8 @@ bun run compile     # dist/zekno-runner, for the machine you are on
 
 `scripts/` holds the release scripts: `release.ts`, which the release workflow runs, and
 `second-build.ts`, which the maintainer runs. [RELEASING.md](./RELEASING.md) says how each is used.
+
+`src` holds `main.ts`, the entry point, and one folder per subject: `commands/` (what each
+command does), `session/` (several requests over one connection), `docker/` (starting apps with
+Docker Compose and reading what runs) and `home/` (the runner's folder on the server). Tests sit
+in folders of the same names under `test/`.

@@ -59,7 +59,7 @@ packages/core/src/     index.ts; crypto/; team/; secrets/; deploy/; protocol/
 ```
 
 Tests: `test/<the same folder>/`; `test/support/` for helpers and stand-ins; `test/scenarios/`
-for tests that cross subjects; `test/build/` and `test/docs/` for the compiled program and the
+for tests that cross subjects; `test/compiled/`, `test/layers/` and `test/docs/` for the compiled program, the directions of imports and the
 docs. `apps/cli/tests/` (the agent end-to-end tests) keeps the layout its runner expects.
 `apps/runner/scripts/` already is a folder and stays.
 
@@ -74,7 +74,7 @@ docs. `apps/cli/tests/` (the agent end-to-end tests) keeps the layout its runner
    `commands/` or `asking/`.
 5. Nothing that `cli/cli.ts` imports statically loads Ink or React (already tested).
 
-A test, `apps/cli/test/build/layers.test.ts`, walks the imports and fails on a breach of 1 to 4.
+A test, `apps/cli/test/layers/layers.test.ts`, walks the imports and fails on a breach of 1 to 4.
 
 ## Phases
 

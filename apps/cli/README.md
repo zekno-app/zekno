@@ -52,7 +52,7 @@ Run from the checkout, zekno reads `.env` and `bunfig.toml` from the folder you 
 because that is how Bun runs a script, and a `bunfig.toml` can make it load other code first. The
 runner it starts from `apps/runner` for `--local` does the same. So run it from source only inside
 folders you trust, and use the compiled `zekno` anywhere else: it is built with both turned off,
-and `test/build/compiled.test.ts` checks that it reads neither. Like any program built with Bun, the
+and `test/compiled/compiled.test.ts` checks that it reads neither. Like any program built with Bun, the
 compiled `zekno` still obeys three of Bun's own variables: `BUN_OPTIONS` (for example
 `--preload <file>`, which runs that file first), `BUN_BE_BUN=1` (it then acts as Bun itself) and
 `BUN_INSPECT` (it opens a debugger). Whoever can set them already controls your account.
@@ -919,6 +919,30 @@ app (`src/app/`) uses too. The app's keys are a pure reducer, `src/app/state/sta
 press does at the hidden prompt is a pure function, `src/ui/parts/secret-input.ts`. Tests use the plain
 interface and an in-memory key store, so they need no terminal and never touch the real keychain. `test/docs/docs.test.ts` checks that this file and the docs page name every command, flag and
 key, and nothing that does not exist.
+
+### Where the code lives
+
+`src` holds `main.ts`, the entry point, and one folder per subject. Nothing else sits loose.
+
+| Folder | What it holds |
+|--------|---------------|
+| `cli/` | Arguments and dispatch, what a command is given, errors |
+| `commands/` | One file per command: what it draws and asks |
+| `ops/` | What each command does, as data. The app uses these too |
+| `asking/` | The questions single commands ask, and a first deploy from nothing |
+| `secrets/` | Reading a file of secrets for import |
+| `version/` | The version, the newer-release check, the runner release this build carries |
+| `server/` | Reaching a server: transport, session, cleaning what a server says, the check script, and `install/`, the installer |
+| `project/` | `zekno.json`, the record of first use, reading the Compose file |
+| `profile/` | The profile folder and the keychain |
+| `shared/` | What both the app and single commands show: times, app views, deploy stages |
+| `ui/` | Single commands: `ink/` at a terminal, `plain/` everywhere else, `parts/` and `terminal/` for what both draw with |
+| `app/` | The full-screen app: `state/` (the reducer, by screen), `effects/` (what it does outside its state), `screens/` |
+
+Imports point one way: nothing outside `app/` imports `app/`, `ops/` imports nothing that draws,
+and `test/layers/layers.test.ts` fails when a file breaks that. Tests sit in folders of the same
+names under `test/`, with `test/support/` for stand-ins and `test/scenarios/` for tests that cross
+subjects.
 
 ## End-to-end tests
 

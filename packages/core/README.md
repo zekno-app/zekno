@@ -60,3 +60,8 @@ bun run typecheck
 
 Source files are internal apart from `src/index.ts`. `src/protocol/limits.ts` holds every size limit and
 `src/protocol/result.ts` every refusal code.
+
+`src` holds `index.ts` and one folder per subject: `crypto/` (keys, envelopes, hashes,
+confirmation codes), `team/` (signed team lists), `secrets/` (sealed secrets and their records),
+`deploy/` (signed deploys and project links) and `protocol/` (messages, versions, limits,
+results).
