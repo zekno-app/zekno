@@ -120,7 +120,7 @@ const SETTINGS_LINES: readonly ((line: string) => boolean)[] = [
     ["    image: ", "    restart: ", "    mem_limit: "].some(
       (start) => line.startsWith(start) && quotedThen(line, start.length, "")
     ),
-  (line) => /^    cpus: [0-9]{1,4}(\.[0-9]{1,2})?$/.test(line),
+  (line) => /^ {4}cpus: [0-9]{1,4}(\.[0-9]{1,2})?$/.test(line),
   (line) =>
     ["    command: ", "    expose: ", "    ports: "].some(
       (start) => line.startsWith(start) && quotedList(line, start.length)
