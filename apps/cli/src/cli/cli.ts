@@ -19,7 +19,7 @@ import {
 import { serverAdd, serverList, serverUpdate } from "../commands/server"
 import { status } from "../commands/status"
 import { teamOnce, type Deps } from "./context"
-import { CliError, UsageError } from "./errors"
+import { CliError, UsageError, WrongInput } from "./errors"
 import { checkTo } from "../ops/deploy"
 import { checkSecretName, sayWhichSecret } from "../ops/secret"
 import { profileStore } from "../profile/profile"
@@ -356,6 +356,11 @@ export async function run(argv: string[], given: Deps): Promise<number> {
     if (error instanceof CoreError) {
       deps.ui.error(`That could not be done (${error.code}).`)
       return 1
+    }
+    // Its sentence already says what to do: no help line (specs/010-app-settings, research R9 item 16).
+    if (error instanceof WrongInput) {
+      deps.ui.error(error.message)
+      return 2
     }
     if (
       error instanceof UsageError ||

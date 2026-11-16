@@ -11,6 +11,16 @@ export class RunnerRefused extends CliError {
 /** The command was typed wrongly: shown with a hint, exit status 2. */
 export class UsageError extends Error {}
 
+/**
+ * Input that is wrong, said by a sentence that already says what to do, so
+ * `run` prints it without the help line and ends with exit status 2
+ * (specs/010-app-settings, research R9 item 16; board `CmdSettings`, "Exit
+ * status 2"; contracts/deploy.md, DP2): a value a setting does not allow, or
+ * a folder with both a settings file and a Compose file and nothing to say
+ * which.
+ */
+export class WrongInput extends Error {}
+
 /** Said when a person says no to a question, or leaves one, and nothing was done. */
 export const NOTHING_DONE = "Nothing was done."
 

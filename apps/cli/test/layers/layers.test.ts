@@ -2,7 +2,9 @@
  * Where code lives, and which way its imports point (specs/007-code-in-folders):
  * each package's `src` holds its entry point and folders only (spec FR-001),
  * and the folders of apps/cli/src import each other only in the directions of
- * plan.md, "Which way imports point", rules 1 to 4 and 6 (FR-007). Rule 5,
+ * plan.md, "Which way imports point", rules 1 to 4 and 6 (FR-007), with the
+ * folder settings/ placed among them by specs/010-app-settings/plan.md,
+ * "Which way imports point". Rule 5,
  * nothing cli/cli.ts imports statically loads Ink or React, is the walk of
  * main.ts's static imports in test/asking/asking.test.ts.
  *
@@ -48,6 +50,7 @@ const LAYOUT = [
   "project",
   "secrets",
   "server",
+  "settings",
   "shared",
   "ui",
   "version",
@@ -259,7 +262,15 @@ for (const { file, imports } of READ) {
 }
 
 /** The folders of rule 3: what the rest is built on. */
-const BASE = ["shared", "server", "project", "profile", "secrets", "version"]
+const BASE = [
+  "shared",
+  "server",
+  "project",
+  "profile",
+  "secrets",
+  "settings",
+  "version",
+]
 
 /**
  * Known and allowed, each with its reason:
@@ -301,7 +312,7 @@ const RULES: { rule: string; breaks(edge: Edge): boolean }[] = [
       ["ui", "app", "asking", "commands"].includes(folderOf(edge.to)),
   },
   {
-    rule: "3. shared/, server/, project/, profile/, secrets/ and version/ import nothing from app/, commands/, asking/ or ops/, and from ui/ only ui/types.ts.",
+    rule: "3. shared/, server/, project/, profile/, secrets/, settings/ and version/ import nothing from app/, commands/, asking/ or ops/, and from ui/ only ui/types.ts.",
     breaks: (edge) =>
       BASE.includes(folderOf(edge.from)) &&
       (["app", "commands", "asking", "ops"].includes(folderOf(edge.to)) ||
@@ -453,6 +464,8 @@ describe("the checker itself", () => {
     expect(broken("server/session.ts", "ops/deploy.ts", "type")).toEqual(["3."])
     expect(broken("version/version.ts", "ui/plain/plain.ts")).toEqual(["3."])
     expect(broken("shared/deploy.ts", "asking/asking.ts")).toEqual(["3."])
+    expect(broken("settings/compose.ts", "ops/settings.ts")).toEqual(["3."])
+    expect(broken("settings/source.ts", "project/compose-read.ts")).toEqual([])
     expect(broken("ui/ink/doctor-report.tsx", "ops/doctor.ts")).toEqual(["4."])
     expect(
       broken("ui/ink/doctor-report.tsx", "asking/asking.ts", "type")

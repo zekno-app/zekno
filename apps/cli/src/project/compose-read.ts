@@ -48,8 +48,8 @@ export type ComposeSource =
 /** A Compose file as read: its text, and the file it was read from. */
 export type ComposeText = { text: string; path: string }
 
-/** The sentences for what can be wrong, each naming the file. */
-type Words = {
+/** The sentences for what can be wrong, each naming the file. A settings file is read with its own (settings/file.ts). */
+export type Words = {
   /** The file as a sentence names it before "is not a file" and the like. */
   subject: string
   missing: string
@@ -57,7 +57,7 @@ type Words = {
   folder: string
 }
 
-function wordsFor(source: ComposeSource): Words {
+export function wordsFor(source: ComposeSource): Words {
   if (source.kind === "project") {
     const shown = shownPath(source.link.path)
     const named = sanitize(source.link.compose)
@@ -91,20 +91,40 @@ function ownedByMe(stat: Stats): boolean {
 const TOO_LARGE = "The Compose file is larger than the 256 KiB limit."
 
 /** Reads an open file to its end, up to one byte past the limit, so a file that grew after `fstat` is still caught. */
-function readAll(fd: number): Buffer {
-  const buffer = Buffer.alloc(LIMITS.composeBytes + 1)
+function readAll(fd: number, limit: number, tooLarge: string): Buffer {
+  const buffer = Buffer.alloc(limit + 1)
   let length = 0
   while (length < buffer.length) {
     const read = readSync(fd, buffer, length, buffer.length - length, null)
     if (read === 0) break
     length += read
   }
-  if (length > LIMITS.composeBytes) throw new CliError(TOO_LARGE)
+  if (length > limit) throw new CliError(tooLarge)
   return buffer.subarray(0, length)
 }
 
-/** A Compose file that must stay inside `folder`, under the relative name `name`. */
-function readInside(folder: string, name: string, words: Words): ComposeText {
+/** The bytes of a file as read from one open file, with the file's identity and mode from that descriptor. */
+export type ReadBytes = {
+  bytes: Buffer
+  path: string
+  dev: number
+  ino: number
+  mode: number
+}
+
+/**
+ * The bytes of a file that must stay inside `folder`, under the relative
+ * name `name`, at most `limit` bytes (`tooLarge` said past it). Every check
+ * this file's first comment names is made here, for a Compose file and for a
+ * settings file alike.
+ */
+export function readInsideBytes(
+  folder: string,
+  name: string,
+  words: Words,
+  limit: number,
+  tooLarge: string
+): ReadBytes {
   let root: string
   try {
     root = realpathSync(folder)
@@ -144,8 +164,8 @@ function readInside(folder: string, name: string, words: Words): ComposeText {
       throw new CliError(
         `${words.subject} belongs to another user, so zekno does not use it.`
       )
-    if (opened.size > LIMITS.composeBytes) throw new CliError(TOO_LARGE)
-    const bytes = readAll(fd)
+    if (opened.size > limit) throw new CliError(tooLarge)
+    const bytes = readAll(fd, limit, tooLarge)
     // What was read must still be the file inside the folder: a folder on the way may have been swapped for a link meanwhile.
     let again: string
     let now: Stats
@@ -166,7 +186,13 @@ function readInside(folder: string, name: string, words: Words): ComposeText {
         `${words.subject} was changed while zekno read it. Try again.`
       )
     }
-    return { text: bytes.toString("utf8"), path }
+    return {
+      bytes,
+      path,
+      dev: opened.dev,
+      ino: opened.ino,
+      mode: opened.mode,
+    }
   } catch (error) {
     if (error instanceof CliError) throw error
     throw new CliError(`${words.subject} could not be read.`)
@@ -175,8 +201,29 @@ function readInside(folder: string, name: string, words: Words): ComposeText {
   }
 }
 
-/** A Compose file named with `-f`: followed where it leads, but read from one open file, a regular file within the limit. */
-function readGiven(path: string, words: Words): ComposeText {
+/** A Compose file that must stay inside `folder`, under the relative name `name`. */
+function readInside(folder: string, name: string, words: Words): ComposeText {
+  const read = readInsideBytes(
+    folder,
+    name,
+    words,
+    LIMITS.composeBytes,
+    TOO_LARGE
+  )
+  return { text: read.bytes.toString("utf8"), path: read.path }
+}
+
+/**
+ * The bytes of a file named with `-f`: followed where it leads, but read
+ * from one open file, a regular file of at most `limit` bytes (`tooLarge`
+ * said past it).
+ */
+export function readGivenBytes(
+  path: string,
+  words: Words,
+  limit: number,
+  tooLarge: string
+): ReadBytes {
   let fd: number
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK)
@@ -188,14 +235,26 @@ function readGiven(path: string, words: Words): ComposeText {
   try {
     const opened = fstatSync(fd)
     if (!opened.isFile()) throw new CliError(`${words.subject} is not a file.`)
-    if (opened.size > LIMITS.composeBytes) throw new CliError(TOO_LARGE)
-    return { text: readAll(fd).toString("utf8"), path }
+    if (opened.size > limit) throw new CliError(tooLarge)
+    return {
+      bytes: readAll(fd, limit, tooLarge),
+      path,
+      dev: opened.dev,
+      ino: opened.ino,
+      mode: opened.mode,
+    }
   } catch (error) {
     if (error instanceof CliError) throw error
     throw new CliError(`${words.subject} could not be read.`)
   } finally {
     closeSync(fd)
   }
+}
+
+/** A Compose file named with `-f`: followed where it leads, but read from one open file, a regular file within the limit. */
+function readGiven(path: string, words: Words): ComposeText {
+  const read = readGivenBytes(path, words, LIMITS.composeBytes, TOO_LARGE)
+  return { text: read.bytes.toString("utf8"), path: read.path }
 }
 
 /** Reads the Compose file a deploy will sign, once. Every problem is a sentence that names the file. */
