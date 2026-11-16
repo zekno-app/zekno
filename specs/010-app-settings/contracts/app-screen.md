@@ -299,7 +299,9 @@ program.
 14. **The typed question** is drawn as on the board, the question bold (`TextQuestion` draws it
     in the text colour, so the line is built from pieces in its look). A value longer than about
     two lines of the box shows its end after `…`, so the cursor stays in view; up to 4096
-    characters can be typed (a list of secret names, 256 × 130).
+    characters can be typed (a list of secret names, 256 × 130). The value filled in comes from
+    the file, so it is drawn cleaned (`sanitize`), as every value shown is: a character drawn as
+    nothing that a plain value may hold is kept in the value and not drawn.
 15. **The box's title** `Change a setting  <svc> · <label>` is its first line inside the box, as
     on the board, not in the top border as `Confirm` draws its title. The box's border is
     `Confirm`'s round border, in the brand colour. `now` and `new` are padded to 5; a value goes

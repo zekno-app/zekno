@@ -481,6 +481,25 @@ describe("changing a value (board AppSettingsEdit)", () => {
     expect(lines.at(-1)).toBe(" ↑↓ move  enter choose  esc back")
   })
 
+  test("a value filled in from the file is drawn cleaned: a character drawn as nothing is not drawn", () => {
+    const settings: Settings = {
+      version: 1,
+      services: [
+        ["web", { image: "nginx:1.27", plain: [["NOTE", "a\u202eb"]] }],
+      ],
+    }
+    const state = play(
+      opened(),
+      settingsRead(settings),
+      ...Array.from({ length: 8 }, () => K.down),
+      K.enter
+    ).state
+    const text = draw(state).join("\n")
+    expect(text).toContain(inBox("Change a setting  web · NOTE"))
+    expect(text).toContain(inBox("? NOTE › ab"))
+    expect(text).not.toContain("\u202e")
+  })
+
   test("a value that is not set reads in its words; a long value's end is shown, with the cursor", () => {
     const worker = play(
       opened(),

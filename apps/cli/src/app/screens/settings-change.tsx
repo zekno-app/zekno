@@ -13,6 +13,7 @@
  */
 import { Box, Text } from "ink"
 
+import { sanitize } from "../../server/sanitize"
 import type { SettingPath, SettingRow } from "../../settings/types"
 import { AS4, AS5, CS9, restartShown, settingWords } from "../../settings/words"
 import { firstSentence } from "../../ui/ink/questions"
@@ -120,7 +121,10 @@ export function boxLines(
           { text: words.question, bold: true },
           { text: " " },
           { text: "›", dim: true },
-          { text: ` ${typedShown(change.typed, words.question, inner)}` },
+          // Filled in from the file, which may hold a character drawn as nothing: cleaned, as every value shown is.
+          {
+            text: ` ${typedShown(sanitize(change.typed), words.question, inner)}`,
+          },
           { text: " ", inverse: true, keep: true },
         ]),
         inner
