@@ -1,0 +1,5 @@
+# Commits that only reformat code. `git blame --ignore-revs-file .git-blame-ignore-revs` skips them,
+# and GitHub reads this file by itself.
+
+# style: format the CLI, the runner and the core with Prettier
+225117c4b3ab32e22eccdb919dd40de57b177790
