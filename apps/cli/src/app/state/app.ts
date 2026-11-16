@@ -5,6 +5,7 @@ import type { Step } from "./events"
 import { listKey } from "./input"
 import { openLogs } from "./logs"
 import { setSecretScreen } from "./set-secret"
+import { openSettings } from "./settings"
 import { go, push, replaceTop, stay } from "./steps"
 import type { Screen, State } from "./types"
 
@@ -93,6 +94,8 @@ export function onApp(
     }
     case "l":
       return openLogs(state, screen.server, screen.app)
+    case "e":
+      return openSettings(state, screen.server, screen.app)
     case "s":
       return push(state, setSecretScreen(screen.server, screen.app))
     case "x": {

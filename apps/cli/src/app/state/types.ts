@@ -9,6 +9,11 @@ import type { TeamTrust } from "@workspace/core"
 import type { DeployProgress } from "../../shared/deploy"
 import type { Notice } from "../../shared/notice"
 import type { AppRow, DeployRow, SecretRow } from "../../shared/views"
+import type {
+  SettingPath,
+  Settings,
+  SettingsReport,
+} from "../../settings/types"
 
 /** FR-007: the smallest window the app draws itself in. */
 export const MIN_COLUMNS = 80
@@ -220,8 +225,70 @@ export type Screen =
     }
   | { name: "help" }
   | { name: "profile-error"; reason: string; folder: string }
+  /** An app's settings (specs/010-app-settings, contracts/app-screen.md), opened with `e` on its screen. */
+  | {
+      name: "settings"
+      server: string
+      app: string
+      /** The service shown, by its place in the file. */
+      service: number
+      /** The selected row of that service. */
+      row: number
+      /** The pane shows the settings, or the Compose text they turn into (`c`). */
+      showing: "settings" | "compose"
+      /** Lines of the Compose text scrolled past. */
+      scroll: number
+      /** A change of the selected row, while it is open. */
+      change?: ScreenChange
+    }
 
 export type ScreenName = Screen["name"]
+
+/**
+ * A change of one setting on the settings screen (contracts/app-screen.md,
+ * "Changing a value"): typing its value, picking it from a list, or asking
+ * y/N before it is written. Only what a setting may hold is kept: a secret
+ * is a name, never a value.
+ */
+export type ScreenChange = {
+  path: SettingPath
+  stage: "typing" | "picking" | "asking"
+  /** What is typed so far (typing), or the value picked (picking): the text a write is given. */
+  typed: string
+  /** The row of the list (picking). */
+  pick: number
+  /** Why the typed value was refused, drawn under it. */
+  reason?: string
+  /** Once checked: the value as typed (undefined removes the setting) and how it reads. */
+  next?: { value: string | undefined; shown: string }
+  /** How the value reads now. */
+  now: string
+  /**
+   * The SHA-256 of the file the change was opened on: a write is refused
+   * when the file is no longer those bytes (CS12), whatever was read since.
+   */
+  sha256: string
+}
+
+/** What the settings screen shows for one app, once read (effects/settings.ts). */
+export type SettingsView = {
+  server: string
+  app: string
+  outcome:
+    | {
+        kind: "read"
+        /** Every service with every row of the screen (`screenRows`), marked against the last deploy. */
+        report: SettingsReport
+        settings: Settings
+        sha256: string
+        /** The Compose text the settings turn into (`composeText`). */
+        compose: string
+      }
+    /** One sentence in place of the settings: SH1, SH2 or AS6. */
+    | { kind: "sentence"; sentence: string }
+    /** The file could not be used: its first sentence, and the rest. */
+    | { kind: "fault"; first: string; rest: string }
+}
 
 /** A question the app asks with a few fixed answers (board "Two questions the app asks"). Their answers are in questions.ts. */
 export type Question =
@@ -275,6 +342,8 @@ export type State = {
     deploys: DeployRow[]
     secrets: SecretRow[]
   }
+  /** What the settings screen shows, once read for that app. Names and values that are not secret only. */
+  settingsView?: SettingsView
   size: { columns: number; rows: number }
   deploy?: DeployProgress
   /** Adding a server started from the app. */

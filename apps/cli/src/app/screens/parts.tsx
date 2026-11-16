@@ -15,12 +15,17 @@ import type { RunState } from "../../shared/views"
  * A pane of Home or the app screen: a rounded box with its title on its
  * first line and, optionally, something on the right of that line. The pane
  * that has the keys has a brand border and a bold title; the others are faint.
+ * The settings screen's panes have no empty line between their lines
+ * (`gap`), and its pane during a change a faint border with a title in the
+ * text colour (`dimTitle`).
  */
 export function Pane({
   title,
   right,
   focused = false,
   width,
+  gap = 1,
+  dimTitle = !focused,
   children,
 }: {
   title: ReactNode
@@ -28,6 +33,10 @@ export function Pane({
   focused?: boolean
   /** A fixed width, or undefined to take the room that is left. */
   width?: number
+  /** Empty lines between the title and each part below it. */
+  gap?: number
+  /** Whether the title is faint: by default, when the pane does not have the keys. */
+  dimTitle?: boolean
   children?: ReactNode
 }) {
   const theme = useTheme()
@@ -41,11 +50,11 @@ export function Pane({
       borderColor={focused ? theme.brand : undefined}
       borderDimColor={!focused}
       paddingX={1}
-      rowGap={1}
+      rowGap={gap}
       overflow="hidden"
     >
       <Box justifyContent="space-between" columnGap={1} flexShrink={0}>
-        <Text bold dimColor={!focused} wrap="truncate-end">
+        <Text bold dimColor={dimTitle} wrap="truncate-end">
           {title}
         </Text>
         {right ? <Box flexShrink={0}>{right}</Box> : null}

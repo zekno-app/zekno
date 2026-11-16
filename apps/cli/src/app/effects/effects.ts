@@ -12,7 +12,8 @@
  * (context.ts), the profile (profile.ts), reading the servers (servers.ts),
  * deploys and rollbacks (deploys.ts), this folder's zekno.json (links.ts),
  * logs (logs.ts, with batcher.ts), adding a server (add-server.ts), updating
- * a runner (update-runner.ts) and secrets (secrets.ts).
+ * a runner (update-runner.ts), secrets (secrets.ts) and an app's settings
+ * file (settings.ts).
  */
 import type { OpDeps } from "../../cli/context"
 import { locateServer } from "../../ops/status"
@@ -28,6 +29,7 @@ import { createLogs } from "./logs"
 import { createKey } from "./profile"
 import { removeChosenSecret, saveSecret } from "./secrets"
 import { createServers, type Timing } from "./servers"
+import { createSettings } from "./settings"
 import { createRunnerUpdates } from "./update-runner"
 
 /** What the app needs from the outside world: what every operation needs. */
@@ -90,6 +92,7 @@ export function createEffects(
   const logs = createLogs(context)
   const adding = createAdding(context, servers)
   const updates = createRunnerUpdates(context, servers)
+  const settings = createSettings(context)
 
   return {
     deps: ops,
@@ -154,6 +157,9 @@ export function createEffects(
           return
         case "remove-secret":
           void perform(() => removeChosenSecret(context, effect))
+          return
+        case "read-settings":
+          void perform(async () => settings.read(effect))
           return
       }
     },

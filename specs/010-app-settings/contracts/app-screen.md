@@ -16,29 +16,36 @@ app's screen.
 
 ## What it shows (board `AppSettings`, 100 by 30)
 
-```text
- ▀▀▀█ ... (the wordmark)          › prod › demo › settings                ● running  deploy 4
+As built (the screen's own render at 100 by 30, the wordmark left out; see "As built" at the
+end for what changed from the first drawing):
 
- ╭──────────────────────╮ ╭──────────────────────────────────────────────────────────────────╮
- │ Services             │ │ web                                               zekno.app.json │
- │ ❯ web                │ │ Source                                                           │
- │   worker             │ │     image      ghcr.io/acme/demo-web:1.4.2                       │
- │                      │ │ Deploy                                                           │
- │                      │ │     start      bun run start                                     │
- │                      │ │     restart    on failure                                        │
- │                      │ │ ❯   memory     1g  ! changed, not deployed (was 512m)            │
- │                      │ │     cpus       1                                                 │
- │                      │ │ Networking                                                       │
- │                      │ │     port       3000                                              │
- │                      │ │     published  not published                                     │
- │                      │ │ Variables                                                        │
- │                      │ │     secrets    DATABASE_URL, SESSION_KEY                         │
- │                      │ │     plain      NODE_ENV=production                               │
- │ One app, one file:   │ │ Volumes                                                          │
- │ zekno.app.json       │ │     uploads    /data/uploads                                     │
- │                      │ │ ──────────────────────────────────────────────────────────────── │
- │                      │ │ A change is written to the file. It runs after the next deploy.  │
- ╰──────────────────────╯ ╰──────────────────────────────────────────────────────────────────╯
+```text
+ ▀▀▀▀ ... (the wordmark)    › prod › demo › settings              ● running deploy 4
+
+ ╭────────────────────╮ ╭─────────────────────────────────────────────────────────────────────────╮
+ │ Services           │ │ web                                                      zekno.app.json │
+ │ ❯ web              │ │ Source                                                                  │
+ │   worker           │ │   image      ghcr.io/acme/demo-web:1.4.2                                │
+ │                    │ │ Deploy                                                                  │
+ │                    │ │   start      bun run start                                              │
+ │                    │ │   restart    on failure                                                 │
+ │                    │ │ ❯ memory     1g  ! changed, not deployed (was 512m)                     │
+ │                    │ │   cpus       1                                                          │
+ │                    │ │ Networking                                                              │
+ │                    │ │   port       3000                                                       │
+ │                    │ │   published  not published                                              │
+ │                    │ │ Variables                                                               │
+ │                    │ │   secrets    DATABASE_URL, SESSION_KEY                                  │
+ │                    │ │   plain      NODE_ENV=production                                        │
+ │                    │ │ Volumes                                                                 │
+ │                    │ │   uploads    /data/uploads                                              │
+ │                    │ │                                                                         │
+ │                    │ │                                                                         │
+ │                    │ │                                                                         │
+ │ One app, one file: │ │ ─────────────────────────────────────────────────────────────────────── │
+ │ zekno.app.json     │ │ A change is written to the file. It runs after the next deploy.         │
+ ╰────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────╯
+
 
  ↑↓ move  enter change  tab services  c Compose text  d deploy  esc back
 ```
@@ -230,3 +237,44 @@ contracts/commands.md, "Each setting's words".
   server is contacted.
 - **The app screen**: its hint line at 100 by 30 and 80 by 24 with `e settings`
   (`test/app/app-operate.test.tsx`, research R7).
+
+## As built
+
+Settled while building the screen (tasks T041 to T046), each the smallest thing that keeps the
+board, the contract's words and feature 004's look. The maintainer reviews them on the real
+program.
+
+### Showing the settings (US2)
+
+1. **The row's columns.** The first drawing put the label 4 columns in and the value at column
+   15. The board's grid (16 px marker, 96 px label, 8 px gaps) and this contract's own words ("a
+   marker column of 2 ... padded to 11") give the label at column 2 and the value at column 13,
+   as feature 004's panes draw a 16 px marker column (`Marker`, 2 columns). Built as the board
+   and the words; the drawing above is the screen's own render.
+2. **The Services pane** is 22 columns from border to border, as this contract says (the first
+   drawing showed 24). Its title has no empty line under it, unlike the panes of feature 004
+   whose boards put 10 px there: on this board the Services pane's 10 px and the service pane's
+   8 px (2 px gap and 6 px above `Source`) keep `❯ web` level with `Source`, so both are drawn
+   with none (`Pane`'s new `gap`, 0 here, 1 everywhere else as before).
+3. **The header's right side** is drawn by the same parts as the app screen: `● running deploy 4`
+   with one space between, as the app screen draws it today (its tests pin one space); the first
+   drawing showed two.
+4. **A label longer than 10 columns** (a volume's name can be 63) widens the label column to fit,
+   up to half the pane; a longer one is cut with `…`. A value that does not fit goes on under
+   itself from the value column, broken at a space (`wrapPieces`, the same breaking as single
+   commands).
+5. **The window's `more` lines** count lines hidden, a section's heading and a value's second line
+   included, since the window is of lines (`listWindow` over the lines drawn, keeping the selected
+   row's first line in view). At 80 by 24 the window of design.md's file starts
+   `↓ 5 more`. The Services pane is a window the same way when its services do not fit (up to 32).
+6. **A sentence in place of the settings** (SH1, SH2, AS6) is drawn as a fault is: its first
+   sentence bold, the rest faint on the next line, so SH1 reads `This folder has no settings
+   file.` then `Run zekno settings init to start one.`; SH2 is one sentence, bold. The pane has
+   no title and a faint border (nothing in it takes keys), and fills the panes' room.
+7. **Before the first read** the Services pane shows its title and AS2, and the service pane is a
+   pane with nothing in it; the hints are those of showing the settings, and `d` deploys.
+8. **The file named on the right** is the settings file as the deploy names it, relative to the
+   folder the app was started in (`deploy/zekno.app.json` for a link that names one there).
+9. **A deploy that ends** with a settings screen of that app anywhere in the stack reads the last
+   deploy again (`read-settings` with `deployed: true`), so its marks are right when the person
+   comes back to it from the deploy screen.

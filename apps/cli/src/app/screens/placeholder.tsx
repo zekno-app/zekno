@@ -24,7 +24,17 @@ export const HINTS: Record<
     ["l", "logs"],
     ["s", "set secret"],
     ["x", "remove secret"],
+    ["e", "settings"],
     ["tab", "pane"],
+    ["esc", "back"],
+  ],
+  // Showing the settings (board `AppSettings`); its other hint lines are in settings-layout.ts.
+  settings: [
+    ["↑↓", "move"],
+    ["enter", "change"],
+    ["tab", "services"],
+    ["c", "Compose text"],
+    ["d", "deploy"],
     ["esc", "back"],
   ],
   deploy: [
@@ -61,6 +71,7 @@ const TITLES: Record<keyof typeof HINTS, string> = {
   welcome: "First run",
   "add-server": "Adding a server",
   "set-secret": "Setting a secret",
+  settings: "The settings screen",
 }
 
 /** The screen's place in the header, as its board shows it. */
@@ -90,6 +101,8 @@ function placeOf(state: State, screen: Screen): ReactNode {
       return <Trail parts={["add a server"]} />
     case "set-secret":
       return <Trail parts={[screen.server, screen.app, "set a secret"]} />
+    case "settings":
+      return <Trail parts={[screen.server, screen.app, "settings"]} />
     default:
       return null
   }

@@ -10,8 +10,8 @@
  * files of this folder: the types (types.ts, events.ts), reading and
  * changing the state (reading.ts, steps.ts, input.ts), the team as Home
  * shows it (team.ts), one file for each screen (home.ts, app.ts, deploy.ts,
- * logs.ts, welcome.ts, add-server.ts, set-secret.ts), and the questions
- * (questions.ts).
+ * logs.ts, welcome.ts, add-server.ts, set-secret.ts, settings.ts), and the
+ * questions (questions.ts).
  *
  * A hidden value (a secret being typed) never enters this state. While the
  * hidden prompt is open the reducer only knows that it is open: the keys go
@@ -56,6 +56,14 @@ import {
   setSecretScreen,
   typeSecretName,
 } from "./set-secret"
+import {
+  afterDeploy,
+  onSettings,
+  settingRefused,
+  settingsRead,
+  settingsTick,
+  settingWritten,
+} from "./settings"
 import {
   go,
   keep,
@@ -214,6 +222,9 @@ function onKey(state: State, key: AppKey): Step {
     case "set-secret":
       step = onSetSecret(state, screen, key)
       break
+    case "settings":
+      step = onSettings(state, screen, key)
+      break
     case "welcome":
       // The key is being created: no question is open, so only help and quit do anything.
       break
@@ -301,7 +312,8 @@ export function update(state: State, event: AppEvent): Step {
     case "deploy-progress":
       return deployProgress(state, event)
     case "deploy-ended":
-      return deployEnded(state, event)
+      // A settings screen of that app marks what changed since this deploy: its last deploy is read again.
+      return afterDeploy(state, deployEnded(state, event))
     case "missing-values":
       return push(state, {
         ...setSecretScreen(event.server, event.app),
@@ -353,9 +365,17 @@ export function update(state: State, event: AppEvent): Step {
       )
     case "app-states":
       return appStates(state, event)
+    case "settings-read":
+      return settingsRead(state, event)
+    case "setting-written":
+      return settingWritten(state, event)
+    case "setting-refused":
+      return settingRefused(state, event)
     case "tick": {
       if (!refreshAllowed(state)) return stay(state)
       const screen = top(state)
+      // The settings screen reads its app's state and its file again; it may have been edited elsewhere.
+      if (screen.name === "settings") return settingsTick(state)
       // Home shows every server; the app screen shows one app of one server.
       return go(
         state,

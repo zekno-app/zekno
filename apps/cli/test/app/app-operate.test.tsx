@@ -484,9 +484,16 @@ describe("the app screen (board 'One app: deploys and secrets')", () => {
     expect(pane(screen, "Secrets")).toContain(
       "! SESSION_KEY was set after deploy 4. It takes effect on the next deploy."
     )
-    expect(lastLine(screen)).toBe(
-      "d deploy  r roll back to selected  l logs  s set secret  x remove secret  tab pane  esc back"
-    )
+    // With `e settings` (specs/010-app-settings, research R7) the hints take two lines at 100 columns.
+    const hints = screen
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .slice(-2)
+      .map((line) => line.trim())
+    expect(hints).toEqual([
+      "d deploy  r roll back to selected  l logs  s set secret  x remove secret  e settings  tab pane",
+      "esc back",
+    ])
     fits(screen, 100, 30)
   })
 
@@ -794,7 +801,7 @@ describe("at 80 columns (boards 'Home at 80 columns' and 'One app at 80 columns'
     expect(screen).toMatch(/│ Values are never shown\. │/)
     expect(screen).not.toContain("To change one")
     expect(words(lines.slice(-2).join(" "))).toBe(
-      " d deploy r roll back to selected l logs s set secret x remove secret tab pane esc back"
+      " d deploy r roll back to selected l logs s set secret x remove secret e settings tab pane esc back"
     )
     fits(screen, 80, 24)
   })

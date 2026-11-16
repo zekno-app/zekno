@@ -37,6 +37,7 @@ import { LogsScreen } from "./screens/logs"
 import { Placeholder } from "./screens/placeholder"
 import { ProfileErrorScreen } from "./screens/profile-error"
 import { SetSecretScreen } from "./screens/set-secret"
+import { SettingsScreen } from "./screens/settings"
 import { TooSmall } from "./screens/too-small"
 import { WelcomeScreen } from "./screens/welcome"
 import type { AppEvent, Effect } from "./state/events"
@@ -186,6 +187,16 @@ export function Screen({
     case "logs":
       return (
         <LogsScreen
+          state={state}
+          screen={screen}
+          columns={columns}
+          rows={rows}
+          status={status}
+        />
+      )
+    case "settings":
+      return (
+        <SettingsScreen
           state={state}
           screen={screen}
           columns={columns}

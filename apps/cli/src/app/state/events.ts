@@ -5,6 +5,7 @@
  */
 import type { DeployStage } from "../../shared/deploy"
 import type { AppRow, DeployRow, RunState, SecretRow } from "../../shared/views"
+import type { SettingPath } from "../../settings/types"
 import type { AppKey } from "../keys"
 import type { Notice } from "../../shared/notice"
 import type {
@@ -12,6 +13,7 @@ import type {
   Linked,
   LogLine,
   RunnerRow,
+  SettingsView,
   State,
   TeamView,
 } from "./types"
@@ -61,6 +63,26 @@ export type Effect =
   | { kind: "connect"; server: string }
   /** `y` to "use it here?": record this folder's zekno.json, signed by the team, as used here, once it is still what was shown. */
   | { kind: "use-link"; server: string; app: string }
+  /**
+   * Read this folder's settings for an app's settings screen, and mark what
+   * changed since this machine's last deploy of it. `deployed`: read that
+   * last deploy from the history again too; otherwise the one read before
+   * is used. Nothing is asked of the keychain or of a server.
+   */
+  | { kind: "read-settings"; server: string; app: string; deployed: boolean }
+  /**
+   * Write one change to the settings file, only while it is still the very
+   * bytes whose SHA-256 is `sha256`. `value` is the text as typed; undefined
+   * removes the setting. Nothing is deployed.
+   */
+  | {
+      kind: "write-setting"
+      server: string
+      app: string
+      path: SettingPath
+      value: string | undefined
+      sha256: string
+    }
 
 // ---------------------------------------------------------------------------
 // Events
@@ -180,6 +202,17 @@ export type AppEvent =
   | { type: "log-lines"; lines: LogLine[]; fresh?: boolean }
   /** The logs stopped coming: the connection dropped, or Docker's log command ended. */
   | { type: "logs-dropped"; problem?: string }
+  /** What the settings screen of an app shows, as just read from this folder. */
+  | {
+      type: "settings-read"
+      server: string
+      app: string
+      outcome: SettingsView["outcome"]
+    }
+  /** A change from the settings screen was written to the file. Nothing was deployed. */
+  | { type: "setting-written"; server: string; app: string }
+  /** A change from the settings screen was not written, and why. The file is as it was. */
+  | { type: "setting-refused"; server: string; app: string; notice: Notice }
 
 /** One kind of event, for the part of the reducer that handles it. */
 export type EventOf<Type extends AppEvent["type"]> = Extract<
