@@ -312,6 +312,14 @@ export const SH2 = (file: string): string =>
  */
 export const SH3 = (file: string, folder?: string): string =>
   `${folder === undefined ? "This folder's zekno.json" : `The zekno.json in ${folder}`} names ${file}, so zekno deploy uses it, not the zekno.app.json here.`
+/**
+ * SH4 (security review S6): a zekno.json that applies here carries a
+ * signature but is not in use on this machine yet, and names another file
+ * than this folder's `zekno.app.json`: a deploy asks about it first, and a
+ * yes deploys that file. `folder` as for SH3.
+ */
+export const SH4 = (file: string, folder?: string): string =>
+  `${folder === undefined ? "This folder's zekno.json" : `The zekno.json in ${folder}`} names ${file} and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys ${file}, not the zekno.app.json here.`
 /** CS1, for `set` or `unset`. */
 export const CS1 = (verb: "set" | "unset"): string =>
   verb === "set"

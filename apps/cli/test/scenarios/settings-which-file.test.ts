@@ -8,14 +8,22 @@
  * is left aside as the deploy leaves it, and nothing is recorded.
  */
 import { describe, expect, test } from "bun:test"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { readSignedDeploy } from "@workspace/core"
+import {
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { join } from "node:path"
 
 import { shownFile, shownPath } from "../../src/project/shown"
 import { composeText } from "../../src/settings/compose"
 import { settingsText } from "../../src/settings/text"
-import { IN6, SH3 } from "../../src/settings/words"
-import { answering, machine, twin } from "../support/helpers"
+import { IN6, SH3, SH4 } from "../../src/settings/words"
+import { openTeam } from "../../src/cli/context"
+import { answering, machine, ready, twin } from "../support/helpers"
 import {
   fileOf,
   HIDDEN,
@@ -273,18 +281,76 @@ describe("a zekno.json the deploy leaves aside", () => {
     expect(() => readFileSync(join(m.home, "links.json"))).toThrow()
   })
 
-  test("signed and not yet used here (another machine of the member): the folder's own file; links.json stays as it was", async () => {
+  test("signed and not yet used here (another machine of the member), naming another file: every command but init says SH4 and shows or changes nothing; no keychain, links.json not written (security review S6)", async () => {
+    for (const [folder, make] of [
+      ["C", linkedElsewhere],
+      ["B", linkedCompose],
+      ["A", subFolder],
+    ] as const) {
+      const { m, ownFile } = await make()
+      const other = await twin(m)
+      other.deps.cwd = m.deps.cwd
+      noKeychain(other)
+      const said =
+        folder === "C"
+          ? SH4("deploy/zekno.app.json")
+          : folder === "B"
+            ? SH4("compose.yaml")
+            : SH4(
+                shownFile(
+                  other.deps.cwd,
+                  join(realpathSync(m.project), "zekno.app.json")
+                ),
+                shownPath(realpathSync(m.project))
+              )
+      for (const args of [
+        ["settings"],
+        ["settings", "--json"],
+        ["settings", "compose"],
+        ["settings", "set", "web.memory", "2g", "--yes"],
+        ["settings", "unset", "web.plain.FROM", "--yes"],
+      ])
+        expect({ folder, args, run: await piped(other, ...args) }).toEqual({
+          folder,
+          args,
+          run: { code: 1, out: [], err: [said] },
+        })
+      expect(text(ownFile)).toBe(fileOf(folder === "A" ? SUB : VISIBLE))
+      expect(() => readFileSync(join(other.home, "links.json"))).toThrow()
+    }
+  }, 120_000)
+
+  test("signed and not yet used here, naming this folder's own zekno.app.json: the commands go on with it", async () => {
+    const m = await ready()
+    rmSync(join(m.project, "compose.yaml"))
+    writeFileSync(join(m.project, "zekno.app.json"), fileOf(VISIBLE))
+    expect(await m.zekno("link", "--app", "demo", "--server", "dev")).toBe(0)
+    const other = await twin(m)
+    other.deps.cwd = m.project
+    noKeychain(other)
+    expect((await piped(other, "settings")).out).toEqual(linesOf(VISIBLE))
+    expect(() => readFileSync(join(other.home, "links.json"))).toThrow()
+  }, 60_000)
+
+  test("the first-use question of zekno deploy names the file a yes deploys, and a yes deploys it", async () => {
     const { m } = await linkedElsewhere()
     const other = await twin(m)
     other.deps.cwd = m.project
-    expect((await piped(other, "settings")).out).toEqual(linesOf(VISIBLE))
-    expect((await piped(other, "settings", "compose")).out.join("\n")).toBe(
-      composeText(runs(VISIBLE)).trimEnd()
-    )
-    expect(
-      (await piped(other, "settings", "set", "web.memory", "2g", "--yes")).code
-    ).toBe(0)
-    expect(text(join(m.project, "zekno.app.json"))).toContain('"memory": "2g"')
-    expect(() => readFileSync(join(other.home, "links.json"))).toThrow()
+    const asking = answering(other, [{ yes: true }])
+    expect(await other.zekno("deploy")).toBe(0)
+    expect(asking.asked[0]).toEqual({
+      kind: "confirm",
+      question:
+        "Ada linked this folder to demo on dev, with deploy/zekno.app.json. Use it here?",
+    })
+    const team = await openTeam(other.deps)
+    const server = team.profile.servers[0]!
+    const entry = team.store.history(server.serverId, "demo").at(-1)!
+    const read = readSignedDeploy({
+      envelope: entry.envelope,
+      trust: team.trust,
+    })
+    if (!read.ok) throw new Error("the deploy did not verify")
+    expect(read.value.deploy.compose).toBe(composeText(runs(HIDDEN)))
   }, 60_000)
 })

@@ -46,7 +46,7 @@ import { join } from "node:path"
 
 import { accept, isAccepted } from "./accepted"
 import { CliError, NOTHING_DONE, UsageError } from "../cli/errors"
-import { findProject, isHere, type ProjectLink } from "./file"
+import { DEFAULT_COMPOSE, findProject, isHere, type ProjectLink } from "./file"
 import { sanitize } from "../server/sanitize"
 import { notSigned, notSignedHere, standingOf } from "./signed"
 import { shownPath } from "./shown"
@@ -94,9 +94,11 @@ export function aboveOf(
 /**
  * The question at a terminal the first time a file signed by the team is
  * met here: who linked which folder to what (the folder and its Compose file
- * named when the file is in a folder above, `aboveOf`), and, when a flag
- * sends the command to another app or server than the file names (`uses`),
- * where it goes instead.
+ * named when the file is in a folder above, `aboveOf`; in this folder, the
+ * file named when it is not `compose.yaml`, since a "yes" deploys that file:
+ * specs/010-app-settings, security review S6), and, when a flag sends the
+ * command to another app or server than the file names (`uses`), where it
+ * goes instead.
  */
 export function useQuestion(
   member: string,
@@ -105,9 +107,11 @@ export function useQuestion(
   uses?: { app: string; server: string }
 ): string {
   const above = aboveOf(link, cwd)
+  const named =
+    link.compose === DEFAULT_COMPOSE ? "" : `, with ${sanitize(link.compose)}`
   const linked = above
     ? `${member} linked ${above.folder} to ${link.app} on ${link.server}, with ${above.compose}.`
-    : `${member} linked this folder to ${link.app} on ${link.server}.`
+    : `${member} linked this folder to ${link.app} on ${link.server}${named}.`
   const elsewhere =
     uses && (uses.app !== link.app || uses.server !== link.server)
       ? ` This command uses ${uses.app} on ${uses.server}.`

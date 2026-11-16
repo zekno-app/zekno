@@ -12,19 +12,21 @@
  * A zekno.json is in use here when `links.json` holds it, byte for byte: it
  * was signed by the team and used in its folder on this machine
  * (project/accepted.ts). That is judged without the keychain, so `set`,
- * `unset`, `init` and `compose` never open it. Any other zekno.json, not
- * signed by the team or signed and not yet used here, is left aside as the
- * deploy leaves it: never asked about, never recorded, `links.json` left as
- * it is. One that cannot be read stops the command with its sentence, as it
- * stops a deploy.
+ * `unset`, `init` and `compose` never open it. One that carries a signature
+ * and is not in use here yet, which a deploy asks about first, stops every
+ * command but `init` with SH4 when it names another file than this folder's
+ * `zekno.app.json` (security review S6). Any other is left aside as the
+ * deploy leaves it. None is ever asked about or recorded: `links.json` is
+ * left as it is. One that cannot be read stops the command with its
+ * sentence, as it stops a deploy.
  *
  * `zekno settings` may open the team, once: only when the file shown is the
  * one a zekno.json in use here names and a profile exists, to verify that
  * the team signed it and then this machine's history of deploys, so that a
  * setting changed since the last deploy is marked (research R4).
  */
-import { lstatSync } from "node:fs"
-import { join, resolve } from "node:path"
+import { lstatSync, realpathSync } from "node:fs"
+import { basename, dirname, join, resolve } from "node:path"
 
 import { teamOf, type OpDeps, type Team } from "../cli/context"
 import { CliError, UsageError, WrongInput } from "../cli/errors"
@@ -72,22 +74,41 @@ import {
   SH1,
   SH2,
   SH3,
+  SH4,
 } from "../settings/words"
 import { createSettings, writeSettings } from "../settings/write"
 import { lastDeployedCompose } from "../shared/views"
 
 /**
- * The zekno.json that applies here, in this folder or the nearest above,
- * when it is in use here: `links.json` holds it byte for byte. Undefined
- * with none, and with one not in use here (not signed by the team, or
- * signed and not yet used here): it is left aside, as the deploy leaves it.
+ * The zekno.json that applies here, in this folder or the nearest above:
+ * `inUse` when `links.json` holds it byte for byte; `pending` when it does
+ * not and the file carries a signature, so it may be the team's and not yet
+ * used on this machine, which a deploy at a terminal asks about first and a
+ * yes deploys from (security review S6). Neither with none, and with one
+ * that carries no signature: it is left aside, as the deploy leaves it.
+ * Nothing here reads the keychain, asks, or records anything.
  */
-function linkInUse(
-  deps: Pick<OpDeps, "cwd" | "home">
-): ProjectLink | undefined {
+function linkOf(deps: Pick<OpDeps, "cwd" | "home">): {
+  inUse?: ProjectLink
+  pending?: ProjectLink
+} {
   const found = findProject(deps.cwd)
-  return found !== undefined && isAccepted(deps.home, found) ? found : undefined
+  if (found === undefined) return {}
+  if (isAccepted(deps.home, found)) return { inUse: found }
+  return found.signed === undefined ? {} : { pending: found }
 }
+
+/** A path with the links of its folder followed, as a zekno.json's folder is held: two names of one file compare equal. */
+function realFile(path: string): string {
+  try {
+    return join(realpathSync(dirname(path)), basename(path))
+  } catch {
+    return path
+  }
+}
+
+/** The zekno.json in use here, or undefined: what the deploy would follow with no question. */
+const linkInUse = (deps: Pick<OpDeps, "cwd" | "home">) => linkOf(deps).inUse
 
 /** The settings a deploy in this folder would sign, read once: the file, and where it came from. */
 type Placed = {
@@ -108,7 +129,17 @@ const aboveOf = (cwd: string, link?: ProjectLink): string | undefined =>
  * neither. Nothing is read from a Compose file (FR-018).
  */
 function readPlaced(deps: Pick<OpDeps, "cwd" | "home">): Placed {
-  const place = settingsPlace(deps.cwd, linkInUse(deps))
+  const { inUse, pending } = linkOf(deps)
+  const place = settingsPlace(deps.cwd, inUse)
+  // A zekno.json not in use here yet that names another file than this folder's settings: a yes to the deploy's question
+  // deploys that file, so this one is not shown or changed as if it were the one deployed (S6).
+  if (pending !== undefined && place.kind === "settings") {
+    const named = resolve(pending.folder, pending.compose)
+    if (realFile(named) !== realFile(namedPath(place.source)))
+      throw new CliError(
+        SH4(shownFile(deps.cwd, named), aboveOf(deps.cwd, pending))
+      )
+  }
   if (place.kind === "none") throw new CliError(SH1)
   if (place.kind === "compose")
     throw new CliError(
