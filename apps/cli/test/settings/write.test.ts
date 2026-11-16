@@ -9,6 +9,7 @@ import * as fs from "node:fs"
 import {
   chmodSync,
   linkSync,
+  lstatSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -275,6 +276,54 @@ describe("createSettings", () => {
       )
     ).toContain("There is already")
     expect(readFileSync(join(other, SETTINGS_FILE), "utf8")).toBe("appeared")
+    onlyFiles(other, [SETTINGS_FILE])
+  })
+
+  /** A hard link that fails as on a disk that has none (exFAT, some network shares). */
+  const noHardLinks = (code: string) => () => {
+    throw Object.assign(new Error("not supported"), { code })
+  }
+
+  test("on a disk without hard links: the file is made, mode 644, whole, with no temporary file left (security review, needs validation)", () => {
+    for (const code of ["ENOTSUP", "EPERM", "EOPNOTSUPP", "EMLINK", "ENOSYS"]) {
+      const folder = tempDir("settings-create")
+      const path = createSettings(folder, small, { link: noHardLinks(code) })
+      expect({ code, text: readFileSync(path, "utf8") }).toEqual({
+        code,
+        text: settingsText(small),
+      })
+      expect(statSync(path).mode & 0o777).toBe(0o644)
+      onlyFiles(folder, [SETTINGS_FILE])
+    }
+  })
+
+  test("on a disk without hard links: a file that appears between the check and the placing is never replaced, IN4", () => {
+    const folder = tempDir("settings-create")
+    expect(
+      refused(() =>
+        createSettings(folder, small, {
+          link: noHardLinks("ENOTSUP"),
+          beforeFallback: () =>
+            writeFileSync(join(folder, SETTINGS_FILE), "appeared"),
+        })
+      )
+    ).toBe(
+      "There is already a zekno.app.json here. Change it with zekno settings set, or in an editor."
+    )
+    expect(readFileSync(join(folder, SETTINGS_FILE), "utf8")).toBe("appeared")
+    onlyFiles(folder, [SETTINGS_FILE])
+    // Nor a link to nowhere put there in between.
+    const other = tempDir("settings-create")
+    expect(
+      refused(() =>
+        createSettings(other, small, {
+          link: noHardLinks("ENOTSUP"),
+          beforeFallback: () =>
+            symlinkSync("/nowhere", join(other, SETTINGS_FILE)),
+        })
+      )
+    ).toContain("There is already")
+    expect(lstatSync(join(other, SETTINGS_FILE)).isSymbolicLink()).toBe(true)
     onlyFiles(other, [SETTINGS_FILE])
   })
 

@@ -114,12 +114,16 @@ describe("browsing", () => {
     expect(settingsScreen(last.state).row).toBe(9)
   })
 
-  test("d deploys as on the app screen, and nothing while a deploy runs", () => {
+  test("d deploys as on the app screen, with the SHA-256 of the file the screen shows; nothing while a deploy runs", () => {
     const state = onBoard()
+    // The file the screen shows, by its bytes: a file read with other ones is not deployed (security review, needs validation).
     expect(effectsOf(state, text("d"))).toEqual([
+      { kind: "deploy", server: "prod", app: "demo", shown: "a".repeat(64) },
+    ])
+    // The app's own screen shows no settings, and carries none.
+    expect(effectsOf(onApp(), text("d"))).toEqual([
       { kind: "deploy", server: "prod", app: "demo" },
     ])
-    expect(effectsOf(onApp(), text("d"))).toEqual(effectsOf(state, text("d")))
     const running = play(state, {
       type: "deploy-started",
       server: "prod",
@@ -642,7 +646,7 @@ describe("the Compose text (c)", () => {
   test("d deploys from it; enter and tab do nothing; ? opens help and q quits", () => {
     const compose = play(onBoard(), text("c")).state
     expect(effectsOf(compose, text("d"))).toEqual([
-      { kind: "deploy", server: "prod", app: "demo" },
+      { kind: "deploy", server: "prod", app: "demo", shown: "a".repeat(64) },
     ])
     for (const event of [K.enter, K.tab])
       expect(update(compose, event)).toEqual({ state: compose, effects: [] })

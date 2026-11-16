@@ -266,7 +266,13 @@ describe("readSource: the chosen file, read once", () => {
     expect(read).toEqual({
       text: DESIGN_COMPOSE,
       path: realpathSync(join(folder, "zekno.app.json")),
-      settings: { services: ["web", "worker"] },
+      settings: {
+        services: ["web", "worker"],
+        // The bytes read, so the app's d can tell them from what its screen showed.
+        sha256: new Bun.CryptoHasher("sha256")
+          .update(DESIGN_FILE)
+          .digest("hex"),
+      },
     })
     expect(read.text).toBe(composeText(DESIGN_SETTINGS))
   })

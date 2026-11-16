@@ -129,8 +129,8 @@ export type SettingsReport = {
 
 /** What a deploy reads, whichever kind of file it came from. */
 export type DeployText = ComposeText & {
-  /** Set for a settings file: its services, for the summary's `from` line. */
-  settings?: { services: readonly string[] }
+  /** Set for a settings file: its services, for the summary's `from` line, and the SHA-256 of the bytes read. */
+  settings?: { services: readonly string[]; sha256: string }
 }
 
 /** Which file a deploy uses (contracts/deploy.md). */

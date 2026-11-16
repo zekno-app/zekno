@@ -51,6 +51,10 @@ export type WriteOptions = {
   text?: (settings: Settings) => string
   /** Called right before a new file is put in place: a test makes a file appear there. */
   beforePlace?: () => void
+  /** Puts the new file in place with a hard link (`linkSync`): a test gives one that fails as a disk without hard links does. */
+  link?: (existing: string, path: string) => void
+  /** Called right before a new file is put in place on a disk without hard links: a test makes a file appear there. */
+  beforeFallback?: () => void
 }
 
 /** The fields of a service, in one order, to compare two settings whatever order their objects were made in. */
@@ -207,7 +211,7 @@ export function writeSettings(
   }
 }
 
-/** File systems where a hard link cannot be made; creating there checks first, then renames. */
+/** File systems where a hard link cannot be made; creating there makes the file in place, exclusively (`createInPlace`). */
 const NO_HARD_LINKS = new Set([
   "EPERM",
   "ENOTSUP",
@@ -216,13 +220,48 @@ const NO_HARD_LINKS = new Set([
   "ENOSYS",
 ])
 
-/** Whether anything is at a path, a link to nowhere included. */
-function exists(path: string): boolean {
+/**
+ * Makes the file at `path` in place, on a disk without hard links: opened
+ * with `O_CREAT | O_EXCL`, which fails when anything has that name, a link
+ * to nowhere included, at the moment of the call, so no file is ever
+ * replaced, not even one made in between (IN4; the security review's second
+ * "needs validation"). Then written whole and flushed. A failure after it
+ * was made removes it, and only while it is still the file this made.
+ */
+function createInPlace(path: string, text: string): void {
+  let fd: number
   try {
-    lstatSync(path)
-    return true
-  } catch {
-    return false
+    fd = openSync(
+      path,
+      constants.O_WRONLY |
+        constants.O_CREAT |
+        constants.O_EXCL |
+        constants.O_NOFOLLOW,
+      0o644
+    )
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST")
+      throw new CliError(IN4)
+    throw error
+  }
+  const made = fstatSync(fd)
+  try {
+    fchmodSync(fd, 0o644)
+    const bytes = Buffer.from(text, "utf8")
+    let written = 0
+    while (written < bytes.length)
+      written += writeSync(fd, bytes, written, bytes.length - written)
+    fsyncSync(fd)
+  } catch (error) {
+    try {
+      const now = lstatSync(path)
+      if (now.dev === made.dev && now.ino === made.ino) rmSync(path)
+    } catch {
+      // Gone already, or not this file any more: nothing of someone else's is removed.
+    }
+    throw error
+  } finally {
+    closeSync(fd)
   }
 }
 
@@ -230,7 +269,9 @@ function exists(path: string): boolean {
  * Creates `zekno.app.json` in `folder` holding `settings` (`zekno settings
  * init`), mode 644, put in place with a hard link, which fails if anything
  * is already there, so an existing file is never replaced, not even one that
- * appears in between (IN4). Returns the file's path.
+ * appears in between (IN4). On a disk without hard links it is made in place
+ * with an exclusive create instead, which refuses the same. Returns the
+ * file's path.
  */
 export function createSettings(
   folder: string,
@@ -245,14 +286,14 @@ export function createSettings(
     writeNew(temporary, text, 0o644, () => (made = true))
     options.beforePlace?.()
     try {
-      linkSync(temporary, path)
+      ;(options.link ?? linkSync)(temporary, path)
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code ?? ""
       if (code === "EEXIST") throw new CliError(IN4)
       if (!NO_HARD_LINKS.has(code)) throw error
-      if (exists(path)) throw new CliError(IN4)
-      renameSync(temporary, path)
-      made = false
+      // No check and then a rename, which would replace a file made in between: one call that refuses a name taken.
+      options.beforeFallback?.()
+      createInPlace(path, text)
     }
     return path
   } catch (error) {

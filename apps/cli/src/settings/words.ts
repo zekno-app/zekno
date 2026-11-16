@@ -420,6 +420,9 @@ export const DP3 = {
   detail: (services: readonly string[]): string =>
     `${services.length} ${services.length === 1 ? "service" : "services"}: ${services.join(", ")}`,
 }
+/** DP6: `d` on the settings screen found the file changed since the screen showed it (the review's first "needs validation"). */
+export const DP6 =
+  "The settings changed since this screen showed them, so nothing was deployed."
 /** DP5 */
 export const DP5 =
   "This folder has zekno.app.json and compose.yaml. Run zekno link -f <file> here to say which."

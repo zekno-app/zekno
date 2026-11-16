@@ -27,7 +27,11 @@ export type Effect =
   | { kind: "add-server"; destination: string; name: string }
   | { kind: "open-app"; server: string; app: string }
   /** `app` undefined: the app of the linked folder. */
-  | { kind: "deploy"; server: string; app?: string }
+  /**
+   * `shown`: from the settings screen, the SHA-256 of the settings file it
+   * showed; a file read with other bytes is then not deployed.
+   */
+  | { kind: "deploy"; server: string; app?: string; shown?: string }
   /**
    * Go ahead with the deploy that was waiting on a question, with its answer:
    * write zekno.json or not, the missing values were set or skipped, or deploy

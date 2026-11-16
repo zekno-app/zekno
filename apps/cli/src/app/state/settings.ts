@@ -62,11 +62,25 @@ export const openSettings = (state: State, server: string, app: string): Step =>
     readAgain(server, app, true)
   )
 
-/** `d`: the same deploy as `d` on the app's screen, and nothing while one runs. */
-const deploy = (state: State, screen: SettingsScreen): Step =>
+/**
+ * `d`: the same deploy as `d` on the app's screen, and nothing while one
+ * runs. Once the screen shows settings it carries the SHA-256 of the file it
+ * showed: a file read with other bytes when the deploy reads it is not
+ * deployed (security review, "needs validation").
+ */
+const deploy = (
+  state: State,
+  screen: SettingsScreen,
+  read?: ReadOutcome
+): Step =>
   state.deploy?.running
     ? stay(state)
-    : go(state, { kind: "deploy", server: screen.server, app: screen.app })
+    : go(state, {
+        kind: "deploy",
+        server: screen.server,
+        app: screen.app,
+        ...(read === undefined ? {} : { shown: read.sha256 }),
+      })
 
 /**
  * How far the Compose text can be scrolled at this window's size: until its
@@ -96,7 +110,7 @@ function onCompose(
   }
   if (isText(key, "c") || key.kind === "escape")
     return stay(replaceTop(state, { ...screen, showing: "settings" }))
-  if (isText(key, "d")) return deploy(state, screen)
+  if (isText(key, "d")) return deploy(state, screen, read)
   // Rows and services are the settings': nothing to change or move here.
   if (key.kind === "enter" || key.kind === "tab") return stay(state)
   return undefined
@@ -153,7 +167,7 @@ export function onSettings(
   }
   if (isText(key, "c"))
     return stay(replaceTop(state, { ...screen, showing: "compose", scroll: 0 }))
-  if (isText(key, "d")) return deploy(state, screen)
+  if (isText(key, "d")) return deploy(state, screen, read)
   return undefined
 }
 
@@ -200,7 +214,7 @@ export const settingWritten = (
   event: EventOf<"setting-written">
 ): Step => go(state, readAgain(event.server, event.app, false))
 
-/** A change was refused: the status line says why, and the file is read again as it is now. */
+/** A change was refused, or a deploy from this screen found the file changed since it was shown (DP6): the status line says why, and the file is read again as it is now. */
 export const settingRefused = (
   state: State,
   event: EventOf<"setting-refused">

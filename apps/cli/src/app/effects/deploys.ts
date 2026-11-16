@@ -22,7 +22,7 @@ import { sanitize } from "../../server/sanitize"
 import { SETTINGS_FILE } from "../../settings/file"
 import { chooseSource, present, readSource } from "../../settings/source"
 import type { DeploySource, DeployText } from "../../settings/types"
-import { DP5 } from "../../settings/words"
+import { DP5, DP6 } from "../../settings/words"
 import { seconds } from "../../shared/time"
 import { appNames, latestAccepted, secretNamesOf } from "../../shared/views"
 import type { Effect } from "../state/events"
@@ -258,6 +258,22 @@ export function createDeploys(context: Context) {
           ? undefined
           : (await openTeam(ops)).trust)
       source = composeOf(effect.server, effect.app, trust)
+      // From the settings screen, only the file it showed: one read now with other bytes, or no settings file at all, is not
+      // deployed unseen. The screen is told why and reads the file again, so it shows what is there now.
+      if (
+        source &&
+        effect.kind === "deploy" &&
+        effect.shown !== undefined &&
+        source.read.settings?.sha256 !== effect.shown
+      ) {
+        dispatch({
+          type: "setting-refused",
+          server: effect.server,
+          app: effect.app ?? source.app,
+          notice: { tone: "error", text: DP6 },
+        })
+        return undefined
+      }
     }
     if (!source) return undefined
     // On a server with no apps yet, `d` deploys the app the folder is linked to, when that server is the folder's.

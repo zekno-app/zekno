@@ -24,7 +24,7 @@ import {
   type ConnectOptions,
   type Target,
 } from "../../src/server/transport"
-import { DP5 } from "../../src/settings/words"
+import { DP5, DP6 } from "../../src/settings/words"
 import { COMPOSE_V1, machine, ready } from "../support/helpers"
 import {
   DESIGN_COMPOSE,
@@ -408,6 +408,8 @@ async function appOn(m: Machine) {
     failures,
     connections: () => connections,
     d: () => effects.run({ kind: "deploy", server: "dev", app: "demo" }),
+    /** Runs any effect, as the reducer asks for it. */
+    run: (effect: Effect) => effects.run(effect),
     answer,
     /** Waits for the next event of that type after the `seen` first ones. */
     until: (type: AppEvent["type"], seen = 0) =>
@@ -650,5 +652,86 @@ describe("d deploys the file the folder's rule picks, as zekno deploy does (feat
     await app.until("deploy-ended")
     expect(await signed(m)).toEqual([COMPOSE_V1])
     expect(app.failures).toEqual([])
+  }, 60_000)
+})
+
+describe("d on the settings screen deploys only the file it showed (security review, needs validation)", () => {
+  /** A linked folder of design.md's file with its secrets, the settings screen's read of it, and the SHA-256 that read showed. */
+  async function shownThenD(change: boolean) {
+    const m = await folderWith({ "zekno.app.json": DESIGN_FILE })
+    await withSecrets(m)
+    expect(await m.zekno("link", ...WHERE)).toBe(0)
+    const app = await appOn(m)
+    app.run({
+      kind: "read-settings",
+      server: "dev",
+      app: "demo",
+      deployed: true,
+    })
+    await app.until("settings-read")
+    const outcome = app.of("settings-read")[0]!.outcome
+    if (outcome.kind !== "read") throw new Error(outcome.kind)
+    // Another terminal, an editor or a git checkout changes the file after the screen read it and before d.
+    if (change)
+      writeFileSync(
+        join(m.project, "zekno.app.json"),
+        DESIGN_FILE.replace('"1g"', '"2g"')
+      )
+    const seen = app.events.length
+    app.run({
+      kind: "deploy",
+      server: "dev",
+      app: "demo",
+      shown: outcome.sha256,
+    })
+    await waitFor(
+      () =>
+        app.events
+          .slice(seen)
+          .some(
+            (event) =>
+              event.type === "deploy-ended" || event.type === "setting-refused"
+          ),
+      "the deploy's end or its refusal"
+    )
+    return { m, app, events: app.events.slice(seen) }
+  }
+
+  test("the file changed after the screen read it: nothing is signed or connected; the screen is told in one sentence and reads the file again", async () => {
+    const { m, app, events } = await shownThenD(true)
+    expect(events).toEqual([
+      {
+        type: "setting-refused",
+        server: "dev",
+        app: "demo",
+        notice: { tone: "error", text: DP6 },
+      },
+    ])
+    expect(app.connections()).toBe(0)
+    expect(await signed(m)).toEqual([])
+    expect(app.failures).toEqual([])
+  }, 60_000)
+
+  test("the file as the screen showed it: deployed as before, the text zekno settings compose prints", async () => {
+    const { m, app } = await shownThenD(false)
+    expect(app.of("deploy-ended")[0]!.outcome).toBe("started")
+    expect(await signed(m)).toEqual([DESIGN_COMPOSE])
+    expect(app.failures).toEqual([])
+  }, 60_000)
+
+  test("d from the app's own screen, which shows no settings, carries nothing and keeps today's behaviour: the file as it is now", async () => {
+    const m = await folderWith({ "zekno.app.json": DESIGN_FILE })
+    await withSecrets(m)
+    expect(await m.zekno("link", ...WHERE)).toBe(0)
+    writeFileSync(
+      join(m.project, "zekno.app.json"),
+      DESIGN_FILE.replace('"1g"', '"2g"')
+    )
+    const app = await appOn(m)
+    app.d()
+    await app.until("deploy-ended")
+    expect(await signed(m)).toEqual([
+      DESIGN_COMPOSE.replace('mem_limit: "1g"', 'mem_limit: "2g"'),
+    ])
   }, 60_000)
 })

@@ -171,6 +171,9 @@ export function readSource(
   return {
     text: composeText(read.settings),
     path: read.path,
-    settings: { services: read.settings.services.map(([name]) => name) },
+    settings: {
+      services: read.settings.services.map(([name]) => name),
+      sha256: read.sha256,
+    },
   }
 }
