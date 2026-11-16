@@ -1,12 +1,16 @@
 # Design: App settings
 
-**Status**: proposed on 2026-11-16, not approved. Nothing here is built until the maintainer
-approves it (spec FR-035). The boards are in [design/](./design/) and on the design canvas, in
-the row "App settings (spec 010)".
+**Status**: approved by the maintainer on 2026-11-16 ("Yes approve, drop the design"), with the
+boards open on the canvas. All six decisions below are approved as recommended, and the five
+boards as drawn. The maintainer also dropped the approval step for what this design does not
+show yet (the settings screen at 80 columns and on a light terminal, and any line no board
+shows): those follow the approved look, are listed in the build's reports, and are reviewed on
+the real program. The boards are in [design/](./design/) and on the design canvas, in the row
+"App settings (spec 010)".
 
-## Decisions for the maintainer
+## Decisions, approved as recommended on 2026-11-16
 
-Each has options and a recommendation. They are tool and design choices, so none is made.
+Each had options and a recommendation. The recommended option of each is the decision.
 
 ### 1. The form of the file
 

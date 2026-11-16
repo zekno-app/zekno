@@ -1,8 +1,8 @@
 # Boards for app settings
 
 A copy of the row "App settings (spec 010)" of the design canvas
-(https://claude.ai/artifact/BVuvZPZTReLa4TSHfyzMJW). **Proposed, not approved yet.** Nothing is
-built from them until the maintainer approves them.
+(https://claude.ai/artifact/BVuvZPZTReLa4TSHfyzMJW). **Approved by the maintainer on 2026-11-16.** They are binding for the look: colours, what is
+bold and what is dim, spacing and alignment. `design.md` is binding for the words.
 
 | Board | Shows |
 |---|---|

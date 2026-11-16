@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-16
 
-**Status**: Draft
+**Status**: Design approved 2026-11-16; ready for planning
 
 **Input**: User description: "App settings, the way people coming from Railway know them. An app gets settings in the sections such a person expects. The settings live in a file in the project, and the developer's machine turns them into the Compose text and signs that. A hand-written Compose file stays possible." Agreed in direction by the maintainer on 2026-11-16 ("Yes agree"). The full description is in the first commit of this folder.
 
