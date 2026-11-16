@@ -662,3 +662,66 @@ describe("the Compose text (c)", () => {
     ])
   })
 })
+
+describe("keys read before a question of the screen can be drawn (the walkthrough's type-ahead)", () => {
+  /** A key as app.tsx dispatches it: with the time it was read. */
+  const at = (event: AppEvent, time: number): AppEvent => {
+    if (event.type !== "key") throw new Error(event.type)
+    return { ...event, at: time }
+  }
+  /** The board, the memory row selected, its value open at time 1000 and emptied at 1100. */
+  const typingAt1000 = () =>
+    play(
+      onBoard(),
+      at(K.enter, 1000),
+      ...Array.from({ length: 4 }, (_, n) => at(K.backspace, 1100 + n))
+    ).state
+
+  test("the write question: a y in the same read as the Enter that opens it, or 3 ms after, writes nothing; one read once it is on the screen writes", () => {
+    const typed = play(
+      typingAt1000(),
+      at(text("2"), 1200),
+      at(text("g"), 1201)
+    ).state
+    const asking = play(typed, at(K.enter, 2000)).state
+    expect(settingsScreen(asking).change?.stage).toBe("asking")
+    expect(settingsScreen(asking).change?.openedAt).toBe(2000)
+    for (const time of [2000, 2003, 2010, 2049]) {
+      const step = play(asking, at(text("y"), time))
+      expect({ time, effects: step.effects }).toEqual({ time, effects: [] })
+      expect(settingsScreen(step.state).change?.stage).toBe("asking")
+    }
+    expect(effectsOf(asking, at(text("y"), 2050))).toEqual([
+      expect.objectContaining({
+        kind: "write-setting",
+        sha256: "a".repeat(64),
+      }),
+    ])
+    // Ctrl-C still quits at once.
+    expect(play(asking, at(K.ctrlC, 2001)).state.exiting).toBe(true)
+  })
+
+  test("the value typed: keys read with or just after the Enter that opens it type nothing", () => {
+    const open = typingAt1000()
+    // The backspaces at 1100 came after the hold: the value is empty.
+    expect(settingsScreen(open).change?.typed).toBe("")
+    const early = play(
+      play(onBoard(), at(K.enter, 1000)).state,
+      at(text("9"), 1000),
+      at(text("9"), 1030)
+    ).state
+    expect(settingsScreen(early).change?.typed).toBe("1g")
+  })
+
+  test("the restart rules: a key read just after the Enter that opens the list neither moves nor chooses", () => {
+    const list = play(onBoard(), K.up, at(K.enter, 1000)).state
+    expect(settingsScreen(list).change?.stage).toBe("picking")
+    const early = play(list, at(K.down, 1001), at(K.enter, 1002)).state
+    expect(settingsScreen(early).change).toMatchObject({
+      stage: "picking",
+      pick: 1,
+    })
+    const later = play(list, at(K.down, 1060)).state
+    expect(settingsScreen(later).change?.pick).toBe(2)
+  })
+})

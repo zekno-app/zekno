@@ -19,16 +19,61 @@ import { CS17, IMAGE_NEEDED } from "../../settings/words"
 import { applyConfirmKey, type Choice } from "../../ui/parts/confirm"
 import { applySelectKey } from "../../ui/parts/select"
 import { applyTextInput } from "../../ui/parts/text-input"
+import { TYPED_AHEAD_MS } from "../../ui/terminal/type-ahead"
 import type { AppKey } from "../keys"
 import type { Step } from "./events"
 import { inputOf, listKey, type InputFlags } from "./input"
 import {
   settingsReadOf,
+  top,
   type ReadOutcome,
   type SettingsScreen,
 } from "./reading"
 import { go, quit, replaceTop, stay } from "./steps"
 import type { ScreenChange, State } from "./types"
+
+/**
+ * Whether a key read at `at` comes too soon after the settings screen's open
+ * question (the value typed, the restart rules, or "Write this to ...?")
+ * opened to answer it: within `TYPED_AHEAD_MS` of the key that opened it,
+ * that read included, before it can have been drawn. Single commands throw
+ * such keys away for as long before they draw a question (type-ahead.ts);
+ * here a `y` 3 ms after the Enter that opens the write question would
+ * otherwise write the file unseen (the pseudo-terminal walkthrough of
+ * feature 010). Ctrl-C is left to quit.
+ */
+export function heldBack(state: State, key: AppKey, at?: number): boolean {
+  const screen = top(state)
+  const opened =
+    screen.name === "settings" ? screen.change?.openedAt : undefined
+  return (
+    opened !== undefined &&
+    at !== undefined &&
+    key.kind !== "ctrl-c" &&
+    at - opened < TYPED_AHEAD_MS
+  )
+}
+
+/**
+ * Marks when a question of the settings screen opened: a change that is new
+ * after this key, or now at another stage, opened at `at`, the time the key
+ * was read (`heldBack`).
+ */
+export function stampOpened(before: State, step: Step, at?: number): Step {
+  if (at === undefined) return step
+  const was = top(before)
+  const now = top(step.state)
+  if (now.name !== "settings" || !now.change) return step
+  const previous = was.name === "settings" ? was.change : undefined
+  if (previous && previous.stage === now.change.stage) return step
+  return {
+    ...step,
+    state: replaceTop(step.state, {
+      ...now,
+      change: { ...now.change, openedAt: at },
+    }),
+  }
+}
 
 /** The restart rules, in the order the list shows them. */
 export const RESTARTS = ["no", "on-failure", "always"] as const

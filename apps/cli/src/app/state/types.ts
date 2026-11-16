@@ -268,6 +268,12 @@ export type ScreenChange = {
    * when the file is no longer those bytes (CS12), whatever was read since.
    */
   sha256: string
+  /**
+   * When its stage (typing, picking, asking) opened, as the key that opened
+   * it was read: keys read before `TYPED_AHEAD_MS` have passed were typed
+   * before the question could be on the screen, and answer nothing.
+   */
+  openedAt?: number
 }
 
 /** What the settings screen shows for one app, once read (effects/settings.ts). */

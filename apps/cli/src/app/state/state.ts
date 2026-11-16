@@ -64,7 +64,7 @@ import {
   settingsTick,
   settingWritten,
 } from "./settings"
-import { typeSetting } from "./settings-change"
+import { heldBack, stampOpened, typeSetting } from "./settings-change"
 import {
   go,
   keep,
@@ -242,7 +242,10 @@ function onKey(state: State, key: AppKey): Step {
 export function update(state: State, event: AppEvent): Step {
   switch (event.type) {
     case "key":
-      return onKey(state, event.key)
+      // A key read before a question of the settings screen can be on the screen does not answer it (settings-change.ts).
+      return heldBack(state, event.key, event.at)
+        ? stay(state)
+        : stampOpened(state, onKey(state, event.key), event.at)
     case "resize":
       return stay({
         ...state,

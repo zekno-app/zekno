@@ -325,7 +325,8 @@ function App({
       return
     }
     const appKey = toAppKey(input, key)
-    if (appKey) store.dispatch({ type: "key", key: appKey })
+    // When it was read: a key read in the moment a question opens, the same read included, is not its answer (state.ts).
+    if (appKey) store.dispatch({ type: "key", key: appKey, at: Date.now() })
   })
   return <AppView state={state} columns={columns} rows={rows} />
 }

@@ -92,7 +92,12 @@ export type Effect =
 // Events
 
 export type AppEvent =
-  | { type: "key"; key: AppKey }
+  /**
+   * `at`: when the key was read (`Date.now()`), so a key read in the moment
+   * after a question of the settings screen opened, before it can have been
+   * drawn, is not taken as its answer.
+   */
+  | { type: "key"; key: AppKey; at?: number }
   | { type: "resize"; columns: number; rows: number }
   | { type: "team"; team: TeamView }
   /** First run: the key was created; next is adding a server. */
