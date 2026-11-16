@@ -201,6 +201,37 @@ sentences; DP1 with no profile; the security review's folders A and C (a sub-fol
 `deploy/zekno.app.json`); the screen before its first read (the read was too fast to see); the
 light theme at 80 by 24; a real terminal emulator (only the screen model); a real server.
 
+#### After the walkthrough: what was fixed, and what was left (written by the implementer)
+
+Differences:
+
+1. SH1 drawn as an error at a terminal: **left as it is**, as every error of a single command is
+   drawn (`✖`, first sentence bold, the rest dim); recorded as known in contracts/commands.md.
+2. DP2 after the missing-server sentence with no terminal: **left as it is**, today's order for a
+   deploy with no terminal (server, then app, then file); written into contracts/deploy.md as an
+   "As built" note, with the three sentences in their order.
+3. Type-ahead on the screen's write question: **fixed** (commit `29e1e8e`). A key read within 50 ms
+   of the key that opens the value prompt, the restart list or the write question, the same read
+   included, does nothing. `ta_timing.py` run again after the fix: `y` 3.4, 10.1 and 30.4 ms after
+   the Enter, the question reaching the terminal at 15.7, 23.3 and about 31 ms; the file was
+   written in none of the three (before the fix it was written at 3 ms).
+4. The words of a value not set inside a change: **left as they are** (the board's bold new value
+   wins); recorded as known in contracts/app-screen.md.
+
+Rough edges (commit `a7505e9`):
+
+- Keys dropped without a word while typing a value: **fixed**; the line under the value now says
+  `Use one line with no control character.` (a plain value's own rule for a plain value).
+- AS9 inside the change box named `c`, and a long value's first lines hid the change: **fixed**;
+  each value is cut around where the two first differ, `…` before and after, no key named, the
+  question in view.
+- AS7 drawn with its backticks: **fixed**; drawn without them.
+- IN6 a dim note after `init`: **fixed**; a warning wherever it is said, after an empty line in
+  `compose` at a terminal.
+- Left as they are and recorded as known in the contracts: the orphan words where long sentences
+  wrap; the uneven "too small" layout (feature 004's screen); the 80 by 24 window hiding a section
+  heading above its first row.
+
 ### The agent end-to-end tests
 
 (not yet run)

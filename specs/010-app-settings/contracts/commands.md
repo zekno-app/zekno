@@ -448,3 +448,56 @@ Tests: `test/scenarios/settings-which-file.test.ts` (the review's three folders,
 a `zekno.json` left aside), `test/scenarios/settings-compose.test.ts` (printed equals signed in
 each), `test/settings/invisible.test.ts`, `test/ui/ink/settings-report.test.tsx` and
 `test/commands/settings.test.tsx` (the removed marks), `test/scenarios/settings-exact-name.test.ts`.
+
+## As built: after the second pass of the review and the walkthrough (2026-11-16)
+
+Written by the implementer (security review, part 7, S6 to S9; quickstart.md, "The
+pseudo-terminal walkthrough"). Where these notes and the sections above differ, these are built.
+
+**A `zekno.json` not in use here yet (S6).** When the `zekno.json` that applies here, in this
+folder or above, carries a signature (`signed`), is not in `links.json`, and names another file
+than this folder's own `zekno.app.json`, the deploy asks about it first and a yes deploys that
+file. `zekno settings`, `--json`, `compose`, `set` and `unset` then say SH4 and nothing else,
+status 1, and show or change nothing. No keychain is read and nothing is recorded; whether the
+signature is the team's cannot be known without the keychain, so any signature counts here (a
+`zekno.json` with none is left aside, as before). With the folder's own file, the commands go on.
+`init` is unchanged.
+
+| Id | Sentence |
+|----|----------|
+| SH4 | `This folder's zekno.json names <file> and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys <file>, not the zekno.app.json here.`; for one in a folder above, `The zekno.json in <folder> names <file> and ...` [1] |
+
+**Options (S7).** Each settings command takes only its own option: `--json` for `zekno settings`,
+`--yes` for `set` and `unset`, none for `compose` and `init`. Any other option given to one of
+them, `--app`, `--server` and `-f` among them, is refused after the words are checked and before
+anything is read, with the help line, status 2 (`UsageError`):
+``\`zekno settings compose\` does not take \`--app\`.`` (`-f` and `--file` are both named `` `-f` ``).
+No other command reads its arguments differently (`plain-unchanged.test.ts` is green).
+
+**CS11 names the file (S7).** When the file written is not this folder's own `zekno.app.json`
+(the one a `zekno.json` in use here names), CS11's text is `Written to <file>`:
+`✔ Written to deploy/zekno.app.json  Run zekno deploy to use it.` at a terminal,
+`Written to deploy/zekno.app.json  Run zekno deploy to use it.` piped.
+
+**Blanks at a value's ends (S8).** Typed for `set`, a plain value or a start command refused by
+the rule of contracts/settings-file.md ("As built", S8) is CS7 with
+`Use no space or other blank at its start or end.` [2]:
+`That is not a value zekno can write. Use no space or other blank at its start or end.`
+
+**IN6 is a warning everywhere it is said (walkthrough).** After `zekno settings` (as before),
+after the Compose text of `compose`, set apart by an empty line at a terminal, after CS11 of `set`
+and `unset`, and after IN3 of `init`: `! This folder has compose.yaml too. zekno deploy asks which
+to deploy, or takes -f <file>.` at a terminal, standard error when piped.
+
+**Known, left as they are (walkthrough).**
+
+- SH1 at a terminal is drawn as every error of a single command: `✖` and its first sentence bold,
+  then `Run zekno settings init to start one.` dim on the next line; the board's right column
+  draws it as one plain line in its explanation column. Piped, it is one line.
+- In `unset`'s change line the words of a setting left out are bold as the new value
+  (`→ no limit`): the board's bold new value wins over the dim of "Words".
+- Where a long sentence wraps at 80 columns, a short last word may stand alone on its line.
+
+Tests: `test/scenarios/settings-which-file.test.ts` (S6 in folders A, B and C on a second machine;
+the options; `Written to`; IN6 at a terminal), `test/settings/invisible.test.ts` (S8),
+`test/commands/settings.test.tsx` (IN6 after `init`).

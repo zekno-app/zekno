@@ -654,6 +654,96 @@ terminals.
 
 **Commit of these records and the docs**: the commit that adds this part.
 
+### After the second pass (part 7): what was fixed
+
+**Written by the implementer, after the reviewer's part 7.** Each fix has tests that failed before
+it and pass after it.
+
+#### S6. A `zekno.json` not yet in use here
+
+**Change.** `linkOf` in `ops/settings.ts` gives the `zekno.json` that applies here as `inUse`
+(in `links.json`) or, when it carries a signature and is not there, as `pending`. A pending one
+that names another file than this folder's own `zekno.app.json` stops `zekno settings`, `--json`,
+`compose`, `set` and `unset` with SH4, status 1, nothing shown or written:
+`This folder's zekno.json names deploy/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys deploy/zekno.app.json, not the zekno.app.json here.`
+(`The zekno.json in <folder> names ...` for one above). No keychain is read, nothing is asked or
+recorded, `links.json` is unchanged. Naming the folder's own file, the commands go on. The
+first-use question of single commands (`useQuestion`) names the file a yes deploys when it is not
+`compose.yaml`: `Ada linked this folder to demo on dev, with deploy/zekno.app.json. Use it here?`.
+Every existing test of features 004 and 006 asks about `compose.yaml` and kept its words.
+`apps/cli/tests/link.e2e.ts` checks the app's question ("ada linked this folder to demo on prod"
+as a region of the app's screen), which is unchanged; nothing under `apps/cli/tests/` was edited.
+
+**Known limits.** The full-screen app's own first-use question (`useLinkWords`) still names no
+file in this folder: the app's existing screens stay as they are in this feature. Without the
+keychain the commands cannot tell the team's signature from another's, so any signature counts as
+pending; a `zekno.json` signed by another team, which the deploy calls not signed and leaves aside,
+also stops the commands with SH4 (they fail closed). `init` does not say SH4.
+
+**Tests.** `test/scenarios/settings-which-file.test.ts`: folders C, B and A on a second machine of
+the member (`twin`, a key store that throws), every command, SH4, the own file untouched,
+`links.json` never written; the own file goes on; `zekno deploy`'s question names
+`deploy/zekno.app.json` and a yes signs that file. Before the fix the commands printed the
+folder's own file with status 0 and the question named no file. **Commit** `8814494`.
+
+#### S7. Options the settings commands do not take
+
+**Change.** `cli/cli.ts` refuses any option a settings command does not take (`--json` for
+`zekno settings` and `--yes` for `set` and `unset` are theirs), after the words are checked:
+`` `zekno settings compose` does not take `--app`. `` with the help line, status 2. No other
+command's reading of its arguments changes (`plain-unchanged.test.ts` green). CS11 names the file
+written when it is not this folder's own: `Written to deploy/zekno.app.json  Run zekno deploy to
+use it.` **Tests.** `settings-which-file.test.ts`, "the options a settings command takes". The
+reviewer's other half (`from <file>` on standard error for `compose`) was not done: not asked.
+**Commit** `f39d118`.
+
+#### S8. A blank at either end
+
+**Change.** `blankAtAnEnd` in `settings/values.ts`: a plain value may not start or end with a
+`White_Space` character or U+2800 (SV24's third rule), nor may the first or last word of a start
+command (SV9 (h)): `use no space or other blank at its start or end.` `readTyped` refuses the same.
+Blanks inside stay. **Where it differs from the request:** the ordinary spaces around a start
+command's words stay allowed. They only separate the words and are never signed (the Compose text
+holds the words), the approved grammar has `*SP` at both ends, and the contract's own example is
+`  node   server.js  `; any other blank there would be part of a word and is refused.
+**Tests.** `test/settings/invisible.test.ts`, "a blank at either end" (the review's ten blanks and
+the space, at each end, in the file and typed; inner blanks kept). **Commit** `f39d118`.
+
+#### S9. Asterisks in a value
+
+**Change.** `inSettingsForm` in `project/compose-file.ts` holds a text to the exact lines
+`composeText` writes, every name and value a double-quoted scalar at a node's start, so the text
+holds no anchor, alias or tag; `aliasesTooMany` skips the alias count for such a text only.
+`deployedSettings`, `expectedValues` and `composeServices` use it. Any other text keeps the count
+unchanged (a hand-written file with the same 500 asterisks still gives no names).
+**Tests.** `test/project/compose-file.test.ts` (500 asterisks: the form, `JWT_SECRET` named, the
+services listed; hand-written unchanged; a line zekno does not write, or an alias, anchor, tag,
+comment or other escape among its lines, is not the form; every good file's text is);
+`test/settings/compose.test.ts` (the deployed settings read back, a removed variable and service
+marked). **Commits** `f39d118`, and `4909f66` for its pattern written as the lint asks.
+
+#### The walkthrough's type-ahead
+
+**Change.** Keys carry the time they were read; a stage of a change records when it opened; a key
+read within `TYPED_AHEAD_MS` (50 ms) of that, the same read included, does nothing (Ctrl-C still
+quits). **Tests.** `test/app/settings-type-ahead.test.tsx` (the real app, a stand-in terminal:
+`2g` and Enter in one read, `y` 3 ms later, nothing written; before the fix the file held `2g`),
+`test/app/settings-state.test.ts`. `ta_timing.py` after the fix: no write at 3, 10 or 30 ms.
+**Commit** `29e1e8e`.
+
+#### Existing tests whose expectations changed in this pass
+
+- `settings-which-file.test.ts`, "signed and not yet used here ...: the folder's own file": now
+  SH4 (S6). Folder A's `set --yes`: `Written to <the root's file>` (S7). "Both files": IN6 a
+  warning, on standard error (walkthrough).
+- `values.test.ts`, `readTyped` of `"  as it is "`: now refused (S8); `test/support/settings-random.ts`
+  puts a drawn plain value that would start or end with a blank between brackets, so the thousand
+  settings stay within the rules (S8).
+- `settings-state.test.ts` and `settings-screen.test.tsx`, AS7: without backticks (walkthrough).
+- `settings-screen.test.tsx`, the change box at 80 by 24: cut around the difference, no key named
+  (walkthrough).
+- `commands/settings.test.tsx`, IN6 after `init`: a warning (walkthrough).
+
 ## 7. Second pass: the fixes
 
 **Written by the same independent reviewer as parts 1 to 5**, not by the implementer. Parts 1 to 6

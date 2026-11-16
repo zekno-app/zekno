@@ -668,12 +668,24 @@ same folder would sign, by the same rule (see [`zekno deploy`](#zekno-deploy)): 
 `zekno.json` in use here names, in this folder or in one above, wherever it is, and named as the
 deploy names it, such as `deploy/zekno.app.json`; else this folder's own `zekno.app.json`. A
 `zekno.json` is in use here when your team signed it and it was used in its folder on this
-machine; any other is left aside, as `zekno deploy` leaves it, and is never asked about or
-recorded. When the deploy would use a Compose file while a `zekno.app.json` lies here, each
-command says so in one sentence and shows or changes nothing, exit status 1:
+machine. One that carries a signature and is not in use here yet is what `zekno deploy` asks
+about first ("Use it here?"), and a yes deploys the file it names: when that is not this folder's
+own `zekno.app.json`, each command says so in one sentence and shows or changes nothing, exit
+status 1:
+`This folder's zekno.json names deploy/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys deploy/zekno.app.json, not the zekno.app.json here.`
+Nothing is asked or recorded: answer the question with `zekno link` or `zekno deploy`. Any
+other `zekno.json` is left aside, as `zekno deploy` leaves it. When the deploy would use a
+Compose file while a `zekno.app.json` lies here, each command says so in one sentence and shows
+or changes nothing, exit status 1:
 `This folder's zekno.json names compose.yaml, so zekno deploy uses it, not the zekno.app.json here.`
-With `compose.yaml` here too and no `zekno.json`, the settings are shown and changed, and a note
-says that `zekno deploy` asks which to deploy, or takes `-f <file>`. A file counts only when its
+With `compose.yaml` here too and no `zekno.json`, the settings are shown and changed, and a
+warning says that `zekno deploy` asks which to deploy, or takes `-f <file>`.
+
+**Options.** The settings commands take only their own: `--json` for `zekno settings`, `--yes`
+for `set` and `unset`. Any other, `--app`, `--server` and `-f` among them, is refused with exit
+status 2, since it would change nothing here: `` `zekno settings compose` does not take `--app`. ``
+To see what a deploy with `--app` or `--server` would sign, run the command where that app's
+folder is. A file counts only when its
 folder lists it exactly as `zekno.app.json`: on a disk that ignores letter case, as macOS has by
 default, `ZEKNO.APP.JSON` is not a settings file.
 
@@ -755,6 +767,11 @@ Hangul filler, a variation selector that does not follow an emoji, a line or par
 So what zekno shows of a value is the value that is signed. Every other setting takes ASCII only.
 A value that holds one is refused with its place:
 `web, variables.plain.NODE_ENV: use no invisible character, such as a zero-width space or a right-to-left mark.`
+Nor may a plain value start or end with a space or another blank (a no-break space, an
+ideographic space, a braille blank and the like), which would not be seen at the end of a line;
+nor may the first or last word of a start command. Blanks inside a value stay, and so do the
+spaces that only separate the words of a start command:
+`web, variables.plain.REQUIRE_AUTH: use no space or other blank at its start or end.`
 
 **What it can never hold.** A secret's value: `secrets` is a list of names, and the values stay in
 `zekno secret set`. A path on this machine: no setting takes one. A folder of the server: a volume
@@ -908,6 +925,8 @@ $ zekno settings set web.memory 1g
 - With no terminal it needs `--yes`. Without it, it prints the change line, says
   ``There is no terminal to ask on. Add `--yes` to write it to zekno.app.json.`` and ends with exit
   status 1. With it, the change line and `Written  Run zekno deploy to use it.`, exit status 0.
+  When the file written is not this folder's own `zekno.app.json`, that line names it:
+  `Written to deploy/zekno.app.json  Run zekno deploy to use it.`
 - A value its rule refuses is said with the rule, with exit status 2, and the file is not
   touched:
 
@@ -993,8 +1012,8 @@ $ zekno settings init
   On a disk that ignores letter case, a file named `ZEKNO.APP.JSON` or the like takes that name:
   it stops before asking and says to rename it or remove it.
 - When a `zekno.json` in use here names another file, a warning after it says that `zekno deploy`
-  uses that file, not the one just made. Else, with `compose.yaml` in the folder too, a note says
-  that `zekno deploy` asks which to deploy, or takes `-f <file>`.
+  uses that file, not the one just made. Else, with `compose.yaml` in the folder too, a warning
+  says that `zekno deploy` asks which to deploy, or takes `-f <file>`.
 - Esc or Ctrl-C at a question: `Nothing was done.`, exit status 1. With no terminal it writes
   nothing and ends with exit status 1.
 
@@ -1003,8 +1022,8 @@ $ zekno settings init
 | Status | When |
 |--------|------|
 | `0` | Shown, written or printed; a value the same as now; `unset` of a setting not set |
-| `1` | No settings file, or a deploy here would use a Compose file; a fault in the file; "no", Esc or Ctrl-C; no terminal without `--yes`; `init` with no terminal or with a file here; the file changed since it was read, is a symbolic link, or could not be written |
-| `2` | A word missing or one too many; a setting this zekno does not know or does not have yet; a service the file does not have; a value not allowed; a change that breaks a rule of the file; `unset` of the image |
+| `1` | No settings file, or a deploy here would use a Compose file, or a `zekno.json` not in use here yet names another file; a fault in the file; "no", Esc or Ctrl-C; no terminal without `--yes`; `init` with no terminal or with a file here; the file changed since it was read, is a symbolic link, or could not be written |
+| `2` | A word missing or one too many; an option the command does not take; a setting this zekno does not know or does not have yet; a service the file does not have; a value not allowed; a change that breaks a rule of the file; `unset` of the image |
 
 ### `zekno doctor`
 
@@ -1218,7 +1237,9 @@ Two things must both be true before zekno uses a `zekno.json`:
    a folder, zekno shows what it names and asks once. At a terminal: `Ada linked this folder to
    api on prod. Use it here?` Only `y` goes on; anything else stops with "Nothing was done.". A
    file in a folder above is named with that folder and the Compose file a yes deploys: `Ada linked
-   ~/Downloads to api on prod, with ~/Downloads/compose.yaml. Use it here?` When `--app` or
+   ~/Downloads to api on prod, with ~/Downloads/compose.yaml. Use it here?` In this folder, the
+   file a yes deploys is named when it is not `compose.yaml`: `Ada linked this folder to api on
+   prod, with deploy/zekno.app.json. Use it here?` (the app's own question names no file). When `--app` or
    `--server` sends the command elsewhere than the file names, the question says both: `Ada linked
    this folder to api on dev. This command uses api on prod. Use it here?` A key typed before the
    question is drawn, such as while the keychain asks, is thrown away: only a `y` typed at the

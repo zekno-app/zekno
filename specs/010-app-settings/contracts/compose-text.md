@@ -170,3 +170,14 @@ so what any surface shows of the text is the text. A last deploy made before thi
 command held one is read back by `deployedSettings` as no settings (`composeText` of it throws,
 which gives undefined), so nothing is marked against it; one whose plain value held one is read
 back as before, and the value of the file differs from it, so it is marked.
+
+## As built: after the second pass of the review (2026-11-16)
+
+Written by the implementer (security review, part 7, S9). A text whose every line is one of the
+lines of "Each setting" above, every name and value a double-quoted scalar escaped as `quote`
+escapes (`inSettingsForm`, `project/compose-file.ts`), holds no YAML anchor, alias or tag,
+whatever its values hold. Reading it back (`deployedSettings`), finding the values it expects
+(`expectedValues`) and listing its services (`composeServices`) no longer count the `*` inside its
+quoted values as aliases (`aliasesTooMany`), so a value of 500 asterisks keeps the marks and the
+question for a missing secret. Any text in another form keeps the alias count exactly as before.
+Tests: `test/project/compose-file.test.ts` and `test/settings/compose.test.ts`, "500 asterisks".

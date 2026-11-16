@@ -315,3 +315,23 @@ the rule above as well.
 Tests: `test/settings/invisible.test.ts` (each kind the review named, in a start command and a
 plain value, in the file and typed; the review's own values; what stays allowed; every character
 `sanitize` takes out is refused); `test/scenarios/settings-exact-name.test.ts`.
+
+## As built: after the second pass of the review (2026-11-16)
+
+Written by the implementer (security review, part 7, S8). Where these notes and the sections above
+differ, these are built.
+
+**A blank at either end (S8).** A plain value may not start or end with a blank: a character of
+Unicode's `White_Space` (the space, the no-break space, U+1680, U+2000 to U+200A, U+202F, U+205F,
+U+3000 and the rest), or the braille blank U+2800, which draws as a space. Nor may the first or
+last word of a start command: the spaces that only separate its words, at its ends too, stay
+allowed, as they are never signed (the Compose text holds the words), so the grammar's `*SP` and
+the example `  node   server.js  ` hold. Blanks inside a value or a word stay allowed. An empty
+plain value is a value.
+
+| Id | Place and rule |
+|----|----------------|
+| SV9 (h) | `<svc>, deploy.start: use no space or other blank at its start or end.` Checked after (a) and before the count of words of (d). |
+| SV24 | its third rule: `<svc>, variables.plain.<NAME>: use no space or other blank at its start or end.` Said after the first and the second. |
+
+Tests: `test/settings/invisible.test.ts`, "a blank at either end".

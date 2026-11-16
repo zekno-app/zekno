@@ -198,3 +198,25 @@ was fixed"). Where these notes and the sections above differ, these notes are wh
 | DP6 | `The settings changed since this screen showed them, so nothing was deployed.` (the app, an error notice) | |
 
 Test: `test/app/app-effects.test.ts`, "d on the settings screen deploys only the file it showed".
+
+## As built: after the second pass of the review and the walkthrough (2026-11-16)
+
+Written by the implementer. Where these notes and the sections above differ, these are built.
+
+- **The first-use question names the file (S6).** In single commands (`useQuestion`,
+  `project/project.ts`, which `zekno deploy`, `zekno link` and every command taking names from a
+  `zekno.json` ask), a `zekno.json` in this folder that names another file than `compose.yaml`
+  is asked about with that file: `Ada linked this folder to demo on dev, with
+  deploy/zekno.app.json. Use it here?`; with `compose.yaml` the words are as before. One in a
+  folder above already named its file. **Known limit:** the same question in the full-screen app
+  (`useLinkWords`, `app/state/questions.ts`) names no file in this folder: the app's existing
+  screens stay as they are in this feature.
+- **Both files with no terminal, no link and no flags (walkthrough, difference 2).** The order of
+  checks is today's for a deploy with no terminal: the server first, then the app, then the file.
+  So with neither flag the missing-server sentence comes first
+  (``Say which server with `--server <name>`, or link this folder to it with `zekno link`, which keeps it in zekno.json.``,
+  status 2, with the help line); with `--server` alone, the missing-app sentence; with `--app` and
+  `--server`, DP2, status 2. Rule 4 above is reached only once the deploy knows where it goes.
+- **What a settings deploy asks for (S9).** The values a deploy from settings asks for at a
+  terminal, and the app lists before `d`, come from `expectedValues` of its Compose text, which no
+  longer gives none for a value full of asterisks (contracts/compose-text.md, "As built").
