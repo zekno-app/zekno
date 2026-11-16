@@ -16,14 +16,7 @@ import { Box, Text } from "ink"
 import { sanitize } from "../../server/sanitize"
 import { SETTINGS_FILE } from "../../settings/file"
 import type { SettingPath, SettingRow } from "../../settings/types"
-import {
-  AS4,
-  AS5,
-  AS9,
-  CS9,
-  restartShown,
-  settingWords,
-} from "../../settings/words"
+import { AS4, AS5, CS9, restartShown, settingWords } from "../../settings/words"
 import { firstSentence } from "../../ui/ink/questions"
 import type { Piece } from "../../ui/ink/wrap"
 import type { KeyHint } from "../../ui/parts/key-hints"
@@ -65,18 +58,50 @@ const wordsOf = (path: SettingPath) =>
     path.key === "plain" || path.key === "volume" ? path.name : ""
   )
 
+/** How many characters before the first difference stay in view when a value is cut around it. */
+const BEFORE_CHANGE = 16
+
+/** Where two values first differ, in characters: the length of the shorter when one begins the other. */
+function firstDifference(a: string, b: string): number {
+  const left = [...a]
+  const right = [...b]
+  let at = 0
+  while (at < left.length && at < right.length && left[at] === right[at]) at++
+  return at
+}
+
 /**
- * Lines of `pieces` in `width` columns, at most `most`, and when more were
- * cut, AS9 under them, faint: how many more, and the key that shows them
- * (security review S4), as a row of the screen says it.
+ * A value of the box in `width` columns: whole when `most` lines hold it;
+ * else cut around `from`, where the old and the new value first differ, so
+ * the change itself is in view (the walkthrough's rough edge): a faint `…`
+ * for what is left out before it, at most `most` lines from there, and `…`
+ * at the end of the last for what is left out after. No key is named: none
+ * of the screen's keys works while the box is open.
  */
-function capped(pieces: readonly Piece[], width: number, most: number) {
-  const lines = linesOf(pieces, width)
+function around(
+  value: string,
+  style: Omit<Piece, "text">,
+  from: number,
+  width: number,
+  most: number
+): Piece[][] {
+  const whole = linesOf([{ ...style, text: value }], width)
+  if (whole.length <= most) return whole
+  const chars = [...value]
+  const start = from > BEFORE_CHANGE ? from - BEFORE_CHANGE : 0
+  const lines = linesOf(
+    [
+      ...(start > 0 ? [{ text: "…", dim: true }] : []),
+      { ...style, text: chars.slice(start).join("") },
+    ],
+    width
+  )
   if (lines.length <= most) return lines
-  return [
-    ...lines.slice(0, most),
-    ...linesOf([{ text: AS9(lines.length - most), dim: true }], width),
-  ]
+  const kept = lines.slice(0, most)
+  const last = kept[most - 1]!
+  const text = last.map((piece) => piece.text).join("")
+  kept[most - 1] = [{ ...style, text: cut(`${text}…`, width) }]
+  return kept
 }
 
 /**
@@ -95,14 +120,9 @@ function typedShown(typed: string, question: string, inner: number): string {
   return `…${tail}`
 }
 
-/** A label of the box, faint, padded to its column, and the lines of its value after it, at most `most`. */
-function labelled(
-  label: string,
-  value: Piece[],
-  inner: number,
-  most: number
-): Piece[][] {
-  return capped(value, inner - NOW_WIDTH, most).map((line, index) => [
+/** A label of the box, faint, padded to its column, and the lines of its value after it (`around`). */
+function labelled(label: string, lines: Piece[][]): Piece[][] {
+  return lines.map((line, index) => [
     { text: (index === 0 ? label : "").padEnd(NOW_WIDTH), dim: true },
     ...line,
   ])
@@ -173,14 +193,12 @@ export function boxLines(
     return lines
   }
   const { first, rest } = firstSentence(CS9(file))
+  const next = change.next?.shown ?? ""
+  const from = firstDifference(change.now, next)
+  const width = inner - NOW_WIDTH
   lines.push(
-    ...labelled(AS5.now, [{ text: change.now }], inner, most),
-    ...labelled(
-      AS5.new,
-      [{ text: change.next?.shown ?? "", bold: true }],
-      inner,
-      most
-    ),
+    ...labelled(AS5.now, around(change.now, {}, from, width, most)),
+    ...labelled(AS5.new, around(next, { bold: true }, from, width, most)),
     ...linesOf(
       ask([
         { text: first, bold: true },
@@ -229,7 +247,7 @@ export function ChangePane({
   const section = rows[at]?.section
   const shown = rows.filter((row) => row.section === section)
   const inner = wholeInner(columns)
-  // The old and the new value whole when the pane holds them; else each cut to the most lines that fit, with AS9 under them.
+  // The old and the new value whole when the pane holds them; else each cut around their first difference to the lines that fit.
   // The room: the pane's border, its first line, the box's border, and the fewest lines a window of the rows above takes.
   const room = body - 2 - 1 - 2 - ROWS_LEAST
   const boxOf = (most: number) =>
@@ -250,6 +268,7 @@ export function ChangePane({
         inner={inner}
         // The pane's border, its first line, and the box with its border.
         height={body - 2 - 1 - box.length - 2}
+        keyNamed={false}
       />
       <Box flexGrow={1} />
       <Box

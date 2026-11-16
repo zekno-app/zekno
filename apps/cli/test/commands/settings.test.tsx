@@ -803,7 +803,7 @@ describe("zekno settings init (T053)", () => {
     expect(checkSettings(fileOf(m), "zekno.app.json")).toEqual(CREATED)
   })
 
-  test("a refused image keeps the question open with its reason; IN6 with compose.yaml here", async () => {
+  test("a refused image keeps the question open with its reason; IN6 with compose.yaml here, a warning as everywhere it is said", async () => {
     const m = machine()
     m.compose(COMPOSE_V1)
     const t = terminal(100, 30)
@@ -821,7 +821,7 @@ describe("zekno settings init (T053)", () => {
       `? Image › ${IMAGE}`,
       "? Service name › web",
       "✔ Written zekno.app.json  Run zekno deploy to use it.",
-      `  ${IN6}`,
+      `! ${IN6}`,
     ])
   })
 

@@ -84,8 +84,8 @@ async function change(
     file === SETTINGS_FILE ? CS11.text : CS11_TO(file),
     CS11.detail
   )
-  // A deploy here asks which file to use, or takes -f: the file written is one of two.
-  if (prepared.both) deps.ui.note(IN6)
+  // A deploy here asks which file to use, or takes -f: the file written is one of two. A warning, as everywhere IN6 is said.
+  if (prepared.both) deps.ui.warn(IN6)
   return 0
 }
 
@@ -122,7 +122,7 @@ export async function settingsUnset(
  * Then the image (IN1) and the service's name (IN2, `web` filled in), each
  * held to its rule where it is typed; the file is created whole, never over
  * another (IN3), in this folder, with SH3 as a warning when the zekno.json in
- * use here names another file, else IN6 when compose.yaml is here too. Esc
+ * use here names another file, else IN6, a warning, when compose.yaml is here too. Esc
  * or Ctrl-C at a question: `Nothing was done.`, status 1, nothing written.
  */
 export async function settingsInit(deps: Deps): Promise<number> {
@@ -144,7 +144,7 @@ export async function settingsInit(deps: Deps): Promise<number> {
   createFromAnswers(deps, image, service)
   deps.ui.success(IN3.text, IN3.detail)
   if (linked !== undefined) deps.ui.warn(linked)
-  else if (compose) deps.ui.note(IN6)
+  else if (compose) deps.ui.warn(IN6)
   return 0
 }
 
@@ -163,5 +163,9 @@ export function settingsCompose(deps: Deps): void {
   // The text ends with a line feed: the last part is empty, and is not a line.
   lines.pop()
   for (const line of lines) deps.ui.line(line, [quiet(sanitize(line))])
-  if (note !== undefined) deps.ui.warn(note)
+  // At a terminal an empty line sets it apart from the text, as after the settings; piped it is on standard error alone.
+  if (note !== undefined) {
+    deps.ui.gap()
+    deps.ui.warn(note)
+  }
 }

@@ -15,7 +15,12 @@
 import { applyChange, shownValue } from "../../settings/change"
 import type { ServiceSettings, SettingPath } from "../../settings/types"
 import { MAX_SECRETS, MAX_TEXT, readTyped } from "../../settings/values"
-import { CS17, IMAGE_NEEDED } from "../../settings/words"
+import {
+  CS17,
+  IMAGE_NEEDED,
+  settingWords,
+  startRule,
+} from "../../settings/words"
 import { applyConfirmKey, type Choice } from "../../ui/parts/confirm"
 import { applySelectKey } from "../../ui/parts/select"
 import { applyTextInput } from "../../ui/parts/text-input"
@@ -189,6 +194,13 @@ function checked(
   )
 }
 
+/** A line break or a control character, which a typed value never takes. */
+const LINE_OR_CONTROL = /[\u0000-\u001f\u007f-\u009f]/
+
+/** The sentence the screen has for a value of more than one line: a plain value's rule, or a start command's for a control character. */
+const oneLine = (path: SettingPath): string =>
+  path.key === "plain" ? settingWords("plain").rule : startRule("control")
+
 /** A key, or a paste, typed into the value. Enter checks it; Esc closes the change. */
 export function typeSetting(
   state: State,
@@ -204,6 +216,16 @@ export function typeSetting(
     flags,
     limitOf(change.path)
   )
+  // Keys that came in one read with a line break or a control character among them are taken for a paste of several
+  // lines and dropped, so nothing is written: the setting's rule for one line says why (the walkthrough's rough edge).
+  if (
+    result.kind === "typing" &&
+    result.value === change.typed &&
+    LINE_OR_CONTROL.test(input.replace(/(\r\n?|\n)$/, ""))
+  )
+    return stay(
+      withChange(state, screen, { ...change, reason: oneLine(change.path) })
+    )
   if (result.kind === "cancelled")
     return stay(withChange(state, screen, undefined))
   if (result.kind === "done")

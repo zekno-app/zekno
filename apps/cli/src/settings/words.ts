@@ -477,10 +477,11 @@ export const AS8 = (was?: string, volume = false): string =>
 /**
  * AS9 (security review S4): under a value cut on the settings screen, how
  * many of its lines are not drawn, and the key that shows it whole: the
- * Compose text holds every value, and scrolls.
+ * Compose text holds every value, and scrolls. While a change is open `c`
+ * does nothing, so the key is left out (`key` false).
  */
-export const AS9 = (lines: number): string =>
-  `… ${lines} more ${lines === 1 ? "line" : "lines"}: c shows ${lines === 1 ? "it" : "them"} in the Compose text`
+export const AS9 = (lines: number, key = true): string =>
+  `… ${lines} more ${lines === 1 ? "line" : "lines"}${key ? `: c shows ${lines === 1 ? "it" : "them"} in the Compose text` : ""}`
 /** AS4 */
 export const AS4 = "Change a setting"
 /** AS5 */

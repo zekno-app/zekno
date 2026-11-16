@@ -215,13 +215,17 @@ describe("browsing", () => {
     // worker has no plain variable and no volume: its last two rows.
     const worker = play(onBoard(), K.tab).state
     const downs = (n: number) => Array.from({ length: n }, () => K.down)
+    // Drawn as every line of the app is at a terminal: the command without its backticks (the walkthrough's rough edge).
     const plain = play(worker, ...downs(8), K.enter).state
-    expect(plain.notice).toEqual({ tone: "info", text: AS7("worker", "plain") })
+    expect(plain.notice).toEqual({
+      tone: "info",
+      text: "Add one with zekno settings set worker.plain.<NAME> <value>.",
+    })
     expect(settingsScreen(plain).change).toBeUndefined()
     const volume = play(worker, ...downs(9), K.enter).state
     expect(volume.notice).toEqual({
       tone: "info",
-      text: AS7("worker", "volume"),
+      text: "Add one with zekno settings set worker.volumes.<name> <path>.",
     })
     expect(AS7("worker", "plain")).toBe(
       "Add one with `zekno settings set worker.plain.<NAME> <value>`."
@@ -723,5 +727,36 @@ describe("keys read before a question of the screen can be drawn (the walkthroug
     })
     const later = play(list, at(K.down, 1060)).state
     expect(settingsScreen(later).change?.pick).toBe(2)
+  })
+})
+
+describe("keys dropped as a paste while a value is typed (the walkthrough's rough edge)", () => {
+  test("keys that came in one read with a line break among them type nothing, and the rule for one line says why", () => {
+    const typing = play(onBoard(), K.enter).state
+    const dropped = play(typing, text("g\ry")).state
+    expect(settingsScreen(dropped).change).toMatchObject({
+      stage: "typing",
+      typed: "1g",
+      reason: "Use one line with no control character.",
+    })
+    // A plain value says its own rule.
+    const plain = play(
+      onBoard(),
+      ...Array.from({ length: 5 }, () => K.down),
+      K.enter
+    ).state
+    expect(settingsScreen(plain).change?.path).toEqual({
+      service: "web",
+      key: "plain",
+      name: "NODE_ENV",
+    })
+    expect(settingsScreen(play(plain, text("a\nb")).state).change?.reason).toBe(
+      "Use one line with no control character, at most 4096 characters."
+    )
+    // A paste of one line followed by Enter is still taken.
+    expect(
+      settingsScreen(play(typing, K.backspace, K.backspace, text("2g\r")).state)
+        .change?.stage
+    ).toBe("asking")
   })
 })

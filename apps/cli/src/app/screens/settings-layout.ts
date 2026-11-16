@@ -192,7 +192,8 @@ function shortWas(row: SettingRow, room: number): SettingRow {
 export function rowValueLines(
   row: SettingRow,
   room: number,
-  warning: string
+  warning: string,
+  key = true
 ): Piece[][] {
   const short = shortWas(row, room)
   const value = linesOf([{ text: row.shown, dim: !row.set }], room)
@@ -202,7 +203,7 @@ export function rowValueLines(
   return [
     ...value.slice(0, VALUE_LINES),
     ...linesOf(
-      [{ text: AS9(value.length - VALUE_LINES), dim: true }, ...mark],
+      [{ text: AS9(value.length - VALUE_LINES, key), dim: true }, ...mark],
       room
     ),
   ]
@@ -211,12 +212,14 @@ export function rowValueLines(
 /**
  * The lines of `rows` in `inner` columns: each section's heading where the
  * section changes, then each row, its value going on under itself, never
- * under the labels, cut as `rowValueLines` says.
+ * under the labels, cut as `rowValueLines` says. `key`: whether AS9 names
+ * `c`, which does nothing while a change is open.
  */
 export function rowLines(
   rows: readonly SettingRow[],
   inner: number,
-  warning: string
+  warning: string,
+  key = true
 ): RowLine[] {
   const label = labelWidth(rows, inner)
   const room = inner - MARKER_WIDTH - label
@@ -227,7 +230,7 @@ export function rowLines(
       section = row.section
       lines.push({ kind: "heading", text: row.section })
     }
-    rowValueLines(row, room, warning).forEach((pieces, index) =>
+    rowValueLines(row, room, warning, key).forEach((pieces, index) =>
       lines.push({
         kind: "row",
         row: at,

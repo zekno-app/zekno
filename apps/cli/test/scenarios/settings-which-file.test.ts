@@ -55,7 +55,9 @@ async function atTerminal(m: Machine, ...args: string[]) {
   try {
     const code = await m.zekno(...args)
     await t.ui.close()
-    return { code, lines: t.lines() }
+    const screen = t.screen()
+    while (screen.at(-1) === "") screen.pop()
+    return { code, lines: t.lines(), screen }
   } finally {
     m.deps.ui = before
   }
@@ -247,6 +249,7 @@ describe("both files and nothing that decides", () => {
     const compose = await piped(m, "settings", "compose")
     expect(compose.out.join("\n")).toBe(composeText(runs(VISIBLE)).trimEnd())
     expect(compose.err).toEqual([IN6])
+    // A warning, as everywhere IN6 is said: on standard error when piped.
     expect(
       await piped(m, "settings", "set", "web.memory", "2g", "--yes")
     ).toEqual({
@@ -254,10 +257,13 @@ describe("both files and nothing that decides", () => {
       out: [
         "web · memory limit  no limit → 2g",
         "Written  Run zekno deploy to use it.",
-        IN6,
       ],
-      err: [],
+      err: [IN6],
     })
+    // At a terminal, the Compose text, an empty line, then IN6 as a warning.
+    const drawn = await atTerminal(m, "settings", "compose")
+    expect(drawn.code).toBe(0)
+    expect(drawn.screen.slice(-2)).toEqual(["", `! ${IN6}`])
   })
 })
 

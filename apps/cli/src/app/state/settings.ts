@@ -10,6 +10,7 @@
  * takes what they report. A change is opened, typed, checked and asked
  * about in settings-change.ts, with the pure checks of settings/.
  */
+import { withoutBackticks } from "../../ui/ink/marks"
 import { applySelectKey, clampIndex } from "../../ui/parts/select"
 import type { SettingRow } from "../../settings/types"
 import { AS7 } from "../../settings/words"
@@ -161,7 +162,11 @@ export function onSettings(
     if ("adding" in row.path)
       return stay({
         ...state,
-        notice: { tone: "info", text: AS7(row.path.service, row.path.key) },
+        // Drawn as every line of the app is at a terminal: a command without the backticks plain output keeps.
+        notice: {
+          tone: "info",
+          text: withoutBackticks(AS7(row.path.service, row.path.key)),
+        },
       })
     return openChange(state, screen, read, row.path)
   }

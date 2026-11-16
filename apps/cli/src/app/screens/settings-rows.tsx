@@ -95,14 +95,17 @@ export function RowWindow({
   selected,
   inner,
   height,
+  keyNamed = true,
 }: {
   rows: readonly SettingRow[]
   selected: number
   inner: number
   height: number
+  /** Whether a cut value's line names `c`: not while a change is open, where `c` does nothing. */
+  keyNamed?: boolean
 }) {
   const theme = useTheme()
-  const lines = rowLines(rows, inner, theme.warning)
+  const lines = rowLines(rows, inner, theme.warning, keyNamed)
   const label = labelWidth(rows, inner)
   const shown = listWindow(
     lines.length,
