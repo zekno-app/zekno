@@ -12,7 +12,7 @@
  * file and, for its content, a place and a rule: never a piece of it.
  */
 import { createHash } from "node:crypto"
-import { resolve } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 
 import { CliError } from "../cli/errors"
 import {
@@ -22,6 +22,7 @@ import {
   type ReadBytes,
   type Words,
 } from "../project/compose-read"
+import { listsExactly } from "../project/file"
 import { shownFile, shownPath } from "../project/shown"
 import { sanitize } from "../server/sanitize"
 import { checkSettings, isSettings } from "./schema"
@@ -109,6 +110,27 @@ function wordsOf(
 }
 
 /**
+ * Whether a settings file found by its name in a folder (this folder's, or
+ * the one a zekno.json names) is listed there exactly as `zekno.app.json`:
+ * on a disk that ignores letter case `ZEKNO.APP.JSON` would be opened under
+ * that name, and it is not a settings file (security review S5). A folder
+ * that cannot be listed is left to the reader, which says what is wrong.
+ */
+function listedHere(
+  source: Exclude<ComposeSource, { kind: "given" }>
+): boolean {
+  const path =
+    source.kind === "default"
+      ? join(source.folder, SETTINGS_FILE)
+      : resolve(source.link.folder, source.link.compose)
+  try {
+    return listsExactly(dirname(path), basename(path))
+  } catch {
+    return true
+  }
+}
+
+/**
  * Reads and checks a settings file, once. `source` names it as a Compose
  * file would be named (`default`: `zekno.app.json` in that folder;
  * `project`: the file a zekno.json names; `given`: `-f`). Every problem is a
@@ -120,6 +142,8 @@ export function readSettingsFile(
 ): SettingsRead {
   const { shown, words } = wordsOf(source, cwd)
   const tooLarge = SR3(shown)
+  if (source.kind !== "given" && !listedHere(source))
+    throw new CliError(words.missing)
   try {
     let read: ReadBytes
     switch (source.kind) {

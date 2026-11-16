@@ -19,7 +19,8 @@
  * already decided whether its link may be used.
  *
  * For rules 3 and 4 a file is there when anything has its name in the
- * folder: a link is not followed to decide it. A link that leads nowhere, or
+ * folder, and for `zekno.app.json` that name exactly (`settingsFileIn`): a
+ * link is not followed to decide it. A link that leads nowhere, or
  * out of the folder, and a folder of that name all count, so neither of the
  * two names can be made to vanish and let the other win without a question.
  * The reader then says what is wrong with the one chosen.
@@ -27,7 +28,11 @@
 import { lstatSync } from "node:fs"
 import { join, resolve } from "node:path"
 
-import { DEFAULT_COMPOSE, type ProjectLink } from "../project/file"
+import {
+  DEFAULT_COMPOSE,
+  listsExactly,
+  type ProjectLink,
+} from "../project/file"
 import { readCompose, type ComposeSource } from "../project/compose-read"
 import { shownFile } from "../project/shown"
 import { composeText } from "./compose"
@@ -50,6 +55,24 @@ export function present(folder: string, name: string): boolean {
   }
 }
 
+/**
+ * Whether `folder` holds a settings file: an entry named exactly
+ * `zekno.app.json` in its listing, looked at as `present` looks. On a disk
+ * that ignores letter case `ZEKNO.APP.JSON` is found under that name too,
+ * and it is not a settings file, as `ZEKNO.JSON` is not a zekno.json (the
+ * file-name case note of feature 004; security review S5): one folder gives
+ * the same choice on every machine. A folder that cannot be listed counts as
+ * holding one, so the reader says what is wrong with it.
+ */
+export function settingsFileIn(folder: string): boolean {
+  if (!present(folder, SETTINGS_FILE)) return false
+  try {
+    return listsExactly(folder, SETTINGS_FILE)
+  } catch {
+    return true
+  }
+}
+
 /** The file a deploy in `cwd` uses, by the rules above. `file` is `-f` as typed; `project` a link that may be used here. */
 export function chooseSource(
   cwd: string,
@@ -69,7 +92,7 @@ export function chooseSource(
   }
   const source = { kind: "default", folder: cwd } as const
   const compose = present(cwd, DEFAULT_COMPOSE)
-  const settings = present(cwd, SETTINGS_FILE)
+  const settings = settingsFileIn(cwd)
   if (compose && settings) return { kind: "both", folder: cwd }
   return settings ? { kind: "settings", source } : { kind: "compose", source }
 }
@@ -114,7 +137,7 @@ export function settingsPlace(cwd: string, link?: ProjectLink): SettingsPlace {
         resolve(chosen.source.link.folder, chosen.source.link.compose)
       ),
       link: chosen.source.link,
-      settingsHere: present(cwd, SETTINGS_FILE),
+      settingsHere: settingsFileIn(cwd),
     }
   return present(cwd, DEFAULT_COMPOSE)
     ? { kind: "compose", file: DEFAULT_COMPOSE, settingsHere: false }

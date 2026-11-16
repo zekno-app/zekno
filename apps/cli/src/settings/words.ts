@@ -387,6 +387,9 @@ export const IN4 =
 /** IN5 */
 export const IN5 =
   "There is no terminal to ask on. Run zekno settings init at a terminal, or write zekno.app.json yourself."
+/** IN7: on a disk that ignores letter case, a file such as ZEKNO.APP.JSON takes the name (security review S5). */
+export const IN7 =
+  "A file here is named zekno.app.json in other capital letters, and this disk takes it as the same name. zekno reads settings only from a file named exactly zekno.app.json: rename that file, or remove it."
 /** IN6 */
 export const IN6 =
   "This folder has compose.yaml too. zekno deploy asks which to deploy, or takes -f <file>."
@@ -443,6 +446,13 @@ export const AS8 = (was?: string, volume = false): string =>
   was === undefined
     ? "! removed, not deployed"
     : `! removed, not deployed (was ${was}${volume ? "; its data stays" : ""})`
+/**
+ * AS9 (security review S4): under a value cut on the settings screen, how
+ * many of its lines are not drawn, and the key that shows it whole: the
+ * Compose text holds every value, and scrolls.
+ */
+export const AS9 = (lines: number): string =>
+  `… ${lines} more ${lines === 1 ? "line" : "lines"}: c shows ${lines === 1 ? "it" : "them"} in the Compose text`
 /** AS4 */
 export const AS4 = "Change a setting"
 /** AS5 */

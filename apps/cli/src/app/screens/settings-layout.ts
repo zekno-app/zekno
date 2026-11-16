@@ -9,7 +9,7 @@
  */
 import { sanitize } from "../../server/sanitize"
 import type { SettingRow } from "../../settings/types"
-import { AS3, AS8 } from "../../settings/words"
+import { AS3, AS8, AS9 } from "../../settings/words"
 import { wrapPieces, type Piece } from "../../ui/ink/wrap"
 import type { KeyHint } from "../../ui/parts/key-hints"
 import { LOGO_HEIGHT } from "../../ui/terminal/logo"
@@ -24,7 +24,11 @@ export const LABEL_WIDTH = 11
 export const MARKER_WIDTH = 2
 /** The label column of the change's `now` and `new` rows (board `AppSettingsEdit`). */
 export const NOW_WIDTH = 5
-/** The most lines the `now` and `new` values of a change take; a longer value ends with "…". */
+/**
+ * The most lines a value takes on the settings screen, in a row and in the
+ * change box, when it does not fit whole: the rest is said by AS9 on the
+ * line under it (security review S4).
+ */
 export const VALUE_LINES = 3
 /** The most columns the value after `n keep` takes in the hint line; a longer one ends with "…". */
 export const KEEP_WIDTH = 24
@@ -163,10 +167,51 @@ export function valuePieces(row: SettingRow, warning: string): Piece[] {
   return pieces
 }
 
+/** A mark's old value, cut to one line of `room` columns: it is what runs now, not what the next deploy runs, and the whole of it is in `zekno settings`. */
+function shortWas(row: SettingRow, room: number): SettingRow {
+  const was = (text: string) => cut(text, Math.max(room, 8))
+  return {
+    ...row,
+    ...(row.changed?.was === undefined
+      ? {}
+      : { changed: { was: was(row.changed.was) } }),
+    ...(row.removed === undefined
+      ? {}
+      : { removed: { was: was(row.removed.was) } }),
+  }
+}
+
+/**
+ * The lines of one row's value in `room` columns (security review S4): the
+ * whole value and its mark when the value takes at most `VALUE_LINES` lines;
+ * else its first `VALUE_LINES` lines and, under them, AS9 (how many more,
+ * and that `c` shows them), faint, then the mark. A mark's old value takes
+ * one line at most. So no value a deploy runs is drawn partly without a
+ * word that more of it is not drawn, and no row is taller than a few lines.
+ */
+export function rowValueLines(
+  row: SettingRow,
+  room: number,
+  warning: string
+): Piece[][] {
+  const short = shortWas(row, room)
+  const value = linesOf([{ text: row.shown, dim: !row.set }], room)
+  if (value.length <= VALUE_LINES)
+    return linesOf(valuePieces(short, warning), room)
+  const mark = valuePieces(short, warning).slice(1)
+  return [
+    ...value.slice(0, VALUE_LINES),
+    ...linesOf(
+      [{ text: AS9(value.length - VALUE_LINES), dim: true }, ...mark],
+      room
+    ),
+  ]
+}
+
 /**
  * The lines of `rows` in `inner` columns: each section's heading where the
  * section changes, then each row, its value going on under itself, never
- * under the labels.
+ * under the labels, cut as `rowValueLines` says.
  */
 export function rowLines(
   rows: readonly SettingRow[],
@@ -182,7 +227,7 @@ export function rowLines(
       section = row.section
       lines.push({ kind: "heading", text: row.section })
     }
-    linesOf(valuePieces(row, warning), room).forEach((pieces, index) =>
+    rowValueLines(row, room, warning).forEach((pieces, index) =>
       lines.push({
         kind: "row",
         row: at,

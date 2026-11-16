@@ -285,13 +285,20 @@ export const isAbove = (dir: string, path: string): boolean =>
   dir !== path && path.startsWith(dir.endsWith(sep) ? dir : `${dir}${sep}`)
 
 /**
- * Whether a folder's listing has a file named exactly zekno.json. On a file
- * system that ignores case, `ZEKNO.JSON` is found under that name too, and it
- * is not a project file: what a person sees in the folder is what counts.
+ * Whether a folder's listing has an entry named exactly `name`. On a file
+ * system that ignores case, `ZEKNO.JSON` is found under the name
+ * `zekno.json` too, and it is not that file: what a person sees in the
+ * folder, and what a disk that heeds case would find, is what counts. Throws
+ * when the folder cannot be listed. `zekno.app.json` is held to it as well
+ * (specs/010-app-settings, security review S5).
  */
+export const listsExactly = (dir: string, name: string): boolean =>
+  readdirSync(dir).includes(name)
+
+/** Whether a folder's listing has a file named exactly zekno.json (`listsExactly`). */
 function listedExactly(dir: string, shown: string): boolean {
   try {
-    return readdirSync(dir).includes(PROJECT_FILE)
+    return listsExactly(dir, PROJECT_FILE)
   } catch {
     throw new CliError(`${shown} could not be read.`)
   }

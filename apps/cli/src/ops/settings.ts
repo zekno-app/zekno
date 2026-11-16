@@ -46,6 +46,7 @@ import { reportOf } from "../settings/rows"
 import {
   namedPath,
   present,
+  settingsFileIn,
   settingsPlace,
   type SettingsPlace,
 } from "../settings/source"
@@ -67,6 +68,7 @@ import {
   IN2_RULE,
   IN4,
   IN6,
+  IN7,
   SH1,
   SH2,
   SH3,
@@ -267,7 +269,9 @@ export function writeSettingChange(plan: SettingPlan): void {
 
 /**
  * `zekno settings init` before it asks: IN4 when anything named
- * `zekno.app.json` is in this folder already, a link to nowhere included.
+ * `zekno.app.json` is in this folder already, a link to nowhere included;
+ * IN7 when that name is taken on this disk by a file named in other letter
+ * case, which is no settings file and which init cannot add one beside.
  * `linked`: SH3, said once the file is made, when the zekno.json in use here
  * names another file than the one init makes, which the next deploy then
  * does not use; else `compose`: whether compose.yaml is here too (IN6). A
@@ -277,7 +281,9 @@ export function prepareInit(deps: Pick<OpDeps, "cwd" | "home">): {
   compose: boolean
   linked?: string
 } {
-  if (present(deps.cwd, SETTINGS_FILE)) throw new CliError(IN4)
+  // The name taken on this disk, by the settings file or by one that differs from it in letter case only (security review S5).
+  if (present(deps.cwd, SETTINGS_FILE))
+    throw new CliError(settingsFileIn(deps.cwd) ? IN4 : IN7)
   let link: ProjectLink | undefined
   try {
     link = linkInUse(deps)

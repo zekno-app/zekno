@@ -16,7 +16,14 @@ import { Box, Text } from "ink"
 import { sanitize } from "../../server/sanitize"
 import { SETTINGS_FILE } from "../../settings/file"
 import type { SettingPath, SettingRow } from "../../settings/types"
-import { AS4, AS5, CS9, restartShown, settingWords } from "../../settings/words"
+import {
+  AS4,
+  AS5,
+  AS9,
+  CS9,
+  restartShown,
+  settingWords,
+} from "../../settings/words"
 import { firstSentence } from "../../ui/ink/questions"
 import type { Piece } from "../../ui/ink/wrap"
 import type { KeyHint } from "../../ui/parts/key-hints"
@@ -39,6 +46,9 @@ import {
 } from "./settings-layout"
 import { Lines, RowWindow } from "./settings-rows"
 
+/** The fewest lines a window of rows takes: three rows, and a `more` line above and below (`listWindow`). */
+const ROWS_LEAST = 5
+
 /** The hints of the change's stage (contracts/app-screen.md, "Keys"): asking names the value `n` keeps. */
 export function changeHints(change: ScreenChange): readonly KeyHint[] {
   if (change.stage === "typing") return TYPING_HINTS
@@ -55,15 +65,18 @@ const wordsOf = (path: SettingPath) =>
     path.key === "plain" || path.key === "volume" ? path.name : ""
   )
 
-/** Lines of `pieces` in `width` columns, at most `most`; the last one kept ends with "…" when more were cut. */
+/**
+ * Lines of `pieces` in `width` columns, at most `most`, and when more were
+ * cut, AS9 under them, faint: how many more, and the key that shows them
+ * (security review S4), as a row of the screen says it.
+ */
 function capped(pieces: readonly Piece[], width: number, most: number) {
   const lines = linesOf(pieces, width)
   if (lines.length <= most) return lines
-  const kept = lines.slice(0, most)
-  const last = kept[most - 1]!
-  const text = last.map((piece) => piece.text).join("")
-  kept[most - 1] = [{ ...last[0], text: cut(`${text}…`, width) }]
-  return kept
+  return [
+    ...lines.slice(0, most),
+    ...linesOf([{ text: AS9(lines.length - most), dim: true }], width),
+  ]
 }
 
 /**
@@ -82,9 +95,14 @@ function typedShown(typed: string, question: string, inner: number): string {
   return `…${tail}`
 }
 
-/** A label of the box, faint, padded to its column, and the lines of its value after it. */
-function labelled(label: string, value: Piece[], inner: number): Piece[][] {
-  return capped(value, inner - NOW_WIDTH, VALUE_LINES).map((line, index) => [
+/** A label of the box, faint, padded to its column, and the lines of its value after it, at most `most`. */
+function labelled(
+  label: string,
+  value: Piece[],
+  inner: number,
+  most: number
+): Piece[][] {
+  return capped(value, inner - NOW_WIDTH, most).map((line, index) => [
     { text: (index === 0 ? label : "").padEnd(NOW_WIDTH), dim: true },
     ...line,
   ])
@@ -100,7 +118,8 @@ export function boxLines(
   change: ScreenChange,
   theme: Theme,
   inner: number,
-  file = SETTINGS_FILE
+  file = SETTINGS_FILE,
+  most = VALUE_LINES
 ): Piece[][] {
   const words = wordsOf(change.path)
   const lines: Piece[][] = linesOf(
@@ -155,11 +174,12 @@ export function boxLines(
   }
   const { first, rest } = firstSentence(CS9(file))
   lines.push(
-    ...labelled(AS5.now, [{ text: change.now }], inner),
+    ...labelled(AS5.now, [{ text: change.now }], inner, most),
     ...labelled(
       AS5.new,
       [{ text: change.next?.shown ?? "", bold: true }],
-      inner
+      inner,
+      most
     ),
     ...linesOf(
       ask([
@@ -209,13 +229,14 @@ export function ChangePane({
   const section = rows[at]?.section
   const shown = rows.filter((row) => row.section === section)
   const inner = wholeInner(columns)
-  const box = boxLines(
-    service,
-    change,
-    theme,
-    boxInner(columns),
-    read.report.file
-  )
+  // The old and the new value whole when the pane holds them; else each cut to the most lines that fit, with AS9 under them.
+  // The room: the pane's border, its first line, the box's border, and the fewest lines a window of the rows above takes.
+  const room = body - 2 - 1 - 2 - ROWS_LEAST
+  const boxOf = (most: number) =>
+    boxLines(service, change, theme, boxInner(columns), read.report.file, most)
+  let box = boxOf(Infinity)
+  for (let most = VALUE_LINES; box.length > room && most >= 1; most--)
+    box = boxOf(most)
   return (
     <Pane
       title={service}

