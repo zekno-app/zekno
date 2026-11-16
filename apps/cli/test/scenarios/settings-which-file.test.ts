@@ -114,13 +114,14 @@ describe("A: a sub-folder under a linked root", () => {
     })
     // set, unset and compose judge the link without the keychain, and connect nowhere.
     noKeychain(m)
+    // The line that says it was written names the file, as it is not this folder's own (security review S7).
     expect(
       await piped(m, "settings", "set", "web.memory", "2g", "--yes")
     ).toEqual({
       code: 0,
       out: [
         "web · memory limit  no limit → 2g",
-        "Written  Run zekno deploy to use it.",
+        `Written to ${shown}  Run zekno deploy to use it.`,
       ],
       err: [],
     })
@@ -352,5 +353,65 @@ describe("a zekno.json the deploy leaves aside", () => {
     })
     if (!read.ok) throw new Error("the deploy did not verify")
     expect(read.value.deploy.compose).toBe(composeText(runs(HIDDEN)))
+  }, 60_000)
+})
+
+describe("the options a settings command takes (security review S7)", () => {
+  const HELP_LINE = "\nRun `zekno --help` for the list of commands."
+
+  test("--app, --server, -f and any other option a settings command does not take: status 2, the sentence and the help line, nothing printed or written", async () => {
+    const { m, signedFile } = await subFolder()
+    for (const [args, said] of [
+      [
+        ["settings", "compose", "--app", "billing", "--server", "dev"],
+        "`zekno settings compose` does not take `--app`.",
+      ],
+      [
+        ["settings", "-f", "zekno.app.json"],
+        "`zekno settings` does not take `-f`.",
+      ],
+      [
+        ["settings", "set", "web.memory", "2g", "--yes", "--server", "dev"],
+        "`zekno settings set` does not take `--server`.",
+      ],
+      [
+        ["settings", "unset", "web.plain.FROM", "--yes", "--file", "x.yaml"],
+        "`zekno settings unset` does not take `-f`.",
+      ],
+      [
+        ["settings", "compose", "--json"],
+        "`zekno settings compose` does not take `--json`.",
+      ],
+      [["settings", "--yes"], "`zekno settings` does not take `--yes`."],
+      [
+        ["settings", "init", "--force"],
+        "`zekno settings init` does not take `--force`.",
+      ],
+    ] as const)
+      expect({ args, run: await piped(m, ...args) }).toEqual({
+        args,
+        run: { code: 2, out: [], err: [`${said}${HELP_LINE}`] },
+      })
+    expect(text(signedFile)).toBe(fileOf(ROOT))
+    // Their own options are taken as before.
+    expect((await piped(m, "settings", "--json")).code).toBe(0)
+  }, 60_000)
+
+  test("with --yes, the line that says it was written names the file when it is not this folder's own", async () => {
+    const { m } = await linkedElsewhere()
+    expect(
+      (await piped(m, "settings", "set", "web.memory", "2g", "--yes")).out
+    ).toEqual([
+      "web · memory limit  no limit → 2g",
+      "Written to deploy/zekno.app.json  Run zekno deploy to use it.",
+    ])
+    const own = machine()
+    writeFileSync(join(own.project, "zekno.app.json"), fileOf(VISIBLE))
+    expect(
+      (await piped(own, "settings", "set", "web.memory", "2g", "--yes")).out
+    ).toEqual([
+      "web · memory limit  no limit → 2g",
+      "Written  Run zekno deploy to use it.",
+    ])
   }, 60_000)
 })

@@ -16,6 +16,7 @@ import { isReservedSecretName, LIMITS, SECRET_NAME } from "@workspace/core"
 
 import { holdsHidden } from "../server/sanitize"
 import {
+  BLANK_RULE,
   HIDDEN_RULE,
   IN2_RULE,
   settingWords,
@@ -95,6 +96,21 @@ export function holdsOnlyAllowed(text: string): boolean {
  * setting is held to an ASCII pattern, which refuses them already.
  */
 export const holdsInvisible = (text: string): boolean => holdsHidden(text)
+
+/** A blank: Unicode's `White_Space`, and the braille blank (U+2800), which draws as a space too. */
+const BLANK = /^[\p{White_Space}\u2800]$/u
+
+/**
+ * Whether a text starts or ends with a blank (security review S8): drawn at
+ * the end of a line it is not seen, so `true ` would read as `true` and be
+ * signed as it is. A blank inside a text is seen, and stays allowed.
+ */
+export function blankAtAnEnd(text: string): boolean {
+  const chars = [...text]
+  return (
+    chars.length > 0 && (BLANK.test(chars[0]!) || BLANK.test(chars.at(-1)!))
+  )
+}
 
 /** Characters as a person counts them: code points, not UTF-16 units. */
 export const characters = (text: string): number => [...text].length
@@ -197,6 +213,9 @@ export function splitStart(
     words.push(word)
   }
   if (words.length === 0) return { problem: "empty" }
+  // Spaces around the words only separate them and are never signed (the Compose text holds the words); any other blank
+  // at either end would be part of the first or the last word, run as it is and not seen (security review S8).
+  if (blankAtAnEnd(command.replace(/^ +| +$/g, ""))) return { problem: "blank" }
   if (words.length > MAX_WORDS) return { problem: "long" }
   return { words }
 }
@@ -290,20 +309,22 @@ export function checkPlainName(name: string): string | undefined {
 
 /**
  * What is wrong with a plain variable's value: a character no setting holds
- * or more than 4096 characters (`form`), or a character drawn as nothing
- * (`hidden`); empty is a value.
+ * or more than 4096 characters (`form`), a character drawn as nothing
+ * (`hidden`), or a blank at either end (`blank`); empty is a value.
  */
 export function plainValueProblem(
   value: string
-): "form" | "hidden" | undefined {
+): "form" | "hidden" | "blank" | undefined {
   if (!holdsOnlyAllowed(value) || characters(value) > MAX_TEXT) return "form"
-  return holdsInvisible(value) ? "hidden" : undefined
+  if (holdsInvisible(value)) return "hidden"
+  return blankAtAnEnd(value) ? "blank" : undefined
 }
 
 /** A plain variable's value: one line, no control or invisible character, at most 4096 characters; empty is a value. */
 export function checkPlainValue(value: string): string | undefined {
   const problem = plainValueProblem(value)
   if (problem === undefined) return undefined
+  if (problem === "blank") return BLANK_RULE
   return problem === "form" ? settingWords("plain").rule : HIDDEN_RULE
 }
 

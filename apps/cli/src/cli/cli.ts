@@ -136,6 +136,19 @@ function readableProject(cwd: string): ProjectLink | undefined {
   }
 }
 
+/** The options each settings command takes; any other given to one is refused (security review S7). */
+const SETTINGS_OPTIONS: Record<string, readonly string[]> = {
+  settings: ["json"],
+  "settings set": ["yes"],
+  "settings unset": ["yes"],
+  "settings compose": [],
+  "settings init": [],
+}
+
+/** Said when a settings command is given an option it does not take. `-f` is the short form of `--file`. */
+export const optionNotTaken = (name: string, option: string): string =>
+  `\`zekno ${name}\` does not take ${option === "file" ? "`-f`" : `\`--${option}\``}.`
+
 /**
  * Runs one command and returns the exit status: 0 for success, 1 when the
  * action failed or was refused, 2 for wrong usage.
@@ -189,6 +202,14 @@ export async function run(argv: string[], given: Deps): Promise<number> {
           : `Unexpected "${positionals[WORDS[name]!]}" after \`zekno ${name}\`.`
       )
     }
+    // The settings commands take only their own options: `--app`, `--server` or `-f` would look like a deploy's and change
+    // nothing here (specs/010-app-settings, security review S7). Every other command reads its arguments as before.
+    const unused = Object.hasOwn(SETTINGS_OPTIONS, name)
+      ? Object.keys(values).find(
+          (option) => !SETTINGS_OPTIONS[name]!.includes(option)
+        )
+      : undefined
+    if (unused !== undefined) throw new UsageError(optionNotTaken(name, unused))
 
     // The two versions built into the program, before anything opens the team: no keychain, no profile, no connection, no file.
     // Only the command `version` then asks GitHub whether a newer release exists; `--version` never uses the network (FR-036).

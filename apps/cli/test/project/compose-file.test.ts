@@ -3,14 +3,20 @@ import { LIMITS } from "@workspace/core"
 
 import { composeServices } from "../../src/shared/views"
 import {
+  aliasesTooMany,
   COMPOSE_READ_BYTES,
   expectedValues,
+  inSettingsForm,
   interpolated,
   MAX_ALIASES,
   MAX_NAMES,
   MAX_NODES,
   tooManyAliases,
 } from "../../src/project/compose-file"
+import { composeText } from "../../src/settings/compose"
+import { checkSettings, isSettings } from "../../src/settings/schema"
+import type { Settings } from "../../src/settings/types"
+import { DESIGN_SETTINGS, GOOD_FILES } from "../support/settings-files"
 
 describe("environment", () => {
   test("as a list: a name with no `=` is expected; `NAME=value` and `NAME=` are not", () => {
@@ -275,5 +281,73 @@ describe("at most 64 names", () => {
         `services:\n  web:\n    command: "${used}"\n    environment:\n      - FIRST\n`
       )
     ).toEqual(["FIRST", ...Array.from({ length: 20 }, (_, n) => `USED_${n}`)])
+  })
+})
+
+describe("text in the form zekno writes from settings (specs/010-app-settings, security review S9)", () => {
+  /** The review's case: a plain value of 500 asterisks beside a secret never set. */
+  const MASKED: Settings = {
+    version: 1,
+    services: [
+      [
+        "web",
+        {
+          image: "ghcr.io/acme/web:1",
+          start: 'sh -c "echo \\"*\\" && exec bun run start"',
+          secrets: ["JWT_SECRET"],
+          plain: [
+            ["MASK", "*".repeat(500)],
+            ["REQUIRE_AUTH", "1"],
+          ],
+        },
+      ],
+    ],
+  }
+
+  test("500 asterisks in a value: the guard would count them, the form shows none is an alias, and the secret is still named", () => {
+    const text = composeText(MASKED)
+    expect(tooManyAliases(text)).toBe(true)
+    expect(inSettingsForm(text)).toBe(true)
+    expect(aliasesTooMany(text)).toBe(false)
+    expect(expectedValues(text)).toEqual(["JWT_SECRET"])
+    expect(composeServices(text)).toEqual(["web (ghcr.io/acme/web:1)"])
+  })
+
+  test("the guard is unchanged for any other text: a hand-written file with the same asterisks gives no names, as before", () => {
+    const handWritten = `services:\n  web:\n    image: ghcr.io/acme/web:1\n    environment:\n      JWT_SECRET: \${JWT_SECRET}\n      MASK: "${"*".repeat(500)}"\n`
+    expect(inSettingsForm(handWritten)).toBe(false)
+    expect(aliasesTooMany(handWritten)).toBe(true)
+    expect(expectedValues(handWritten)).toEqual([])
+  })
+
+  test("a line zekno does not write, or an alias put among its lines, is not the form", () => {
+    const text = composeText(MASKED)
+    for (const changed of [
+      text.replace('    image: "ghcr.io/acme/web:1"', "    image: *a"),
+      text.replace('["sh", "-c",', '["sh", *b,'),
+      text.replace('"REQUIRE_AUTH": "1"', '"REQUIRE_AUTH": &a "1"'),
+      text.replace('"REQUIRE_AUTH": "1"', '"REQUIRE_AUTH": !!binary "1"'),
+      text.replace('"REQUIRE_AUTH": "1"', '"REQUIRE_AUTH": "1" # *c'),
+      text.replace('"REQUIRE_AUTH": "1"', '"REQUIRE_AUTH": "1\\x41"'),
+      `${text}x-extra: *d\n`,
+      text.slice(0, -1),
+      "",
+    ])
+      expect({ changed, form: inSettingsForm(changed) }).toEqual({
+        changed,
+        form: false,
+      })
+    expect(inSettingsForm(composeText(DESIGN_SETTINGS))).toBe(true)
+    for (const file of GOOD_FILES) {
+      const read = checkSettings(file.text, "zekno.app.json")
+      if (!isSettings(read)) throw new Error(file.name)
+      expect({
+        name: file.name,
+        form: inSettingsForm(composeText(read)),
+      }).toEqual({
+        name: file.name,
+        form: true,
+      })
+    }
   })
 })

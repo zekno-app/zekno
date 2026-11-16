@@ -115,15 +115,18 @@ export const SV8 = (svc: string): PlaceRule =>
     "use an image reference, such as ghcr.io/acme/web:1.4.2."
   )
 
-/** What can be wrong with a start command: SV9 (a) to (e) and (g); (f) is not a string. */
+/** What can be wrong with a start command: SV9 (a) to (e), (g) and (h); (f) is not a string. */
 export type StartProblem =
-  "empty" | "quote" | "shell" | "long" | "control" | "hidden"
+  "empty" | "quote" | "shell" | "long" | "control" | "hidden" | "blank"
 
 /** The rule of a value holding a character drawn as nothing (security review S2), after its place: SV9 (g) and SV24's second form. */
 const HIDDEN =
   "use no invisible character, such as a zero-width space or a right-to-left mark."
 
-/** SV9 (a) to (e) and (g), as the rule after the place. */
+/** The rule of a value that starts or ends with a blank (security review S8), after its place: SV9 (h) and SV24's third form. */
+const BLANK_ENDS = "use no space or other blank at its start or end."
+
+/** SV9 (a) to (e), (g) and (h), as the rule after the place. */
 const START_RULES: Record<StartProblem, string> = {
   empty: "use a command, or leave start out to run the image's own.",
   quote: "a quote does not close.",
@@ -132,9 +135,15 @@ const START_RULES: Record<StartProblem, string> = {
   long: "use at most 4096 characters and 256 words.",
   control: "use one line with no control character.",
   hidden: HIDDEN,
+  blank: BLANK_ENDS,
 }
+/** A rule after its place, as a sentence of its own. */
+const sentence = (rule: string): string =>
+  `${rule.charAt(0).toUpperCase()}${rule.slice(1)}`
 /** The same rule as a sentence of its own, after `That is not ...` (CS7) for a value typed. */
-export const HIDDEN_RULE = `${HIDDEN.charAt(0).toUpperCase()}${HIDDEN.slice(1)}`
+export const HIDDEN_RULE = sentence(HIDDEN)
+/** The same for a blank at either end (security review S8). */
+export const BLANK_RULE = sentence(BLANK_ENDS)
 /** SV9: (a) to (e) and (g) by the problem, (f) `type` for a start that is not a string. */
 export const SV9 = (svc: string, problem: StartProblem | "type"): PlaceRule =>
   at(
@@ -200,13 +209,19 @@ export const SV23 = (svc: string, n: number): PlaceRule =>
     `${svc}, variables.plain`,
     `a variable name uses letters, digits and underscore, does not start with a digit, and is at most 128 characters (line ${n}).`
   )
-/** SV24; `hidden`: the value holds a character drawn as nothing (security review S2). */
-export const SV24 = (svc: string, name: string, hidden = false): PlaceRule =>
+/** SV24; `hidden`: the value holds a character drawn as nothing (security review S2); `blank`: it starts or ends with a blank (S8). */
+export const SV24 = (
+  svc: string,
+  name: string,
+  problem: "form" | "hidden" | "blank" = "form"
+): PlaceRule =>
   at(
     `${svc}, variables.plain.${name}`,
-    hidden
+    problem === "hidden"
       ? HIDDEN
-      : "use a value in quotes, one line with no control character, at most 4096 characters."
+      : problem === "blank"
+        ? BLANK_ENDS
+        : "use a value in quotes, one line with no control character, at most 4096 characters."
   )
 /** SV25 */
 export const SV25 = (svc: string, name: string): PlaceRule =>
@@ -364,6 +379,8 @@ export const CS10 = (file: string): string =>
   `There is no terminal to ask on. Add \`--yes\` to write it to ${file}.`
 /** CS11: the text and its detail. */
 export const CS11 = { text: "Written", detail: "Run zekno deploy to use it." }
+/** CS11's text when the file written is not this folder's own `zekno.app.json` (security review S7). */
+export const CS11_TO = (file: string): string => `Written to ${file}`
 /** CS12 */
 export const CS12 = (file: string): string =>
   `${file} changed since zekno read it, so nothing was written. Try again.`

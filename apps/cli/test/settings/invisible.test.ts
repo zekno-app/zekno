@@ -242,3 +242,81 @@ describe("readTyped: zekno settings set and the screen refuse the same", () => {
     expect(checkPlainValue("café 東京 🚀")).toBeUndefined()
   })
 })
+
+describe("a blank at either end (security review S8)", () => {
+  /** The review's ten, and the ordinary space. */
+  const BLANKS: readonly [string, string][] = [
+    ["space", " "],
+    ["no-break space", "\u00a0"],
+    ["Ogham space mark", "\u1680"],
+    ["en quad", "\u2000"],
+    ["hair space", "\u200a"],
+    ["thin space", "\u2009"],
+    ["narrow no-break space", "\u202f"],
+    ["medium mathematical space", "\u205f"],
+    ["ideographic space", "\u3000"],
+    ["braille blank", "\u2800"],
+  ]
+  const BLANK_RULE = "use no space or other blank at its start or end."
+
+  test("a plain value that starts or ends with one: SV24, naming the place and never the content; typed, the same", () => {
+    for (const [what, blank] of BLANKS)
+      for (const value of [`true${blank}`, `${blank}true`]) {
+        expect({
+          what,
+          value,
+          said: sentence(
+            fileWith({ variables: { plain: { REQUIRE_AUTH: value } } })
+          ),
+        }).toEqual({
+          what,
+          value,
+          said: `zekno.app.json could not be read as settings. web, variables.plain.REQUIRE_AUTH: ${BLANK_RULE}`,
+        })
+        expect(
+          readTyped(
+            { service: "web", key: "plain", name: "REQUIRE_AUTH" },
+            value
+          )
+        ).toEqual({
+          refused: "Use no space or other blank at its start or end.",
+        })
+      }
+  })
+
+  test("a start command whose first or last word starts or ends with one: SV9 (h); the spaces that only separate words stay allowed", () => {
+    for (const [what, blank] of BLANKS.slice(1))
+      for (const start of [
+        `bun run start${blank}`,
+        `${blank}bun run start`,
+        ` bun run start${blank} `,
+      ])
+        expect({
+          what,
+          start,
+          said: sentence(fileWith({ deploy: { start } })),
+        }).toEqual({
+          what,
+          start,
+          said: `zekno.app.json could not be read as settings. web, deploy.start: ${BLANK_RULE}`,
+        })
+    expect(checkStart("  node   server.js  ")).toBeUndefined()
+    expect(
+      readTyped({ service: "web", key: "start" }, "bun run start\u00a0")
+    ).toEqual({ refused: "Use no space or other blank at its start or end." })
+  })
+
+  test("blanks inside a value stay allowed, and an empty value is a value", () => {
+    for (const [what, blank] of BLANKS) {
+      expect({ what, plain: checkPlainValue(`a${blank}b`) }).toEqual({
+        what,
+        plain: undefined,
+      })
+      expect({ what, start: checkStart(`echo a${blank}b`) }).toEqual({
+        what,
+        start: undefined,
+      })
+    }
+    expect(checkPlainValue("")).toBeUndefined()
+  })
+})

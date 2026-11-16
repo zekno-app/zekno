@@ -28,7 +28,7 @@
  * Nothing here imports schema.ts: the text is made from settings already
  * checked, and schema.ts uses `composeText` for the size rule (SV33).
  */
-import { COMPOSE_READ_BYTES, tooManyAliases } from "../project/compose-file"
+import { aliasesTooMany, COMPOSE_READ_BYTES } from "../project/compose-file"
 import type { ServiceSettings, Settings } from "./types"
 import { joinStart, splitStart } from "./values"
 
@@ -182,7 +182,8 @@ function serviceOf(parsed: unknown): ServiceSettings | undefined {
  * compared, never signed, sent or written.
  */
 export function deployedSettings(text: string): Settings | undefined {
-  if (Buffer.byteLength(text) > COMPOSE_READ_BYTES || tooManyAliases(text))
+  // A text in the form zekno writes holds no alias, whatever its values hold (`aliasesTooMany`, security review S9).
+  if (Buffer.byteLength(text) > COMPOSE_READ_BYTES || aliasesTooMany(text))
     return undefined
   try {
     const parsed: unknown = Bun.YAML.parse(text)

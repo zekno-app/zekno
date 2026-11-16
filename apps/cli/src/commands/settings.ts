@@ -16,10 +16,12 @@ import {
   writeSettingChange,
 } from "../ops/settings"
 import { sanitize } from "../server/sanitize"
+import { SETTINGS_FILE } from "../settings/file"
 import { checkImage, checkServiceName } from "../settings/values"
 import {
   CS10,
   CS11,
+  CS11_TO,
   CS9,
   IN1,
   IN1_RULE,
@@ -77,7 +79,11 @@ async function change(
   const file = prepared.read.shown
   if (!yes && !(await deps.ui.confirm(CS9(file), CS10(file)))) throw new Left()
   writeSettingChange(prepared)
-  deps.ui.success(CS11.text, CS11.detail)
+  // A file other than this folder's own is named: the one a link names, which the person may not expect (security review S7).
+  deps.ui.success(
+    file === SETTINGS_FILE ? CS11.text : CS11_TO(file),
+    CS11.detail
+  )
   // A deploy here asks which file to use, or takes -f: the file written is one of two.
   if (prepared.both) deps.ui.note(IN6)
   return 0

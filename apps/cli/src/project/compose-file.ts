@@ -71,6 +71,93 @@ export function tooManyAliases(text: string): boolean {
   return false
 }
 
+/** Where a double-quoted scalar that starts at `at` ends, past its closing quote, with only `\\` and `\"` escaped inside, as zekno's settings write one; -1 for anything else. */
+function quotedEnd(line: string, at: number): number {
+  if (line[at] !== '"') return -1
+  for (let index = at + 1; index < line.length; index++) {
+    const char = line[index]
+    if (char === '"') return index + 1
+    if (char === "\\") {
+      const next = line[index + 1]
+      if (next !== "\\" && next !== '"') return -1
+      index++
+    }
+  }
+  return -1
+}
+
+/** Whether `line` from `at` is one double-quoted scalar, then exactly `rest`. */
+const quotedThen = (line: string, at: number, rest: string): boolean => {
+  const end = quotedEnd(line, at)
+  return end !== -1 && line.slice(end) === rest
+}
+
+/** Whether `line` from `at` is `[` and double-quoted scalars joined by `, ` and `]`, to its end. */
+function quotedList(line: string, at: number): boolean {
+  if (line[at] !== "[") return false
+  for (let index = at + 1; ;) {
+    const end = quotedEnd(line, index)
+    if (end === -1) return false
+    if (line.slice(end) === "]") return true
+    if (!line.startsWith(", ", end)) return false
+    index = end + 2
+  }
+}
+
+/** The lines zekno writes from settings (contracts/compose-text.md), by what each starts with. */
+const SETTINGS_LINES: readonly ((line: string) => boolean)[] = [
+  (line) =>
+    [
+      "services:",
+      "volumes:",
+      "    environment:",
+      "    volumes:",
+      '      - type: "volume"',
+    ].includes(line),
+  (line) => line.startsWith("  ") && quotedThen(line, 2, ":"),
+  (line) => line.startsWith("  ") && quotedThen(line, 2, ": {}"),
+  (line) =>
+    ["    image: ", "    restart: ", "    mem_limit: "].some(
+      (start) => line.startsWith(start) && quotedThen(line, start.length, "")
+    ),
+  (line) => /^    cpus: [0-9]{1,4}(\.[0-9]{1,2})?$/.test(line),
+  (line) =>
+    ["    command: ", "    expose: ", "    ports: "].some(
+      (start) => line.startsWith(start) && quotedList(line, start.length)
+    ),
+  (line) => {
+    if (!line.startsWith("      ")) return false
+    const end = quotedEnd(line, 6)
+    return (
+      end !== -1 && line.startsWith(": ", end) && quotedThen(line, end + 2, "")
+    )
+  },
+  (line) =>
+    ["        source: ", "        target: "].some(
+      (start) => line.startsWith(start) && quotedThen(line, start.length, "")
+    ),
+]
+
+/**
+ * Whether a Compose text has only the lines zekno writes from settings
+ * (contracts/compose-text.md; `composeText`): fixed keys, and every name and
+ * value a double-quoted scalar where a node starts. Such a text holds no
+ * anchor, alias or tag, whatever its values hold: a `*` in it is inside a
+ * quoted scalar, which `tooManyAliases` cannot tell (security review S9). So
+ * it needs no alias count; a text in any other form still does, unchanged.
+ */
+export function inSettingsForm(text: string): boolean {
+  if (!text.endsWith("\n")) return false
+  return text
+    .slice(0, -1)
+    .split("\n")
+    .every((line) => SETTINGS_LINES.some((form) => form(line)))
+}
+
+/** Whether a Compose text may use more aliases than it can be parsed with: one in zekno's settings form holds none. */
+export const aliasesTooMany = (text: string): boolean =>
+  !inSettingsForm(text) && tooManyAliases(text)
+
 /** An environment variable's name, as Compose reads one. */
 const VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/
 const VARIABLE_START = /^[A-Za-z_][A-Za-z0-9_]*/
@@ -193,7 +280,7 @@ const usable = (name: string): boolean =>
  * the walk's bounds.
  */
 export function expectedValues(compose: string): string[] {
-  if (compose.length > COMPOSE_READ_BYTES || tooManyAliases(compose)) return []
+  if (compose.length > COMPOSE_READ_BYTES || aliasesTooMany(compose)) return []
   let parsed: unknown
   try {
     // Bun's parser refuses excessive aliasing and stops on nesting too deep for it.

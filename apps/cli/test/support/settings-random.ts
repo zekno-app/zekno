@@ -6,7 +6,7 @@
  */
 import { composeText } from "../../src/settings/compose"
 import type { ServiceSettings, Settings } from "../../src/settings/types"
-import { joinStart, splitStart } from "../../src/settings/values"
+import { blankAtAnEnd, joinStart, splitStart } from "../../src/settings/values"
 
 export const IMAGE = "ghcr.io/acme/web:1.4.2"
 export const one = (
@@ -171,6 +171,11 @@ export function randomSettings(random: ReturnType<typeof generator>): Settings {
     Array.from({ length: 1 + random.below(3) }, () => random.pick(POOL)).join(
       ""
     )
+  // A plain value may not start or end with a blank (security review S8): such a draw is put between brackets.
+  const plainText = () => {
+    const drawn = text()
+    return blankAtAnEnd(drawn) ? `[${drawn}]` : drawn
+  }
   return {
     version: 1,
     services: names.map((name) => {
@@ -199,7 +204,7 @@ export function randomSettings(random: ReturnType<typeof generator>): Settings {
       if (secrets.length > 0) service.secrets = secrets
       const plain = PLAIN_NAMES.filter(
         (each) => !secrets.includes(each) && random.chance(0.3)
-      ).map((each) => [each, text()] as const)
+      ).map((each) => [each, plainText()] as const)
       if (plain.length > 0) service.plain = plain
       const volumes = VOLUME_NAMES.filter(() => random.chance(0.25)).map(
         (each, at) => [each, `/v${at}/${each}`] as const

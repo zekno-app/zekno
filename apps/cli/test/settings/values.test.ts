@@ -364,9 +364,13 @@ describe("readTyped: a value as typed for set or the screen", () => {
     expect(readTyped({ service: "web", key: "secrets" }, "A, B,C")).toEqual({
       value: ["A", "B", "C"],
     })
+    // Inner spaces are kept as typed; a blank at either end is refused (security review S8).
+    expect(
+      readTyped({ service: "web", key: "plain", name: "X" }, "as  it is")
+    ).toEqual({ value: "as  it is" })
     expect(
       readTyped({ service: "web", key: "plain", name: "X" }, "  as it is ")
-    ).toEqual({ value: "  as it is " })
+    ).toEqual({ refused: "Use no space or other blank at its start or end." })
     expect(readTyped({ service: "web", key: "plain", name: "X" }, "")).toEqual({
       value: "",
     })

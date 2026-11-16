@@ -156,7 +156,7 @@ const PlainSchema = z
       if (problem !== undefined)
         context.addIssue({
           code: "custom",
-          message: problem === "form" ? "SV24" : "SV24:hidden",
+          message: problem === "form" ? "SV24" : `SV24:${problem}`,
         })
     }),
     fails("SV22")

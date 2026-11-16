@@ -14,6 +14,7 @@ import {
   deployedSettings,
   quote,
 } from "../../src/settings/compose"
+import { reportOf } from "../../src/settings/rows"
 import type { ServiceSettings, Settings } from "../../src/settings/types"
 import { joinStart, splitStart } from "../../src/settings/values"
 import {
@@ -388,5 +389,46 @@ describe("deployedSettings (contracts/compose-text.md, Reading it back)", () => 
     expect(splitStart(back.services[0]![1].start!)).toEqual(
       splitStart(settings.services[0]![1].start!)
     )
+  })
+})
+
+describe("the marks against a deploy with 500 asterisks in a value (security review S9)", () => {
+  test("the deployed settings read back, so a variable removed since is marked, and a service too", () => {
+    const deployed: Settings = {
+      version: 1,
+      services: [
+        [
+          "web",
+          {
+            image: "ghcr.io/acme/web:1",
+            plain: [
+              ["MASK", "*".repeat(500)],
+              ["REQUIRE_AUTH", "1"],
+            ],
+          },
+        ],
+        ["auth", { image: "ghcr.io/acme/auth:1" }],
+      ],
+    }
+    const back = deployedSettings(composeText(deployed))
+    expect(back).toEqual(deployed)
+    const now: Settings = {
+      version: 1,
+      services: [
+        [
+          "web",
+          { image: "ghcr.io/acme/web:1", plain: [["MASK", "*".repeat(500)]] },
+        ],
+      ],
+    }
+    const report = reportOf(now, back, "demo")
+    expect(
+      report.services[0]!.rows.filter((row) => row.removed).map(
+        (row) => row.removed
+      )
+    ).toEqual([{ was: "REQUIRE_AUTH=1" }])
+    expect(report.removed).toEqual([
+      { name: "auth", was: "ghcr.io/acme/auth:1" },
+    ])
   })
 })
