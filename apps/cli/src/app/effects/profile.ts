@@ -6,7 +6,7 @@ import { openTeam, TAMPERED, type OpDeps, type Team } from "../../cli/context"
 import { createTeam } from "../../ops/init"
 import { profileStore } from "../../profile/profile"
 import { findProject } from "../../project/file"
-import { aboveOf } from "../../project/project"
+import { aboveOf, namedFile } from "../../project/project"
 import { notSignedHere, standingOf } from "../../project/signed"
 import { tilde } from "../../project/shown"
 import { sanitize } from "../../server/sanitize"
@@ -95,6 +95,8 @@ export async function loadStart(
     if (standing.kind === "new") {
       // A file in a folder above is named with its folder and Compose file: that is what a "yes" deploys.
       const above = aboveOf(link, deps.cwd)
+      // In this folder, the file it names when that is not compose.yaml, as the single commands ask (security review S6).
+      const file = above ? undefined : namedFile(link)
       return {
         ...verified,
         firstUse: {
@@ -103,6 +105,7 @@ export async function loadStart(
           path: link.path,
           sha256: link.sha256,
           ...(above ? { above } : {}),
+          ...(file === undefined ? {} : { file }),
         },
       }
     }

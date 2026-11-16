@@ -92,13 +92,22 @@ export function aboveOf(
 }
 
 /**
+ * The file a project file in this folder names, as the first-use question
+ * says it: a "yes" deploys that file, so it is named when it is not
+ * `compose.yaml` (specs/010-app-settings, security review S6). Undefined for
+ * `compose.yaml`, whose question is worded as before. The single commands
+ * (`useQuestion`) and the full-screen app (`loadStart`) ask with it.
+ */
+export const namedFile = (link: ProjectLink): string | undefined =>
+  link.compose === DEFAULT_COMPOSE ? undefined : sanitize(link.compose)
+
+/**
  * The question at a terminal the first time a file signed by the team is
  * met here: who linked which folder to what (the folder and its Compose file
  * named when the file is in a folder above, `aboveOf`; in this folder, the
- * file named when it is not `compose.yaml`, since a "yes" deploys that file:
- * specs/010-app-settings, security review S6), and, when a flag sends the
- * command to another app or server than the file names (`uses`), where it
- * goes instead.
+ * file named when it is not `compose.yaml`, `namedFile`), and, when a flag
+ * sends the command to another app or server than the file names (`uses`),
+ * where it goes instead.
  */
 export function useQuestion(
   member: string,
@@ -107,11 +116,10 @@ export function useQuestion(
   uses?: { app: string; server: string }
 ): string {
   const above = aboveOf(link, cwd)
-  const named =
-    link.compose === DEFAULT_COMPOSE ? "" : `, with ${sanitize(link.compose)}`
+  const named = namedFile(link)
   const linked = above
     ? `${member} linked ${above.folder} to ${link.app} on ${link.server}, with ${above.compose}.`
-    : `${member} linked this folder to ${link.app} on ${link.server}${named}.`
+    : `${member} linked this folder to ${link.app} on ${link.server}${named === undefined ? "" : `, with ${named}`}.`
   const elsewhere =
     uses && (uses.app !== link.app || uses.server !== link.server)
       ? ` This command uses ${uses.app} on ${uses.server}.`

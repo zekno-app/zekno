@@ -147,6 +147,7 @@ export function initialState(
     server: firstUse.server,
     app: firstUse.app,
     ...(firstUse.above ? { above: firstUse.above } : {}),
+    ...(firstUse.file === undefined ? {} : { file: firstUse.file }),
   }
   return {
     ...base,

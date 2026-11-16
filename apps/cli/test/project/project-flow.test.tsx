@@ -41,6 +41,7 @@ import type { State } from "../../src/app/state/types"
 import { openTeam, type OpDeps } from "../../src/cli/context"
 import { MISSING_APP, MISSING_SERVER } from "../../src/cli/errors"
 import { findProject } from "../../src/project/file"
+import { useQuestion } from "../../src/project/project"
 import { signerOf } from "../../src/project/signed"
 import { connect } from "../../src/server/transport"
 import {
@@ -51,6 +52,10 @@ import {
   ready,
   twin,
 } from "../support/helpers"
+import {
+  linkedCompose,
+  linkedElsewhere as linkedToDeployFile,
+} from "../support/settings-places"
 
 type Machine = ReturnType<typeof machine>
 
@@ -2502,6 +2507,87 @@ describe("the two screens, and the reducer's part", () => {
     expect(top(used)).toEqual({ name: "home", pane: "apps", server: 0, app: 1 })
     expect(used.notice).toBeUndefined()
   })
+
+  test("use this zekno.json here?, the file in this folder naming another file than compose.yaml: the question names it, in the single commands' words (security review S6)", () => {
+    const start = {
+      kind: "team",
+      team: TEAM,
+      firstUse: {
+        member: "Ada",
+        server: "prod",
+        app: "demo",
+        compose: "deploy/zekno.app.json",
+        path: "/x/zekno.json",
+        sha256: "0".repeat(64),
+        file: "deploy/zekno.app.json",
+      },
+    } as const
+    const asked = initialState(start, { columns: 100, rows: 30 })
+    expect(asked.question).toEqual({
+      kind: "use-link",
+      member: "Ada",
+      server: "prod",
+      app: "demo",
+      file: "deploy/zekno.app.json",
+    })
+    for (const [columns, rows] of [
+      [100, 30],
+      [80, 24],
+    ] as const) {
+      const screen = draw({ ...asked, size: { columns, rows } }, columns, rows)
+      fits(screen, columns)
+      expect(screen.split("\n").length).toBeLessThanOrEqual(rows)
+      expect(screen).toContain(
+        "╭─ Ada linked this folder to demo on prod, with deploy/zekno.app.json ─"
+      )
+      expect(words(screen)).toContain(
+        "The link is signed by your team. It has not been used in this folder on this machine. Use it here?"
+      )
+      expect(lastLine(screen)).toBe("y use it  n not now")
+    }
+    // Only the words change: y uses it, as for compose.yaml.
+    expect(
+      update(asked, { type: "key", key: { kind: "text", text: "y" } })
+    ).toEqual({
+      state: { ...asked, question: undefined },
+      effects: [{ kind: "use-link", server: "prod", app: "demo" }],
+    })
+  })
+
+  test("the app opened on a second machine of the member in a folder whose zekno.json names deploy/zekno.app.json asks with that file; one naming compose.yaml asks as before (security review S6)", async () => {
+    const { m } = await linkedToDeployFile()
+    const other = await twin(m)
+    other.deps.cwd = m.project
+    const start = await loadStart(other.deps)
+    if (start.kind !== "team") throw new Error(start.kind)
+    expect(start.firstUse?.file).toBe("deploy/zekno.app.json")
+    const question = useQuestion("Ada", findProject(m.project)!, m.project)
+    expect(question).toBe(
+      "Ada linked this folder to demo on dev, with deploy/zekno.app.json. Use it here?"
+    )
+    for (const [columns, rows] of [
+      [100, 30],
+      [80, 24],
+    ] as const) {
+      const screen = draw(initialState(start, { columns, rows }), columns, rows)
+      fits(screen, columns)
+      // The single command's sentence, then the app's own line under it.
+      expect(screen).toContain(`╭─ ${question.replace(". Use it here?", "")} ─`)
+      expect(words(screen)).toContain(
+        "The link is signed by your team. It has not been used in this folder on this machine. Use it here?"
+      )
+    }
+
+    const plain = await linkedCompose()
+    const second = await twin(plain.m)
+    second.deps.cwd = plain.m.project
+    const before = await loadStart(second.deps)
+    if (before.kind !== "team") throw new Error(before.kind)
+    expect(before.firstUse?.file).toBeUndefined()
+    const screen = draw(initialState(before, { columns: 100, rows: 30 }))
+    expect(screen).toContain("╭─ Ada linked this folder to demo on dev ─")
+    expect(screen).not.toContain(", with")
+  }, 60_000)
 
   test("after a value is stored, the next name not set yet is asked, going round to an earlier one left out", () => {
     let state = update(home(), {

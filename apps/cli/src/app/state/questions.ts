@@ -53,15 +53,19 @@ export const CHOICES = {
  * The words of "use this zekno.json here?", asked when the app opens. A file
  * in a folder above is named with its folder and its Compose file: a "yes"
  * deploys that Compose file, not the one in the folder the app was started in.
+ * A file in this folder that names another file than compose.yaml is named
+ * with that file, in the words of the single commands' question
+ * (`useQuestion`; specs/010-app-settings, security review S6).
  */
 export function useLinkWords(
   question: Extract<Question, { kind: "use-link" }>
 ): { title: string; body: string } {
-  const { member, app, server, above } = question
+  const { member, app, server, above, file } = question
+  const named = file === undefined ? "" : `, with ${file}`
   return {
     title: above
       ? `${member} linked ${above.folder} to ${app} on ${server}, with ${above.compose}`
-      : `${member} linked this folder to ${app} on ${server}`,
+      : `${member} linked this folder to ${app} on ${server}${named}`,
     body: "The link is signed by your team. It has not been used in this folder on this machine. Use it here?",
   }
 }

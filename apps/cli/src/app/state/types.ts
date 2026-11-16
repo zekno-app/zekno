@@ -132,14 +132,17 @@ export type Above = { folder: string; compose: string }
  * A zekno.json signed by the team that has not been used in this folder on
  * this machine: who signed it (cleaned) and what it names, for the question
  * asked when the app opens, with its folder and Compose file when it is in a
- * folder above (`above`); and the file as it was judged, its real path and
- * the SHA-256 of its bytes, so that a "yes" records only what was shown.
+ * folder above (`above`), or the file it names when it is in this folder and
+ * that file is not compose.yaml (`file`); and the file as it was judged, its
+ * real path and the SHA-256 of its bytes, so that a "yes" records only what
+ * was shown.
  */
 export type FirstUse = Linked & {
   member: string
   path: string
   sha256: string
   above?: Above
+  file?: string
 }
 
 /**
@@ -323,6 +326,8 @@ export type Question =
    * When the app opens in a folder whose zekno.json is signed by the team
    * (`member` signed it) and was not used in this folder on this machine:
    * use it here? `above`: the file is in a folder above, named in the question.
+   * `file`: the file it names in this folder, named in the question when it
+   * is not compose.yaml, as the single commands name it.
    */
   | {
       kind: "use-link"
@@ -330,6 +335,7 @@ export type Question =
       server: string
       app: string
       above?: Above
+      file?: string
     }
 
 // ---------------------------------------------------------------------------
