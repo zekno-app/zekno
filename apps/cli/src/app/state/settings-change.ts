@@ -230,7 +230,15 @@ export function typeSetting(
     return stay(withChange(state, screen, undefined))
   if (result.kind === "done")
     return checked(state, screen, change, result.value)
-  return stay(withChange(state, screen, { ...change, typed: result.value }))
+  // Why a value was refused is about that value: the first key that changes it takes the reason away.
+  if (result.value === change.typed) return stay(state)
+  return stay(
+    withChange(state, screen, {
+      ...change,
+      typed: result.value,
+      reason: undefined,
+    })
+  )
 }
 
 /**

@@ -1,22 +1,22 @@
 /**
  * The parts the settings screen draws its lines with (specs/010-app-settings,
  * contracts/app-screen.md): a line already broken into pieces, a service's
- * rows in sections as a window that keeps the selected row in view, and the
- * `↑ <n> more` and `↓ <n> more` lines of a window, as the lists of single
- * commands draw them (`listWindow`, `moreLine`). The screen showing the
- * settings and the pane of a change both draw rows with these.
+ * rows in sections as a window of whole rows that keeps the selected row in
+ * view (`rowWindow`), and the `↑ <n> more` and `↓ <n> more` lines of a
+ * window, as the lists of single commands draw them (`moreLine`). The screen
+ * showing the settings and the pane of a change both draw rows with these.
  */
 import { Box, Text } from "ink"
 
 import type { SettingRow } from "../../settings/types"
-import { listWindow, moreLine } from "../../ui/ink/questions"
+import { moreLine } from "../../ui/ink/questions"
 import type { Piece } from "../../ui/ink/wrap"
 import { useTheme } from "../../ui/terminal/theme"
 import { Marker } from "./parts"
 import {
   labelWidth,
-  lineOfRow,
   rowLines,
+  rowWindow,
   type RowLine,
 } from "./settings-layout"
 
@@ -86,9 +86,10 @@ function RowLineView({
 
 /**
  * A service's rows in `height` lines: all of them when they fit, else a
- * window that keeps the selected row's first line in view, with the `more`
- * lines. The label is faint, the selected one bold; a value left out faint;
- * a mark in the theme's warning colour.
+ * window of whole rows that keeps the selected row in view, with the `more`
+ * lines and the heading of its first row (`rowWindow`). The label is faint,
+ * the selected one bold; a value left out faint; a mark in the theme's
+ * warning colour.
  */
 export function RowWindow({
   rows,
@@ -107,14 +108,17 @@ export function RowWindow({
   const theme = useTheme()
   const lines = rowLines(rows, inner, theme.warning, keyNamed)
   const label = labelWidth(rows, inner)
-  const shown = listWindow(
-    lines.length,
-    lineOfRow(lines, selected),
-    Math.max(1, height)
-  )
+  const shown = rowWindow(lines, selected, Math.max(1, height))
   return (
     <Box flexDirection="column" flexShrink={0}>
       <More direction="↑" count={shown.above} />
+      {shown.heading === undefined ? null : (
+        <RowLineView
+          line={{ kind: "heading", text: shown.heading }}
+          selected={selected}
+          label={label}
+        />
+      )}
       {lines.slice(shown.from, shown.to).map((line, offset) => (
         <RowLineView
           key={shown.from + offset}

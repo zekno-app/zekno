@@ -386,11 +386,20 @@ describe("changing", () => {
       reason: "Use a size such as 512m or 1g.",
     })
     expect(refused.effects).toEqual([])
-    // Typing again keeps the reason until enter checks again.
-    const typed = play(refused.state, ...erase(4), ...typing("2g")).state
-    expect(settingsScreen(typed).change?.reason).toBe(
-      "Use a size such as 512m or 1g."
+    // The reason is about the value refused: the first key that changes the value takes it away.
+    const erased = play(refused.state, K.backspace).state
+    expect(settingsScreen(erased).change).toMatchObject({ typed: "lot" })
+    expect(settingsScreen(erased).change?.reason).toBeUndefined()
+    // A key that changes nothing keeps it: an arrow; Backspace on the empty image refused.
+    expect(
+      settingsScreen(play(refused.state, K.right).state).change?.reason
+    ).toBe("Use a size such as 512m or 1g.")
+    const image = play(onRow(0), K.enter, ...erase(40), K.enter).state
+    expect(settingsScreen(play(image, K.backspace).state).change).toMatchObject(
+      { typed: "", reason: "A service needs an image." }
     )
+    const typed = play(refused.state, ...erase(4), ...typing("2g")).state
+    expect(settingsScreen(typed).change?.reason).toBeUndefined()
     expect(settingsScreen(play(typed, K.enter).state).change).toMatchObject({
       stage: "asking",
       reason: undefined,

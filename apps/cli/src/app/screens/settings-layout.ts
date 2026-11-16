@@ -150,6 +150,19 @@ export function labelWidth(rows: readonly SettingRow[], inner: number): number {
 }
 
 /**
+ * A mark (AS3, AS8) as pieces in the warning colour, its `!` held to the
+ * word after it (`keep`): where the mark wraps, the line breaks before the
+ * `!`, never between it and its words.
+ */
+export function markPieces(mark: string, warning: string): Piece[] {
+  if (!mark.startsWith("! ")) return [{ text: mark, color: warning }]
+  return [
+    { text: "! ", color: warning, keep: true },
+    { text: mark.slice(2), color: warning },
+  ]
+}
+
+/**
  * A row's value as pieces: the value (dim when it is the words of a setting
  * left out) and, when it changed since the last deploy, two spaces and AS3
  * in the warning colour; when the last deploy had it and the file no
@@ -158,12 +171,15 @@ export function labelWidth(rows: readonly SettingRow[], inner: number): number {
 export function valuePieces(row: SettingRow, warning: string): Piece[] {
   const pieces: Piece[] = [{ text: row.shown, dim: !row.set }]
   if (row.changed)
-    pieces.push({ text: `  ${AS3(row.changed.was)}`, color: warning })
+    pieces.push(
+      { text: "  ", color: warning },
+      ...markPieces(AS3(row.changed.was), warning)
+    )
   if (row.removed)
-    pieces.push({
-      text: `  ${AS8(row.removed.was, row.path.key === "volume")}`,
-      color: warning,
-    })
+    pieces.push(
+      { text: "  ", color: warning },
+      ...markPieces(AS8(row.removed.was, row.path.key === "volume"), warning)
+    )
   return pieces
 }
 
@@ -242,12 +258,137 @@ export function rowLines(
   return lines
 }
 
-/** The line of `lines` where row `row` starts. */
-export const lineOfRow = (lines: readonly RowLine[], row: number): number =>
-  Math.max(
-    0,
-    lines.findIndex((line) => line.kind === "row" && line.row === row)
-  )
+/**
+ * Which of a service's lines a window draws: `↑ <above> more` when lines are
+ * hidden above; `heading`, the section heading of the first row drawn, when
+ * that row is not the first of its section, so a row never shows without its
+ * heading; the lines `from` to `to`; and `↓ <below> more` when lines are
+ * hidden below. `above` counts every line before the first row drawn but its
+ * heading, which is drawn; `below` every line after the last row drawn.
+ */
+export type RowsShown = {
+  above: number
+  heading?: string
+  from: number
+  to: number
+  below: number
+}
+
+/** The lines a window takes: its `more` lines, its heading kept above the rows, and its lines. */
+const shownHeight = (shown: RowsShown): number =>
+  (shown.above > 0 ? 1 : 0) +
+  (shown.heading === undefined ? 0 : 1) +
+  (shown.to - shown.from) +
+  (shown.below > 0 ? 1 : 0)
+
+/** Where a row's lines start and end, and its section's heading: its line and its words. */
+type RowSpan = {
+  start: number
+  end: number
+  heading?: { at: number; text: string }
+}
+
+/** Each row's lines, in the order of the rows. */
+function rowSpans(lines: readonly RowLine[]): RowSpan[] {
+  const spans: RowSpan[] = []
+  let heading: RowSpan["heading"]
+  lines.forEach((line, at) => {
+    if (line.kind === "heading") heading = { at, text: line.text }
+    else {
+      const span = spans[line.row]
+      if (span) span.end = at + 1
+      else spans[line.row] = { start: at, end: at + 1, heading }
+    }
+  })
+  return spans
+}
+
+/** The window of rows `first` to `last`, each whole, with the heading of the first. */
+function rowsFrom(
+  lines: readonly RowLine[],
+  spans: readonly RowSpan[],
+  first: number,
+  last: number
+): RowsShown {
+  const { start, heading } = spans[first]!
+  const end = spans[last]!.end
+  const below = lines.length - end
+  // The first row of its section: its heading is drawn in its own place, just above it.
+  if (heading === undefined || heading.at === start - 1) {
+    const from = heading?.at ?? start
+    return { above: from, from, to: end, below }
+  }
+  // Rows of its section hidden above: the heading is kept above the row, and only it, of the lines before, is drawn.
+  return {
+    above: start - 1,
+    heading: heading.text,
+    from: start,
+    to: end,
+    below,
+  }
+}
+
+/**
+ * The window of a service's rows in `height` lines (contracts/app-screen.md,
+ * "80 by 24" and "As built: after the review of the screens"): every line
+ * when they fit; else whole rows around the selected one, never a row's
+ * lines in part, and the first row's section heading always drawn: in its
+ * place, or kept on the line under `↑ <n> more` when rows of its section are
+ * hidden above. The rows are added one at a time on the side with fewer
+ * lines drawn, below first, so the selected row stays near the middle, as
+ * `listWindow` keeps it. Only a row taller than the whole window, which a
+ * long notice at 80 by 24 can make, is drawn from its first line as far as
+ * there is room, the rest counted in `↓ <n> more`.
+ */
+export function rowWindow(
+  lines: readonly RowLine[],
+  selected: number,
+  height: number
+): RowsShown {
+  const spans = rowSpans(lines)
+  if (lines.length <= height || spans.length === 0)
+    return { above: 0, from: 0, to: lines.length, below: 0 }
+  const at = Math.min(Math.max(0, selected), spans.length - 1)
+  let first = at
+  let last = at
+  let shown = rowsFrom(lines, spans, first, last)
+  if (shownHeight(shown) > height) {
+    // The selected row alone does not fit: its first lines, at least one, and the rest counted below.
+    while (shownHeight(shown) > height && shown.to > spans[at]!.start + 1)
+      shown = { ...shown, to: shown.to - 1, below: shown.below + 1 }
+    return shown
+  }
+  for (;;) {
+    const up = first > 0 ? rowsFrom(lines, spans, first - 1, last) : undefined
+    const down =
+      last < spans.length - 1
+        ? rowsFrom(lines, spans, first, last + 1)
+        : undefined
+    const upFits = up !== undefined && shownHeight(up) <= height
+    const downFits = down !== undefined && shownHeight(down) <= height
+    if (!upFits && !downFits) return shown
+    const before = spans[at]!.start - spans[first]!.start
+    const after = spans[last]!.end - spans[at]!.end
+    if (downFits && (!upFits || after <= before)) {
+      last++
+      shown = down
+    } else {
+      first--
+      shown = up!
+    }
+  }
+}
+
+/** The fewest lines a window needs to draw the selected row whole, with its heading and its `more` lines. */
+export const rowsLeast = (
+  lines: readonly RowLine[],
+  selected: number
+): number => {
+  const spans = rowSpans(lines)
+  if (spans.length === 0) return 0
+  const at = Math.min(Math.max(0, selected), spans.length - 1)
+  return shownHeight(rowsFrom(lines, spans, at, at))
+}
 
 /**
  * The Compose text as the lines it is drawn in, `inner` columns wide, faint:

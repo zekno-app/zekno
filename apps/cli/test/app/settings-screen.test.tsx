@@ -12,7 +12,13 @@ import { renderToString } from "ink"
 import { join } from "node:path"
 
 import { AppView } from "../../src/app/app"
-import { rowValueLines } from "../../src/app/screens/settings-layout"
+import {
+  rowLines,
+  rowValueLines,
+  serviceInner,
+  wholeInner,
+  type RowLine,
+} from "../../src/app/screens/settings-layout"
 import { top } from "../../src/app/state/reading"
 import type { AppEvent } from "../../src/app/state/events"
 import type { State } from "../../src/app/state/types"
@@ -59,6 +65,92 @@ const row = (label: string, value: string, selected = false) =>
   `${selected ? "❯" : " "} ${label.padEnd(11)}${value}`
 
 const board = () => onBoard()
+
+/** A window tall enough for every row of the files below: the lines of a pane with nothing hidden. */
+const TALL = { columns: 80, rows: 80 }
+
+/** The lines inside a pane, from the line after its first to `end`, the empty ones at its foot left out. */
+function paneLines(
+  lines: string[],
+  from: number,
+  to: number,
+  end: (line: string) => boolean
+): string[] {
+  const inside = lines.map((line) => line.slice(from, to).trimEnd())
+  const first = inside.findIndex((line) => line.endsWith("zekno.app.json"))
+  const last = inside.findIndex((line, at) => at > first && end(line))
+  const pane = inside.slice(first + 1, last)
+  while (pane.at(-1) === "") pane.pop()
+  return pane
+}
+
+/** The service pane's rows at 80 columns: under its first line, above its foot's rule. */
+const servicePane = (lines: string[]) =>
+  paneLines(lines, 26, 77, (line) => line.startsWith("─"))
+
+/** The rows of the one pane of a change at 80 columns: under its first line, above the change box. */
+const changePane = (lines: string[]) =>
+  paneLines(lines, 3, 77, (line) => line.startsWith("╭"))
+
+/** Where `part` stands in `all`, line for line; -1 when nowhere. */
+const indexOfLines = (all: string[], part: string[]): number =>
+  all.findIndex((_, at) => part.every((line, k) => all[at + k] === line))
+
+/**
+ * A window of rows as the walkthrough's review asks (contracts/app-screen.md,
+ * "As built: after the review of the screens"): the first line it draws,
+ * after `↑ <n> more`, is the heading of its first row, in its own place or
+ * kept there; its rows are whole, the selected one among them; `↑ <n> more`
+ * counts every line before its first row but that heading, and `↓ <n> more`
+ * every line after its last. `full` is every line, as drawn with room for
+ * all; `structure` says which row each of them belongs to.
+ */
+function expectWholeWindow(
+  shown: string[],
+  full: string[],
+  structure: RowLine[],
+  selected: number
+) {
+  const up = /^ {2}↑ (\d+) more$/.exec(shown[0] ?? "")
+  const down = /^ {2}↓ (\d+) more$/.exec(shown.at(-1) ?? "")
+  const lines = shown.slice(up ? 1 : 0, down ? -1 : undefined)
+  // Under the heading, the rows drawn are lines of the whole, one after the other.
+  const rows = lines.slice(1)
+  const from = indexOfLines(full, rows)
+  const end = from + rows.length
+  expect({ shown, found: from > 0 }).toEqual({ shown, found: true })
+  // The heading drawn first is the section heading of the first row drawn.
+  let heading = "none"
+  for (const line of structure.slice(0, from))
+    if (line.kind === "heading") heading = line.text
+  expect({ shown, heading: lines[0] }).toEqual({ shown, heading })
+  // Whole rows: the first starts there, and the line after the last is another row's or a heading.
+  const starts = (at: number) => {
+    const line = structure[at]
+    const before = structure[at - 1]
+    return (
+      line === undefined ||
+      line.kind === "heading" ||
+      before?.kind !== "row" ||
+      before.row !== line.row
+    )
+  }
+  expect({ shown, first: starts(from), last: starts(end) }).toEqual({
+    shown,
+    first: true,
+    last: true,
+  })
+  expect(
+    structure
+      .slice(from, end)
+      .some((line) => line.kind === "row" && line.row === selected)
+  ).toBe(true)
+  expect({
+    shown,
+    above: Number(up?.[1] ?? 0),
+    below: Number(down?.[1] ?? 0),
+  }).toEqual({ shown, above: from - 1, below: full.length - end })
+}
 
 describe("the board AppSettings, 100 by 30", () => {
   test("line by line: the header, the Services pane, the service's rows in sections, the foot and the hints", () => {
@@ -310,6 +402,137 @@ describe("80 by 24", () => {
     const last = draw(state, 80, 24).join("\n")
     expect(last).toMatch(/│ {3}↑ 5 more +│/)
     expect(last).not.toMatch(/↓ \d+ more/)
+  })
+
+  test("the window keeps the heading of its first row: under ↑ <n> more when rows of its section are hidden above, in its own place when only lines before it are", () => {
+    const at = (downs: number) =>
+      servicePane(
+        draw(
+          play(
+            opened(NARROW),
+            settingsRead(DESIGN_SETTINGS, {
+              deployed: withMemory(DESIGN_SETTINGS, "512m"),
+            }),
+            ...Array.from({ length: downs }, () => K.down)
+          ).state,
+          80,
+          24
+        )
+      )
+    // memory: the window starts at the top, Source in its place, where the walkthrough had ↑ 1 more.
+    expect(at(3)).toEqual([
+      "Source",
+      "  image      ghcr.io/acme/demo-web:1.4.2",
+      "Deploy",
+      "  start      bun run start",
+      "  restart    on failure",
+      "❯ memory     1g  ! changed, not deployed (was 512m)",
+      "  cpus       1",
+      "Networking",
+      "  port       3000",
+      "  published  not published",
+      "  ↓ 5 more",
+    ])
+    // port: Deploy kept on the line under ↑ 4 more (Source, image, start, restart), over memory.
+    expect(at(5)).toEqual([
+      "  ↑ 4 more",
+      "Deploy",
+      "  memory     1g  ! changed, not deployed (was 512m)",
+      "  cpus       1",
+      "Networking",
+      "❯ port       3000",
+      "  published  not published",
+      "Variables",
+      "  secrets    DATABASE_URL, SESSION_KEY",
+      "  plain      NODE_ENV=production",
+      "  ↓ 2 more",
+    ])
+  })
+
+  test("moving through every row of design.md's file and the review's S3 file: each window starts with the heading of its first row, its rows whole, and its more lines count every line not drawn", () => {
+    for (const [settings, deployed] of [
+      [DESIGN_SETTINGS, withMemory(DESIGN_SETTINGS, "512m")],
+      [S3_NOW, S3_DEPLOYED],
+    ] as const) {
+      const rows = screenRows(settings.services[0]!, deployed)
+      const structure = rowLines(rows, serviceInner(80), "yellow")
+      let state = play(
+        opened(NARROW),
+        settingsRead(settings, { deployed })
+      ).state
+      for (let row = 0; row < rows.length; row++) {
+        const lines = draw(state, 80, 24)
+        fits(lines, 80, 24)
+        // Every line, as the same screen draws them with room for all.
+        const full = servicePane(draw({ ...state, size: TALL }, 80, TALL.rows))
+        expect(full.length).toBe(structure.length)
+        expectWholeWindow(servicePane(lines), full, structure, row)
+        state = play(state, K.down).state
+      }
+    }
+  })
+
+  test("a row of several lines at the window's edge is drawn whole or not at all: S3's memory, two lines, with published selected", () => {
+    const pane = servicePane(
+      draw(
+        play(
+          opened(NARROW),
+          settingsRead(S3_NOW, { deployed: S3_DEPLOYED }),
+          ...Array.from({ length: 6 }, () => K.down)
+        ).state,
+        80,
+        24
+      )
+    )
+    // The walkthrough drew `512m)` under ↑ 6 more, the line before it hidden, and the removed variable's first line alone at the foot.
+    expect(pane).toEqual([
+      "  ↑ 6 more",
+      "Deploy",
+      "  cpus       no limit",
+      "Networking",
+      "  port       none",
+      "❯ published  not published",
+      "Variables",
+      "  secrets    none",
+      "  plain      NODE_ENV=production",
+      "  ↓ 6 more",
+    ])
+  })
+
+  test("while a change is open, the window of its section keeps the section's heading and whole rows", () => {
+    // 40 plain variables, every seventh with a value of two lines.
+    const plain = Array.from(
+      { length: 40 },
+      (_, at) =>
+        [
+          `VAR_${String(at).padStart(2, "0")}`,
+          at % 7 === 3 ? `${"v".repeat(30)} ${"w".repeat(30)}` : `value-${at}`,
+        ] as [string, string]
+    )
+    const settings: Settings = {
+      version: 1,
+      services: [["web", { image: "ghcr.io/acme/web:1", plain }]],
+    }
+    const rows = screenRows(settings.services[0]!)
+    const section = rows.filter((row) => row.section === "Variables")
+    const structure = rowLines(section, wholeInner(80), "yellow", false)
+    for (const variable of [10, 17, 20, 38]) {
+      for (const stage of [[], [text("z"), K.enter]]) {
+        const state = play(
+          opened(NARROW),
+          settingsRead(settings),
+          ...Array.from({ length: 8 + variable }, () => K.down),
+          K.enter,
+          ...stage
+        ).state
+        const lines = draw(state, 80, 24)
+        fits(lines, 80, 24)
+        const full = changePane(draw({ ...state, size: TALL }, 80, TALL.rows))
+        expect(full.length).toBe(structure.length)
+        // The secrets row is the section's first; the variable is the row after it.
+        expectWholeWindow(changePane(lines), full, structure, variable + 1)
+      }
+    }
   })
 
   test("many services: the Services pane is a window too, the shown one always in it", () => {
@@ -573,6 +796,78 @@ describe("a long value (security review S4)", () => {
     expect(text.at(-1)).toEndWith("…)")
   })
 
+  test("a mark stays with its words: where it wraps, the line breaks before its !, also after the … n more lines cut", () => {
+    // 100 by 30: the walkthrough drew `… 52 more lines: c shows them in the Compose text  !` and `changed, ...` under it.
+    const wide = draw(long({ columns: 100, rows: 30 }))
+    const at = wide.findIndex((line) =>
+      line.includes("… 52 more lines: c shows them in the Compose text")
+    )
+    expect(wide[at]).toBe(
+      twoPanes("", row("", "… 52 more lines: c shows them in the Compose text"))
+    )
+    expect(wide[at + 1]).toBe(
+      twoPanes("", row("", "! changed, not deployed (was bun run start)"))
+    )
+    // 80 by 24: a value that leaves room for `!` and not for `changed,`.
+    const started = draw(
+      play(
+        opened({ columns: 80, rows: 24 }),
+        settingsRead(
+          {
+            version: 1,
+            services: [
+              [
+                "web",
+                {
+                  image: "ghcr.io/acme/web:1",
+                  start: "bun run start --port 3000 now",
+                },
+              ],
+            ],
+          },
+          { deployed: SHORT }
+        ),
+        K.down
+      ).state,
+      80,
+      24
+    )
+    expect(servicePane(started).slice(3, 6)).toEqual([
+      "❯ start      bun run start --port 3000 now",
+      "             ! changed, not deployed (was bun run",
+      "             start)",
+    ])
+    for (const line of [...wide, ...started])
+      expect({ line, ends: /!\s*│$/.test(line) }).toEqual({ line, ends: false })
+  })
+
+  test("a mark stays with its words in a row's lines, the removed mark too, at any width", () => {
+    const changed = screenRows(
+      [
+        "web",
+        { image: "ghcr.io/acme/web:1", start: "bun run start --port 3000 now" },
+      ],
+      SHORT
+    )[1]!
+    const removed = screenRows(S3_NOW.services[0]!, S3_DEPLOYED).find(
+      (entry) => entry.removed !== undefined
+    )!
+    for (const entry of [changed, removed])
+      // The narrowest room a value has is 25 columns (80 columns, a label of half the pane); a mark's first word takes 10.
+      for (let room = 12; room <= 60; room++) {
+        const text = rowValueLines(entry, room, "yellow").map((line) =>
+          line.map((piece) => piece.text).join("")
+        )
+        for (const line of text)
+          expect({ room, line, ends: line.trimEnd().endsWith("!") }).toEqual({
+            room,
+            line,
+            ends: false,
+          })
+        expect(text.join(" ")).toMatch(/! (changed|removed),/)
+      }
+  })
+
   test("80 by 24: c shows the whole value, every line of it, as it scrolls to its end", () => {
     let state = play(
       opened({ columns: 80, rows: 24 }),
@@ -729,6 +1024,30 @@ describe("changing a value (board AppSettingsEdit)", () => {
     const refused = draw(memory(undefined, "lots")).join("\n")
     expect(refused).toContain(inBox("? Memory limit › lots"))
     expect(refused).toContain(inBox("  Use a size such as 512m or 1g."))
+  })
+
+  test("a refusal goes at the first key that changes the value, and comes back at the next enter that refuses", () => {
+    const refused = memory(undefined, "lots")
+    for (const [keys, value] of [
+      [[K.backspace], "lot"],
+      [typing("x"), "lotsx"],
+    ] as const) {
+      const lines = draw(play(refused, ...keys).state)
+      fits(lines, 100, 30)
+      const drawn = lines.join("\n")
+      expect(drawn).toContain(inBox(`? Memory limit › ${value}`))
+      expect(drawn).not.toContain("Use a size such as")
+      // The box is one line shorter: nothing stands where the reason was.
+      expect(lines).toContain(inBox("Change a setting  web · memory limit"))
+      expect(lines.at(-1)).toBe(" enter next  esc back")
+    }
+    // A key that changes nothing leaves it: an arrow.
+    expect(draw(play(refused, K.right).state).join("\n")).toContain(
+      inBox("  Use a size such as 512m or 1g.")
+    )
+    expect(
+      draw(play(refused, K.backspace, K.enter).state).join("\n")
+    ).toContain(inBox("  Use a size such as 512m or 1g."))
   })
 
   test("picking restart: the question and the three rules, the marker on the one chosen", () => {

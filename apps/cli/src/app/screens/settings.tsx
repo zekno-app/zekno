@@ -8,9 +8,10 @@
  * shows the Compose text the settings turn into in the service pane's place.
  *
  * Every line is broken before it is drawn (settings-layout.ts), so the rows
- * that do not fit are a window that keeps the selected row in view, with
- * `↑ <n> more` and `↓ <n> more` lines as the lists of single commands have
- * (`listWindow`). Every colour comes from the theme.
+ * that do not fit are a window of whole rows that keeps the selected row in
+ * view and the heading of its first row, with `↑ <n> more` and `↓ <n> more`
+ * lines as the lists of single commands have (`rowWindow`). Every colour
+ * comes from the theme.
  */
 import { Box, Text } from "ink"
 import type { ReactNode } from "react"
@@ -41,6 +42,7 @@ import {
   composeLines,
   cut,
   linesOf,
+  markPieces,
   scrolled,
   SENTENCE_HINTS,
   SERVICES_INNER,
@@ -96,9 +98,10 @@ function AppState({
 export function removedLines(name: string, warning: string): Piece[][] {
   return [
     [{ text: `  ${cut(name, SERVICES_INNER - 2)}`, dim: true }],
-    ...linesOf([{ text: AS8(), color: warning }], SERVICES_INNER - 2).map(
-      (line) => [{ text: "  " }, ...line]
-    ),
+    ...linesOf(markPieces(AS8(), warning), SERVICES_INNER - 2).map((line) => [
+      { text: "  " },
+      ...line,
+    ]),
   ]
 }
 

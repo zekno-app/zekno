@@ -33,13 +33,15 @@ import {
   linesOf,
   NOW_WIDTH,
   PICKING_HINTS,
+  rowLines,
+  rowsLeast,
   TYPING_HINTS,
   VALUE_LINES,
   wholeInner,
 } from "./settings-layout"
 import { Lines, RowWindow } from "./settings-rows"
 
-/** The fewest lines a window of rows takes: three rows, and a `more` line above and below (`listWindow`). */
+/** The fewest lines a window of rows takes: a `more` line above and below, the heading and two rows. */
 const ROWS_LEAST = 5
 
 /** The hints of the change's stage (contracts/app-screen.md, "Keys"): asking names the value `n` keeps. */
@@ -246,10 +248,16 @@ export function ChangePane({
   const at = rows.findIndex((row) => isRowOf(row, change.path))
   const section = rows[at]?.section
   const shown = rows.filter((row) => row.section === section)
+  const selected = Math.max(0, shown.indexOf(rows[at]!))
   const inner = wholeInner(columns)
+  // The fewest lines the rows above take: `ROWS_LEAST`, and never less than the row being changed whole, with its heading and the more lines.
+  const least = Math.max(
+    ROWS_LEAST,
+    rowsLeast(rowLines(shown, inner, theme.warning, false), selected)
+  )
   // The old and the new value whole when the pane holds them; else each cut around their first difference to the lines that fit.
-  // The room: the pane's border, its first line, the box's border, and the fewest lines a window of the rows above takes.
-  const room = body - 2 - 1 - 2 - ROWS_LEAST
+  // The room: the pane's border, its first line, the box's border, and the fewest lines the rows above take.
+  const room = body - 2 - 1 - 2 - least
   const boxOf = (most: number) =>
     boxLines(service, change, theme, boxInner(columns), read.report.file, most)
   let box = boxOf(Infinity)
@@ -264,7 +272,7 @@ export function ChangePane({
     >
       <RowWindow
         rows={shown}
-        selected={Math.max(0, shown.indexOf(rows[at]!))}
+        selected={selected}
         inner={inner}
         // The pane's border, its first line, and the box with its border.
         height={body - 2 - 1 - box.length - 2}
