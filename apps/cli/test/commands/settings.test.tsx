@@ -433,7 +433,7 @@ describe("zekno settings set and unset (T051)", () => {
     expect(await piped(m, "settings", "set", "web.memory", "2g")).toEqual({
       code: 1,
       out: ["web · memory limit  1g → 2g"],
-      err: [CS10],
+      err: [CS10("zekno.app.json")],
     })
     expect(fileOf(m)).toBe(DESIGN_FILE)
     expect(

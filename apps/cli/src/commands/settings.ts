@@ -32,15 +32,21 @@ import {
 import { quiet } from "../ui/types"
 
 /**
- * `zekno settings [--json]`: the settings of this folder's `zekno.app.json`
- * in sections, plain lines when piped, or with `--json` the file's own data
- * as one JSON object.
+ * `zekno settings [--json]`: the settings of the file `zekno deploy` here
+ * would sign in sections, plain lines when piped, or with `--json` the
+ * file's own data as one JSON object, and IN6 apart from it when
+ * compose.yaml is beside it with nothing that decides.
  */
 export async function settingsShow(
   deps: Deps,
   options: { json?: boolean }
 ): Promise<void> {
-  if (options.json) return deps.ui.json(await settingsData(deps))
+  if (options.json) {
+    const { data, note } = settingsData(deps)
+    deps.ui.json(data)
+    if (note !== undefined) deps.ui.warn(note)
+    return
+  }
   deps.ui.settingsReport(await showSettings(deps))
 }
 
@@ -68,13 +74,16 @@ async function change(
     now: change.now,
     next: change.next,
   })
-  if (!yes && !(await deps.ui.confirm(CS9, CS10))) throw new Left()
+  const file = prepared.read.shown
+  if (!yes && !(await deps.ui.confirm(CS9(file), CS10(file)))) throw new Left()
   writeSettingChange(prepared)
   deps.ui.success(CS11.text, CS11.detail)
+  // A deploy here asks which file to use, or takes -f: the file written is one of two.
+  if (prepared.both) deps.ui.note(IN6)
   return 0
 }
 
-/** `zekno settings set <service>.<setting> <value> [--yes]`: changes one setting of this folder's `zekno.app.json`. */
+/** `zekno settings set <service>.<setting> <value> [--yes]`: changes one setting of the file `zekno deploy` here would sign. */
 export async function settingsSet(
   deps: Deps,
   path: string | undefined,
@@ -88,7 +97,7 @@ export async function settingsSet(
   )
 }
 
-/** `zekno settings unset <service>.<setting> [--yes]`: removes one setting of this folder's `zekno.app.json`. */
+/** `zekno settings unset <service>.<setting> [--yes]`: removes one setting of the file `zekno deploy` here would sign. */
 export async function settingsUnset(
   deps: Deps,
   path: string | undefined,
@@ -106,11 +115,12 @@ export async function settingsUnset(
  * before any question when `zekno.app.json` is here; with no terminal, IN5.
  * Then the image (IN1) and the service's name (IN2, `web` filled in), each
  * held to its rule where it is typed; the file is created whole, never over
- * another (IN3), with IN6 when compose.yaml is here too. Esc or Ctrl-C at a
- * question: `Nothing was done.`, status 1, nothing written.
+ * another (IN3), in this folder, with SH3 as a warning when the zekno.json in
+ * use here names another file, else IN6 when compose.yaml is here too. Esc
+ * or Ctrl-C at a question: `Nothing was done.`, status 1, nothing written.
  */
 export async function settingsInit(deps: Deps): Promise<number> {
-  const { compose } = prepareInit(deps)
+  const { compose, linked } = prepareInit(deps)
   if (!deps.ui.asks) throw new CliError(IN5)
   const image = await deps.ui.ask({
     question: IN1,
@@ -127,7 +137,8 @@ export async function settingsInit(deps: Deps): Promise<number> {
   })
   createFromAnswers(deps, image, service)
   deps.ui.success(IN3.text, IN3.detail)
-  if (compose) deps.ui.note(IN6)
+  if (linked !== undefined) deps.ui.warn(linked)
+  else if (compose) deps.ui.note(IN6)
   return 0
 }
 
@@ -135,13 +146,16 @@ export async function settingsInit(deps: Deps): Promise<number> {
  * `zekno settings compose`: the Compose text the settings turn into, the
  * text a deploy of this folder signs (FR-027). Piped, each line exactly as it
  * is, so standard output is the text, byte for byte, with its last line
- * feed; at a terminal the same lines, dim (board `CmdSettings`), with any
- * invisible character of a plain value taken out, as every line drawn from
- * the file is.
+ * feed; at a terminal the same lines, dim (board `CmdSettings`), cleaned as
+ * every line drawn from the file is. IN6, when compose.yaml is beside the
+ * file with nothing that decides, goes after the text, on standard error
+ * when piped.
  */
 export function settingsCompose(deps: Deps): void {
-  const lines = folderCompose(deps).split("\n")
+  const { text, note } = folderCompose(deps)
+  const lines = text.split("\n")
   // The text ends with a line feed: the last part is empty, and is not a line.
   lines.pop()
   for (const line of lines) deps.ui.line(line, [quiet(sanitize(line))])
+  if (note !== undefined) deps.ui.warn(note)
 }

@@ -318,7 +318,11 @@ describe("contracts/commands.md", () => {
       "This folder deploys compose.yaml, a Compose file written by hand, so it has no settings to show."
     )
     expect(SH3("compose.yaml")).toBe(
-      "This folder's zekno.json names compose.yaml, so zekno deploy uses it, not these settings."
+      "This folder's zekno.json names compose.yaml, so zekno deploy uses it, not the zekno.app.json here."
+    )
+    // A zekno.json in a folder above names its folder (security review S1).
+    expect(SH3("~/app/zekno.app.json", "~/app")).toBe(
+      "The zekno.json in ~/app names ~/app/zekno.app.json, so zekno deploy uses it, not the zekno.app.json here."
     )
   })
 
@@ -348,11 +352,15 @@ describe("contracts/commands.md", () => {
     expect(CS8("web", "memory limit", "1g")).toBe(
       "web · memory limit is 1g already. Nothing was written."
     )
-    expect(CS9).toBe(
+    expect(CS9(F)).toBe(
       "Write this to zekno.app.json? Nothing is deployed until you deploy."
     )
-    expect(CS10).toBe(
+    expect(CS10(F)).toBe(
       "There is no terminal to ask on. Add `--yes` to write it to zekno.app.json."
+    )
+    // The file a link names is named as the deploy names it (security review S1).
+    expect(CS9("deploy/zekno.app.json")).toBe(
+      "Write this to deploy/zekno.app.json? Nothing is deployed until you deploy."
     )
     expect(CS11).toEqual({
       text: "Written",

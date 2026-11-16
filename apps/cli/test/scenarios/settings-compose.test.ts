@@ -12,15 +12,24 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { openTeam } from "../../src/cli/context"
-import { SH1 } from "../../src/settings/words"
+import { composeText } from "../../src/settings/compose"
+import { SH1, SH3 } from "../../src/settings/words"
 import type { Cell } from "../../src/ui/types"
-import { machine, ready } from "../support/helpers"
+import { COMPOSE_V1, machine, ready } from "../support/helpers"
 import {
   DESIGN_COMPOSE,
   DESIGN_FILE,
   GOOD_FILES,
   SENTINEL,
 } from "../support/settings-files"
+import {
+  HIDDEN,
+  linkedCompose,
+  linkedElsewhere,
+  ROOT,
+  runs,
+  subFolder,
+} from "../support/settings-places"
 import { terminal } from "../support/terminal"
 
 type Machine = ReturnType<typeof machine>
@@ -140,6 +149,45 @@ describe("zekno settings compose prints what zekno deploy signs (FR-027, SC-002)
     expect(readFileSync(join(m.project, "compose.yaml"), "utf8")).toBe(
       DESIGN_COMPOSE
     )
+  }, 60_000)
+
+  test("a sub-folder under a linked root, with a zekno.app.json of its own (security review S1, A): printed there equals what zekno deploy there signs, the root's file", async () => {
+    const { m } = await subFolder()
+    const first = await printed(m, "settings", "compose")
+    expect(first).toEqual({
+      code: 0,
+      text: composeText(runs(ROOT)),
+      err: [],
+    })
+    expect(await m.zekno("deploy")).toBe(0)
+    expect(await lastSigned(m)).toBe(first.text)
+    expect((await printed(m, "settings", "compose")).text).toBe(first.text)
+  }, 60_000)
+
+  test("a link naming deploy/zekno.app.json, with a zekno.app.json in the folder (security review S1, C): printed equals signed, the file the link names", async () => {
+    const { m } = await linkedElsewhere()
+    const first = await printed(m, "settings", "compose")
+    expect(first).toEqual({
+      code: 0,
+      text: composeText(runs(HIDDEN)),
+      err: [],
+    })
+    expect(await m.zekno("deploy")).toBe(0)
+    expect(await lastSigned(m)).toBe(first.text)
+    // With flags the same link decides, and the same text is signed.
+    expect(await m.zekno("deploy", ...WHERE)).toBe(0)
+    expect(await lastSigned(m)).toBe(first.text)
+  }, 60_000)
+
+  test("a link naming compose.yaml, with a zekno.app.json beside it (security review S1, B): nothing printed, SH3, and the deploy signs compose.yaml", async () => {
+    const { m } = await linkedCompose()
+    expect(await printed(m, "settings", "compose")).toEqual({
+      code: 1,
+      text: "",
+      err: [SH3("compose.yaml")],
+    })
+    expect(await m.zekno("deploy")).toBe(0)
+    expect(await lastSigned(m)).toBe(COMPOSE_V1)
   }, 60_000)
 
   test("at a terminal: the same lines, each drawn dim", async () => {

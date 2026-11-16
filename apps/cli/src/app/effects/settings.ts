@@ -15,24 +15,19 @@
  * leaves it.
  */
 import type { TeamTrust } from "@workspace/core"
-import { existsSync, lstatSync } from "node:fs"
-import { join, resolve } from "node:path"
+import { lstatSync } from "node:fs"
 
 import { CliError } from "../../cli/errors"
 import { profileStore, type Server } from "../../profile/profile"
 import type { ComposeSource } from "../../project/compose-read"
-import { DEFAULT_COMPOSE, findProject } from "../../project/file"
+import { findProject } from "../../project/file"
 import { standingOf } from "../../project/signed"
 import { sanitize } from "../../server/sanitize"
 import { applyChange } from "../../settings/change"
 import { composeText, deployedSettings } from "../../settings/compose"
-import {
-  isSettingsFile,
-  readSettingsFile,
-  SETTINGS_FILE,
-} from "../../settings/file"
+import { readSettingsFile } from "../../settings/file"
 import { screenRows } from "../../settings/rows"
-import { chooseSource } from "../../settings/source"
+import { namedPath, settingsPlace } from "../../settings/source"
 import type { Settings } from "../../settings/types"
 import {
   AS6,
@@ -90,12 +85,13 @@ export function faultOf(message: string): { first: string; rest: string } {
 
 /**
  * The settings file `d` would deploy for `app` on `server`, from the folder
- * the app was started in (research R6): the one this folder's zekno.json
- * names when it is signed by the team, used here and names that app on that
- * server; AS6 when it names another; SH2 when it names a Compose file. A
- * zekno.json that cannot be used here, or none: `zekno.app.json` here (also
- * beside `compose.yaml`, where `d` deploys nothing and says DP5), SH2 with
- * only `compose.yaml`, SH1 with neither.
+ * the app was started in (research R6), by the rule the settings commands
+ * share (`settingsPlace`, settings/source.ts): the one the zekno.json that
+ * applies here names when it is signed by the team, used here and names
+ * that app on that server; AS6 when it names another; SH2 when it names a
+ * Compose file. A zekno.json that cannot be used here, or none:
+ * `zekno.app.json` here (also beside `compose.yaml`, where `d` deploys
+ * nothing and says DP5), SH2 with only `compose.yaml`, SH1 with neither.
  */
 function settingsFor(
   cwd: string,
@@ -104,23 +100,25 @@ function settingsFor(
   app: string,
   trust: TeamTrust | undefined
 ): Found {
-  const link = findProject(cwd)
-  if (link && trust && standingOf(link, trust, home).kind === "used") {
-    if (link.server !== server || link.app !== app)
-      return {
-        kind: "sentence",
-        sentence: AS6(sanitize(link.app), sanitize(link.server)),
-      }
-    return isSettingsFile(link.compose)
-      ? { kind: "settings", source: { kind: "project", link } }
-      : { kind: "sentence", sentence: SH2(sanitize(link.compose)) }
+  const found = findProject(cwd)
+  const link =
+    found && trust && standingOf(found, trust, home).kind === "used"
+      ? found
+      : undefined
+  if (link && (link.server !== server || link.app !== app))
+    return {
+      kind: "sentence",
+      sentence: AS6(sanitize(link.app), sanitize(link.server)),
+    }
+  const place = settingsPlace(cwd, link)
+  switch (place.kind) {
+    case "settings":
+      return { kind: "settings", source: place.source }
+    case "compose":
+      return { kind: "sentence", sentence: SH2(place.file) }
+    case "none":
+      return { kind: "sentence", sentence: SH1 }
   }
-  const chosen = chooseSource(cwd, {})
-  if (chosen.kind !== "compose")
-    return { kind: "settings", source: { kind: "default", folder: cwd } }
-  return existsSync(join(cwd, DEFAULT_COMPOSE))
-    ? { kind: "sentence", sentence: SH2(DEFAULT_COMPOSE) }
-    : { kind: "sentence", sentence: SH1 }
 }
 
 /** Reading the settings screen's file, and the last deploy each app's marks are made against. */
@@ -255,18 +253,6 @@ export function createSettings(context: Context) {
   }
 
   return { read, write }
-}
-
-/** The settings file as its folder names it, before any link in its place is followed. */
-function namedPath(source: ComposeSource): string {
-  switch (source.kind) {
-    case "default":
-      return join(source.folder, SETTINGS_FILE)
-    case "project":
-      return resolve(source.link.folder, source.link.compose)
-    case "given":
-      return source.path
-  }
 }
 
 /** Whether a path is a symbolic link itself. */

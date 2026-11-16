@@ -9,7 +9,7 @@ import { join } from "node:path"
 import { pipedLines } from "../../../src/settings/piped"
 import { reportOf } from "../../../src/settings/rows"
 import type { Settings, SettingsReport } from "../../../src/settings/types"
-import { SH3 } from "../../../src/settings/words"
+import { IN6 } from "../../../src/settings/words"
 import { plainUi } from "../../../src/ui/plain/plain"
 import { BRAND } from "../../../src/ui/terminal/theme"
 import { drawnInColour, plainOf, wordRuns } from "../../support/colour"
@@ -144,14 +144,14 @@ describe("at a terminal (board `CmdSettings`, left column)", () => {
     ).toBe(`GREETING=${long}`)
   })
 
-  test("SH3 after the services, an empty line apart, as a warning", async () => {
+  test("the note (IN6) after the services, an empty line apart, as a warning", async () => {
     const screen = await shown({
       ...reportOf(DESIGN_SETTINGS),
-      note: SH3("compose.yaml"),
+      note: IN6,
     })
     expect(screen.slice(-2)).toEqual([
       "",
-      "! This folder's zekno.json names compose.yaml, so zekno deploy uses it, not these settings.",
+      "! This folder has compose.yaml too. zekno deploy asks which to deploy, or takes -f <file>.",
     ])
   })
 })
@@ -182,7 +182,7 @@ describe("piped (contracts/commands.md, 'Piped, TERM=dumb')", () => {
     expect(err).toEqual([])
   })
 
-  test("a published port is a line of its own; SH3 goes to standard error", () => {
+  test("a published port is a line of its own; the note (IN6) goes to standard error", () => {
     const settings: Settings = {
       version: 1,
       services: [
@@ -200,7 +200,7 @@ describe("piped (contracts/commands.md, 'Piped, TERM=dumb')", () => {
     ).settingsReport({
       ...reportOf(settings),
       piped: pipedLines(settings),
-      note: SH3("compose.yaml"),
+      note: IN6,
     })
     expect(out).toEqual([
       "web\tsource.image\tnginx:1.27",
@@ -209,7 +209,7 @@ describe("piped (contracts/commands.md, 'Piped, TERM=dumb')", () => {
       "web\tnetworking.publish\t8080",
     ])
     expect(err).toEqual([
-      "This folder's zekno.json names compose.yaml, so zekno deploy uses it, not these settings.",
+      "This folder has compose.yaml too. zekno deploy asks which to deploy, or takes -f <file>.",
     ])
   })
 })

@@ -295,9 +295,13 @@ export const SH1 =
 /** SH2 */
 export const SH2 = (file: string): string =>
   `This folder deploys ${file}, a Compose file written by hand, so it has no settings to show.`
-/** SH3 */
-export const SH3 = (compose: string): string =>
-  `This folder's zekno.json names ${compose}, so zekno deploy uses it, not these settings.`
+/**
+ * SH3: the zekno.json in use here names another file than this folder's
+ * `zekno.app.json`. `folder`: where that zekno.json is, when it is in a
+ * folder above, as a sentence shows it; left out for this folder's own.
+ */
+export const SH3 = (file: string, folder?: string): string =>
+  `${folder === undefined ? "This folder's zekno.json" : `The zekno.json in ${folder}`} names ${file}, so zekno deploy uses it, not the zekno.app.json here.`
 /** CS1, for `set` or `unset`. */
 export const CS1 = (verb: "set" | "unset"): string =>
   verb === "set"
@@ -334,12 +338,12 @@ export const CS7 = (notA: string, rule: string): string => `${notA} ${rule}`
 /** CS8 */
 export const CS8 = (svc: string, label: string, old: string): string =>
   `${svc} · ${label} is ${old} already. Nothing was written.`
-/** CS9 */
-export const CS9 =
-  "Write this to zekno.app.json? Nothing is deployed until you deploy."
+/** CS9: `file` is the settings file changed, as the deploy names it. */
+export const CS9 = (file: string): string =>
+  `Write this to ${file}? Nothing is deployed until you deploy.`
 /** CS10 */
-export const CS10 =
-  "There is no terminal to ask on. Add `--yes` to write it to zekno.app.json."
+export const CS10 = (file: string): string =>
+  `There is no terminal to ask on. Add \`--yes\` to write it to ${file}.`
 /** CS11: the text and its detail. */
 export const CS11 = { text: "Written", detail: "Run zekno deploy to use it." }
 /** CS12 */

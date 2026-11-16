@@ -28,7 +28,8 @@ import { lstatSync } from "node:fs"
 import { join, resolve } from "node:path"
 
 import { DEFAULT_COMPOSE, type ProjectLink } from "../project/file"
-import { readCompose } from "../project/compose-read"
+import { readCompose, type ComposeSource } from "../project/compose-read"
+import { shownFile } from "../project/shown"
 import { composeText } from "./compose"
 import { isSettingsFile, readSettingsFile, SETTINGS_FILE } from "./file"
 import type { DeploySource, DeployText } from "./types"
@@ -71,6 +72,65 @@ export function chooseSource(
   const settings = present(cwd, SETTINGS_FILE)
   if (compose && settings) return { kind: "both", folder: cwd }
   return settings ? { kind: "settings", source } : { kind: "compose", source }
+}
+
+/**
+ * Which settings a person is shown, and may change, in `cwd` (specs/010-app-settings,
+ * security review S1): those of the file a deploy in `cwd` would sign,
+ * decided by `chooseSource` itself, given `link`, the zekno.json that
+ * applies here when the caller found it may be used here, as the deploy
+ * judges it. The settings commands and the settings screen both take their
+ * file from here, so neither can show one file while a deploy signs another.
+ *
+ * - `settings`: the settings file a deploy would read, wherever it is (the
+ *   one the link names, or this folder's). `both`: compose.yaml is here too
+ *   and nothing decides, so a deploy asks which (DP1) or stops (DP2).
+ * - `compose`: a deploy would read a Compose file written by hand, named as
+ *   the deploy names it. `settingsHere`: a `zekno.app.json` lies in this
+ *   folder all the same, which the next deploy does not use.
+ * - `none`: neither file.
+ */
+export type SettingsPlace =
+  | { kind: "settings"; source: ComposeSource; both: boolean }
+  | { kind: "compose"; file: string; link?: ProjectLink; settingsHere: boolean }
+  | { kind: "none" }
+
+/** Where the settings shown in `cwd` come from, by the deploy's rule; `link` is a zekno.json the caller found may be used here. */
+export function settingsPlace(cwd: string, link?: ProjectLink): SettingsPlace {
+  const chosen = chooseSource(cwd, link === undefined ? {} : { project: link })
+  if (chosen.kind === "both")
+    return {
+      kind: "settings",
+      source: { kind: "default", folder: cwd },
+      both: true,
+    }
+  if (chosen.kind === "settings")
+    return { kind: "settings", source: chosen.source, both: false }
+  if (chosen.source.kind === "project")
+    return {
+      kind: "compose",
+      file: shownFile(
+        cwd,
+        resolve(chosen.source.link.folder, chosen.source.link.compose)
+      ),
+      link: chosen.source.link,
+      settingsHere: present(cwd, SETTINGS_FILE),
+    }
+  return present(cwd, DEFAULT_COMPOSE)
+    ? { kind: "compose", file: DEFAULT_COMPOSE, settingsHere: false }
+    : { kind: "none" }
+}
+
+/** The settings file of `source` as its folder names it, before any link in its place is followed: where a change is written. */
+export function namedPath(source: ComposeSource): string {
+  switch (source.kind) {
+    case "default":
+      return join(source.folder, SETTINGS_FILE)
+    case "project":
+      return resolve(source.link.folder, source.link.compose)
+    case "given":
+      return source.path
+  }
 }
 
 /**

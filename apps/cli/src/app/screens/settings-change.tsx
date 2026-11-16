@@ -14,6 +14,7 @@
 import { Box, Text } from "ink"
 
 import { sanitize } from "../../server/sanitize"
+import { SETTINGS_FILE } from "../../settings/file"
 import type { SettingPath, SettingRow } from "../../settings/types"
 import { AS4, AS5, CS9, restartShown, settingWords } from "../../settings/words"
 import { firstSentence } from "../../ui/ink/questions"
@@ -98,7 +99,8 @@ export function boxLines(
   service: string,
   change: ScreenChange,
   theme: Theme,
-  inner: number
+  inner: number,
+  file = SETTINGS_FILE
 ): Piece[][] {
   const words = wordsOf(change.path)
   const lines: Piece[][] = linesOf(
@@ -151,7 +153,7 @@ export function boxLines(
     })
     return lines
   }
-  const { first, rest } = firstSentence(CS9)
+  const { first, rest } = firstSentence(CS9(file))
   lines.push(
     ...labelled(AS5.now, [{ text: change.now }], inner),
     ...labelled(
@@ -207,7 +209,13 @@ export function ChangePane({
   const section = rows[at]?.section
   const shown = rows.filter((row) => row.section === section)
   const inner = wholeInner(columns)
-  const box = boxLines(service, change, theme, boxInner(columns))
+  const box = boxLines(
+    service,
+    change,
+    theme,
+    boxInner(columns),
+    read.report.file
+  )
   return (
     <Pane
       title={service}

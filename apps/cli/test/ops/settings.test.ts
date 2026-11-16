@@ -186,7 +186,7 @@ describe("showing", () => {
     expect(links(other)).toBe("")
   }, 60_000)
 
-  test("a zekno.json in use here naming compose.yaml while zekno.app.json is here: SH3 as the note, no app", async () => {
+  test("a zekno.json in use here naming compose.yaml while zekno.app.json is here: SH3, and nothing of zekno.app.json shown (security review S1)", async () => {
     const m = await folderWith({
       "zekno.app.json": DESIGN_FILE,
       "compose.yaml": COMPOSE_V1,
@@ -202,15 +202,14 @@ describe("showing", () => {
         "compose.yaml"
       )
     ).toBe(0)
-    const report = await showSettings(m.deps)
-    expect(report.note).toBe(SH3("compose.yaml"))
-    expect(report.app).toBeUndefined()
+    await expect(showSettings(m.deps)).rejects.toThrow(SH3("compose.yaml"))
+    expect(() => settingsData(m.deps)).toThrow(SH3("compose.yaml"))
   }, 60_000)
 
   test("no zekno.app.json: SH1; SH2 with compose.yaml here, or with this folder's zekno.json naming a Compose file", async () => {
     const bare = machine()
     await expect(showSettings(bare.deps)).rejects.toThrow(SH1)
-    await expect(settingsData(bare.deps)).rejects.toThrow(SH1)
+    expect(() => settingsData(bare.deps)).toThrow(SH1)
 
     const compose = machine()
     writeFileSync(join(compose.project, "compose.yaml"), COMPOSE_V1)
@@ -259,7 +258,7 @@ describe("showing", () => {
       // Keys in another order than zekno writes, and cpus written 1.50.
       `{"services":{"web":{"variables":{"secrets":["A"]},"source":{"image":"nginx:1.27"},"deploy":{"cpus":1.50}}},"zekno":1}`
     )
-    expect(JSON.stringify(await settingsData(untouched(m.deps)))).toBe(
+    expect(JSON.stringify(settingsData(untouched(m.deps)).data)).toBe(
       '{"zekno":1,"services":{"web":{"source":{"image":"nginx:1.27"},"deploy":{"cpus":1.5},"variables":{"secrets":["A"]}}}}'
     )
   })
