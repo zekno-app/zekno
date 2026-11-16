@@ -123,7 +123,83 @@ Added by the tasks as they complete.
 
 ### The pseudo-terminal walkthrough
 
-(not yet run)
+Run 2026-11-16 at `2272197` (branch `010-app-settings`), macOS, Bun 1.4.4. A Python driver
+(`pty.fork()`, a `select` loop reading the whole time, keys one at a time, a screen model of every
+cell) ran a scratchpad script that calls `run` (`cli/cli.ts`) with `inkUi()`, or the plain
+interface where `main.ts` would pick it, and opens the app as `main.ts` does (`loadStart`,
+`detectBackground`, `openApp`). Test-only dependencies: `memoryKeyStore()`, a temporary profile,
+`prod` at `deploy@203.0.113.7` reached only through a stand-in `ssh` in front of the stand-in
+server (the real runner, the stand-in Docker), a stand-in fetch (never called). `TERM=xterm-256color`,
+`COLORTERM=truecolor`, `CI` unset; 100 by 30 and 80 by 24, the settings screen once on a light
+terminal. 133 sessions and 312 captures, kept in the scratchpad (`walkthrough-010/captures`),
+with `screens.md` there holding every screen no board shows. Deploy numbers, durations and
+temporary paths depend on the set-up and are not differences. Every session ended with the cursor
+shown, raw mode off and the alternate screen left; none hung; every exit status was the
+contract's.
+
+| Board | Sizes | Ran | Result |
+|---|---|---|---|
+| `SettingsFile` | both | `settings init` in an empty folder (image, Enter keeps `web`), then design.md's web settings with `set ... --yes` one by one, then `zekno settings` | Matched: `init` writes `settingsText` of the answers; after the sets the file is design.md's `web` service byte for byte, and `zekno settings` reads it. `set` cannot add `worker` (CS4, status 2), as the contract says, so the two-service file itself cannot be built by commands. |
+| `CmdSettings` | both | the design's file linked to `demo` on `prod`, deployed 4 times with `512m`, now `1g`: `settings`, `--json`, `\| cat`; memory back to `512m`, `set web.memory 1g`, `y`, `settings`; `set web.memory lots`; `compose` at a terminal and piped; a folder with no file | Matched line by line, both sizes (every line fits 80): columns 2, 16 and 26; service bold brand, sections bold, labels dim, values text, the mark yellow; change line (`web · memory limit` dim, `→` dim, new bold), CS9 with `yes`, CS11 (`✔` green, detail dim); CS7 bold then dim, status 2, no help line; Compose text dim; piped lines and `--json` exactly the contract's; piped `compose` = the 594 bytes. One difference (1). |
+| `SettingsDeploy` | both | `zekno deploy` linked, file only, to the end; one service; a Compose deploy; both files: Enter, `↓` Enter, Esc, Ctrl-C; no terminal with and without `--app --server`; a domain; memory `lots`; an unknown field on line 9 | `from` row matched (label dim, file text colour, two spaces, detail dim; `1 service: web`; no row for a Compose file); DP1 matched (`?` brand, question bold, `❯` brand, chosen bold, details dim, hint keys text and words dim), then `✔ From  zekno.app.json`; Esc and Ctrl-C `✖ Nothing was done.`, status 1; SL5, SV11, SV6 `(line 9)` matched (`✖` red, bold, rule dim set in by two), nothing connected; DP2 with `--app --server` matched (plain, status 2, no help line, no `ssh`). One difference (2). |
+| `AppSettings` | both, light | Home, Enter on `demo`, `e`; `↓↓↓`; `↓` to the end; `↑`; `tab`, `tab`; `c`, scroll to the end, `↑`, `c`, `c`, `esc`, `esc`; light terminal; 70 by 20, 79 by 23 and back | 100 by 30 matched line by line: header (`› prod › demo` dim, `settings` bold, `● running` green, `deploy 4` dim), Services pane (22 wide, dim border, title bold dim, `❯` brand, name bold, AS2 dim), service pane (brand border, title bold, file dim, headings bold, labels dim, selected bold, `not published` dim, the mark yellow, rule and AS1 dim), hint line. 80 by 24 as the contract: state alone, window with `↓ 5 more` / `↑ n more`, selected row kept in view, every line at most 80 columns and 24 lines. Light: brand `#1a73d1`, no other fixed colour. Too small: the app's message; the screen and an open change came back as they were. |
+| `AppSettingsEdit` | both | `enter` on memory (`512m`), `lots` Enter, `1g` Enter, `n`; again with Esc at asking, Esc while typing; `y`; `enter` on restart, `↓`, Enter; empty memory; empty image; `worker` published port; `d` | The asking step at 100 by 30 matched: one pane with a dim border, its section, the box with a brand border, `Change a setting` bold and `web · memory limit` dim, `now`/`new` dim with the new value bold, CS9 (`?` brand, first sentence bold, `(y/N)` dim), `y write it  n keep 512m  esc back`. The refusal is yellow set in by two. File after `n` and Esc unchanged, after `y` `1g` with the mark; `d` deployed and the mark went. At 80 by 24 every stage fits. One difference (3). |
+
+Differences:
+
+1. `CmdSettings`, a folder with no settings file, at a terminal (look). Board (its right column):
+   `This folder has no settings file. Run zekno settings init to start one.`, one line, text
+   colour. Program: `✖ This folder has no settings file.` (red, bold) and
+   `  Run zekno settings init to start one.` (dim). Piped, it is the board's one line. The board's
+   line stands in its explanation column, so this may be intended.
+2. `SettingsDeploy`, both files, no terminal, no `-f`, no link and no flags (words). Board and
+   DP2: `This folder has zekno.app.json and compose.yaml. Say which with -f <file>.` Program:
+   ``Say which server with `--server <name>`, or link this folder to it with `zekno link`, which keeps it in zekno.json.``
+   then the help line, status 2. DP2 is said only with `--server` (and `--app`); contracts/deploy.md
+   rule 4 does not say which comes first.
+3. Type-ahead on the screen's write question: a `y` written 3.2 ms after the Enter that opens
+   the question, before the question reached the terminal (7.0 ms), answered it and the file was
+   written. The command's question throws such keys away (checked: `y` and Enter written before
+   anything was drawn left CS9 open). app-screen.md "As built" item 12 says "a key typed ahead
+   never writes"; a `y` typed ahead does.
+4. Look, no board, contract ambiguous: contracts/app-screen.md, "Words", says the words of a
+   setting not set are dim, "also the `<old>` and `<new>` of a change". In the change box
+   `now  no limit` is in the text colour and `new  no limit` bold (the board draws the new value
+   bold); in `unset`'s change line `→ no limit` is bold.
+
+Known deliberate differences, confirmed as drawn: R9 item 3 (`(was 512m)` on the command too);
+item 4 (the Compose text in R2's quoted form); item 5 and the board's own caption (the deploy
+panel is today's: title `Deploy n` in its border, `app demo` not bold, `server prod` with no
+address, `secrets 2`, stages `Checked Signed Sent Started`, `demo is live on prod in 0.1s`);
+item 6 (no Services pane during a change); item 7 (DP1's label column 16 and rows set in by two,
+as every list); item 9 (two spaces in the change line); item 14 (the caption not printed);
+commands.md "As built" (value column 26); app-screen.md "As built" items 1 to 3, 6, 15 and 16
+(label at 2 and value at 13; Services 22 wide with no line under its title; one space before
+`deploy 4`; SH1 split bold then dim; the box's title inside it, `now`/`new` padded to 5, no empty
+lines; restart rules bold when chosen, dim when not), 24 (SH2 on the screen where the commands say
+SH3), 26 and 27 (AS9 with 52 and 80 more lines; the box cut to one line each with 47 more).
+
+R9 items 10 to 28 reached: 10 (`e settings` after `x remove secret`, two rows at both sizes),
+11, 12 (`on failure`, `3000, not published`, `3000, published on 8080`, `NAME=value`, volumes),
+13, 14, 15, 16, 17 (`web.memory` and `web.deploy.memory`), 18 (`PATH` as a plain variable), 19
+(`&&` refused), 20, 21 (`zekno link` with both: DP2 at a terminal; the app's `d`: DP5), 22, 23,
+24 (`expose: ["3000"]`), 25, 26 (a `zekno.json` nobody signed: no app, no marks, no warning), 27.
+Item 28 is in the docs, not on a screen.
+
+Security fixes seen: SH3 (every command, status 1; `init` says IN4), IN6 apart (a warning after
+the settings and the Compose text, a dim note after `init`), IN7, DP6 (nothing deployed, the
+screen read again), AS8 on the command and the screen, AS9 at both sizes with `c` reaching the
+value's end, SV9 (g) and SV24's second rule in the file and typed (CS7).
+
+SC-001: an empty folder and a profile with `prod`; `settings init`, `set web.start "bun run start"`,
+`set web.port 8080` (not 3000: the walk keeps clear of that port), `set web.secrets DATABASE_URL`,
+`set web.volumes.data /data`, `zekno deploy` with the value typed when asked: 4.1 s from the first
+command to the result line, answers typed by the driver at once.
+
+Not checked: the two-service file built by commands (CS4); CS13 and CS14; the reader's SR
+sentences; DP1 with no profile; the security review's folders A and C (a sub-folder, a link naming
+`deploy/zekno.app.json`); the screen before its first read (the read was too fast to see); the
+light theme at 80 by 24; a real terminal emulator (only the screen model); a real server.
 
 ### The agent end-to-end tests
 
