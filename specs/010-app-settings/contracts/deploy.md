@@ -174,3 +174,27 @@ setting at deploy is drawn as on the board: `✖ zekno.app.json sets a domain fo
 - The app's `d` in a folder with only a settings file, linked and not, and with both.
 - From a Compose deploy to a settings deploy and back, on the same app: the second deploy's
   Compose text is the new one; a service left out is no longer in it.
+
+## As built: after the security review (2026-11-16)
+
+Written by the implementer of the review's fixes (`security-review.md`, "After the review: what
+was fixed"). Where these notes and the sections above differ, these notes are what is built.
+
+- **The exact name (S5).** For rules 3 and 4 a settings file is there only when the folder lists
+  `zekno.app.json` exactly (`settingsFileIn`); a file of another letter case is no settings file
+  on any disk, so `ZEKNO.APP.JSON` beside `compose.yaml` is not "both". The reader holds a file a
+  link names to the same (contracts/settings-file.md, "As built").
+- **The settings commands follow this rule (S1).** `zekno settings`, `--json`, `compose`, `set`
+  and `unset` decide their file with `chooseSource` too (contracts/commands.md, "As built").
+- **The app's `d` from the settings screen (needs validation, settled).** The `deploy` effect may
+  carry `shown`, the SHA-256 of the settings file the settings screen showed. `readSource` now
+  gives a settings file's SHA-256 with its services (`DeployText.settings.sha256`). When `shown`
+  is given and the file read is not a settings file with those bytes, nothing is signed or sent:
+  the app says DP6 on the status line and the screen reads the file again. `d` from the app's own
+  screen carries nothing, as before.
+
+| Id | Sentence | Status |
+|----|----------|--------|
+| DP6 | `The settings changed since this screen showed them, so nothing was deployed.` (the app, an error notice) | |
+
+Test: `test/app/app-effects.test.ts`, "d on the settings screen deploys only the file it showed".

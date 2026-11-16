@@ -277,10 +277,24 @@ the file.
 - `! changed, not deployed (was 512m)` marks a value that differs from your
   machine's last deploy of that app, when that deploy was made from settings.
   When that is not known, nothing is marked.
+- What that deploy had and the file no longer has is marked as
+  `zekno settings` marks it: a variable or a volume is a row
+  `none  ! removed, not deployed (was …)`, a volume adding `; its data stays`,
+  and a service is listed under the others in the Services pane with
+  `! removed, not deployed`.
+- A value longer than three lines is cut there, and the line under it says
+  how many more there are and where they are:
+  `… 52 more lines: c shows them in the Compose text`. The box of a change
+  shows the old and the new value whole when they fit, else each cut with the
+  same line.
 - `↑` `↓` move between settings, `enter` changes the selected one, `tab` shows
   the next service, `c` shows the Compose text the settings turn into (`c` or
   `esc` goes back), `d` deploys as on the app's screen, and `esc` goes back to
   the app's screen.
+- `d` here deploys only the file the screen shows. When it changed since,
+  nothing is deployed, the status line says
+  `The settings changed since this screen showed them, so nothing was deployed.`
+  and the screen shows the file as it is now.
 - **Changing a value.** `enter` opens a box with the setting's current value
   filled in. Type the new one and press `enter`; `restart` is a list to choose
   from. A value its rule refuses shows the rule, and the box stays open. An
@@ -724,8 +738,25 @@ which).
 
 The five `zekno settings` commands show, change, start and print the file.
 None of them contacts a server, deploys or signs anything. Only
-`zekno settings` itself may read the keychain, once, when this folder has a
-`zekno.json` of its own (below).
+`zekno settings` itself may read the keychain, once, when the file it shows
+is the one a `zekno.json` in use here names (below).
+
+**Which file.** Every `zekno settings` command looks at the settings file
+`zekno deploy` in the same folder would sign, by the same rule (see
+[zekno deploy](#zekno-deploy)): the one the `zekno.json` in use here names, in
+this folder or in one above, wherever it is, and named as the deploy names
+it, such as `deploy/zekno.app.json`; else this folder's own `zekno.app.json`.
+A `zekno.json` is in use here when your team signed it and it was used in its
+folder on your machine; any other is left aside, as `zekno deploy` leaves it,
+and is never asked about or recorded. When the deploy would use a Compose file
+while a `zekno.app.json` lies here, each command says so in one sentence and
+shows or changes nothing, exit status 1:
+`This folder's zekno.json names compose.yaml, so zekno deploy uses it, not the zekno.app.json here.`
+With `compose.yaml` here too and no `zekno.json`, the settings are shown and
+changed, and a note says that `zekno deploy` asks which to deploy, or takes
+`-f <file>`. A file counts only when its folder lists it exactly as
+`zekno.app.json`: on a disk that ignores letter case, as macOS has by default,
+`ZEKNO.APP.JSON` is not a settings file.
 
 #### The settings file
 
@@ -765,14 +796,14 @@ left out.
 | Section | Setting | What it is, and its rule |
 | --- | --- | --- |
 | `source` | `image` | The image the service runs, as Docker names it, such as `ghcr.io/acme/web:1.4.2`: a host if any, a lowercase path, then a tag, a digest (`@sha256:` and 64 hex digits) or both. At most 255 characters |
-| `deploy` | `start` | The start command. Left out: the image's own. At most 4096 characters and 256 words. It runs without a shell: see [The start command](#the-start-command) |
+| `deploy` | `start` | The start command. Left out: the image's own. At most 4096 characters and 256 words, with no control or invisible character (below). It runs without a shell: see [The start command](#the-start-command) |
 | | `restart` | `no`, `on-failure` or `always`. Left out: `no` |
 | | `memory` | A memory limit: a whole number and `m` or `g`, such as `512m` or `1g`, at least `6m`. Left out: no limit |
 | | `cpus` | A processor limit: a number above 0 and at most 1024, with at most two decimals, such as `0.5` or `2`. Left out: no limit |
 | `networking` | `port` | The port the service listens on, 1 to 65535. The other services of the app reach it by the service's name |
 | | `publish` | A port of the server that reaches `port`, 1 to 65535. It needs `port`, and two services cannot publish the same one. Left out: not published. See [Published ports](#published-ports) |
 | `variables` | `secrets` | The names of the secrets the service reads, each set with `zekno secret set`. Never a value. Letters, digits and underscore, not starting with a digit, at most 128 characters, and not a name `zekno` keeps for itself, such as `PATH` |
-| | `plain` | Values that are not secret, such as `{ "NODE_ENV": "production" }`. A name as for a secret, though a name `zekno` keeps for itself is allowed here. A value of one line with no control character, at most 4096 characters, which may be empty. A name cannot be both a secret and a plain variable of one service |
+| | `plain` | Values that are not secret, such as `{ "NODE_ENV": "production" }`. A name as for a secret, though a name `zekno` keeps for itself is allowed here. A value of one line with no control or invisible character (below), at most 4096 characters, which may be empty. A name cannot be both a secret and a plain variable of one service |
 | `volumes` | `<name>` | A named volume, and the absolute path in the container where it is mounted, such as `/data`. See [Volumes](#volumes) |
 
 - A service's name is lowercase letters, digits and hyphens, starts with a
@@ -800,6 +831,16 @@ names the place and the rule, never the file's content:
 ```
 
 Piped, it is one line on standard error. Exit status 1.
+
+**Characters.** A start command and a plain value may hold text in any
+script, accents and emoji, but no control character and no character that is
+drawn as nothing or turns text around: a zero-width space or joiner, a soft
+hyphen, a direction mark or override, a tag character, a Hangul filler, a
+variation selector that does not follow an emoji, a line or paragraph
+separator. So what `zekno` shows of a value is the value that is signed. Every
+other setting takes ASCII only. A value that holds one is refused with its
+place:
+`web, variables.plain.NODE_ENV: use no invisible character, such as a zero-width space or a right-to-left mark.`
 
 **What it can never hold.** A secret's value: `secrets` is a list of names,
 and the values stay in `zekno secret set`. A path on your machine: no setting
@@ -882,17 +923,23 @@ $ zekno settings
   Variables     secrets   DATABASE_URL
 ```
 
-- Only the settings that are set are shown, and a section with none is left
-  out. Secrets are shown by name, never a value.
-- When this folder has a `zekno.json` of its own, `zekno` opens your team to
-  judge it, which reads the keychain once. It is never asked about and never
-  recorded as used. When it is signed by your team, in use here, and names
-  `zekno.app.json`, the first line names its app, and each value that differs
-  from your machine's last deploy of that app made from settings is marked:
-  `! changed, not deployed (was 512m)`. Otherwise the first line is the file's
-  name alone and nothing is marked.
-- When this folder's `zekno.json` names a Compose file, a warning says that
-  `zekno deploy` uses it, not these settings.
+- The settings that are set are shown, and a section with none is left out.
+  Secrets are shown by name, never a value.
+- When the file is the one a `zekno.json` in use here names, `zekno` opens
+  your team to verify it and your machine's history, which reads the keychain
+  once. When your team signed it, the first line names its app, and each
+  value that differs from your machine's last deploy of that app made from
+  settings is marked: `! changed, not deployed (was 512m)`. Otherwise the
+  first line is the file's name alone and nothing is marked.
+- What that deploy had and the file no longer has is shown and marked too,
+  since the next deploy drops it. A setting no longer set reads as one left
+  out, dim: `memory    no limit  ! changed, not deployed (was 512m)`. A plain
+  variable or a volume is a row of its own:
+  `none  ! removed, not deployed (was REQUIRE_AUTH=1)`, and for a volume
+  `none  ! removed, not deployed (was /var/audit; its data stays)`: removing a
+  volume from the settings keeps its data (see [Volumes](#volumes)). A service
+  is a line after the others:
+  `auth  ! removed, not deployed (was ghcr.io/acme/auth:1)`.
 
 Piped, one line per setting that is set: the service, the setting's place in
 the file, and the value as the file holds it, separated by tabs. No marks, no
@@ -954,6 +1001,9 @@ $ zekno settings set web.memory 1g
 
 - "No", Enter, Esc or Ctrl-C: `Nothing was done.`, exit status 1, and the
   file is as it was. `--yes` writes without asking.
+- The question, and the sentence with no terminal below, name the file
+  written as `zekno deploy` names it: `Write this to deploy/zekno.app.json?`
+  for a `zekno.json` that names that file.
 - With no terminal it needs `--yes`. Without it, it prints the change line,
   says ``There is no terminal to ask on. Add `--yes` to write it to zekno.app.json.``
   and ends with exit status 1. With it, the change line and
@@ -992,7 +1042,7 @@ A change runs after the next deploy.
 #### What will run: zekno settings compose
 
 Prints the Compose text the settings turn into: byte for byte the text
-`zekno deploy` signs for this folder's `zekno.app.json`. For the file above:
+`zekno deploy` in this folder signs. For the file above:
 
 ```yaml
 services:
@@ -1041,11 +1091,17 @@ $ zekno settings init
 ✔ Written zekno.app.json  Run zekno deploy to use it.
 ```
 
-- It writes `zekno.app.json` with that one service and its image, and never
-  over a file. With one here it stops before asking:
+- It writes `zekno.app.json` in this folder with that one service and its
+  image, and never over a file, not even one made while it asks. With one
+  here it stops before asking:
   `There is already a zekno.app.json here. Change it with zekno settings set, or in an editor.`
-- With `compose.yaml` in the folder too, a note says that `zekno deploy` asks
-  which to deploy, or takes `-f <file>`.
+  On a disk that ignores letter case, a file named `ZEKNO.APP.JSON` or the
+  like takes that name: it stops before asking and says to rename it or
+  remove it.
+- When a `zekno.json` in use here names another file, a warning after it says
+  that `zekno deploy` uses that file, not the one just made. Else, with
+  `compose.yaml` in the folder too, a note says that `zekno deploy` asks which
+  to deploy, or takes `-f <file>`.
 - Esc or Ctrl-C at a question: `Nothing was done.`, exit status 1. With no
   terminal it writes nothing and ends with exit status 1.
 
@@ -1054,7 +1110,7 @@ $ zekno settings init
 | Status | When |
 | --- | --- |
 | `0` | Shown, written or printed; a value the same as now; `unset` of a setting not set |
-| `1` | No settings file; a fault in the file; "no", Esc or Ctrl-C; no terminal without `--yes`; `init` with no terminal or with a file here; the file changed since it was read, is a symbolic link, or could not be written |
+| `1` | No settings file, or a deploy here would use a Compose file; a fault in the file; "no", Esc or Ctrl-C; no terminal without `--yes`; `init` with no terminal or with a file here; the file changed since it was read, is a symbolic link, or could not be written |
 | `2` | A word missing or one too many; a setting this `zekno` does not know or does not have yet; a service the file does not have; a value not allowed; a change that breaks a rule of the file; `unset` of the image |
 
 ### zekno doctor

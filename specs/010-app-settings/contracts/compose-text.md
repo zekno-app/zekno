@@ -160,3 +160,13 @@ from settings, and nothing is marked. It is never signed, sent or written.
 - When `docker compose version` works on the machine running the tests, `docker compose config
   --quiet` reads the Compose text of every settings file of the test set without error; the test
   is skipped otherwise, as `test/scenarios/real-docker.test.ts` is. It contacts nothing.
+
+## As built: after the security review (2026-11-16)
+
+Written by the implementer of the review's fixes. Nothing in the text changes. Rule 4's "the
+settings hold no character that would need it" holds as before; the start command and a plain
+value now also hold no character drawn as nothing (contracts/settings-file.md, "As built", S2),
+so what any surface shows of the text is the text. A last deploy made before this whose start
+command held one is read back by `deployedSettings` as no settings (`composeText` of it throws,
+which gives undefined), so nothing is marked against it; one whose plain value held one is read
+back as before, and the value of the file differs from it, so it is marked.

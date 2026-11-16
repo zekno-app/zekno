@@ -440,3 +440,216 @@ the screen (S4); `ZEKNO.APP.JSON` alone, not a settings file (S5).
 **Not checked by this review**: a real terminal or pseudo-terminal; real SSH; `docker compose up`;
 Linux; macOS Keychain prompts; the full-screen app drawn by Ink beyond its layout functions and the
 existing tests.
+
+## 6. After the review: what was fixed
+
+**Written by the implementer of the fixes, not by the reviewer.** Parts 1 to 5 above are the
+reviewer's and are unchanged. Each fix has tests that failed before it and pass after it; the
+contracts carry "As built" notes for everything a person sees that changed. Nothing in the runner,
+`packages/core` or any message format changed.
+
+### S1. The settings commands look at the file a deploy would sign
+
+**Change.** `settingsPlace(cwd, link)` in `settings/source.ts` decides the file by `chooseSource`,
+the deploy's own rule, given the `zekno.json` `findProject` finds here or in a folder above. The
+settings commands (`ops/settings.ts`) and the settings screen (`app/effects/settings.ts`, its
+`settingsFor`) both use it; the screen's logic was moved there, not copied. The commands judge a
+`zekno.json` without the keychain: it counts when `links.json` holds it byte for byte (it was
+signed by the team and used in its folder on this machine). One not signed by the team, or not yet
+used here, is left aside as the deploy leaves it; nothing is asked or recorded. When the rule picks
+a settings file, that file is shown or changed, wherever it is, and named as the deploy names it
+(CS9 and CS10 now take the file). When it picks a Compose file while a `zekno.app.json` lies here,
+every command says SH3, reworded for a link here or above, and shows or changes nothing (status 1;
+SH3 is no longer a note after shown settings). With both files and nothing that decides, IN6 is
+said apart. `init` makes the file in this folder and warns with SH3 when the link in use names
+another file.
+
+In the review's three folders, as built:
+
+- **A** (sub-folder under a linked root): every command reads and writes the root's file;
+  `zekno settings` at a terminal starts `demo  from <the root's path>`; `set` without `--yes` says
+  ``There is no terminal to ask on. Add `--yes` to write it to <the root's path>.``; the
+  sub-folder's own file is untouched; `compose` prints the root's text, which `zekno deploy` there
+  signs.
+- **B** (link names `compose.yaml`, `zekno.app.json` beside it): `settings`, `--json`, `compose`,
+  `set` and `unset` each print only
+  `This folder's zekno.json names compose.yaml, so zekno deploy uses it, not the zekno.app.json here.`,
+  status 1.
+- **C** (link names `deploy/zekno.app.json`): every command reads and writes
+  `deploy/zekno.app.json`, named so (`demo  from deploy/zekno.app.json`,
+  `Write this to deploy/zekno.app.json? ...`); `compose` prints its text, which the deploy signs.
+
+**Known limit.** The commands that never read the keychain take `links.json` as the sign of "used
+here". A `zekno.json` recorded there whose signature no longer verifies (its signer was removed
+from the team since) is followed by them, while `zekno deploy` leaves it aside: at a terminal it
+says so (`... is not signed by your team, so zekno does not use it ...`) and asks for the server
+and the app; with no terminal it stops. Attacker B can also add an entry to `links.json`, as
+`accepted.ts` already notes. `zekno settings` itself, which reads the keychain for its marks, shows
+no app and no marks in that case.
+
+**Tests.** `test/scenarios/settings-which-file.test.ts` (A, B and C for every command, both files,
+an unsigned `zekno.json` above and a signed one not used on this machine, with `links.json`
+unchanged; `set`, `unset` and `compose` with a key store that throws);
+`test/scenarios/settings-compose.test.ts` (printed equals signed, byte for byte, in A and C; in B
+nothing printed and the deploy signs `compose.yaml`). All nine new tests failed on the code before
+the fix. **Commit** `5d429d5`.
+
+### S2. Invisible characters are refused
+
+**Change.** One definition, `holdsHidden` in `server/sanitize.ts`, beside `sanitize` and built on
+its own classes: a control character, every character `sanitize` takes out as invisible or drawn
+as nothing (`\p{Cf}`, `\p{Zl}`, `\p{Zp}`, `\p{Cs}`, `\p{Default_Ignorable_Code_Point}`), and
+U+FE0E or U+FE0F where it does not follow an `Extended_Pictographic` character. `settings/` may
+import `server/` (both are base folders of the layering), so no exception was needed. The reader
+refuses such a character in the start command (SV9, a new rule (g)) and in a plain value (SV24, a
+second rule), naming the place and never the content:
+`web, variables.plain.NODE_ENV: use no invisible character, such as a zero-width space or a right-to-left mark.`
+`readTyped`, used by `zekno settings set` and the screen, refuses the same (CS7 with
+`Use no invisible character, such as a zero-width space or a right-to-left mark.`). Every name and
+every other value was already held to an ASCII pattern, which a test now checks for each kind.
+
+**Where the line is.** Refused: zero-width spaces and joiners (U+200B to U+200D, U+2060), the soft
+hyphen, the bidirectional marks, embeddings, overrides and isolates (U+200E, U+200F, U+061C,
+U+202A to U+202E, U+2066 to U+2069), the invisible operators, tag characters (U+E0000 to U+E007F),
+the Hangul fillers (U+115F, U+1160, U+3164, U+FFA0), variation selectors (U+FE00 to U+FE0F where
+not after a pictograph, U+E0100 and on, the Mongolian ones), the combining grapheme joiner, U+180E,
+the interlinear annotation and musical format characters, and as before every `Cc`, the byte order
+mark, U+2028 and U+2029. Allowed: text in any script, precomposed accents, combining marks, emoji,
+an emoji with its form selector, skin tones, flags, and spaces that draw as a space (U+00A0,
+U+3000, U+2800). An emoji sequence joined by U+200D is refused.
+
+**Combining marks: left as they are.** They draw something, so a value that holds them never reads
+as the value without them, which is what S2 is about; the reader already bounds a string to 4,096
+code points; and any bound on a run of them would be a guess at what real text needs (Vietnamese
+written decomposed, Hebrew with points and cantillation, Tibetan stacks) and would refuse real
+values. Whether a long run draws over the rows above in common terminals is still not validated.
+
+**Tests.** `test/settings/invisible.test.ts`: each kind alone, after a word and inside one; the
+review's own values (`production` U+200B, `true` U+E0001, `app.` U+00AD `example.com`, `on`
+U+3164, `bun run start` U+2060); what stays allowed; the names held to ASCII; `readTyped`; and a
+walk over every code point that `sanitize` takes out, each refused. Before the fix the review's
+file read as settings and `readTyped` took `true` U+E0001 (run with the code before the fix).
+Two tests changed (below). **Commit** `92039f2`.
+
+### S3. What the next deploy removes is marked
+
+**Change.** `rows.ts`: a plain variable or a volume this machine's last deploy had and the file no
+longer has is a row of its own after the file's (`removed`, AS8), on the screen in place of the
+`none` row, and in `zekno settings` at a terminal; a service it had is listed (`removedServices`);
+`zekno settings` at a terminal also shows a setting no longer set that the deploy had, marked with
+AS3 as the screen already did. Piped and `--json` carry no marks, as before.
+
+Lines a person now sees, at a terminal (100 columns), for the review's case:
+
+```text
+  Deploy        memory    no limit  ! changed, not deployed (was 512m)
+  Variables     plain     NODE_ENV=production
+                          none  ! removed, not deployed (was REQUIRE_AUTH=1)
+  Volumes       data      /data
+                audit     none  ! removed, not deployed (was /var/audit; its data stays)
+
+  auth  ! removed, not deployed (was ghcr.io/acme/auth:1)
+```
+
+On the screen (100 by 30 and 80 by 24) the same rows, and under the Services `auth`, faint, then
+`! removed, not deployed` in the warning colour over two lines. `; its data stays` keeps a
+volume's line from suggesting its data is deleted (FR-012).
+
+**Tests.** `test/settings/rows.test.ts`, `test/ui/ink/settings-report.test.tsx` (the lines, their
+colours, piped unchanged), `test/app/settings-screen.test.tsx` (100 by 30, 80 by 24, colours,
+`enter` on a removed row), `test/app/settings-effects.test.ts`, `test/commands/settings.test.tsx`
+(after a real deploy). **Commit** `a5af103`.
+
+### S4. A long value says that it goes on
+
+**Change.** `settings-layout.ts`, `rowValueLines`: a value of more than three lines is cut there,
+followed by AS9, `… <n> more lines: c shows them in the Compose text`, faint, then the row's mark;
+a mark's old value takes one line at most. The change box shows the old and the new value whole
+when the pane holds them with five lines of rows, else each cut with AS9, and its question is
+always drawn. The Compose text behind `c` already scrolled to its last line; a test now pins it.
+For the review's start command: at 80 by 24 `… 80 more lines: c shows them in the Compose text`
+then `! changed, not deployed (was bun run start)`; at 100 by 30 `… 52 more lines`; in the change
+box at 80 by 24 one line of each value and `… 47 more lines: ...`.
+
+**Tests.** `test/app/settings-screen.test.tsx`, "a long value": both sizes, a short value drawn
+whole, the old value cut, `c` reaching `attacker.example` and the end, the change box whole and
+cut. **Commit** `13cc897` (with S5).
+
+### S5. `zekno.app.json` by its exact name
+
+**Change.** `listsExactly(dir, name)` in `project/file.ts`, the check `zekno.json` already had,
+now shared. `settingsFileIn` in `settings/source.ts` holds `chooseSource` (so the deploy, `zekno
+link`, the app's `d` and the settings commands) to it, and `readSettingsFile` holds a file found in
+a folder (this one, or the one a link names) to it. `init` says IN7 before any question when the
+name is taken on this disk by a file of other letter case.
+
+**Tests.** `test/scenarios/settings-exact-name.test.ts`, which says which kind of disk it ran on:
+with only `ZEKNO.APP.JSON`, `chooseSource` gives the Compose file, the reader says SR1, every
+settings command SH1, `zekno deploy` the Compose file's sentence and nothing runs, the screen SH1;
+`Zekno.App.Json` beside `compose.yaml` is not both; a link naming `zekno.app.json` beside
+`ZEKNO.APP.JSON` finds no such file; `init` says IN7 on a disk that ignores case and makes
+`zekno.app.json` beside on one that heeds it. On this Mac (case-insensitive) before the fix,
+`chooseSource` chose `ZEKNO.APP.JSON` as settings and read it. **Commit** `13cc897`.
+
+### Needs validation: the screen's `d` (run, and fixed)
+
+**What the test showed before the fix.** In a linked folder, the screen's read, then the file
+changed (memory `1g` to `2g`), then the `deploy` effect: `deploy-started`, the stages,
+`demo is live on dev`; the changed file was signed and started without being shown.
+
+**Change.** `d` on the settings screen (rows or Compose text) carries `shown`, the SHA-256 of the
+file the screen read. The app's deploy compares it with the bytes it reads (`readSource` now gives
+a settings file's SHA-256); when they differ, or the file is no longer a settings file, nothing is
+signed or sent, the status line says
+`The settings changed since this screen showed them, so nothing was deployed.` (DP6), and the
+screen reads the file again. `d` from the app's own screen carries nothing, as before.
+
+**Tests.** `test/app/app-effects.test.ts`, "d on the settings screen deploys only the file it
+showed" (changed: refused, nothing signed or connected; unchanged: deployed; the app's own `d`:
+as before); `test/app/settings-state.test.ts` (`d` carries `shown`). **Commit** `ab85172`.
+
+### Needs validation: `init` without hard links (run, and fixed)
+
+**What the test showed before the fix.** With `link` failing with `ENOTSUP` and a file made at
+`zekno.app.json` between the check and the rename, `createSettings` returned without an error and
+the rename replaced that file.
+
+**Change.** On a disk without hard links the file is made in place with
+`O_CREAT | O_EXCL | O_NOFOLLOW`, which refuses any name taken at that moment, a link to nowhere
+included (IN4), then written whole and flushed; a failure after it was made removes it only while
+it is still the file made.
+
+**Tests.** `test/settings/write.test.ts`: each of `ENOTSUP`, `EPERM`, `EOPNOTSUPP`, `EMLINK`,
+`ENOSYS` makes the file whole, mode 644, with no temporary file left; a file or a link to nowhere
+that appears before the placing is never replaced. **Commit** `ab85172`.
+
+### Not validated
+
+Still as part 2 records them: two names that differ only in letter case in one Git repository (S5
+makes the result the same on every disk, but which one a macOS checkout keeps was not run);
+`docker compose up` on a Linux server; how a long run of combining marks draws in common
+terminals.
+
+### Existing tests whose expectations changed
+
+- `test/ops/settings.test.ts`, "a zekno.json in use here naming compose.yaml while zekno.app.json
+  is here": SH3 is now the command's only sentence, not a note after the settings (S1).
+  `settingsData` now returns `{ data, note }` and throws at once, so two calls of that file read
+  `.data` and `toThrow` (S1).
+- `test/ui/ink/settings-report.test.tsx`, the two tests of the report's note: the note is now IN6
+  (the only note a report carries), not SH3 (S1).
+- `test/settings/words.test.ts`: SH3's words, and CS9 and CS10 taking the file (S1).
+- `test/commands/settings.test.tsx`: CS10 called with the file; the same words (S1).
+- `test/settings/change.test.ts`, "a value is cleaned before it is shown": a value holding U+202E
+  can no longer be set, so the settings are made in memory, and the refusal is checked (S2).
+- `test/scenarios/settings-compose.test.ts`, "a plain value with an invisible character": the file
+  is now refused, nothing printed (S2).
+- `test/settings/rows.test.ts`, "a setting the last deploy had and the file no longer has is not
+  shown": it is now shown and marked; and "plain variables and volumes, each by its name": a
+  removed variable is a removed row, not a `none` row marked changed (S3).
+- `test/settings/source.test.ts`, `readSource` of a settings file: it now gives the SHA-256 of the
+  bytes read (the screen's `d`).
+- `test/app/settings-state.test.ts`, `d` on the settings screen and in its Compose text: the effect
+  carries `shown`; the app's own screen's `d` does not (the screen's `d`).
+
+**Commit of these records and the docs**: the commit that adds this part.

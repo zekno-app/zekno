@@ -355,3 +355,96 @@ above, each shown only after it passed its rule. Statuses in brackets.
   `settingsText` of the answers), IN4, IN5, IN6, leaving.
 - **No secret value anywhere** (SC-004): the stand-in history and secret store hold sentinel
   values; none appears in any output of any of the five commands.
+
+## As built: after the security review (2026-11-16)
+
+Written by the implementer of the review's fixes (`security-review.md`, "After the review: what
+was fixed"). Where these notes and the sections above differ, these notes are what is built.
+
+**Which file every command reads (S1).** Each command reads the settings file `zekno deploy` in
+the same folder would sign, decided by the deploy's own code (`settingsPlace` in
+`settings/source.ts`, which calls `chooseSource` with the `zekno.json` that `findProject` gives).
+The settings screen takes its file from the same function. A `zekno.json` counts when it applies
+here or in a folder above and `links.json` holds it byte for byte (it was signed by the team and
+used in its folder on this machine); that is judged without the keychain, so `set`, `unset`,
+`compose` and `init` still never read it. Any other `zekno.json` is left aside, as the deploy
+leaves it: never asked about, never recorded. One that cannot be read stops the command with its
+sentence, as it stops a deploy.
+
+- The rule picks a settings file: that file is shown or changed, wherever it is, and named as the
+  deploy names it (`shownFile`): `demo  from deploy/zekno.app.json` at a terminal,
+  `Write this to deploy/zekno.app.json? Nothing is deployed until you deploy.` (CS9),
+  ``There is no terminal to ask on. Add `--yes` to write it to deploy/zekno.app.json.`` (CS10).
+  From a sub-folder of a linked root, the root's file is named by its whole path, from `~` when it
+  is under the home folder (`~/acme/zekno.app.json`).
+- The rule picks a Compose file while a `zekno.app.json` lies in this folder: every command says
+  SH3 and nothing else, status 1, and shows or changes nothing. SH3 is no longer a note after the
+  settings.
+- The rule picks a Compose file and none lies here: SH2, naming that file as the deploy names it.
+- Both files here and nothing that decides: the settings are shown and changed as before, and IN6
+  is said apart: as the report's note at a terminal (a warning after the services) and on standard
+  error piped; for `--json` and `compose` with `Ui.warn` (standard error piped, so the text stays
+  exact); for `set` and `unset` after CS11, as a note.
+- `zekno settings` opens the team (one keychain read) only when the file shown is the one a
+  `zekno.json` in use here names and a profile exists; the app's name and the marks are shown
+  only when the team's list verifies that `zekno.json` (`standingOf` gives `used`).
+- `init` makes `zekno.app.json` in this folder as before. When the `zekno.json` in use here names
+  another file, SH3 follows IN3 as a warning (in place of IN6).
+
+Sentences changed or added:
+
+| Id | Sentence |
+|----|----------|
+| SH3 | `This folder's zekno.json names <file>, so zekno deploy uses it, not the zekno.app.json here.`; for one in a folder above, `The zekno.json in <folder> names <file>, so zekno deploy uses it, not the zekno.app.json here.` [1] |
+| CS9 | `Write this to <file>? Nothing is deployed until you deploy.` |
+| CS10 | ``There is no terminal to ask on. Add `--yes` to write it to <file>.`` [1] |
+| IN7 | `A file here is named zekno.app.json in other capital letters, and this disk takes it as the same name. zekno reads settings only from a file named exactly zekno.app.json: rename that file, or remove it.` [1] |
+
+**Characters a value may hold (S2).** A start command or a plain value that holds a character
+drawn as nothing is refused: in the file with SV9 (g) or SV24's second rule
+(contracts/settings-file.md, "As built"), and when typed for `set` with CS7:
+`That is not a start command zekno can run.` or `That is not a value zekno can write.`, then
+`Use no invisible character, such as a zero-width space or a right-to-left mark.` [2]. Cleaning
+with `sanitize` (piped lines, rows, the Compose text at a terminal) is kept, though it now changes
+nothing a file can hold.
+
+**What the next deploy removes (S3).** At a terminal only, where marks appear (piped and `--json`
+are unchanged, with no marks):
+
+- A setting the last deploy had and the file no longer has is shown, its value the words of a
+  setting left out, dim, with AS3: `memory    no limit  ! changed, not deployed (was 512m)`
+  (`port`, `secrets` and the Deploy settings alike). The sentence above, "A setting the last
+  deploy had and the file no longer has is not shown", no longer holds.
+- A plain variable or a volume the last deploy had and the file no longer has is a row of its own
+  after those the file has, its value `none`, dim, and AS8 in the warning colour:
+  `none  ! removed, not deployed (was REQUIRE_AUTH=1)` (labelled `plain` only when it is the first
+  plain row), `audit     none  ! removed, not deployed (was /var/audit; its data stays)`.
+- A service the last deploy had and the file no longer has is a line after the services, an empty
+  line before it: its name bold in the brand colour, two spaces, AS8 with its image in the warning
+  colour: `auth  ! removed, not deployed (was ghcr.io/acme/auth:1)`.
+
+The review's case, at 100 columns:
+
+```text
+  demo  from zekno.app.json
+
+  web
+  Source        image     ghcr.io/acme/web:1
+  Deploy        memory    no limit  ! changed, not deployed (was 512m)
+  Variables     plain     NODE_ENV=production
+                          none  ! removed, not deployed (was REQUIRE_AUTH=1)
+  Volumes       data      /data
+                audit     none  ! removed, not deployed (was /var/audit; its data stays)
+
+  auth  ! removed, not deployed (was ghcr.io/acme/auth:1)
+```
+
+**The exact name (S5).** `zekno.app.json` counts only when its folder lists it exactly so
+(`listsExactly`, shared with `zekno.json`): on a disk that ignores letter case, a folder with only
+`ZEKNO.APP.JSON` has no settings file (SH1), and `init` there says IN7 before any question, since
+the name is taken on that disk. IN4 is said when the folder lists `zekno.app.json` exactly.
+
+Tests: `test/scenarios/settings-which-file.test.ts` (the review's three folders, both files, and
+a `zekno.json` left aside), `test/scenarios/settings-compose.test.ts` (printed equals signed in
+each), `test/settings/invisible.test.ts`, `test/ui/ink/settings-report.test.tsx` and
+`test/commands/settings.test.tsx` (the removed marks), `test/scenarios/settings-exact-name.test.ts`.

@@ -277,3 +277,41 @@ A value from the file, a key the reader does not know, a name that did not pass 
 piece of a line. The tests put the marker `zk_SENTINEL_7c1e` in the wrong place of every faulty
 file (a value, an unknown key, a bad name, a comment) and look for it in standard output,
 standard error, the error's message and stack, and every frame Ink draws (SC-004, SC-005).
+
+## As built: after the security review (2026-11-16)
+
+Written by the implementer of the review's fixes (`security-review.md`, "After the review: what
+was fixed"). Where these notes and the sections above differ, these notes are what is built.
+
+**The exact name (S5).** A settings file found by its name in a folder (this folder's, or the one
+a `zekno.json` names) counts only when the folder's listing has an entry named exactly
+`zekno.app.json` (`listsExactly` in `project/file.ts`, the rule `zekno.json` has had since
+feature 004). On a disk that ignores letter case `ZEKNO.APP.JSON` is opened under that name; it is
+not a settings file, and the reader says SR1 (or SR1 as a link names it). `-f` is the person's own
+path and is not held to it. A folder that cannot be listed is left to the reader's own checks.
+
+**Characters drawn as nothing (S2).** A start command and a plain value, the only settings that
+take a character outside ASCII, may not hold one that `holdsHidden` (`server/sanitize.ts`, the
+one definition) finds: a control character, every character `sanitize` takes out when it draws
+(Unicode's format characters `Cf`, among them zero-width spaces and joiners, the soft hyphen, the
+bidirectional marks, embeddings, overrides and isolates and the tag characters; the line and
+paragraph separators; the default ignorable code points, among them the Hangul fillers, the
+combining grapheme joiner and the variation selectors), and U+FE0E or U+FE0F where it does not
+follow a pictograph (`Extended_Pictographic`). The byte order mark, U+2028 and U+2029 stay refused
+as before, with the rules for a control character. Allowed: text in any script, precomposed
+accents, combining marks (any number), emoji, an emoji with its text or emoji form selector, skin
+tones, flags, spaces that draw as a space (U+00A0, U+3000, U+2800). Refused: an emoji joined by
+U+200D, since the joiner is refused. Every other setting is held to an ASCII pattern already.
+
+| Id | Place and rule |
+|----|----------------|
+| SV9 (g) | `<svc>, deploy.start: use no invisible character, such as a zero-width space or a right-to-left mark.` Checked after (e) and before (d). |
+| SV24 | its second rule: `<svc>, variables.plain.<NAME>: use no invisible character, such as a zero-width space or a right-to-left mark.` Said when the value holds such a character and nothing SV24's first rule refuses. |
+
+The section "Each value" above, "no character of Unicode category `Cc`, and no U+2028, U+2029,
+U+FEFF, U+FFFE or U+FFFF", holds of every string; the start command and a plain value are held to
+the rule above as well.
+
+Tests: `test/settings/invisible.test.ts` (each kind the review named, in a start command and a
+plain value, in the file and typed; the review's own values; what stays allowed; every character
+`sanitize` takes out is refused); `test/scenarios/settings-exact-name.test.ts`.

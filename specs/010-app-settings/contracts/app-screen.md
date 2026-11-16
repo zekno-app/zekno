@@ -331,3 +331,109 @@ program.
     right-to-left override), which the signed text keeps and the screen does not draw.
 23. **Keys there**: `↑↓` scroll, `c` and `esc` back, `d` deploys as from the settings, `?` help,
     `q` quit; `enter` and `tab` do nothing. The refresh reads the file again as on the settings.
+
+## As built: after the security review (2026-11-16)
+
+Written by the implementer of the review's fixes (`security-review.md`, "After the review: what
+was fixed"). Where these notes and the sections above differ, these notes are what is built. The
+maintainer reviews them on the real program.
+
+24. **Which file (S1).** The screen decides its file with the same function as the settings
+    commands (`settingsPlace`, settings/source.ts), given the `zekno.json` that applies here when
+    the team list the app verified says it is used here. What it shows is unchanged: SH2 for a
+    Compose file (named as the deploy names it), AS6 for another app, SH1 for neither. The change
+    box's question names the file shown on the pane's right: `Write this to
+    deploy/zekno.app.json? Nothing is deployed until you deploy.`
+25. **What the next deploy removes (S3).** A plain variable or a volume this machine's last deploy
+    of the app had, and the file no longer has, is a row after those the file has: its value
+    `none`, faint, then two spaces and AS8 in the warning colour. A variable's row is labelled
+    `plain` only when no plain row comes before it; a volume's by its name. It replaces the
+    `none` row of its kind, and `enter` on it says AS7, as on a `none` row. A service the last
+    deploy had and the file no longer has is listed under the services in the Services pane,
+    faint, set in by the marker's two columns, with AS8 (no old value: there is no room) under it
+    in the warning colour. A setting no longer set already had its row and AS3.
+26. **A long value (S4).** A value that takes more than three lines (`VALUE_LINES`) in its row is
+    cut there; the line under it is AS9, faint, followed by the row's mark when it has one. A
+    mark's old value takes one line at most, cut with `…`. So a row is at most a few lines, and no
+    value is drawn in part without a line that says so. The Compose text behind `c` already
+    scrolls line by line to its last line, and shows every value whole.
+27. **The change box (S4).** `now` and `new` are drawn whole when the box, with them whole, leaves
+    the pane room for five lines of rows (three rows and two `more` lines); else each is cut to
+    the most lines, three at most, that leave that room, with AS9 under it. The question y/N is
+    always drawn. This replaces item 15's "takes at most 3 lines, the last ending with `…`".
+28. **`d` (needs validation, settled).** `d` on this screen, showing settings or their Compose
+    text, carries the SHA-256 of the file the screen read (`shown` on the `deploy` effect). The
+    app's deploy reads the file once, as before; when its bytes differ, or the file is no longer a
+    settings file, nothing is read further, signed or sent: the status line says DP6
+    (contracts/deploy.md) and the screen reads the file again, so it shows the file as it is now
+    (the `setting-refused` event, as for a refused change). Before the first read, and on the
+    app's own screen, `d` carries nothing and is as before.
+
+Words added:
+
+| Id | Words |
+|----|-------|
+| AS8 | `! removed, not deployed (was <old>)`; for a volume `! removed, not deployed (was <path>; its data stays)`; in the Services pane `! removed, not deployed` |
+| AS9 | `… <n> more lines: c shows them in the Compose text` (`… 1 more line: c shows it in the Compose text`) |
+
+The review's cases, as built (the wordmark left out):
+
+S3 at 100 by 30, the last deploy with a memory limit, `REQUIRE_AUTH`, the volume `audit` and the
+service `auth`; the file without them:
+
+```text
+ │ Services           │ │ web                                                      zekno.app.json │
+ │ ❯ web              │ │ Source                                                                  │
+ │   auth             │ │ ❯ image      ghcr.io/acme/web:1                                         │
+ │   ! removed, not   │ │ Deploy                                                                  │
+ │   deployed         │ │   start      the image's own                                            │
+ │                    │ │   restart    no                                                         │
+ │                    │ │   memory     no limit  ! changed, not deployed (was 512m)               │
+ │                    │ │   cpus       no limit                                                   │
+ │                    │ │ Networking                                                              │
+ │                    │ │   port       none                                                       │
+ │                    │ │   published  not published                                              │
+ │                    │ │ Variables                                                               │
+ │                    │ │   secrets    none                                                       │
+ │                    │ │   plain      NODE_ENV=production                                        │
+ │                    │ │              none  ! removed, not deployed (was REQUIRE_AUTH=1)         │
+ │                    │ │ Volumes                                                                 │
+ │                    │ │   data       /data                                                      │
+ │                    │ │   audit      none  ! removed, not deployed (was /var/audit; its data    │
+ │                    │ │              stays)                                                     │
+```
+
+At 80 by 24 the Services pane reads the same; the rows are a window, as before (`↓ 10 more`).
+
+S4 at 80 by 24, the review's start command of about 3,000 characters, its row selected:
+
+```text
+ │ ❯ web              │ │ Source                                              │
+ │                    │ │   image      ghcr.io/acme/web:1                     │
+ │                    │ │ Deploy                                              │
+ │                    │ │ ❯ start      sh -c 'echo starting                   │
+ │                    │ │              xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx │
+ │                    │ │              xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx │
+ │                    │ │              … 80 more lines: c shows them in the   │
+ │                    │ │              Compose text  ! changed, not deployed  │
+ │                    │ │              (was bun run start)                    │
+ │                    │ │   restart    no                                     │
+ │                    │ │   ↓ 10 more                                         │
+```
+
+At 100 by 30 the same row reads `… 52 more lines: c shows them in the Compose text  !` and, on
+the next line, `changed, not deployed (was bun run start)`. The change box at 80 by 24:
+
+```text
+ │ │ Change a setting  web · start command                                  │ │
+ │ │ now  sh -c 'echo starting xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx │ │
+ │ │      … 47 more lines: c shows them in the Compose text                 │ │
+ │ │ new  sh -c 'echo starting xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx │ │
+ │ │      … 47 more lines: c shows them in the Compose text                 │ │
+ │ │ ? Write this to zekno.app.json? Nothing is deployed until you deploy.  │ │
+ │ │ (y/N)                                                                  │ │
+```
+
+Tests: `test/app/settings-screen.test.tsx` ("what the next deploy removes", "a long value"),
+`test/app/settings-effects.test.ts`, `test/app/settings-state.test.ts` (`d` carries `shown`),
+`test/app/app-effects.test.ts` ("d on the settings screen deploys only the file it showed").
