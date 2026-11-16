@@ -11,6 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"**/*.{ts,tsx}\"",
     "test": "bun test"
   },
   "devDependencies": {

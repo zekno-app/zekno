@@ -4,9 +4,12 @@
   "type": "module",
   "private": true,
   "license": "MIT",
-  "bin": { "zekno-runner": "./src/main.ts" },
+  "bin": {
+    "zekno-runner": "./src/main.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"**/*.{ts,tsx}\"",
     "test": "bun test",
     "compile": "bun build --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/main.ts --outfile dist/zekno-runner",
     "compile:linux-x64": "bun build --compile --target=bun-linux-x64-baseline --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/main.ts --outfile dist/zekno-runner-linux-x64",

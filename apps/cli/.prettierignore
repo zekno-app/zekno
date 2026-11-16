@@ -1,0 +1,6 @@
+# Read by Prettier when it runs in this folder (bun run format).
+dist/
+.e2e/
+
+# Recorded transcripts of what commands printed before feature 006: never rewritten (specs/006-cli-small-features, FR-028).
+test/plain/plain-at-head.ts

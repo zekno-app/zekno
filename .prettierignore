@@ -5,3 +5,6 @@ node_modules/
 coverage/
 pnpm-lock.yaml
 .pnpm-store/
+# Recorded transcripts of what commands printed before feature 006: never rewritten (specs/006-cli-small-features, FR-028).
+apps/cli/test/plain/plain-at-head.ts
+.e2e/

@@ -1,0 +1,2 @@
+# Read by Prettier when it runs in this folder (bun run format).
+dist/
