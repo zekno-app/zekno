@@ -9,7 +9,13 @@ import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
 import { seconds } from "../../shared/time"
-import { earlierLeftOut, failedNext, startedNext, type DeployProgress, type DeployStart } from "../../shared/deploy"
+import {
+  earlierLeftOut,
+  failedNext,
+  startedNext,
+  type DeployProgress,
+  type DeployStart,
+} from "../../shared/deploy"
 import { numberUsed, stagesOf, Summary } from "../parts/deploy-summary"
 import { Panel } from "../parts/panel"
 import { Stages } from "../parts/stages"
@@ -29,7 +35,15 @@ export type DeployShown = {
 }
 
 /** A sentence that leads a result: its mark, and the sentence in bold. */
-function Lead({ mark, color, children }: { mark: string; color: string; children: ReactNode }) {
+function Lead({
+  mark,
+  color,
+  children,
+}: {
+  mark: string
+  color: string
+  children: ReactNode
+}) {
   return (
     <Box>
       <Box flexShrink={0} marginRight={1}>
@@ -60,14 +74,26 @@ function After({ children }: { children: ReactNode }) {
 /** How far Docker's live line is set in from the left edge. */
 export const LIVE_LINE_INDENT = 2
 
-export function DeployBlock({ shown, columns }: { shown: DeployShown; columns: number }) {
+export function DeployBlock({
+  shown,
+  columns,
+}: {
+  shown: DeployShown
+  columns: number
+}) {
   const theme = useTheme()
   const { start, deploy } = shown
   const width = Math.max(4, Math.min(columns, DEPLOY_PANEL_WIDTH))
   const failed = !deploy.running && deploy.outcome === "start_failed"
   return (
     // A line's space before it, as on the board below the command typed, and once it ended, after it.
-    <Box flexDirection="column" rowGap={1} width={Math.max(4, columns)} paddingTop={1} paddingBottom={deploy.running ? 0 : 1}>
+    <Box
+      flexDirection="column"
+      rowGap={1}
+      width={Math.max(4, columns)}
+      paddingTop={1}
+      paddingBottom={deploy.running ? 0 : 1}
+    >
       <Summary deploy={deploy} width={width} tone="plain" />
       <Stages stages={stagesOf(deploy)} gap={2} />
       {deploy.running ? (
@@ -85,7 +111,9 @@ export function DeployBlock({ shown, columns }: { shown: DeployShown; columns: n
             <Text bold>
               {deploy.app} is live on {deploy.server}
             </Text>
-            {shown.ms === undefined ? null : <Text dimColor> in {seconds(shown.ms)}</Text>}
+            {shown.ms === undefined ? null : (
+              <Text dimColor> in {seconds(shown.ms)}</Text>
+            )}
           </Lead>
           <After>{startedNext(start.flags)}</After>
         </Box>
@@ -94,19 +122,23 @@ export function DeployBlock({ shown, columns }: { shown: DeployShown; columns: n
         <Box flexDirection="column">
           <Lead mark="✖" color={theme.danger}>
             <Text bold>
-              {deploy.server} accepted deploy {deploy.sequence}, but the app did not start.
+              {deploy.server} accepted deploy {deploy.sequence}, but the app did
+              not start.
             </Text>
           </Lead>
           {numberUsed(deploy) ? (
             <After>
-              Number {deploy.sequence} is used, so the next deploy will be {deploy.sequence! + 1}.
+              Number {deploy.sequence} is used, so the next deploy will be{" "}
+              {deploy.sequence! + 1}.
             </After>
           ) : null}
         </Box>
       ) : null}
       {failed && deploy.lines.length > 0 ? (
         <Panel title="Docker said" tone="danger" width={width}>
-          {shown.dropped > 0 ? <Text dimColor>{earlierLeftOut(shown.dropped)}</Text> : null}
+          {shown.dropped > 0 ? (
+            <Text dimColor>{earlierLeftOut(shown.dropped)}</Text>
+          ) : null}
           {deploy.lines.map((line, index) => (
             <Text key={index}>{line}</Text>
           ))}

@@ -8,7 +8,12 @@ import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 
 import { openTeam } from "../../cli/context"
-import { prepareDeploy, prepareRollback, sendDeploy, type DeployPlan } from "../../ops/deploy"
+import {
+  prepareDeploy,
+  prepareRollback,
+  sendDeploy,
+  type DeployPlan,
+} from "../../ops/deploy"
 import { writeLink } from "../../ops/link"
 import { profileStore, type Server } from "../../profile/profile"
 import { expectedValues } from "../../project/compose-file"
@@ -35,7 +40,13 @@ export const COMPOSE_FILE = DEFAULT_COMPOSE
  * this folder?" is never asked). `elsewhere`: that zekno.json names another
  * app or server than the one it would deploy to, so it is asked first.
  */
-type Source = { read: ComposeText; named: string; app: string; linked: boolean; elsewhere?: { server: string; app: string } }
+type Source = {
+  read: ComposeText
+  named: string
+  app: string
+  linked: boolean
+  elsewhere?: { server: string; app: string }
+}
 
 /** Deploys and rollbacks, one at a time, and the deploy that waits on a question. */
 export function createDeploys(context: Context) {
@@ -58,7 +69,14 @@ export function createDeploys(context: Context) {
    * `d` was pressed is the text whose names were listed and the text that is
    * signed, and the file is not read again.
    */
-  let waiting: { server: string; app: string; on: "link" | "values" | "elsewhere"; source: Source } | undefined
+  let waiting:
+    | {
+        server: string
+        app: string
+        on: "link" | "values" | "elsewhere"
+        source: Source
+      }
+    | undefined
   /** "n" to "remember this folder?": it is not asked again while the app is open. */
   let linkSkipped = false
 
@@ -109,11 +127,17 @@ export function createDeploys(context: Context) {
    * the source says so (`elsewhere`), and `plan` asks before anything is
    * signed (the question the maintainer approved on 2026-11-14).
    */
-  function composeOf(server: string, selected: string | undefined, trust: TeamTrust | undefined): Source | undefined {
+  function composeOf(
+    server: string,
+    selected: string | undefined,
+    trust: TeamTrust | undefined
+  ): Source | undefined {
     const link = findProject(ops.cwd)
     if (link) {
       // Judged again as it is now: the file may have changed since the app opened. Without a team list to judge it by, it is not the team's.
-      const standing: Standing = trust ? standingOf(link, trust, deps.home) : { kind: "unsigned" }
+      const standing: Standing = trust
+        ? standingOf(link, trust, deps.home)
+        : { kind: "unsigned" }
       if (standing.kind === "unsigned") {
         notice("error", notSignedHere(link, ops.cwd))
         return undefined
@@ -126,7 +150,12 @@ export function createDeploys(context: Context) {
       const own = link.server === server
       const first = own && !appsDeployedTo(server).includes(link.app)
       if (own && (selected === undefined || selected === link.app || first)) {
-        return { read: readCompose({ kind: "project", link }), named, app: link.app, linked: true }
+        return {
+          read: readCompose({ kind: "project", link }),
+          named,
+          app: link.app,
+          linked: true,
+        }
       }
       if (!serversOnRecord().some((entry) => entry.name === link.server)) {
         notice("error", notConnected(link))
@@ -136,17 +165,34 @@ export function createDeploys(context: Context) {
         notice("info", linkedElsewhere(link))
         return undefined
       }
-      return { read: readCompose({ kind: "project", link }), named, app: selected, linked: true, elsewhere: { server: link.server, app: link.app } }
+      return {
+        read: readCompose({ kind: "project", link }),
+        named,
+        app: selected,
+        linked: true,
+        elsewhere: { server: link.server, app: link.app },
+      }
     }
     if (!existsSync(resolve(ops.cwd, COMPOSE_FILE))) {
-      notice("error", `There is no ${COMPOSE_FILE} in ${shownPath(ops.cwd)}, and no zekno.json names another. Run zekno link -f <file> here to name one.`)
+      notice(
+        "error",
+        `There is no ${COMPOSE_FILE} in ${shownPath(ops.cwd)}, and no zekno.json names another. Run zekno link -f <file> here to name one.`
+      )
       return undefined
     }
     if (selected === undefined) {
-      notice("info", `Choose an app first. To deploy a new app, run zekno link --app <name> --server ${server} in its folder.`)
+      notice(
+        "info",
+        `Choose an app first. To deploy a new app, run zekno link --app <name> --server ${server} in its folder.`
+      )
       return undefined
     }
-    return { read: readCompose({ kind: "default", folder: ops.cwd }), named: COMPOSE_FILE, app: selected, linked: false }
+    return {
+      read: readCompose({ kind: "default", folder: ops.cwd }),
+      named: COMPOSE_FILE,
+      app: selected,
+      linked: false,
+    }
   }
 
   /**
@@ -166,14 +212,22 @@ export function createDeploys(context: Context) {
   ): Promise<(DeployPlan & { from: string }) | undefined> {
     if (effect.kind === "rollback") {
       const to = effect.to === undefined ? undefined : String(effect.to)
-      const rollback = await prepareRollback(ops, { app: effect.app, server: effect.server, to }, { warning: (text) => notice("warning", text) })
+      const rollback = await prepareRollback(
+        ops,
+        { app: effect.app, server: effect.server, to },
+        { warning: (text) => notice("warning", text) }
+      )
       return { ...rollback, from: `what deploy ${rollback.from} ran` }
     }
     // After a question, the Compose file read when `d` was pressed: not read again. A team list already
     // verified is used without awaiting anything; otherwise it is verified now, only when a zekno.json applies.
     let source = after?.source
     if (!source) {
-      const trust = trustKnown() ?? (findProject(ops.cwd) === undefined ? undefined : (await openTeam(ops)).trust)
+      const trust =
+        trustKnown() ??
+        (findProject(ops.cwd) === undefined
+          ? undefined
+          : (await openTeam(ops)).trust)
       source = composeOf(effect.server, effect.app, trust)
     }
     if (!source) return undefined
@@ -181,23 +235,45 @@ export function createDeploys(context: Context) {
     const app = source.app
     if (!source.linked && after === undefined && !linkSkipped) {
       waiting = { server: effect.server, app, on: "link", source }
-      dispatch({ type: "ask-remember-folder", server: effect.server, app, compose: COMPOSE_FILE })
+      dispatch({
+        type: "ask-remember-folder",
+        server: effect.server,
+        app,
+        compose: COMPOSE_FILE,
+      })
       return undefined
     }
     // Only `y` deploys a linked folder to another app; zekno.json itself is left as it is.
     if (source.elsewhere && after === undefined) {
       waiting = { server: effect.server, app, on: "elsewhere", source }
-      dispatch({ type: "ask-deploy-elsewhere", server: effect.server, app, linked: source.elsewhere })
+      dispatch({
+        type: "ask-deploy-elsewhere",
+        server: effect.server,
+        app,
+        linked: source.elsewhere,
+      })
       return undefined
     }
-    const planned = await prepareDeploy(ops, { app, server: effect.server, read: source.read })
+    const planned = await prepareDeploy(ops, {
+      app,
+      server: effect.server,
+      read: source.read,
+    })
     if (after?.on !== "values") {
       // Names only: the secrets' values are never opened here.
       const set = new Set(secretNamesOf(planned.team, planned.server, app))
-      const missing = expectedValues(planned.compose).filter((name) => !set.has(name))
+      const missing = expectedValues(planned.compose).filter(
+        (name) => !set.has(name)
+      )
       if (missing.length > 0) {
         waiting = { server: planned.server.name, app, on: "values", source }
-        dispatch({ type: "missing-values", server: planned.server.name, app, names: missing, file: source.named })
+        dispatch({
+          type: "missing-values",
+          server: planned.server.name,
+          app,
+          names: missing,
+          file: source.named,
+        })
         return undefined
       }
     }
@@ -211,24 +287,48 @@ export function createDeploys(context: Context) {
    * linked folder and another app, it is deployed there. An answer nothing
    * waits for is ignored.
    */
-  async function goOn(effect: Extract<Effect, { kind: "deploy-continue" }>): Promise<void> {
+  async function goOn(
+    effect: Extract<Effect, { kind: "deploy-continue" }>
+  ): Promise<void> {
     const asked = waiting
-    if (!asked || asked.server !== effect.server || asked.app !== effect.app) return
+    if (!asked || asked.server !== effect.server || asked.app !== effect.app)
+      return
     const about =
-      effect.answer === "write-link" || effect.answer === "skip-link" ? "link" : effect.answer === "deploy-elsewhere" ? "elsewhere" : "values"
+      effect.answer === "write-link" || effect.answer === "skip-link"
+        ? "link"
+        : effect.answer === "deploy-elsewhere"
+          ? "elsewhere"
+          : "values"
     if (asked.on !== about) return
     waiting = undefined
     if (effect.answer === "write-link") {
       // Written by a "yes" here: signed with this member's key, and recorded as used here (accepted.ts).
-      await writeLink(deps.home, await openTeam(ops), ops.cwd, { app: effect.app, server: effect.server, compose: COMPOSE_FILE })
-      dispatch({ type: "linked", linked: { server: effect.server, app: effect.app, compose: COMPOSE_FILE } })
+      await writeLink(deps.home, await openTeam(ops), ops.cwd, {
+        app: effect.app,
+        server: effect.server,
+        compose: COMPOSE_FILE,
+      })
+      dispatch({
+        type: "linked",
+        linked: {
+          server: effect.server,
+          app: effect.app,
+          compose: COMPOSE_FILE,
+        },
+      })
     }
     if (effect.answer === "skip-link") linkSkipped = true
-    await deploy({ kind: "deploy", server: effect.server, app: effect.app }, asked)
+    await deploy(
+      { kind: "deploy", server: effect.server, app: effect.app },
+      asked
+    )
   }
 
   /** Signs and sends a deploy, with its stages and Docker's lines as events, and its result as a line wherever the person is. */
-  async function deploy(effect: Extract<Effect, { kind: "deploy" | "rollback" }>, after?: NonNullable<typeof waiting>): Promise<void> {
+  async function deploy(
+    effect: Extract<Effect, { kind: "deploy" | "rollback" }>,
+    after?: NonNullable<typeof waiting>
+  ): Promise<void> {
     if (deploying) return notice("info", "A deploy is already in progress.")
     deploying = true
     try {
@@ -246,11 +346,19 @@ export function createDeploys(context: Context) {
         secretNames: secretNamesOf(team, server, app),
       })
       // Docker's lines are drawn in batches, and past `DEPLOY_LINES` waiting the runner is read no further until they are.
-      const lines = batcher<string>(DEPLOY_LINES, (taken) => dispatch({ type: "deploy-progress", lines: taken }))
+      const lines = batcher<string>(DEPLOY_LINES, (taken) =>
+        dispatch({ type: "deploy-progress", lines: taken })
+      )
       let result
       try {
         result = await sendDeploy(ops, planned, {
-          stage: (stage, info) => dispatch({ type: "deploy-stage", stage, sequence: info.sequence, secrets: info.secrets }),
+          stage: (stage, info) =>
+            dispatch({
+              type: "deploy-stage",
+              stage,
+              sequence: info.sequence,
+              secrets: info.secrets,
+            }),
           progress: (line) => lines.add(line),
           warning: (text) => notice("warning", text),
         })
@@ -258,7 +366,12 @@ export function createDeploys(context: Context) {
         lines.flush()
         const reason = reasonOf(error)
         if (reason === undefined) return fail(error)
-        dispatch({ type: "deploy-ended", outcome: "error", notice: { tone: "error", text: reason }, at: Date.now() })
+        dispatch({
+          type: "deploy-ended",
+          outcome: "error",
+          notice: { tone: "error", text: reason },
+          at: Date.now(),
+        })
         return refresh(team, server, app)
       }
       lines.flush()
@@ -267,7 +380,15 @@ export function createDeploys(context: Context) {
         result.outcome === "started"
           ? `${app} is live on ${server.name} in ${seconds(ended - started)}`
           : `${server.name} accepted deploy ${result.sequence}, but the app did not start.`
-      dispatch({ type: "deploy-ended", outcome: result.outcome, notice: { tone: result.outcome === "started" ? "success" : "error", text }, at: ended })
+      dispatch({
+        type: "deploy-ended",
+        outcome: result.outcome,
+        notice: {
+          tone: result.outcome === "started" ? "success" : "error",
+          text,
+        },
+        at: ended,
+      })
       dispatch({ type: "server-reached", server: server.name, reachable: true })
       refresh(team, server, app)
     } finally {

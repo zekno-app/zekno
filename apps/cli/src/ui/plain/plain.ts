@@ -1,7 +1,13 @@
 import { CliError } from "../../cli/errors"
 import { plainDeployView } from "../../shared/deploy"
 import { standardOutput, writeStandardError } from "../../shared/streams"
-import { cellText, doctorCounts, REMOTE_MARK, SERVERS_SKIPPED, type Ui } from "../types"
+import {
+  cellText,
+  doctorCounts,
+  REMOTE_MARK,
+  SERVERS_SKIPPED,
+  type Ui,
+} from "../types"
 
 /**
  * Whether a command prints plain lines rather than the interface a terminal
@@ -9,12 +15,23 @@ import { cellText, doctorCounts, REMOTE_MARK, SERVERS_SKIPPED, type Ui } from ".
  * standard input is not a terminal (piped, in a script, `< /dev/null`), so
  * output stays stable for whatever reads it, and nothing waits on a person.
  */
-export function wantsPlain(argv: readonly string[], stdout: { isTTY?: boolean }, stdin: { isTTY?: boolean }, env: Record<string, string | undefined> = process.env): boolean {
-  return argv.includes("--json") || !stdout.isTTY || !stdin.isTTY || env.TERM === "dumb"
+export function wantsPlain(
+  argv: readonly string[],
+  stdout: { isTTY?: boolean },
+  stdin: { isTTY?: boolean },
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return (
+    argv.includes("--json") ||
+    !stdout.isTTY ||
+    !stdin.isTTY ||
+    env.TERM === "dumb"
+  )
 }
 
 /** Said where a hidden value would be asked for and there is no terminal to ask on. */
-export const NO_TERMINAL_FOR_VALUE = "There is no terminal to ask on. Pipe the value in and add `--stdin`."
+export const NO_TERMINAL_FOR_VALUE =
+  "There is no terminal to ask on. Pipe the value in and add `--stdin`."
 
 /** Reads everything on standard input, without one trailing line break. */
 export async function readStdin(): Promise<string> {
@@ -38,7 +55,8 @@ export function plainUi(
 ): Ui {
   const ui: Ui = {
     info: out,
-    success: (text, detail) => out(detail === undefined ? text : `${text}  ${detail}`),
+    success: (text, detail) =>
+      out(detail === undefined ? text : `${text}  ${detail}`),
     warn: err,
     error: err,
     note: out,
@@ -88,10 +106,18 @@ export function plainUi(
     // contracts/doctor.md, "Plain output": where, the check, the result word, then the detail and the next step when there are any.
     doctorReport(report) {
       const row = (where: string, check: (typeof report.machine)[number]) =>
-        [where, check.check, check.result, ...(check.result === "not checked" ? [] : [check.detail]), ...(check.next === undefined ? [] : [check.next])].join("\t")
+        [
+          where,
+          check.check,
+          check.result,
+          ...(check.result === "not checked" ? [] : [check.detail]),
+          ...(check.next === undefined ? [] : [check.next]),
+        ].join("\t")
       for (const check of report.machine) out(row("this machine", check))
       if (report.serversSkipped) out(SERVERS_SKIPPED)
-      else for (const server of report.servers) for (const check of server.checks) out(row(server.name, check))
+      else
+        for (const server of report.servers)
+          for (const check of server.checks) out(row(server.name, check))
       out(doctorCounts(report.problems, report.warnings))
     },
     close: async () => {},
@@ -125,7 +151,10 @@ export function processPlainUi(): Ui {
     ...ui,
     close: async () => {
       let timer: ReturnType<typeof setTimeout> | undefined
-      await Promise.race([taken, new Promise((resolve) => (timer = setTimeout(resolve, CLOSE_WAIT_MS)))])
+      await Promise.race([
+        taken,
+        new Promise((resolve) => (timer = setTimeout(resolve, CLOSE_WAIT_MS))),
+      ])
       clearTimeout(timer)
     },
   }

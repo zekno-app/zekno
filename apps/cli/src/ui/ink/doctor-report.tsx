@@ -15,7 +15,11 @@ import { Wrapped } from "./wrap"
 const CHECK_DETAIL = 17
 
 /** The mark and colour of each result (mock-up 5): never colour alone, the mark says it too. */
-const CHECK_MARK = { good: [MARK.success, COLOR.success], warning: [MARK.warn, COLOR.warn], problem: [MARK.error, COLOR.error] } as const
+const CHECK_MARK = {
+  good: [MARK.success, COLOR.success],
+  warning: [MARK.warn, COLOR.warn],
+  problem: [MARK.error, COLOR.error],
+} as const
 
 /**
  * One check of `zekno doctor` (contracts/doctor.md, "At a terminal"; board
@@ -48,12 +52,18 @@ function CheckRow({ check, columns }: { check: CheckLine; columns: number }) {
             <Text color={color}>{mark}</Text> {check.label}
           </Text>
         </Box>
-        <Wrapped pieces={[{ text: check.detail }]} columns={columns - CHECK_DETAIL} />
+        <Wrapped
+          pieces={[{ text: check.detail }]}
+          columns={columns - CHECK_DETAIL}
+        />
       </Box>
       {check.next === undefined ? null : (
         <Box paddingLeft={CHECK_DETAIL}>
           {/* A command in a next step is drawn as an error line draws one: without its backticks. Plain output keeps them. */}
-          <Wrapped pieces={[{ text: withoutBackticks(check.next), dim: true }]} columns={columns - CHECK_DETAIL} />
+          <Wrapped
+            pieces={[{ text: withoutBackticks(check.next), dim: true }]}
+            columns={columns - CHECK_DETAIL}
+          />
         </Box>
       )}
     </Box>
@@ -67,7 +77,13 @@ function CheckRow({ check, columns }: { check: CheckLine; columns: number }) {
  * and before the last line, which is bold. When no server was checked, D31,
  * dim, in place of the servers.
  */
-export function DoctorBlock({ report, columns }: { report: DoctorReport; columns: number }) {
+export function DoctorBlock({
+  report,
+  columns,
+}: {
+  report: DoctorReport
+  columns: number
+}) {
   return (
     <Box flexDirection="column" width={columns}>
       <Box paddingLeft={2}>
@@ -95,7 +111,11 @@ export function DoctorBlock({ report, columns }: { report: DoctorReport; columns
               </Text>
             </Box>
             {server.checks.map((check, index) => (
-              <CheckRow key={`${at}-${index}`} check={check} columns={columns} />
+              <CheckRow
+                key={`${at}-${index}`}
+                check={check}
+                columns={columns}
+              />
             ))}
           </Box>
         ))

@@ -18,8 +18,26 @@
  * way a value leaves this module is inside an entry, which goes to the secret
  * operation and nowhere else.
  */
-import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, statSync, type BigIntStats } from "node:fs"
-import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path"
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readSync,
+  realpathSync,
+  statSync,
+  type BigIntStats,
+} from "node:fs"
+import {
+  dirname,
+  isAbsolute,
+  join,
+  parse,
+  relative,
+  resolve,
+  sep,
+} from "node:path"
 
 import { CliError } from "../cli/errors"
 
@@ -30,40 +48,65 @@ export const IMPORT_FILE_LIMIT = 1_048_576
 export type ImportEntry = { line: number; name: string; value: string }
 
 /** Why a line does not fit the grammar. Each is one sentence, I2 to I9. */
-export type ImportReason = "not_entry" | "unclosed" | "after_quote" | "escape" | "dollar" | "hash" | "control" | "twice"
+export type ImportReason =
+  | "not_entry"
+  | "unclosed"
+  | "after_quote"
+  | "escape"
+  | "dollar"
+  | "hash"
+  | "control"
+  | "twice"
 
 /** The first line that does not fit: its number and why. `first` is the earlier line of a key given twice (I9). */
-export type ImportFailure = { line: number; reason: ImportReason; first?: number }
+export type ImportFailure = {
+  line: number
+  reason: ImportReason
+  first?: number
+}
 
 /** I19: there is nothing at the path. Needs approval (research Q4). */
 export const noImportFile = (file: string): string => `No file at ${file}.`
 /** I20: something is there, but not a file that can be read. Needs approval (research Q4). */
 export const notImportFile = (file: string): string => `${file} is not a file.`
-export const importUnreadable = (file: string): string => `${file} could not be read.`
+export const importUnreadable = (file: string): string =>
+  `${file} could not be read.`
 /** I21. Needs approval (research Q4). */
-export const importTooLarge = (file: string): string => `${file} is larger than the 1 MiB an import file may be. Nothing was stored.`
+export const importTooLarge = (file: string): string =>
+  `${file} is larger than the 1 MiB an import file may be. Nothing was stored.`
 /** I22. Needs approval (research Q4). */
-export const importNotText = (file: string): string => `${file} is not UTF-8 text. Nothing was stored.`
+export const importNotText = (file: string): string =>
+  `${file} is not UTF-8 text. Nothing was stored.`
 
 /** I2 to I9, by reason. Each names the file and a line's number, never anything written on the line. Needs approval (research Q4). */
 const SENTENCES: Record<Exclude<ImportReason, "twice">, string> = {
   not_entry: "this is not a NAME=value line.",
-  unclosed: "a quoted value does not end on this line. Write a line break as \\n inside double quotes.",
+  unclosed:
+    "a quoted value does not end on this line. Write a line break as \\n inside double quotes.",
   after_quote: "there is text after the closing quote.",
-  escape: 'an escape zekno does not read. Inside double quotes only \\\\ \\" \\n \\r \\t and \\$ are read.',
-  dollar: "a $ that zekno would not expand. Put the value in single quotes to keep it as it is.",
+  escape:
+    'an escape zekno does not read. Inside double quotes only \\\\ \\" \\n \\r \\t and \\$ are read.',
+  dollar:
+    "a $ that zekno would not expand. Put the value in single quotes to keep it as it is.",
   hash: "a # inside a value. Quote the value to keep it, or put a space before # to start a comment.",
   control: "a control character.",
 }
 
 /** The sentence for a line that does not fit (I2 to I9), from its number and its reason only. */
-export function importLineSentence(file: string, failure: ImportFailure): string {
-  const said = failure.reason === "twice" ? `the same name as line ${failure.first}.` : SENTENCES[failure.reason]
+export function importLineSentence(
+  file: string,
+  failure: ImportFailure
+): string {
+  const said =
+    failure.reason === "twice"
+      ? `the same name as line ${failure.first}.`
+      : SENTENCES[failure.reason]
   return `${file}, line ${failure.line}: ${said} Nothing was stored.`
 }
 
 /** The error for a line that does not fit, built from the line's number and the reason only. */
-export const importError = (file: string, failure: ImportFailure): CliError => new CliError(importLineSentence(file, failure))
+export const importError = (file: string, failure: ImportFailure): CliError =>
+  new CliError(importLineSentence(file, failure))
 
 /** An import file as read: its text, and, when it was reached through a link in the path as typed, the real path of the file that was read. */
 export type ImportFileRead = { text: string; linkedTo?: string }
@@ -75,10 +118,15 @@ export type ImportFileRead = { text: string; linkedTo?: string }
  * (the path opened is that clean one), and each leading `..` moves the start
  * up one folder: a `..` names no folder of its own, so it holds no link.
  */
-export function typedParts(cwd: string, typed: string): { from: string; parts: string[] } {
+export function typedParts(
+  cwd: string,
+  typed: string
+): { from: string; parts: string[] } {
   const path = resolve(cwd, typed)
   let from = isAbsolute(typed) ? parse(path).root : resolve(cwd)
-  const parts = relative(from, path).split(sep).filter((part) => part !== "")
+  const parts = relative(from, path)
+    .split(sep)
+    .filter((part) => part !== "")
   while (parts[0] === "..") {
     from = dirname(from)
     parts.shift()
@@ -114,15 +162,22 @@ function throughLink(cwd: string, typed: string): boolean {
  * the file read. A path reached through no link must still name the open file
  * too.
  */
-export function whereLinkLeads(cwd: string, typed: string, opened: BigIntStats): string | undefined {
-  const isOpened = (found: BigIntStats) => found.dev === opened.dev && found.ino === opened.ino
+export function whereLinkLeads(
+  cwd: string,
+  typed: string,
+  opened: BigIntStats
+): string | undefined {
+  const isOpened = (found: BigIntStats) =>
+    found.dev === opened.dev && found.ino === opened.ino
   const path = resolve(cwd, typed)
   if (!throughLink(cwd, typed)) {
-    if (!isOpened(lstatSync(path, { bigint: true }))) throw new Error("The path names another file than the one opened.")
+    if (!isOpened(lstatSync(path, { bigint: true })))
+      throw new Error("The path names another file than the one opened.")
     return undefined
   }
   const real = realpathSync(path)
-  if (!isOpened(statSync(real, { bigint: true }))) throw new Error("The link leads to another file than the one opened.")
+  if (!isOpened(statSync(real, { bigint: true })))
+    throw new Error("The link leads to another file than the one opened.")
   return real
 }
 
@@ -141,20 +196,26 @@ export function readImportFile(path: string, shown: string): string {
  * open from the open file. `path` is as typed: relative to `cwd`, the
  * command's folder (this process's own unless given), or absolute.
  */
-export function readImportFileAndLink(path: string, shown: string, cwd = process.cwd()): ImportFileRead {
+export function readImportFileAndLink(
+  path: string,
+  shown: string,
+  cwd = process.cwd()
+): ImportFileRead {
   let fd: number
   try {
     // A link is followed (it is the person's own path), and a pipe cannot hold the read up.
     fd = openSync(resolve(cwd, path), constants.O_RDONLY | constants.O_NONBLOCK)
   } catch (error) {
-    if ((error as { code?: unknown } | null)?.code === "ENOENT") throw new CliError(noImportFile(shown))
+    if ((error as { code?: unknown } | null)?.code === "ENOENT")
+      throw new CliError(noImportFile(shown))
     throw new CliError(importUnreadable(shown))
   }
   const buffer = Buffer.alloc(IMPORT_FILE_LIMIT + 1)
   try {
     const opened = fstatSync(fd, { bigint: true })
     if (!opened.isFile()) throw new CliError(notImportFile(shown))
-    if (opened.size > BigInt(IMPORT_FILE_LIMIT)) throw new CliError(importTooLarge(shown))
+    if (opened.size > BigInt(IMPORT_FILE_LIMIT))
+      throw new CliError(importTooLarge(shown))
     // Where a link leads, from the open file. A path that changed since the open stops the import here, as unreadable.
     const link = whereLinkLeads(cwd, path, opened)
     // Up to one byte past the limit, from the one open file, so a file that grew after `fstat` is still caught.
@@ -167,7 +228,9 @@ export function readImportFileAndLink(path: string, shown: string, cwd = process
     if (length > IMPORT_FILE_LIMIT) throw new CliError(importTooLarge(shown))
     let text: string
     try {
-      text = new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, length))
+      text = new TextDecoder("utf-8", { fatal: true }).decode(
+        buffer.subarray(0, length)
+      )
     } catch {
       throw new CliError(importNotText(shown))
     }
@@ -188,7 +251,10 @@ export function readImportFileAndLink(path: string, shown: string, cwd = process
 }
 
 /** What reading one line gives: nothing (a blank or a comment line), an entry, or why it does not fit. */
-type LineRead = { kind: "nothing" } | { kind: "entry"; name: string; value: string } | { kind: "wrong"; reason: ImportReason }
+type LineRead =
+  | { kind: "nothing" }
+  | { kind: "entry"; name: string; value: string }
+  | { kind: "wrong"; reason: ImportReason }
 
 const NOTHING: LineRead = { kind: "nothing" }
 const wrong = (reason: ImportReason): LineRead => ({ kind: "wrong", reason })
@@ -196,7 +262,8 @@ const wrong = (reason: ImportReason): LineRead => ({ kind: "wrong", reason })
 /** A control character other than a tab: U+0000 to U+001F and U+007F to U+009F (contracts/import.md, CHAR). */
 const CONTROL = /[\u0000-\u0008\u000a-\u001f\u007f-\u009f]/
 const KEY_CHAR = /^[A-Za-z0-9_.-]$/
-const isSpace = (char: string | undefined): boolean => char === " " || char === "\t"
+const isSpace = (char: string | undefined): boolean =>
+  char === " " || char === "\t"
 
 /** The six escapes double quotes allow, and what each stands for. */
 const ESCAPES = new Map([
@@ -216,7 +283,10 @@ function skipSpaces(line: string, at: number): number {
 }
 
 /** A key at `at`, then spaces and `=`: the key and where the value may start, or undefined. */
-function keyAt(line: string, at: number): { name: string; after: number } | undefined {
+function keyAt(
+  line: string,
+  at: number
+): { name: string; after: number } | undefined {
   let end = at
   while (end < line.length && KEY_CHAR.test(line[end]!)) end++
   if (end === at) return undefined
@@ -243,17 +313,26 @@ function readLine(line: string): LineRead {
   const start = skipSpaces(line, 0)
   if (start === line.length || line[start] === "#") return NOTHING
   // 2. An optional `export` and its spaces, then a key, spaces and `=`. `export=1` and `export =1` name the key `export`.
-  const exported = line.startsWith("export", start) && isSpace(line[start + 6]) ? keyAt(line, skipSpaces(line, start + 6)) : undefined
+  const exported =
+    line.startsWith("export", start) && isSpace(line[start + 6])
+      ? keyAt(line, skipSpaces(line, start + 6))
+      : undefined
   const key = exported ?? keyAt(line, start)
   if (!key) return wrong("not_entry")
   const at = skipSpaces(line, key.after)
-  const entry = (value: string): LineRead => ({ kind: "entry", name: key.name, value })
+  const entry = (value: string): LineRead => ({
+    kind: "entry",
+    name: key.name,
+    value,
+  })
 
   // 3. A single-quoted value, taken exactly as written.
   if (line[at] === "'") {
     const close = line.indexOf("'", at + 1)
     if (close === -1) return wrong("unclosed")
-    return afterQuote(line, close + 1) ? entry(line.slice(at + 1, close)) : wrong("after_quote")
+    return afterQuote(line, close + 1)
+      ? entry(line.slice(at + 1, close))
+      : wrong("after_quote")
   }
 
   // 4. A double-quoted value, with its six escapes.
@@ -271,7 +350,8 @@ function readLine(line: string): LineRead {
         continue
       }
       if (char === "$") return wrong("dollar")
-      if (char === '"') return afterQuote(line, next + 1) ? entry(value) : wrong("after_quote")
+      if (char === '"')
+        return afterQuote(line, next + 1) ? entry(value) : wrong("after_quote")
       value += char
     }
     return wrong("unclosed")
@@ -292,7 +372,8 @@ function readLine(line: string): LineRead {
       }
       return wrong("hash")
     }
-    if (char === '"' || char === "'" || char === "`" || char === "\\") return wrong("not_entry")
+    if (char === '"' || char === "'" || char === "`" || char === "\\")
+      return wrong("not_entry")
   }
   return entry(line.slice(at, end).replace(/[ \t]+$/, ""))
 }
@@ -304,7 +385,9 @@ function readLine(line: string): LineRead {
  * dropped; a last line without an LF counts. A key given twice, letter case
  * counting, is I9 at the second line.
  */
-export function parseImport(text: string): { entries: ImportEntry[] } | ImportFailure {
+export function parseImport(
+  text: string
+): { entries: ImportEntry[] } | ImportFailure {
   const pieces = (text.startsWith("﻿") ? text.slice(1) : text).split("\n")
   const entries: ImportEntry[] = []
   const seen = new Map<string, number>()

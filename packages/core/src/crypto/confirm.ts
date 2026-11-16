@@ -27,7 +27,9 @@ function formatCode(digest: Uint8Array): string {
 
 /** The code a person compares to confirm they hold a server's genuine public key. */
 export function serverConfirmationCode(publicKey: ServerPublicKey): string {
-  return formatCode(hash("zekno/v1/confirm/server", decodeKey("serverPublic", publicKey)))
+  return formatCode(
+    hash("zekno/v1/confirm/server", decodeKey("serverPublic", publicKey))
+  )
 }
 
 /** The code for a founding team list, from that list's hash. */

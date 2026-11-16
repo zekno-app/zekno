@@ -24,7 +24,9 @@ describe("keys", () => {
   })
 
   test("generated keys are different every time", () => {
-    const keys = new Set(Array.from({ length: 50 }, () => generateMemberKeyPair().secretKey))
+    const keys = new Set(
+      Array.from({ length: 50 }, () => generateMemberKeyPair().secretKey)
+    )
     expect(keys.size).toBe(50)
   })
 
@@ -43,12 +45,23 @@ describe("keys", () => {
 
   test("truncated, padded, non-canonical and non-text keys are rejected", () => {
     const { publicKey } = generateMemberKeyPair()
-    for (const bad of [publicKey.slice(0, -2), `${publicKey}AA`, `${publicKey}=`, "zk_mpk_", "", 42, null, undefined, {}]) {
+    for (const bad of [
+      publicKey.slice(0, -2),
+      `${publicKey}AA`,
+      `${publicKey}=`,
+      "zk_mpk_",
+      "",
+      42,
+      null,
+      undefined,
+      {},
+    ]) {
       expect(isKey("memberPublic", bad)).toBe(false)
     }
     // A non-canonical encoding of the same bytes: flip unused trailing bits.
     const last = publicKey.at(-1)!
-    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    const alphabet =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
     const twin = publicKey.slice(0, -1) + alphabet[alphabet.indexOf(last) ^ 1]
     expect(isKey("memberPublic", twin) && twin !== publicKey).toBe(false)
   })
@@ -62,7 +75,9 @@ describe("keys", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(CoreError)
       expect((error as CoreError).code).toBe("invalid_key")
-      expect(String((error as Error).message)).not.toContain(corrupted.slice(7, 30))
+      expect(String((error as Error).message)).not.toContain(
+        corrupted.slice(7, 30)
+      )
     }
   })
 

@@ -6,11 +6,28 @@
  */
 import type { Envelope } from "@workspace/core"
 import { randomBytes } from "node:crypto"
-import { closeSync, fchmodSync, linkSync, lstatSync, openSync, realpathSync, renameSync, rmSync, statSync, writeSync } from "node:fs"
+import {
+  closeSync,
+  fchmodSync,
+  linkSync,
+  lstatSync,
+  openSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeSync,
+} from "node:fs"
 import { join, relative, resolve, sep } from "node:path"
 
 import { CliError, UsageError } from "../cli/errors"
-import { ComposePathSchema, isAbove, PROJECT_BYTES, PROJECT_FILE, ProjectSchema } from "./file"
+import {
+  ComposePathSchema,
+  isAbove,
+  PROJECT_BYTES,
+  PROJECT_FILE,
+  ProjectSchema,
+} from "./file"
 import { sanitize } from "../server/sanitize"
 import { shownPath } from "./shown"
 
@@ -22,15 +39,23 @@ import { shownPath } from "./shown"
 export function composeFor(folder: string, file: string): string {
   const path = resolve(folder, file)
   const named = relative(folder, path).split(sep).join("/")
-  if (named === "" || isAbove(path, folder) || !ComposePathSchema.safeParse(named).success) {
-    throw new UsageError("The Compose file has to be inside this folder, since zekno.json names it from here.")
+  if (
+    named === "" ||
+    isAbove(path, folder) ||
+    !ComposePathSchema.safeParse(named).success
+  ) {
+    throw new UsageError(
+      "The Compose file has to be inside this folder, since zekno.json names it from here."
+    )
   }
   let real: string
   let root: string
   try {
     real = realpathSync(path)
   } catch {
-    throw new CliError(`No Compose file at ${shownPath(path)}. Point to one with \`-f <file>\`.`)
+    throw new CliError(
+      `No Compose file at ${shownPath(path)}. Point to one with \`-f <file>\`.`
+    )
   }
   try {
     root = realpathSync(folder)
@@ -38,7 +63,9 @@ export function composeFor(folder: string, file: string): string {
     throw new CliError(`${shownPath(folder)} could not be read.`)
   }
   if (!isAbove(root, real)) {
-    throw new CliError(`${sanitize(named)} leads outside this folder through a symbolic link, so zekno.json cannot name it.`)
+    throw new CliError(
+      `${sanitize(named)} leads outside this folder through a symbolic link, so zekno.json cannot name it.`
+    )
   }
   let isFile: boolean
   try {
@@ -55,21 +82,44 @@ export function composeFor(folder: string, file: string): string {
  * held to its rule, and the team's signature of them when there is one.
  * Nothing else can go in, and it always fits what is read back.
  */
-export function projectText(link: { app: string; server: string; compose: string; signed?: Envelope }): string {
-  const fields = { app: link.app, server: link.server, compose: link.compose, ...(link.signed === undefined ? {} : { signed: link.signed }) }
+export function projectText(link: {
+  app: string
+  server: string
+  compose: string
+  signed?: Envelope
+}): string {
+  const fields = {
+    app: link.app,
+    server: link.server,
+    compose: link.compose,
+    ...(link.signed === undefined ? {} : { signed: link.signed }),
+  }
   const parsed = ProjectSchema.safeParse(fields)
-  if (!parsed.success) throw new CliError("zekno.json holds only an app name, a server name and a Compose file inside its folder.")
+  if (!parsed.success)
+    throw new CliError(
+      "zekno.json holds only an app name, a server name and a Compose file inside its folder."
+    )
   const { app, server, compose, signed } = parsed.data
   const text = `${JSON.stringify(signed === undefined ? { app, server, compose } : { app, server, compose, signed }, null, 2)}\n`
-  if (Buffer.byteLength(text) > PROJECT_BYTES) throw new CliError(`zekno.json would be larger than the ${PROJECT_BYTES} bytes a project file may have.`)
+  if (Buffer.byteLength(text) > PROJECT_BYTES)
+    throw new CliError(
+      `zekno.json would be larger than the ${PROJECT_BYTES} bytes a project file may have.`
+    )
   return text
 }
 
 /** Said when zekno.json would be written over one that is there, without `--force` (A15 of specs/006-cli-small-features). */
-export const alreadyLinked = (folder: string): string => `There is already a ${PROJECT_FILE} in ${shownPath(folder)}. Run \`zekno link --force\` to replace it.`
+export const alreadyLinked = (folder: string): string =>
+  `There is already a ${PROJECT_FILE} in ${shownPath(folder)}. Run \`zekno link --force\` to replace it.`
 
 /** File systems where a hard link cannot be made; writing there checks first, then renames. */
-const NO_HARD_LINKS = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "EMLINK", "ENOSYS"])
+const NO_HARD_LINKS = new Set([
+  "EPERM",
+  "ENOTSUP",
+  "EOPNOTSUPP",
+  "EMLINK",
+  "ENOSYS",
+])
 
 /**
  * Writes `zekno.json` in `folder`, as one whole file or not at all: a new
@@ -79,12 +129,19 @@ const NO_HARD_LINKS = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "EMLINK", "ENOS
  * appears in between. With `force` a rename replaces what is there: a link
  * is replaced itself, never written through. Returns the file's path.
  */
-export function writeProject(folder: string, link: Parameters<typeof projectText>[0], force = false): string {
+export function writeProject(
+  folder: string,
+  link: Parameters<typeof projectText>[0],
+  force = false
+): string {
   const text = projectText(link)
   const path = join(folder, PROJECT_FILE)
   const shown = shownPath(path)
   const already = new CliError(alreadyLinked(folder))
-  const temporary = join(folder, `.${PROJECT_FILE}.${randomBytes(8).toString("hex")}.tmp`)
+  const temporary = join(
+    folder,
+    `.${PROJECT_FILE}.${randomBytes(8).toString("hex")}.tmp`
+  )
   try {
     // `wx` refuses a file or link that is already there under this name.
     const fd = openSync(temporary, "wx", 0o644)

@@ -13,7 +13,11 @@ export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", 
 export function Spinner() {
   const theme = useTheme()
   const { frame } = useAnimation({ interval: 80 })
-  return <Text color={theme.brand}>{SPINNER_FRAMES[frame % SPINNER_FRAMES.length]}</Text>
+  return (
+    <Text color={theme.brand}>
+      {SPINNER_FRAMES[frame % SPINNER_FRAMES.length]}
+    </Text>
+  )
 }
 
 /**
@@ -44,7 +48,13 @@ export function StageMark({ stage }: { stage: Stage }) {
 }
 
 /** The stage row of a deploy: Checked, Signed, Sent, Starting then Started. */
-export function Stages({ stages, gap = 3 }: { stages: readonly Stage[]; gap?: number }) {
+export function Stages({
+  stages,
+  gap = 3,
+}: {
+  stages: readonly Stage[]
+  gap?: number
+}) {
   return (
     <Box columnGap={gap} flexWrap="wrap">
       {stages.map((stage) => (

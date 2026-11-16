@@ -33,9 +33,12 @@ const IGNORABLE = /\p{Default_Ignorable_Code_Point}/u
 /** The two variation selectors that choose between text and emoji form. Emoji keep their form. */
 const EMOJI_FORM = new Set([0xfe0e, 0xfe0f])
 
-const isControl = (code: number) => code < 0x20 || (code >= 0x7f && code <= 0x9f)
-const isHidden = (code: number, char: string) => INVISIBLE.test(char) || (IGNORABLE.test(char) && !EMOJI_FORM.has(code))
-const inRange = (code: number | undefined, low: number, high: number) => code !== undefined && code >= low && code <= high
+const isControl = (code: number) =>
+  code < 0x20 || (code >= 0x7f && code <= 0x9f)
+const isHidden = (code: number, char: string) =>
+  INVISIBLE.test(char) || (IGNORABLE.test(char) && !EMOJI_FORM.has(code))
+const inRange = (code: number | undefined, low: number, high: number) =>
+  code !== undefined && code >= low && code <= high
 
 /** Skips a control sequence's parameters, intermediates and final character. Returns where the text resumes. */
 function skipCsi(codes: number[], start: number): number {
@@ -66,7 +69,14 @@ function skipEscape(codes: number[], start: number): number {
   const next = codes[start + 1]
   if (next === 0x5b) return skipCsi(codes, start + 2) // ESC [
   // ESC ] (OSC), ESC P (DCS), ESC X (SOS), ESC ^ (PM), ESC _ (APC)
-  if (next === 0x5d || next === 0x50 || next === 0x58 || next === 0x5e || next === 0x5f) return skipString(codes, start + 2)
+  if (
+    next === 0x5d ||
+    next === 0x50 ||
+    next === 0x58 ||
+    next === 0x5e ||
+    next === 0x5f
+  )
+    return skipString(codes, start + 2)
   let at = start + 1
   while (inRange(codes[at], 0x20, 0x2f)) at++
   // ESC c, ESC 7, ESC ( B, ESC # 8 and the like. A lone ESC is dropped by itself.
@@ -92,7 +102,13 @@ export function sanitize(text: string): string {
       at = skipEscape(codes, at)
     } else if (code === 0x9b) {
       at = skipCsi(codes, at + 1) // CSI in its one-character form
-    } else if (code === 0x9d || code === 0x90 || code === 0x98 || code === 0x9e || code === 0x9f) {
+    } else if (
+      code === 0x9d ||
+      code === 0x90 ||
+      code === 0x98 ||
+      code === 0x9e ||
+      code === 0x9f
+    ) {
       at = skipString(codes, at + 1) // OSC, DCS, SOS, PM, APC in their one-character forms
     } else if (code === 0x09) {
       const spaces = TAB_STOP - (column % TAB_STOP)

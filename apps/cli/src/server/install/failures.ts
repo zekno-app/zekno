@@ -6,7 +6,8 @@
 import type { InstallRequest } from "./checks"
 import type { InstallFailure } from "./lines"
 
-export const INSTALL_UNEXPECTED = "The installer on the server did not answer as expected, so nothing more was done."
+export const INSTALL_UNEXPECTED =
+  "The installer on the server did not answer as expected, so nothing more was done."
 
 /** Said when an install is needed and this build of zekno holds no checksum to check a download against. */
 export const NO_RELEASE =
@@ -20,9 +21,14 @@ const STILL_THERE = "The runner that was there is still in place."
  * "Installing the runner over SSH"; `tools`, `space`, `libc` and `cpu` from
  * specs/005-runner-release/contracts/versions.md).
  */
-export function installFailure(reason: InstallFailure, request: InstallRequest, where: { destination: string; server?: string }): string {
+export function installFailure(
+  reason: InstallFailure,
+  request: InstallRequest,
+  where: { destination: string; server?: string }
+): string {
   const file = request.source.kind === "file"
-  const nothing = request.mode === "update" ? STILL_THERE : "Nothing was installed."
+  const nothing =
+    request.mode === "update" ? STILL_THERE : "Nothing was installed."
   switch (reason) {
     case "docker":
       return "Docker with Compose was not found on the server. Install Docker with its Compose plugin there, then try again."
@@ -57,7 +63,10 @@ export function installFailure(reason: InstallFailure, request: InstallRequest, 
     case "folder":
       return "The runner's folder could not be created on the server."
     case "name":
-      return notNamedRunner(request.mode === "update" ? request.runnerPath : "that path", where.server ?? where.destination)
+      return notNamedRunner(
+        request.mode === "update" ? request.runnerPath : "that path",
+        where.server ?? where.destination
+      )
     case "newer":
       return `The runner on ${where.server ?? where.destination} is newer than the ${request.version} this zekno carries, so it was left as it is. Update zekno instead.`
     case "usage":

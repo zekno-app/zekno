@@ -16,8 +16,16 @@ import { join } from "node:path"
 import pkg from "../../package.json"
 import { RUNNER_MAIN, tempDir } from "../support/helpers"
 
-const AUTOLOAD_OFF = ["--no-compile-autoload-dotenv", "--no-compile-autoload-bunfig"]
-const AUTOLOAD_ON = ["--compile-autoload-dotenv", "--compile-autoload-bunfig", "--compile-autoload-tsconfig", "--compile-autoload-package-json"]
+const AUTOLOAD_OFF = [
+  "--no-compile-autoload-dotenv",
+  "--no-compile-autoload-bunfig",
+]
+const AUTOLOAD_ON = [
+  "--compile-autoload-dotenv",
+  "--compile-autoload-bunfig",
+  "--compile-autoload-tsconfig",
+  "--compile-autoload-package-json",
+]
 
 let binary = ""
 
@@ -27,8 +35,15 @@ beforeAll(async () => {
   const at = words.indexOf("--outfile")
   binary = join(tempDir("compiled-runner"), "zekno-runner")
   const argv = [process.execPath, ...words.slice(1, at), "--outfile", binary]
-  const build = Bun.spawn(argv, { cwd: join(import.meta.dir, "../.."), stdout: "pipe", stderr: "pipe" })
-  const [code, err] = await Promise.all([build.exited, new Response(build.stderr).text()])
+  const build = Bun.spawn(argv, {
+    cwd: join(import.meta.dir, "../.."),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [code, err] = await Promise.all([
+    build.exited,
+    new Response(build.stderr).text(),
+  ])
   if (code !== 0) throw new Error(`the runner did not compile: ${err}`)
 }, 120_000)
 
@@ -43,32 +58,65 @@ function hostileFolder() {
   mkdirSync(elsewhere)
   chmodSync(elsewhere, 0o700)
   writeFileSync(join(elsewhere, "state.json"), "not a state")
-  writeFileSync(join(dir, ".env"), `ZEKNO_RUNNER_HOME=${elsewhere}\nZEKNO_DOCKER=${join(dir, "docker")}\n`)
+  writeFileSync(
+    join(dir, ".env"),
+    `ZEKNO_RUNNER_HOME=${elsewhere}\nZEKNO_DOCKER=${join(dir, "docker")}\n`
+  )
   writeFileSync(join(dir, "bunfig.toml"), 'preload = ["./evil.ts"]\n')
-  writeFileSync(join(dir, "evil.ts"), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")\n`)
+  writeFileSync(
+    join(dir, "evil.ts"),
+    `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")\n`
+  )
   return { dir, marker }
 }
 
 /** Runs `argv` in `cwd` with an empty home folder and nothing of this process's environment but PATH. */
 async function inFolder(cwd: string, argv: string[]) {
-  const child = Bun.spawn(argv, { cwd, env: { HOME: tempDir("home"), PATH: process.env.PATH ?? "/usr/bin:/bin" }, stdin: "ignore", stdout: "pipe", stderr: "pipe" })
-  const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
+  const child = Bun.spawn(argv, {
+    cwd,
+    env: { HOME: tempDir("home"), PATH: process.env.PATH ?? "/usr/bin:/bin" },
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [stdout, stderr] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ])
   return { code: await child.exited, stdout, stderr }
 }
 
 describe("the compiled runner reads no configuration from the folder it starts in", () => {
   test("each compile script turns .env and bunfig.toml off, and turns nothing on", () => {
-    for (const name of ["compile", "compile:linux-x64", "compile:linux-arm64"] as const) {
+    for (const name of [
+      "compile",
+      "compile:linux-x64",
+      "compile:linux-arm64",
+    ] as const) {
       const words = pkg.scripts[name].split(" ")
-      for (const flag of AUTOLOAD_OFF) expect({ name, flag, has: words.includes(flag) }).toEqual({ name, flag, has: true })
-      for (const flag of AUTOLOAD_ON) expect({ name, flag, has: words.includes(flag) }).toEqual({ name, flag, has: false })
+      for (const flag of AUTOLOAD_OFF)
+        expect({ name, flag, has: words.includes(flag) }).toEqual({
+          name,
+          flag,
+          has: true,
+        })
+      for (const flag of AUTOLOAD_ON)
+        expect({ name, flag, has: words.includes(flag) }).toEqual({
+          name,
+          flag,
+          has: false,
+        })
     }
   })
 
   test("version: it answers as usual, and the folder's preload never runs", async () => {
     const { dir, marker } = hostileFolder()
     const run = await inFolder(dir, [binary, "version"])
-    expect(run).toEqual({ code: 0, stdout: `${JSON.stringify({ version: pkg.version, protocol: 2 })}\n`, stderr: "" })
+    expect(run).toEqual({
+      code: 0,
+      stdout: `${JSON.stringify({ version: pkg.version, protocol: 2 })}\n`,
+      stderr: "",
+    })
     expect(existsSync(marker)).toBe(false)
   })
 

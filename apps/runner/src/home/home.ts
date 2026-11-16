@@ -24,7 +24,8 @@ import { dirname, join } from "node:path"
 const SYSTEM_HOME = "/var/lib/zekno"
 
 /** The folder a user who is not root keeps the runner's key and state in. */
-const userFolder = (userHome: string) => join(userHome, ".local", "state", "zekno")
+const userFolder = (userHome: string) =>
+  join(userHome, ".local", "state", "zekno")
 
 /**
  * Where the runner keeps its key and state when nothing says otherwise.
@@ -89,7 +90,8 @@ function ensureDir(dir: string): void {
  * with a key others can read, refuses to act.
  */
 export function isPrivate(dir: string): boolean {
-  const mine = typeof process.getuid === "function" ? process.getuid() : undefined
+  const mine =
+    typeof process.getuid === "function" ? process.getuid() : undefined
   for (const path of [dir, paths(dir).secretKey]) {
     if (!existsSync(path)) continue
     const info = statSync(path)
@@ -147,7 +149,10 @@ export function isSetUp(dir: string): boolean {
 }
 
 /** Stores the server's key pair. Refuses to overwrite an existing key. */
-export function writeKeys(dir: string, keys: { publicKey: string; secretKey: string }): void {
+export function writeKeys(
+  dir: string,
+  keys: { publicKey: string; secretKey: string }
+): void {
   ensureDir(dir)
   const at = paths(dir)
   const handle = openSync(at.secretKey, "wx", 0o600)
@@ -160,7 +165,10 @@ export function writeKeys(dir: string, keys: { publicKey: string; secretKey: str
   writeAtomic(at.publicKey, keys.publicKey)
 }
 
-export function readKeys(dir: string): { publicKey: string; secretKey: string } {
+export function readKeys(dir: string): {
+  publicKey: string
+  secretKey: string
+} {
   const at = paths(dir)
   return {
     publicKey: readFileSync(at.publicKey, "utf8").trim(),
@@ -178,7 +186,11 @@ export function writeState(dir: string, state: unknown): void {
 }
 
 /** Saves the service definition of an accepted deploy and returns where it is. */
-export function writeCompose(dir: string, app: string, compose: string): string {
+export function writeCompose(
+  dir: string,
+  app: string,
+  compose: string
+): string {
   const path = paths(dir).compose(app)
   ensureDir(join(dir, "apps"))
   ensureDir(join(dir, "apps", app))
@@ -240,7 +252,8 @@ export function acquireLock(dir: string): (() => void) | undefined {
     return tryCreate() ? release : undefined // released in between
   }
   const holder = Number(held.split(":")[0])
-  if (!Number.isInteger(holder) || holder <= 0 || isAlive(holder)) return undefined
+  if (!Number.isInteger(holder) || holder <= 0 || isAlive(holder))
+    return undefined
 
   // The holder is gone. Move its lock aside; only one run can win this rename.
   const aside = `${path}.${token()}.stale`

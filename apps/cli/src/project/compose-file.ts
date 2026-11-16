@@ -83,7 +83,8 @@ type Budget = { nodes: number; chars: number }
 function spend(budget: Budget, depth: number, chars = 0): void {
   budget.nodes += 1
   budget.chars += chars
-  if (budget.nodes > MAX_NODES || budget.chars > MAX_CHARS || depth > MAX_DEPTH) throw TOO_MUCH
+  if (budget.nodes > MAX_NODES || budget.chars > MAX_CHARS || depth > MAX_DEPTH)
+    throw TOO_MUCH
 }
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
@@ -119,7 +120,11 @@ export function interpolated(text: string): string[] {
       const inner = text.slice(at + 2, end)
       const name = VARIABLE_START.exec(inner)?.[0]
       const rest = name === undefined ? "" : inner.slice(name.length)
-      if (name !== undefined && (rest === "" || rest.startsWith(":?") || rest.startsWith("?"))) names.push(name)
+      if (
+        name !== undefined &&
+        (rest === "" || rest.startsWith(":?") || rest.startsWith("?"))
+      )
+        names.push(name)
       at = end
       continue
     }
@@ -133,19 +138,31 @@ export function interpolated(text: string): string[] {
 }
 
 /** Every string value in what was parsed, in document order, for `$`. Keys are not read. */
-function walkStrings(node: unknown, depth: number, budget: Budget, found: (name: string) => void): void {
+function walkStrings(
+  node: unknown,
+  depth: number,
+  budget: Budget,
+  found: (name: string) => void
+): void {
   if (typeof node === "string") {
     spend(budget, depth, node.length)
     for (const name of interpolated(node)) found(name)
     return
   }
   spend(budget, depth)
-  if (Array.isArray(node)) for (const item of node) walkStrings(item, depth + 1, budget, found)
-  else if (isMap(node)) for (const value of Object.values(node)) walkStrings(value, depth + 1, budget, found)
+  if (Array.isArray(node))
+    for (const item of node) walkStrings(item, depth + 1, budget, found)
+  else if (isMap(node))
+    for (const value of Object.values(node))
+      walkStrings(value, depth + 1, budget, found)
 }
 
 /** The names each service's `environment` lists with no value. */
-function environmentNames(services: Record<string, unknown>, budget: Budget, found: (name: string) => void): void {
+function environmentNames(
+  services: Record<string, unknown>,
+  budget: Budget,
+  found: (name: string) => void
+): void {
   for (const service of Object.values(services)) {
     spend(budget, 2)
     const environment = isMap(service) ? service.environment : undefined
@@ -165,7 +182,9 @@ function environmentNames(services: Record<string, unknown>, budget: Budget, fou
 
 /** A name that can be shown and compared with secrets: the secret-name pattern, and not reserved. */
 const usable = (name: string): boolean =>
-  name.length <= LIMITS.secretNameLength && SECRET_NAME.test(name) && !isReservedSecretName(name)
+  name.length <= LIMITS.secretNameLength &&
+  SECRET_NAME.test(name) &&
+  !isReservedSecretName(name)
 
 /**
  * The names a Compose file's text expects that have no value, each once, in

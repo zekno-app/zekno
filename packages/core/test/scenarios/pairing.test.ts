@@ -16,7 +16,9 @@ describe("User Story 4: confirming keys when a server is connected", () => {
     const onServer = serverConfirmationCode(server.publicKey)
     const onLaptop = serverConfirmationCode(overTheWire(server.publicKey))
     expect(onServer).toBe(onLaptop)
-    expect(onServer).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){4}$/)
+    expect(onServer).toMatch(
+      /^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){4}$/
+    )
   })
 
   test("a key substituted by the relay shows a different code", () => {
@@ -34,7 +36,9 @@ describe("User Story 4: confirming keys when a server is connected", () => {
     expect(confirmationCodesMatch(code, code.toLowerCase())).toBe(true)
     expect(confirmationCodesMatch(code, code.replace(/-/g, " "))).toBe(true)
     expect(confirmationCodesMatch(code, code.replace(/-/g, ""))).toBe(true)
-    expect(confirmationCodesMatch(code, code.replace(/0/g, "O").replace(/1/g, "l"))).toBe(true)
+    expect(
+      confirmationCodesMatch(code, code.replace(/0/g, "O").replace(/1/g, "l"))
+    ).toBe(true)
     expect(confirmationCodesMatch(code, code.slice(0, -1))).toBe(false)
     expect(confirmationCodesMatch(code, "")).toBe(false)
     const lastDiffers = code.slice(0, -1) + (code.endsWith("Z") ? "Y" : "Z")
@@ -46,11 +50,17 @@ describe("User Story 4: confirming keys when a server is connected", () => {
     const team = await createTeam({ founderName: "Ada", signer: ada.signer })
     expect(teamConfirmationCode(team.trust)).toBe(team.confirmationCode)
 
-    const confirmed = trustFoundingRoster(overTheWire(team.envelope), team.confirmationCode)
+    const confirmed = trustFoundingRoster(
+      overTheWire(team.envelope),
+      team.confirmationCode
+    )
     expect(confirmed.ok).toBe(true)
     if (confirmed.ok) expect(confirmed.value).toEqual(team.trust)
 
-    const unconfirmed = trustFoundingRoster(team.envelope, "0000-0000-0000-0000-0000")
+    const unconfirmed = trustFoundingRoster(
+      team.envelope,
+      "0000-0000-0000-0000-0000"
+    )
     expect(unconfirmed.ok).toBe(false)
     if (!unconfirmed.ok) expect(unconfirmed.error.code).toBe("code_mismatch")
   })
@@ -59,10 +69,16 @@ describe("User Story 4: confirming keys when a server is connected", () => {
     const ada = person("Ada")
     const mallory = person("Mallory")
     const genuine = await createTeam({ founderName: "Ada", signer: ada.signer })
-    const substituted = await createTeam({ founderName: "Ada", signer: mallory.signer })
+    const substituted = await createTeam({
+      founderName: "Ada",
+      signer: mallory.signer,
+    })
 
     // The person confirmed Ada's code; the relay delivers Mallory's list.
-    const result = trustFoundingRoster(substituted.envelope, genuine.confirmationCode)
+    const result = trustFoundingRoster(
+      substituted.envelope,
+      genuine.confirmationCode
+    )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error.code).toBe("code_mismatch")
   })
@@ -70,7 +86,15 @@ describe("User Story 4: confirming keys when a server is connected", () => {
   test("the team's code stays the same after the team changes, without asking the relay", async () => {
     const { founder, team, relay, trust } = await setup()
     const grace = person("Grace")
-    const later = await changeTeam({ relay, trust, signer: founder.signer, members: [...trust.members, { name: "Grace", publicKey: grace.publicKey, role: "deployer" }] })
+    const later = await changeTeam({
+      relay,
+      trust,
+      signer: founder.signer,
+      members: [
+        ...trust.members,
+        { name: "Grace", publicKey: grace.publicKey, role: "deployer" },
+      ],
+    })
     expect(later.version).toBe(3)
     // Any member's client can show the code from its own trust at any version.
     expect(teamConfirmationCode(later)).toBe(team.confirmationCode)
@@ -78,16 +102,25 @@ describe("User Story 4: confirming keys when a server is connected", () => {
     // A second server is connected while the team is at version 3. The relay
     // serves its own "founding list"; the code a member reads out does not match it.
     const mallory = person("Mallory")
-    const substituted = await createTeam({ founderName: "Ada", signer: mallory.signer })
-    expect(trustFoundingRoster(substituted.envelope, teamConfirmationCode(later))).toMatchObject({ ok: false, error: { code: "code_mismatch" } })
+    const substituted = await createTeam({
+      founderName: "Ada",
+      signer: mallory.signer,
+    })
+    expect(
+      trustFoundingRoster(substituted.envelope, teamConfirmationCode(later))
+    ).toMatchObject({ ok: false, error: { code: "code_mismatch" } })
     // The genuine founding list is accepted, and the server then follows the chain.
-    const pinned = trustFoundingRoster(relay.rosters[0], teamConfirmationCode(later))
+    const pinned = trustFoundingRoster(
+      relay.rosters[0],
+      teamConfirmationCode(later)
+    )
     expect(pinned.ok).toBe(true)
   })
 
   test("codes for a key and for a team list never coincide by construction", async () => {
     const codes = new Set<string>()
-    for (let index = 0; index < 200; index += 1) codes.add(serverConfirmationCode(generateServerKeyPair().publicKey))
+    for (let index = 0; index < 200; index += 1)
+      codes.add(serverConfirmationCode(generateServerKeyPair().publicKey))
     expect(codes.size).toBe(200)
   })
 })

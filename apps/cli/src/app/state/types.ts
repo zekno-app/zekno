@@ -58,23 +58,46 @@ export type ServerRow = {
  * is older than the one this CLI carries, the same or newer; and, for an
  * older one, what needs it updated (ops/server.ts `RunnerRelation`).
  */
-export type RunnerRow = { version?: string; relation: "older" | "same" | "newer"; missing: "state and logs" | "some" | "nothing" }
+export type RunnerRow = {
+  version?: string
+  relation: "older" | "same" | "newer"
+  missing: "state and logs" | "some" | "nothing"
+}
 
 /** The verified team, as the screens show it. `code` is the team code, which servers check. */
-export type TeamView = { member: string; version: number; code?: string; servers: ServerRow[] }
+export type TeamView = {
+  member: string
+  version: number
+  code?: string
+  servers: ServerRow[]
+}
 
 /** One line of an app's logs. Its text was cleaned when it arrived (session.ts). */
 export type LogLine = { time: string; service: string; line: string }
 
 /** The steps of adding a server, in order (board "Add a server"). */
-export const ADD_STEPS = ["connect", "docker", "runner", "set_up", "added"] as const
+export const ADD_STEPS = [
+  "connect",
+  "docker",
+  "runner",
+  "set_up",
+  "added",
+] as const
 export type AddStepName = (typeof ADD_STEPS)[number]
 
 /** The steps shown for a runner on this machine: there is no SSH, no Docker check and nothing to install. */
-export const LOCAL_ADD_STEPS: readonly AddStepName[] = ["connect", "set_up", "added"]
+export const LOCAL_ADD_STEPS: readonly AddStepName[] = [
+  "connect",
+  "set_up",
+  "added",
+]
 
 /** One step of adding a server that has ended. `found`: the runner was already there and was used as it is. */
-export type AddStep = { state: "done" | "failed"; detail?: string; found?: boolean }
+export type AddStep = {
+  state: "done" | "failed"
+  detail?: string
+  found?: boolean
+}
 
 /** Adding a server, started from the app. Kept until another one starts. */
 export type AddProgress = {
@@ -107,7 +130,12 @@ export type Above = { folder: string; compose: string }
  * folder above (`above`); and the file as it was judged, its real path and
  * the SHA-256 of its bytes, so that a "yes" records only what was shown.
  */
-export type FirstUse = Linked & { member: string; path: string; sha256: string; above?: Above }
+export type FirstUse = Linked & {
+  member: string
+  path: string
+  sha256: string
+  above?: Above
+}
 
 /**
  * How the app starts: the profile has been read and verified, or not
@@ -118,7 +146,14 @@ export type FirstUse = Linked & { member: string; path: string; sha256: string; 
  * without reading the keychain.
  */
 export type Start =
-  | { kind: "team"; team: TeamView; linked?: Linked; problem?: string; firstUse?: FirstUse; trust?: TeamTrust }
+  | {
+      kind: "team"
+      team: TeamView
+      linked?: Linked
+      problem?: string
+      firstUse?: FirstUse
+      trust?: TeamTrust
+    }
   | { kind: "no-team" }
   | { kind: "profile-error"; reason: string; folder: string }
 
@@ -127,7 +162,14 @@ export type Start =
 
 export type Screen =
   | { name: "home"; pane: "servers" | "apps"; server: number; app: number }
-  | { name: "app"; server: string; app: string; pane: "deploys" | "secrets"; deploy: number; secret: number }
+  | {
+      name: "app"
+      server: string
+      app: string
+      pane: "deploys" | "secrets"
+      deploy: number
+      secret: number
+    }
   | { name: "deploy"; output: boolean }
   | {
       name: "logs"
@@ -187,19 +229,35 @@ export type Question =
   | { kind: "update-runner"; server: string }
   | { kind: "remember-folder"; server: string; app: string; compose: string }
   /** Esc on the list before a deploy: go ahead without the values in `names`, which are not set? */
-  | { kind: "skip-values"; server: string; app: string; names: readonly string[] }
+  | {
+      kind: "skip-values"
+      server: string
+      app: string
+      names: readonly string[]
+    }
   /**
    * `d` with an app selected other than the one this folder's accepted
    * zekno.json names (`linked`): deploy the folder to the selected app on the
    * selected server all the same?
    */
-  | { kind: "deploy-elsewhere"; server: string; app: string; linked: { server: string; app: string } }
+  | {
+      kind: "deploy-elsewhere"
+      server: string
+      app: string
+      linked: { server: string; app: string }
+    }
   /**
    * When the app opens in a folder whose zekno.json is signed by the team
    * (`member` signed it) and was not used in this folder on this machine:
    * use it here? `above`: the file is in a folder above, named in the question.
    */
-  | { kind: "use-link"; member: string; server: string; app: string; above?: Above }
+  | {
+      kind: "use-link"
+      member: string
+      server: string
+      app: string
+      above?: Above
+    }
 
 // ---------------------------------------------------------------------------
 // The state
@@ -211,7 +269,12 @@ export type State = {
   /** The server and app this folder's zekno.json names. */
   linked?: Linked
   /** Deploys and secrets of the app the app screen shows, once read. */
-  appView?: { server: string; app: string; deploys: DeployRow[]; secrets: SecretRow[] }
+  appView?: {
+    server: string
+    app: string
+    deploys: DeployRow[]
+    secrets: SecretRow[]
+  }
   size: { columns: number; rows: number }
   deploy?: DeployProgress
   /** Adding a server started from the app. */

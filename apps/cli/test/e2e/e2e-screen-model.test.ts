@@ -11,37 +11,60 @@ import { join } from "node:path"
 
 import { keyBytes } from "../../tests/support/engine"
 import { applySgr, createScreen } from "../../tests/support/screen-model"
-import { findBoxes, screenTree, treeText } from "../../tests/support/screen-tree"
+import {
+  findBoxes,
+  screenTree,
+  treeText,
+} from "../../tests/support/screen-tree"
 import { terminalAnswers } from "../../tests/support/terminal"
 
-const captured = (name: string) => readFileSync(join(import.meta.dir, "e2e-screens", `${name}.txt`), "utf8")
+const captured = (name: string) =>
+  readFileSync(join(import.meta.dir, "e2e-screens", `${name}.txt`), "utf8")
 
 /** The screen after `text`, fed whole or in pieces of `size` characters. */
 function screenOf(text: string, size = text.length) {
   const screen = createScreen(100, 30)
-  for (let at = 0; at < text.length; at += size) screen.feed(text.slice(at, at + size))
+  for (let at = 0; at < text.length; at += size)
+    screen.feed(text.slice(at, at + size))
   return screen
 }
 
-const rowsOf = (screen: ReturnType<typeof createScreen>) => Array.from({ length: screen.rows }, (_, row) => screen.row(row))
+const rowsOf = (screen: ReturnType<typeof createScreen>) =>
+  Array.from({ length: screen.rows }, (_, row) => screen.row(row))
 
 describe("the screen model, fed real output", () => {
   test("Home: the header on the wordmark's last line, three panes, the key hints last", () => {
     const lines = screenOf(captured("home")).lines()
-    expect(lines[2]!.endsWith("ada's team            team list v2  pre-alpha, unaudited")).toBe(true)
-    expect(lines[4]).toBe(" ╭──────────────────────╮ ╭──────────────────────────────────────────╮ ╭──────────────────────────╮")
-    expect(lines[7]).toBe(" │ ❯ prod             ● │ │   app    deploy  state       when        │ │ deploy     1, started    │")
-    expect(lines[8]).toBe(" │   this machine       │ │ ❯ demo   1       ● stopped   just now    │ │ signed by  ada           │")
-    expect(lines[26]).toBe(" ╰──────────────────────╯ ╰──────────────────────────────────────────╯ ╰──────────────────────────╯")
-    expect(lines[29]).toBe(" ↑↓ move  ←→ pane  enter open  a add  ? help  q quit")
+    expect(
+      lines[2]!.endsWith(
+        "ada's team            team list v2  pre-alpha, unaudited"
+      )
+    ).toBe(true)
+    expect(lines[4]).toBe(
+      " ╭──────────────────────╮ ╭──────────────────────────────────────────╮ ╭──────────────────────────╮"
+    )
+    expect(lines[7]).toBe(
+      " │ ❯ prod             ● │ │   app    deploy  state       when        │ │ deploy     1, started    │"
+    )
+    expect(lines[8]).toBe(
+      " │   this machine       │ │ ❯ demo   1       ● stopped   just now    │ │ signed by  ada           │"
+    )
+    expect(lines[26]).toBe(
+      " ╰──────────────────────╯ ╰──────────────────────────────────────────╯ ╰──────────────────────────╯"
+    )
+    expect(lines[29]).toBe(
+      " ↑↓ move  ←→ pane  enter open  a add  ? help  q quit"
+    )
     // Every row is exactly as wide as the window: wide and narrow characters are counted as Ink counts them.
-    for (const line of lines) expect(Bun.stringWidth(line)).toBeLessThanOrEqual(100)
+    for (const line of lines)
+      expect(Bun.stringWidth(line)).toBeLessThanOrEqual(100)
   })
 
   test("the same screen, whatever pieces the output arrives in", () => {
     for (const name of ["first-run", "home", "set-a-secret", "deploy"]) {
       const whole = screenOf(captured(name)).lines()
-      for (const size of [1, 2, 3, 7, 64, 1000]) expect(screenOf(captured(name), size).lines()).toEqual(whole)
+      for (const size of [1, 2, 3, 7, 64, 1000])
+        expect(screenOf(captured(name), size).lines()).toEqual(whole)
     }
   })
 
@@ -52,7 +75,9 @@ describe("the screen model, fed real output", () => {
     expect(screen.frames).toBe(12)
     // The background question and DA1 are the only sequences it reads past.
     expect(screen.unknown()).toEqual(["OSC 11", "CSI c"])
-    expect(screen.lines()[11]).toBe("   ✔ Checked   ✔ Signed   ✔ Sent   ✔ Started")
+    expect(screen.lines()[11]).toBe(
+      "   ✔ Checked   ✔ Signed   ✔ Sent   ✔ Started"
+    )
   })
 
   test("cut inside a frame, the frame is known to be half drawn", () => {
@@ -117,10 +142,23 @@ describe("the screen model, sequence by sequence", () => {
 
   test("SGR: bold, faint, 16, 256 and true colours, and their resets", () => {
     const plain = { bold: false, dim: false, fg: undefined }
-    expect(applySgr(plain, "1;2;31")).toEqual({ bold: true, dim: true, fg: "31" })
-    expect(applySgr(plain, "38;2;35;131;226")).toEqual({ ...plain, fg: "38;2;35;131;226" })
-    expect(applySgr(plain, "38;5;244;1")).toEqual({ ...plain, bold: true, fg: "38;5;244" })
-    expect(applySgr({ bold: true, dim: true, fg: "31" }, "22;39")).toEqual(plain)
+    expect(applySgr(plain, "1;2;31")).toEqual({
+      bold: true,
+      dim: true,
+      fg: "31",
+    })
+    expect(applySgr(plain, "38;2;35;131;226")).toEqual({
+      ...plain,
+      fg: "38;2;35;131;226",
+    })
+    expect(applySgr(plain, "38;5;244;1")).toEqual({
+      ...plain,
+      bold: true,
+      fg: "38;5;244",
+    })
+    expect(applySgr({ bold: true, dim: true, fg: "31" }, "22;39")).toEqual(
+      plain
+    )
     expect(applySgr({ bold: true, dim: false, fg: "31" }, "")).toEqual(plain)
   })
 
@@ -185,8 +223,12 @@ describe("the tree the runner and the model read", () => {
   test("the deploy screen: the line about the result is a line of its own, the stages one line", () => {
     const tree = screenTree(rowsOf(screenOf(captured("deploy"))))
     expect(tree.location).toBe("prod › demo › deploy")
-    expect(treeText(tree.root)).toContain(`  text text="✔ Checked  ✔ Signed  ✔ Sent  ✔ Started"`)
-    expect(treeText(tree.root)).toContain(`    text text="from  ~/demo/compose.yaml"`)
+    expect(treeText(tree.root)).toContain(
+      `  text text="✔ Checked  ✔ Signed  ✔ Sent  ✔ Started"`
+    )
+    expect(treeText(tree.root)).toContain(
+      `    text text="from  ~/demo/compose.yaml"`
+    )
   })
 
   test("a node keeps its id while its text is the same, and gets a new one when the text changes", () => {
@@ -212,7 +254,10 @@ describe("keys and the terminal's answers", () => {
 
   test("the background question and DA1 are answered once each, even cut between two reads", () => {
     const query = "\x1b]11;?\x07\x1b[c"
-    expect(terminalAnswers("", query).replies).toEqual(["\x1b]11;rgb:0000/0000/0000\x1b\\", "\x1b[?62;22c"])
+    expect(terminalAnswers("", query).replies).toEqual([
+      "\x1b]11;rgb:0000/0000/0000\x1b\\",
+      "\x1b[?62;22c",
+    ])
     const first = terminalAnswers("", `frame${query.slice(0, 4)}`)
     expect(first.replies).toEqual([])
     const second = terminalAnswers(first.carry, query.slice(4))

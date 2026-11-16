@@ -20,10 +20,16 @@ import type { State } from "./state/types"
 /** The value typed so far, and whether a finished value is being stored. */
 export type HiddenValue = { value: string; saving: boolean }
 
-export const emptyHiddenValue = (): HiddenValue => ({ value: "", saving: false })
+export const emptyHiddenValue = (): HiddenValue => ({
+  value: "",
+  saving: false,
+})
 
 /** Stores a finished value for one secret of one app. */
-export type SaveSecret = (where: { server: string; app: string; name: string }, value: string) => Promise<void>
+export type SaveSecret = (
+  where: { server: string; app: string; name: string },
+  value: string
+) => Promise<void>
 
 /**
  * Applies one key press or paste to the hidden prompt that is open in
@@ -51,7 +57,10 @@ export function hiddenPromptKey(
       return
     case "rejected":
       held.value = ""
-      dispatch({ type: "secret-refused", notice: { tone: "error", text: next.reason } })
+      dispatch({
+        type: "secret-refused",
+        notice: { tone: "error", text: next.reason },
+      })
       return
     case "done": {
       held.value = ""
@@ -59,7 +68,10 @@ export function hiddenPromptKey(
       const name = promptedName(state)
       if (screen.name !== "set-secret" || name === undefined) return
       held.saving = true
-      void save({ server: screen.server, app: screen.app, name }, next.value).finally(() => (held.saving = false))
+      void save(
+        { server: screen.server, app: screen.app, name },
+        next.value
+      ).finally(() => (held.saving = false))
       return
     }
   }

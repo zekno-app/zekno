@@ -39,14 +39,23 @@ export type ReleaseFile = { arch: RunnerArch; sha256: string }
 /** A runner file on this machine, read once: what is sent is exactly what was hashed. */
 export type RunnerFile = { bytes: Uint8Array; sha256: string }
 
-export type InstallSource = { kind: "release"; files: readonly ReleaseFile[] } | { kind: "file"; file: RunnerFile }
+export type InstallSource =
+  | { kind: "release"; files: readonly ReleaseFile[] }
+  | { kind: "file"; file: RunnerFile }
 
 export type InstallRequest =
   | { mode: "add"; version: string; source: InstallSource }
-  | { mode: "update"; version: string; runnerPath: string; source: Extract<InstallSource, { kind: "release" }> }
+  | {
+      mode: "update"
+      version: string
+      runnerPath: string
+      source: Extract<InstallSource, { kind: "release" }>
+    }
 
 /** The runner this CLI carries, as release files: only those with a published checksum. */
-export function releaseFiles(release: { files: Record<string, { sha256: string | null }> } = RUNNER_RELEASE): ReleaseFile[] {
+export function releaseFiles(
+  release: { files: Record<string, { sha256: string | null }> } = RUNNER_RELEASE
+): ReleaseFile[] {
   const files: ReleaseFile[] = []
   for (const arch of ["x64", "arm64"] as const) {
     const sha256 = release.files[`linux-${arch}`]?.sha256
@@ -55,10 +64,14 @@ export function releaseFiles(release: { files: Record<string, { sha256: string |
   return files
 }
 
-const placed = (what: string) => new CliError(`The ${what} for the installer is not valid, so nothing was sent to the server.`)
+const placed = (what: string) =>
+  new CliError(
+    `The ${what} for the installer is not valid, so nothing was sent to the server.`
+  )
 
 /** A runner path that can be an argument: the profile's pattern, and never something an option could be read from. */
-export const isInstallPath = (path: string): boolean => RUNNER_PATH.test(path) && !path.startsWith("-")
+export const isInstallPath = (path: string): boolean =>
+  RUNNER_PATH.test(path) && !path.startsWith("-")
 
 /**
  * Whether an update may replace the file at `path`: only one named
@@ -66,7 +79,8 @@ export const isInstallPath = (path: string): boolean => RUNNER_PATH.test(path) &
  * so without this an edited profile could point an update at any program on
  * the server and have it replaced.
  */
-export const isRunnerFileName = (path: string): boolean => path === "zekno-runner" || path.endsWith("/zekno-runner")
+export const isRunnerFileName = (path: string): boolean =>
+  path === "zekno-runner" || path.endsWith("/zekno-runner")
 
 /**
  * The words after `sh -s --`. Every value is checked against its pattern
@@ -75,24 +89,38 @@ export const isRunnerFileName = (path: string): boolean => path === "zekno-runne
  */
 export function installWords(request: InstallRequest): string[] {
   const words: string[] = [request.mode === "update" ? "update" : "add"]
-  if (typeof request.version !== "string" || !VERSION_PATTERN.test(request.version)) throw placed("version")
+  if (
+    typeof request.version !== "string" ||
+    !VERSION_PATTERN.test(request.version)
+  )
+    throw placed("version")
   words.push(request.version)
   if (request.mode === "update") {
-    if (typeof request.runnerPath !== "string" || !isInstallPath(request.runnerPath)) throw placed("runner path")
+    if (
+      typeof request.runnerPath !== "string" ||
+      !isInstallPath(request.runnerPath)
+    )
+      throw placed("runner path")
     if (!isRunnerFileName(request.runnerPath)) throw placed("runner path")
     words.push(request.runnerPath)
   }
   const source = request.source
   if (source.kind === "file") {
     if (request.mode !== "add") throw placed("runner file")
-    if (typeof source.file.sha256 !== "string" || !SHA256_PATTERN.test(source.file.sha256)) throw placed("SHA-256")
+    if (
+      typeof source.file.sha256 !== "string" ||
+      !SHA256_PATTERN.test(source.file.sha256)
+    )
+      throw placed("SHA-256")
     words.push("file", source.file.sha256)
     return words
   }
   words.push("release")
   for (const file of source.files) {
-    if (typeof file.arch !== "string" || !ARCH_PATTERN.test(file.arch)) throw placed("architecture")
-    if (typeof file.sha256 !== "string" || !SHA256_PATTERN.test(file.sha256)) throw placed("SHA-256")
+    if (typeof file.arch !== "string" || !ARCH_PATTERN.test(file.arch))
+      throw placed("architecture")
+    if (typeof file.sha256 !== "string" || !SHA256_PATTERN.test(file.sha256))
+      throw placed("SHA-256")
     words.push(file.arch, file.sha256)
   }
   return words
@@ -109,10 +137,16 @@ export async function readRunnerFile(path: string): Promise<RunnerFile> {
   } catch {
     throw new CliError("There is no runner file at that path.")
   }
-  if (!info.isFile()) throw new CliError("The runner file must be a regular file.")
-  if (info.size > RUNNER_FILE_LIMIT) throw new CliError("The runner file is larger than 256 MiB.")
+  if (!info.isFile())
+    throw new CliError("The runner file must be a regular file.")
+  if (info.size > RUNNER_FILE_LIMIT)
+    throw new CliError("The runner file is larger than 256 MiB.")
   const bytes = await Bun.file(path).bytes()
   if (bytes.length === 0) throw new CliError("The runner file is empty.")
-  if (bytes.length > RUNNER_FILE_LIMIT) throw new CliError("The runner file is larger than 256 MiB.")
-  return { bytes, sha256: new Bun.CryptoHasher("sha256").update(bytes).digest("hex") }
+  if (bytes.length > RUNNER_FILE_LIMIT)
+    throw new CliError("The runner file is larger than 256 MiB.")
+  return {
+    bytes,
+    sha256: new Bun.CryptoHasher("sha256").update(bytes).digest("hex"),
+  }
 }

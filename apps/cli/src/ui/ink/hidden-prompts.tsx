@@ -10,17 +10,39 @@ import { Box, useInput, useWindowSize } from "ink"
 import { useRef, useState } from "react"
 
 import { CliError } from "../../cli/errors"
-import { isCtrlC, QuestionLine, questionPieces, Reason, VALUE_EMPTY, valueHasLines } from "./questions"
+import {
+  isCtrlC,
+  QuestionLine,
+  questionPieces,
+  Reason,
+  VALUE_EMPTY,
+  valueHasLines,
+} from "./questions"
 import { applySecretInput } from "../parts/secret-input"
 import { withoutBackticks } from "./marks"
 import type { Piece } from "./wrap"
 
-export type Prompt = { question: string; settle(result: { value: string } | { error: Error }): void }
+export type Prompt = {
+  question: string
+  settle(result: { value: string } | { error: Error }): void
+}
 /** The hidden prompt that can be skipped. `name` is the secret's, for the sentence about a value of several lines. */
-export type ValueOpen = { id: number; question: string; name: string; settle(result: { kind: "value"; value: string } | { kind: "skipped" } | { kind: "left" }): void }
+export type ValueOpen = {
+  id: number
+  question: string
+  name: string
+  settle(
+    result:
+      { kind: "value"; value: string } | { kind: "skipped" } | { kind: "left" }
+  ): void
+}
 
 /** What follows the question of the hidden prompt that can be skipped while it is open: `(hidden)` and `esc skips it`, dim. Nothing of the value. */
-export const hiddenPieces: Piece[] = [{ text: "(hidden)", dim: true }, { text: "   " }, { text: "esc skips it", dim: true }]
+export const hiddenPieces: Piece[] = [
+  { text: "(hidden)", dim: true },
+  { text: "   " },
+  { text: "esc skips it", dim: true },
+]
 
 /**
  * Asks for a value and shows nothing of it, not even its length. A value it
@@ -35,10 +57,19 @@ export function SecretPrompt({ prompt }: { prompt: Prompt }) {
     const next = applySecretInput(value.current, input, key)
     if (next.kind === "typing") value.current = next.value
     else if (next.kind === "done") prompt.settle({ value: next.value })
-    else if (next.kind === "cancelled") prompt.settle({ error: new CliError("Cancelled.") })
+    else if (next.kind === "cancelled")
+      prompt.settle({ error: new CliError("Cancelled.") })
     else prompt.settle({ error: new CliError(next.reason) })
   })
-  return <QuestionLine pieces={[...questionPieces(prompt.question), { text: "(hidden)", dim: true }]} columns={columns} />
+  return (
+    <QuestionLine
+      pieces={[
+        ...questionPieces(prompt.question),
+        { text: "(hidden)", dim: true },
+      ]}
+      columns={columns}
+    />
+  )
 }
 
 /**
@@ -66,13 +97,19 @@ export function ValuePrompt({ open }: { open: ValueOpen }) {
       return
     }
     value.current = ""
-    if (next.kind === "done" && next.value !== "") return open.settle({ kind: "value", value: next.value })
+    if (next.kind === "done" && next.value !== "")
+      return open.settle({ kind: "value", value: next.value })
     setReason(next.kind === "done" ? VALUE_EMPTY : valueHasLines(open.name))
   })
   return (
     <Box flexDirection="column">
-      <QuestionLine pieces={[...questionPieces(open.question), ...hiddenPieces]} columns={columns} />
-      {reason === undefined ? null : <Reason text={withoutBackticks(reason)} columns={columns} />}
+      <QuestionLine
+        pieces={[...questionPieces(open.question), ...hiddenPieces]}
+        columns={columns}
+      />
+      {reason === undefined ? null : (
+        <Reason text={withoutBackticks(reason)} columns={columns} />
+      )}
     </Box>
   )
 }

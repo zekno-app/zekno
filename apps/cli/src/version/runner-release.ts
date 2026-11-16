@@ -17,8 +17,18 @@ import release from "./runner-release.json"
 export const RunnerReleaseSchema = z.strictObject({
   version: z.string().regex(RUNNER_VERSION_PATTERN),
   files: z.strictObject({
-    "linux-x64": z.strictObject({ sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable() }),
-    "linux-arm64": z.strictObject({ sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable() }),
+    "linux-x64": z.strictObject({
+      sha256: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .nullable(),
+    }),
+    "linux-arm64": z.strictObject({
+      sha256: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .nullable(),
+    }),
   }),
 })
 

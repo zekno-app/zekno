@@ -21,7 +21,8 @@ function columnsOf(char: string): number {
     code >= 0x1f300
   return wide ? 2 : 1
 }
-export const widthOf = (text: string): number => [...text].reduce((sum, char) => sum + columnsOf(char), 0)
+export const widthOf = (text: string): number =>
+  [...text].reduce((sum, char) => sum + columnsOf(char), 0)
 
 /**
  * The rows Ink draws a sentence of plain words in at `width` columns: wrapped

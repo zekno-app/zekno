@@ -6,7 +6,10 @@ import { Frame, Header, Trail } from "../frame"
 import type { Screen, State } from "../state/types"
 
 /** Each screen's key hints, as its board's last line shows them. */
-export const HINTS: Record<Exclude<Screen["name"], "help" | "profile-error">, readonly KeyHint[]> = {
+export const HINTS: Record<
+  Exclude<Screen["name"], "help" | "profile-error">,
+  readonly KeyHint[]
+> = {
   home: [
     ["↑↓", "move"],
     ["←→", "pane"],
@@ -64,11 +67,21 @@ const TITLES: Record<keyof typeof HINTS, string> = {
 function placeOf(state: State, screen: Screen): ReactNode {
   switch (screen.name) {
     case "home":
-      return state.team ? <Text dimColor>{state.team.member}'s team</Text> : null
+      return state.team ? (
+        <Text dimColor>{state.team.member}'s team</Text>
+      ) : null
     case "app":
       return <Trail parts={[screen.server, screen.app]} />
     case "deploy":
-      return <Trail parts={[state.deploy?.server ?? "", state.deploy?.app ?? "", "deploy"]} />
+      return (
+        <Trail
+          parts={[
+            state.deploy?.server ?? "",
+            state.deploy?.app ?? "",
+            "deploy",
+          ]}
+        />
+      )
     case "logs":
       return <Trail parts={[screen.server, screen.app, "logs"]} />
     case "welcome":
@@ -96,7 +109,16 @@ export function Placeholder({
   status?: ReactNode
 }) {
   return (
-    <Frame header={<Header place={placeOf(state, screen)} logo={screen.name !== "welcome"} />} hints={HINTS[screen.name]} status={status}>
+    <Frame
+      header={
+        <Header
+          place={placeOf(state, screen)}
+          logo={screen.name !== "welcome"}
+        />
+      }
+      hints={HINTS[screen.name]}
+      status={status}
+    >
       <Box flexDirection="column" paddingX={2}>
         <Text bold>{TITLES[screen.name]} is not built yet.</Text>
         <Text dimColor>Single commands for scripts: zekno --help</Text>

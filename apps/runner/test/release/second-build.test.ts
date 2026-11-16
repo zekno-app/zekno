@@ -1,15 +1,33 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { dirname, join } from "node:path"
 
-import { realBuild, secondBuild, type SecondBuildDeps } from "../../scripts/second-build"
+import {
+  realBuild,
+  secondBuild,
+  type SecondBuildDeps,
+} from "../../scripts/second-build"
 import { tempDir } from "../support/helpers"
-import { copied, git, releaseRepo, runnerRelease, type ReleaseRepo } from "./release-helpers"
+import {
+  copied,
+  git,
+  releaseRepo,
+  runnerRelease,
+  type ReleaseRepo,
+} from "./release-helpers"
 
 const TAG = "runner-v0.1.0-dev.1"
 const X64 = new TextEncoder().encode("the x64 runner\n".repeat(64))
 const ARM64 = new TextEncoder().encode("the arm64 runner\n".repeat(64))
-const sha = (bytes: Uint8Array) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
+const sha = (bytes: Uint8Array) =>
+  new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
 const RELEASE_JSON = "apps/cli/src/version/runner-release.json"
 
 /** The release notes the workflow writes (contracts/release.md), for this stand-in release. */
@@ -47,7 +65,12 @@ function notes(commit: string, x64 = sha(X64), arm64 = sha(ARM64)): string {
 }
 
 /** "The record" of contracts/second-build.md, written out here. The stand-in repository's commit B says "b". */
-function record(commit: string, rows: [string, string, string, string, string][], matched: boolean, subject = "b"): string {
+function record(
+  commit: string,
+  rows: [string, string, string, string, string][],
+  matched: boolean,
+  subject = "b"
+): string {
   return [
     `Second build of ${TAG} (dev): ${matched ? "matched" : "did not match"}.`,
     "",
@@ -57,7 +80,9 @@ function record(commit: string, rows: [string, string, string, string, string][]
     "|------|------------|------------|------------|--------|",
     ...rows.map((row) => `| ${row.join(" | ")} |`),
     "",
-    matched ? "The checksums are recorded in apps/cli/src/version/runner-release.json on dev." : "Nothing was recorded. No zekno installs this release.",
+    matched
+      ? "The checksums are recorded in apps/cli/src/version/runner-release.json on dev."
+      : "Nothing was recorded. No zekno installs this release.",
     "",
   ].join("\n")
 }
@@ -79,24 +104,32 @@ type World = {
  * its release in a folder. The tag is on commit B of `dev`, or on the commit `at` names: A, on
  * `main` and so on `dev` too, or C, on `feature` only.
  */
-function world(options: { recorded?: string; at?: "a" | "b" | "c" } = {}): World {
+function world(
+  options: { recorded?: string; at?: "a" | "b" | "c" } = {}
+): World {
   const at = options.at ?? "b"
-  const repo = copied(`second build, recorded ${options.recorded ?? "nothing"}, tag at ${at}`, () => {
-    const made = releaseRepo()
-    git(made.root, "switch", "-q", "dev")
-    if (options.recorded !== undefined) {
-      writeFileSync(join(made.root, RELEASE_JSON), options.recorded)
-      git(made.root, "commit", "-q", "-am", "recorded")
+  const repo = copied(
+    `second build, recorded ${options.recorded ?? "nothing"}, tag at ${at}`,
+    () => {
+      const made = releaseRepo()
+      git(made.root, "switch", "-q", "dev")
+      if (options.recorded !== undefined) {
+        writeFileSync(join(made.root, RELEASE_JSON), options.recorded)
+        git(made.root, "commit", "-q", "-am", "recorded")
+      }
+      git(made.root, "tag", TAG, made.commits[at])
+      git(made.root, "push", "-q", "origin", TAG)
+      return made
     }
-    git(made.root, "tag", TAG, made.commits[at])
-    git(made.root, "push", "-q", "origin", TAG)
-    return made
-  })
+  )
   const commit = repo.commits[at]
   const files = tempDir("release-files")
   writeFileSync(join(files, "zekno-runner-linux-x64.gz"), Bun.gzipSync(X64))
   writeFileSync(join(files, "zekno-runner-linux-arm64.gz"), Bun.gzipSync(ARM64))
-  writeFileSync(join(files, "SHA256SUMS"), `${sha(X64)}  zekno-runner-linux-x64\n${sha(ARM64)}  zekno-runner-linux-arm64\n`)
+  writeFileSync(
+    join(files, "SHA256SUMS"),
+    `${sha(X64)}  zekno-runner-linux-x64\n${sha(ARM64)}  zekno-runner-linux-arm64\n`
+  )
   writeFileSync(join(files, "RELEASE-NOTES.md"), notes(commit))
   const out: string[] = []
   const err: string[] = []
@@ -106,14 +139,28 @@ function world(options: { recorded?: string; at?: "a" | "b" | "c" } = {}): World
   const deps: SecondBuildDeps = {
     root: repo.root,
     git: async (args) => {
-      const result = Bun.spawnSync(["git", ...args], { cwd: repo.root, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } })
-      return { code: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() }
+      const result = Bun.spawnSync(["git", ...args], {
+        cwd: repo.root,
+        env: {
+          ...process.env,
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_CONFIG_NOSYSTEM: "1",
+        },
+      })
+      return {
+        code: result.exitCode,
+        stdout: result.stdout.toString(),
+        stderr: result.stderr.toString(),
+      }
     },
     download: async (name, limit) => {
       downloads.push(name)
       const path = join(files, name)
       if (!existsSync(path)) return { ok: false, reason: "HTTP 404" }
-      return { ok: true, bytes: new Uint8Array(readFileSync(path)).subarray(0, limit + 1) }
+      return {
+        ok: true,
+        bytes: new Uint8Array(readFileSync(path)).subarray(0, limit + 1),
+      }
     },
     build: async (built_commit, folder) => {
       builds.push(built_commit)
@@ -137,13 +184,18 @@ function world(options: { recorded?: string; at?: "a" | "b" | "c" } = {}): World
     built,
     builds,
     downloads,
-    before: { json: readFileSync(join(repo.root, RELEASE_JSON), "utf8"), origin: git(repo.origin, "for-each-ref") },
+    before: {
+      json: readFileSync(join(repo.root, RELEASE_JSON), "utf8"),
+      origin: git(repo.origin, "for-each-ref"),
+    },
   }
   return world
 }
 
 const unchanged = (w: World) => {
-  expect(readFileSync(join(w.repo.root, RELEASE_JSON), "utf8")).toBe(w.before.json)
+  expect(readFileSync(join(w.repo.root, RELEASE_JSON), "utf8")).toBe(
+    w.before.json
+  )
   expect(git(w.repo.origin, "for-each-ref")).toBe(w.before.origin)
   expect(git(w.repo.root, "status", "--porcelain")).toBe("")
 }
@@ -168,11 +220,18 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     const printed = w.out.join("")
     expect(printed.startsWith(text)).toBe(true)
     const next = printed.slice(text.length)
-    const match = /^Recorded runner 0\.1\.0-dev\.1 in apps\/cli\/src\/version\/runner-release\.json\. Next, on dev:\n {2}git add apps\/cli\/src\/version\/runner-release\.json\n {2}git commit -F (\S+)\n {2}git push origin dev\n {2}gh release edit runner-v0\.1\.0-dev\.1 --repo zekno-app\/zekno --notes-file (\S+)\n$/.exec(next)
+    const match =
+      /^Recorded runner 0\.1\.0-dev\.1 in apps\/cli\/src\/version\/runner-release\.json\. Next, on dev:\n {2}git add apps\/cli\/src\/version\/runner-release\.json\n {2}git commit -F (\S+)\n {2}git push origin dev\n {2}gh release edit runner-v0\.1\.0-dev\.1 --repo zekno-app\/zekno --notes-file (\S+)\n$/.exec(
+        next
+      )
     expect(match).not.toBeNull()
     const [, message, notesFile] = match!
-    expect(readFileSync(message!, "utf8")).toBe(`chore(cli): install runner 0.1.0-dev.1\n\n${text}`)
-    expect(readFileSync(notesFile!, "utf8")).toBe(notes(commit).replace("Not made yet.\n", text))
+    expect(readFileSync(message!, "utf8")).toBe(
+      `chore(cli): install runner 0.1.0-dev.1\n\n${text}`
+    )
+    expect(readFileSync(notesFile!, "utf8")).toBe(
+      notes(commit).replace("Not made yet.\n", text)
+    )
     expect(message!.startsWith(w.deps.tmp)).toBe(true)
     expect(w.err).toEqual([])
     // Nothing was committed, nothing pushed: only the one file changed, and origin is as it was.
@@ -186,7 +245,10 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     const w = world()
     const changed = X64.slice()
     changed[100] = changed[100]! ^ 1
-    writeFileSync(join(w.files, "zekno-runner-linux-x64.gz"), Bun.gzipSync(changed))
+    writeFileSync(
+      join(w.files, "zekno-runner-linux-x64.gz"),
+      Bun.gzipSync(changed)
+    )
     expect(await secondBuild(TAG, w.deps)).toBe(1)
     const rows: [string, string, string, string, string][] = [
       ["zekno-runner-linux-x64", sha(X64), sha(changed), sha(X64), "differs"],
@@ -194,26 +256,42 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     ]
     const text = record(w.repo.commits.b, rows, false)
     expect(w.out.join("")).toBe(text)
-    const kept = /^Kept this build and the downloaded files in (\S+)\. The release notes with this record are in (\S+)\.\n$/.exec(said(w))
+    const kept =
+      /^Kept this build and the downloaded files in (\S+)\. The release notes with this record are in (\S+)\.\n$/.exec(
+        said(w)
+      )
     expect(kept).not.toBeNull()
-    expect(existsSync(join(kept![1]!, "downloaded", "zekno-runner-linux-x64"))).toBe(true)
-    expect(readFileSync(join(kept![1]!, "downloaded", "zekno-runner-linux-x64"))).toEqual(Buffer.from(changed))
-    expect(readFileSync(kept![2]!, "utf8")).toBe(notes(w.repo.commits.b).replace("Not made yet.\n", text))
+    expect(
+      existsSync(join(kept![1]!, "downloaded", "zekno-runner-linux-x64"))
+    ).toBe(true)
+    expect(
+      readFileSync(join(kept![1]!, "downloaded", "zekno-runner-linux-x64"))
+    ).toEqual(Buffer.from(changed))
+    expect(readFileSync(kept![2]!, "utf8")).toBe(
+      notes(w.repo.commits.b).replace("Not made yet.\n", text)
+    )
     unchanged(w)
   })
 
   test("SHA256SUMS different from both builds, this build different, SHA256SUMS malformed: status 1, nothing recorded", async () => {
     const other = sha(new TextEncoder().encode("another runner"))
     const sums = world()
-    writeFileSync(join(sums.files, "SHA256SUMS"), `${other}  zekno-runner-linux-x64\n${sha(ARM64)}  zekno-runner-linux-arm64\n`)
+    writeFileSync(
+      join(sums.files, "SHA256SUMS"),
+      `${other}  zekno-runner-linux-x64\n${sha(ARM64)}  zekno-runner-linux-arm64\n`
+    )
     expect(await secondBuild(TAG, sums.deps)).toBe(1)
-    expect(sums.out.join("")).toContain(`| zekno-runner-linux-x64 | ${sha(X64)} | ${sha(X64)} | ${other} | differs |`)
+    expect(sums.out.join("")).toContain(
+      `| zekno-runner-linux-x64 | ${sha(X64)} | ${sha(X64)} | ${other} | differs |`
+    )
     unchanged(sums)
 
     const ours = world()
     ours.built.arm64 = new TextEncoder().encode("built elsewhere")
     expect(await secondBuild(TAG, ours.deps)).toBe(1)
-    expect(ours.out.join("")).toContain(`| zekno-runner-linux-arm64 | ${sha(ours.built.arm64)} | ${sha(ARM64)} | ${sha(ARM64)} | differs |`)
+    expect(ours.out.join("")).toContain(
+      `| zekno-runner-linux-arm64 | ${sha(ours.built.arm64)} | ${sha(ARM64)} | ${sha(ARM64)} | differs |`
+    )
     unchanged(ours)
 
     for (const text of [
@@ -237,7 +315,10 @@ describe("the second build: all three agree, or nothing is recorded", () => {
   test("notes that name another commit or version, a tag on GitHub moved, a commit that builds another version: status 1", async () => {
     const commit = (w: World) => w.repo.commits.b
     const otherCommit = world()
-    writeFileSync(join(otherCommit.files, "RELEASE-NOTES.md"), notes(otherCommit.repo.commits.a))
+    writeFileSync(
+      join(otherCommit.files, "RELEASE-NOTES.md"),
+      notes(otherCommit.repo.commits.a)
+    )
     expect(await secondBuild(TAG, otherCommit.deps)).toBe(1)
     expect(said(otherCommit)).toBe(
       `RELEASE-NOTES.md names runner 0.1.0-dev.1 from ${otherCommit.repo.commits.a}, not runner 0.1.0-dev.1 from ${commit(otherCommit)}.\n`
@@ -245,28 +326,47 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     unchanged(otherCommit)
 
     const unreadable = world()
-    writeFileSync(join(unreadable.files, "RELEASE-NOTES.md"), "# Hello\u001b[2J\n")
+    writeFileSync(
+      join(unreadable.files, "RELEASE-NOTES.md"),
+      "# Hello\u001b[2J\n"
+    )
     expect(await secondBuild(TAG, unreadable.deps)).toBe(1)
-    expect(said(unreadable)).toBe(`RELEASE-NOTES.md names something else, not runner 0.1.0-dev.1 from ${commit(unreadable)}.\n`)
+    expect(said(unreadable)).toBe(
+      `RELEASE-NOTES.md names something else, not runner 0.1.0-dev.1 from ${commit(unreadable)}.\n`
+    )
 
     const moved = world()
-    git(moved.repo.root, "push", "-q", "-f", "origin", `${moved.repo.commits.a}:refs/tags/${TAG}`)
+    git(
+      moved.repo.root,
+      "push",
+      "-q",
+      "-f",
+      "origin",
+      `${moved.repo.commits.a}:refs/tags/${TAG}`
+    )
     moved.before.origin = git(moved.repo.origin, "for-each-ref")
     expect(await secondBuild(TAG, moved.deps)).toBe(1)
-    expect(said(moved)).toBe(`The tag on GitHub points at ${moved.repo.commits.a}, the tag here at ${commit(moved)}.\n`)
+    expect(said(moved)).toBe(
+      `The tag on GitHub points at ${moved.repo.commits.a}, the tag here at ${commit(moved)}.\n`
+    )
     expect(moved.builds).toEqual([])
     unchanged(moved)
 
     // The tag, here and on GitHub, on a commit whose runner says another version.
     const w = world()
-    writeFileSync(join(w.repo.root, "apps/runner/package.json"), `${JSON.stringify({ version: "0.1.0-dev.2" })}\n`)
+    writeFileSync(
+      join(w.repo.root, "apps/runner/package.json"),
+      `${JSON.stringify({ version: "0.1.0-dev.2" })}\n`
+    )
     git(w.repo.root, "commit", "-q", "-am", "another version")
     const head = git(w.repo.root, "rev-parse", "HEAD")
     git(w.repo.root, "tag", "-f", TAG, head)
     git(w.repo.root, "push", "-q", "-f", "origin", TAG)
     w.before.origin = git(w.repo.origin, "for-each-ref")
     expect(await secondBuild(TAG, w.deps)).toBe(1)
-    expect(said(w)).toBe(`The commit of ${TAG} builds runner 0.1.0-dev.2, not 0.1.0-dev.1.\n`)
+    expect(said(w)).toBe(
+      `The commit of ${TAG} builds runner 0.1.0-dev.2, not 0.1.0-dev.1.\n`
+    )
     unchanged(w)
   })
 
@@ -293,7 +393,9 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     writeFileSync(join(behind.files, "RELEASE-NOTES.md"), notes(d))
     behind.before.origin = git(behind.repo.origin, "for-each-ref")
     expect(await secondBuild(TAG, behind.deps)).toBe(1)
-    expect(said(behind)).toContain(`points at commit ${d}, which is not on dev here. Pull dev first`)
+    expect(said(behind)).toContain(
+      `points at commit ${d}, which is not on dev here. Pull dev first`
+    )
     expect(behind.builds).toEqual([])
     unchanged(behind)
     git(behind.repo.root, "pull", "-q", "--ff-only", "origin", "dev")
@@ -304,12 +406,21 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     // Commit A is on main, which dev holds too: a dev release may be cut from it.
     const a = world({ at: "a" })
     expect(await secondBuild(TAG, a.deps)).toBe(0)
-    expect(a.out.join("")).toContain(`Commit ${a.repo.commits.a}, "a", built from`)
+    expect(a.out.join("")).toContain(
+      `Commit ${a.repo.commits.a}, "a", built from`
+    )
   })
 
   test("the record names the commit's subject, cleaned, so it can be compared with the commit that was tagged", async () => {
     const w = world()
-    git(w.repo.root, "commit", "-q", "--allow-empty", "-m", 'fix(runner): a "quoted" word\u001b[31m and é and more words to make it long enough to be cut somewhere after a hundred characters')
+    git(
+      w.repo.root,
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      'fix(runner): a "quoted" word\u001b[31m and é and more words to make it long enough to be cut somewhere after a hundred characters'
+    )
     const head = git(w.repo.root, "rev-parse", "HEAD")
     git(w.repo.root, "push", "-q", "origin", "dev")
     git(w.repo.root, "tag", "-f", TAG, head)
@@ -317,9 +428,12 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     writeFileSync(join(w.files, "RELEASE-NOTES.md"), notes(head))
     expect(await secondBuild(TAG, w.deps)).toBe(0)
     // Anything but printable ASCII becomes `?`, and it is cut at 100 characters.
-    const subject = 'fix(runner): a "quoted" word?[31m and ? and more words to make it long enough to be cut somewhere af'
+    const subject =
+      'fix(runner): a "quoted" word?[31m and ? and more words to make it long enough to be cut somewhere af'
     expect(subject).toHaveLength(100)
-    expect(w.out.join("")).toContain(`Commit ${head}, "${subject}", built from \`git archive\``)
+    expect(w.out.join("")).toContain(
+      `Commit ${head}, "${subject}", built from \`git archive\``
+    )
   })
 
   test("a failure that is none of its own checks (a download cut off, a process that cannot start) is status 3 with a sentence, never 1 (security review RV9)", async () => {
@@ -328,7 +442,9 @@ describe("the second build: all three agree, or nothing is recorded", () => {
       throw new Error("The socket connection was closed unexpectedly.")
     }
     expect(await secondBuild(TAG, cut.deps)).toBe(3)
-    expect(said(cut)).toBe("The second build could not finish: The socket connection was closed unexpectedly. Nothing was compared, and nothing was recorded.\n")
+    expect(said(cut)).toBe(
+      "The second build could not finish: The socket connection was closed unexpectedly. Nothing was compared, and nothing was recorded.\n"
+    )
     unchanged(cut)
 
     const build = world()
@@ -336,7 +452,9 @@ describe("the second build: all three agree, or nothing is recorded", () => {
       throw new Error("ENOENT: no such file or directory, posix_spawn 'tar'")
     }
     expect(await secondBuild(TAG, build.deps)).toBe(3)
-    expect(said(build)).toBe("The second build could not finish: ENOENT: no such file or directory, posix_spawn 'tar'. Nothing was compared, and nothing was recorded.\n")
+    expect(said(build)).toBe(
+      "The second build could not finish: ENOENT: no such file or directory, posix_spawn 'tar'. Nothing was compared, and nothing was recorded.\n"
+    )
     unchanged(build)
     expect(Bun.spawnSync(["ls", build.deps.tmp]).stdout.toString()).toBe("")
 
@@ -345,7 +463,9 @@ describe("the second build: all three agree, or nothing is recorded", () => {
       throw new Error("ENOENT: no such file or directory, posix_spawn 'git'")
     }
     expect(await secondBuild(TAG, gitless.deps)).toBe(3)
-    expect(said(gitless)).toBe("The second build could not finish: ENOENT: no such file or directory, posix_spawn 'git'. Nothing was compared, and nothing was recorded.\n")
+    expect(said(gitless)).toBe(
+      "The second build could not finish: ENOENT: no such file or directory, posix_spawn 'git'. Nothing was compared, and nothing was recorded.\n"
+    )
     unchanged(gitless)
 
     // After the comparison: what it says is true whatever was written by then.
@@ -362,27 +482,43 @@ describe("the second build: all three agree, or nothing is recorded", () => {
   test("conditions on this machine: wrong branch, uncommitted file, another Bun, no local tag, a newer version recorded: status 2", async () => {
     const branch = world()
     git(branch.repo.root, "switch", "-q", "main")
-    branch.before.json = readFileSync(join(branch.repo.root, RELEASE_JSON), "utf8")
+    branch.before.json = readFileSync(
+      join(branch.repo.root, RELEASE_JSON),
+      "utf8"
+    )
     expect(await secondBuild(TAG, branch.deps)).toBe(2)
-    expect(said(branch)).toBe("A dev release is recorded on dev. This checkout is on main.\n")
+    expect(said(branch)).toBe(
+      "A dev release is recorded on dev. This checkout is on main.\n"
+    )
     unchanged(branch)
 
     const detached = world()
     git(detached.repo.root, "switch", "-q", "--detach", "HEAD")
     expect(await secondBuild(TAG, detached.deps)).toBe(2)
-    expect(said(detached)).toBe("A dev release is recorded on dev. This checkout is on no branch.\n")
+    expect(said(detached)).toBe(
+      "A dev release is recorded on dev. This checkout is on no branch.\n"
+    )
 
     const dirty = world()
-    writeFileSync(join(dirty.repo.root, RELEASE_JSON), runnerRelease("0.1.0-dev.1", "a".repeat(64), "b".repeat(64)))
+    writeFileSync(
+      join(dirty.repo.root, RELEASE_JSON),
+      runnerRelease("0.1.0-dev.1", "a".repeat(64), "b".repeat(64))
+    )
     const edited = readFileSync(join(dirty.repo.root, RELEASE_JSON), "utf8")
     expect(await secondBuild(TAG, dirty.deps)).toBe(2)
-    expect(said(dirty)).toBe("apps/cli/src/version/runner-release.json has changes that are not committed. Commit or undo them first.\n")
-    expect(readFileSync(join(dirty.repo.root, RELEASE_JSON), "utf8")).toBe(edited)
+    expect(said(dirty)).toBe(
+      "apps/cli/src/version/runner-release.json has changes that are not committed. Commit or undo them first.\n"
+    )
+    expect(readFileSync(join(dirty.repo.root, RELEASE_JSON), "utf8")).toBe(
+      edited
+    )
 
     const bun = world()
     bun.deps.bunVersion = "1.4.5"
     expect(await secondBuild(TAG, bun.deps)).toBe(2)
-    expect(said(bun)).toBe("The release was built with Bun 1.4.4; this machine runs Bun 1.4.5. Install Bun 1.4.4 and run this again.\n")
+    expect(said(bun)).toBe(
+      "The release was built with Bun 1.4.4; this machine runs Bun 1.4.5. Install Bun 1.4.4 and run this again.\n"
+    )
     unchanged(bun)
 
     const untagged = world()
@@ -393,20 +529,30 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     )
     unchanged(untagged)
 
-    const newer = world({ recorded: runnerRelease("0.1.0-dev.2", "a".repeat(64), "b".repeat(64)) })
+    const newer = world({
+      recorded: runnerRelease("0.1.0-dev.2", "a".repeat(64), "b".repeat(64)),
+    })
     expect(await secondBuild(TAG, newer.deps)).toBe(2)
-    expect(said(newer)).toBe("This branch already records runner 0.1.0-dev.2, newer than 0.1.0-dev.1. Nothing was changed.\n")
+    expect(said(newer)).toBe(
+      "This branch already records runner 0.1.0-dev.2, newer than 0.1.0-dev.1. Nothing was changed.\n"
+    )
     expect(newer.builds).toEqual([])
     unchanged(newer)
   })
 
   test("the same version already recorded: with the same checksums nothing changes; with others it is a mismatch", async () => {
-    const same = world({ recorded: runnerRelease("0.1.0-dev.1", sha(X64), sha(ARM64)) })
+    const same = world({
+      recorded: runnerRelease("0.1.0-dev.1", sha(X64), sha(ARM64)),
+    })
     expect(await secondBuild(TAG, same.deps)).toBe(0)
-    expect(same.out.join("")).toContain("Already recorded. Nothing was changed.\n")
+    expect(same.out.join("")).toContain(
+      "Already recorded. Nothing was changed.\n"
+    )
     unchanged(same)
 
-    const others = world({ recorded: runnerRelease("0.1.0-dev.1", "a".repeat(64), "b".repeat(64)) })
+    const others = world({
+      recorded: runnerRelease("0.1.0-dev.1", "a".repeat(64), "b".repeat(64)),
+    })
     expect(await secondBuild(TAG, others.deps)).toBe(1)
     expect(said(others)).toBe(
       `apps/cli/src/version/runner-release.json already records runner 0.1.0-dev.1 with other checksums: ${"a".repeat(64)} and ${"b".repeat(64)}. Nothing was changed.\n`
@@ -414,9 +560,13 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     unchanged(others)
 
     // An older version recorded with checksums is replaced, as the next release always is.
-    const older = world({ recorded: runnerRelease("0.0.9", "a".repeat(64), "b".repeat(64)) })
+    const older = world({
+      recorded: runnerRelease("0.0.9", "a".repeat(64), "b".repeat(64)),
+    })
     expect(await secondBuild(TAG, older.deps)).toBe(0)
-    expect(readFileSync(join(older.repo.root, RELEASE_JSON), "utf8")).toBe(runnerRelease("0.1.0-dev.1", sha(X64), sha(ARM64)))
+    expect(readFileSync(join(older.repo.root, RELEASE_JSON), "utf8")).toBe(
+      runnerRelease("0.1.0-dev.1", sha(X64), sha(ARM64))
+    )
   })
 
   test("a download that fails or is not what it should be, a build that fails: nothing recorded", async () => {
@@ -427,9 +577,14 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     unchanged(missing)
 
     const notGzip = world()
-    writeFileSync(join(notGzip.files, "zekno-runner-linux-arm64.gz"), "not gzip at all")
+    writeFileSync(
+      join(notGzip.files, "zekno-runner-linux-arm64.gz"),
+      "not gzip at all"
+    )
     expect(await secondBuild(TAG, notGzip.deps)).toBe(1)
-    expect(said(notGzip)).toBe("zekno-runner-linux-arm64.gz is not a gzip file.\n")
+    expect(said(notGzip)).toBe(
+      "zekno-runner-linux-arm64.gz is not a gzip file.\n"
+    )
 
     const bigSums = world()
     writeFileSync(join(bigSums.files, "SHA256SUMS"), "x".repeat(4097))
@@ -437,22 +592,34 @@ describe("the second build: all three agree, or nothing is recorded", () => {
     expect(said(bigSums)).toBe("SHA256SUMS is larger than 4 KiB.\n")
 
     const bigNotes = world()
-    writeFileSync(join(bigNotes.files, "RELEASE-NOTES.md"), "x".repeat(64 * 1024 + 1))
+    writeFileSync(
+      join(bigNotes.files, "RELEASE-NOTES.md"),
+      "x".repeat(64 * 1024 + 1)
+    )
     expect(await secondBuild(TAG, bigNotes.deps)).toBe(1)
     expect(said(bigNotes)).toBe("RELEASE-NOTES.md is larger than 64 KiB.\n")
 
     // A small file that unpacks to more than 256 MiB: gzip members of zeros, one after another.
     const bomb = world()
     const member = Bun.gzipSync(new Uint8Array(1024 * 1024))
-    writeFileSync(join(bomb.files, "zekno-runner-linux-x64.gz"), Buffer.concat(Array.from({ length: 257 }, () => member)))
+    writeFileSync(
+      join(bomb.files, "zekno-runner-linux-x64.gz"),
+      Buffer.concat(Array.from({ length: 257 }, () => member))
+    )
     expect(await secondBuild(TAG, bomb.deps)).toBe(1)
     expect(said(bomb)).toBe("zekno-runner-linux-x64 is larger than 256 MiB.\n")
     unchanged(bomb)
 
     const build = world()
-    build.deps.build = async () => ({ ok: false, step: "bun install --frozen-lockfile", output: "error: lockfile had changes, but lockfile is frozen" })
+    build.deps.build = async () => ({
+      ok: false,
+      step: "bun install --frozen-lockfile",
+      output: "error: lockfile had changes, but lockfile is frozen",
+    })
     expect(await secondBuild(TAG, build.deps)).toBe(3)
-    expect(said(build)).toBe("The build failed at bun install --frozen-lockfile.\nerror: lockfile had changes, but lockfile is frozen\n")
+    expect(said(build)).toBe(
+      "The build failed at bun install --frozen-lockfile.\nerror: lockfile had changes, but lockfile is frozen\n"
+    )
     unchanged(build)
     expect(Bun.spawnSync(["ls", build.deps.tmp]).stdout.toString()).toBe("")
   })
@@ -460,11 +627,20 @@ describe("the second build: all three agree, or nothing is recorded", () => {
   test("no argument, or a tag that is not one: status 2", async () => {
     const w = world()
     expect(await secondBuild(undefined, w.deps)).toBe(2)
-    expect(said(w)).toBe("Usage: bun apps/runner/scripts/second-build.ts runner-v<version>\n")
-    for (const tag of ["runner-v0.1.0-dev.0", "v0.1.0", "runner-v0.1", "runner-v0.1.0\n"]) {
+    expect(said(w)).toBe(
+      "Usage: bun apps/runner/scripts/second-build.ts runner-v<version>\n"
+    )
+    for (const tag of [
+      "runner-v0.1.0-dev.0",
+      "v0.1.0",
+      "runner-v0.1",
+      "runner-v0.1.0\n",
+    ]) {
       const bad = world()
       expect(await secondBuild(tag, bad.deps)).toBe(2)
-      expect(said(bad)).toBe(`The tag ${tag.replace("\n", "?")} is not runner-v<x.y.z> or runner-v<x.y.z>-dev.<n>.\n`)
+      expect(said(bad)).toBe(
+        `The tag ${tag.replace("\n", "?")} is not runner-v<x.y.z> or runner-v<x.y.z>-dev.<n>.\n`
+      )
       unchanged(bad)
     }
   })
@@ -476,7 +652,11 @@ describe("the second build: all three agree, or nothing is recorded", () => {
  * runner whose two compile scripts write, in place of a binary, the
  * environment they were given and how many entries their cache folder held.
  */
-function buildRepo(options: { runner: boolean }): { root: string; commit: string; marks: string } {
+function buildRepo(options: { runner: boolean }): {
+  root: string
+  commit: string
+  marks: string
+} {
   const dir = tempDir("build-repo")
   const root = join(dir, "repo")
   const marks = join(dir, "marks")
@@ -485,8 +665,23 @@ function buildRepo(options: { runner: boolean }): { root: string; commit: string
     mkdirSync(dirname(join(root, path)), { recursive: true })
     writeFileSync(join(root, path), text)
   }
-  write("package.json", JSON.stringify({ name: "probe", private: true, workspaces: ["apps/*", "packages/*"], scripts: { postinstall: `echo root > ${marks}/root` } }))
-  write("packages/a/package.json", JSON.stringify({ name: "a", version: "1.0.0", scripts: { postinstall: `echo a > ${marks}/a` } }))
+  write(
+    "package.json",
+    JSON.stringify({
+      name: "probe",
+      private: true,
+      workspaces: ["apps/*", "packages/*"],
+      scripts: { postinstall: `echo root > ${marks}/root` },
+    })
+  )
+  write(
+    "packages/a/package.json",
+    JSON.stringify({
+      name: "a",
+      version: "1.0.0",
+      scripts: { postinstall: `echo a > ${marks}/a` },
+    })
+  )
   write(".gitignore", "node_modules\n")
   if (options.runner) {
     write(
@@ -495,14 +690,29 @@ function buildRepo(options: { runner: boolean }): { root: string; commit: string
         name: "runner",
         private: true,
         dependencies: { a: "workspace:*" },
-        scripts: { "compile:linux-x64": "sh compile.sh dist/zekno-runner-linux-x64", "compile:linux-arm64": "sh compile.sh dist/zekno-runner-linux-arm64" },
+        scripts: {
+          "compile:linux-x64": "sh compile.sh dist/zekno-runner-linux-x64",
+          "compile:linux-arm64": "sh compile.sh dist/zekno-runner-linux-arm64",
+        },
       })
     )
-    write("apps/runner/compile.sh", 'mkdir -p dist\n{ env; printf "CACHE_HOLDS=%s\\n" "$(ls -A "$BUN_INSTALL_CACHE_DIR" | wc -l | tr -d " ")"; } > "$1"\n')
+    write(
+      "apps/runner/compile.sh",
+      'mkdir -p dist\n{ env; printf "CACHE_HOLDS=%s\\n" "$(ls -A "$BUN_INSTALL_CACHE_DIR" | wc -l | tr -d " ")"; } > "$1"\n'
+    )
   }
   // The lock file: workspaces only, so nothing is fetched to make it.
-  const lock = Bun.spawnSync([process.execPath, "install", "--ignore-scripts"], { cwd: root, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: dir }, stdout: "pipe", stderr: "pipe" })
-  if (lock.exitCode !== 0) throw new Error(`bun install: ${lock.stderr.toString()}`)
+  const lock = Bun.spawnSync(
+    [process.execPath, "install", "--ignore-scripts"],
+    {
+      cwd: root,
+      env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: dir },
+      stdout: "pipe",
+      stderr: "pipe",
+    }
+  )
+  if (lock.exitCode !== 0)
+    throw new Error(`bun install: ${lock.stderr.toString()}`)
   git(dir, "init", "-q", "-b", "main", root)
   git(root, "add", "-A")
   git(root, "commit", "-q", "-m", "probe")
@@ -516,7 +726,10 @@ const envOf = (bytes: Uint8Array): Record<string, string> =>
       .decode(bytes)
       .trim()
       .split("\n")
-      .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)])
+      .map((line) => [
+        line.slice(0, line.indexOf("=")),
+        line.slice(line.indexOf("=") + 1),
+      ])
   )
 
 describe("the second build's own build, without the network", () => {
@@ -546,20 +759,38 @@ describe("the second build's own build, without the network", () => {
     for (const bytes of [result.x64, result.arm64]) {
       const env = envOf(bytes)
       // None of this machine's values is passed on but HOME and PATH; TMPDIR and the cache are the build's own.
-      const own: Record<string, string> = { TMPDIR: join(folder, "tmp"), BUN_INSTALL_CACHE_DIR: join(folder, "bun-cache") }
+      const own: Record<string, string> = {
+        TMPDIR: join(folder, "tmp"),
+        BUN_INSTALL_CACHE_DIR: join(folder, "bun-cache"),
+      }
       for (const name of Object.keys(from)) {
-        if (name !== "HOME" && name !== "PATH") expect({ name, value: env[name] }).toEqual({ name, value: own[name] })
+        if (name !== "HOME" && name !== "PATH")
+          expect({ name, value: env[name] }).toEqual({ name, value: own[name] })
       }
       expect(env["HOME"]).toBe(home)
       // `bun run` puts its own folders in front (one holds `bun` as this Bun); behind them, this Bun's folder, then this machine's PATH.
-      expect(env["PATH"]!.endsWith(`:${dirname(process.execPath)}:${from["PATH"]}`)).toBe(true)
+      expect(
+        env["PATH"]!.endsWith(`:${dirname(process.execPath)}:${from["PATH"]}`)
+      ).toBe(true)
       expect(env["TMPDIR"]).toBe(join(folder, "tmp"))
       // The runtimes come from a folder that started empty, so Bun downloads them again.
       expect(env["BUN_INSTALL_CACHE_DIR"]).toBe(join(folder, "bun-cache"))
       expect(env["CACHE_HOLDS"]).toBe("0")
       // Nothing else, but what `bun run` adds for a package script itself.
       const others = Object.keys(env).filter(
-        (name) => !["HOME", "PATH", "TMPDIR", "BUN_INSTALL_CACHE_DIR", "CACHE_HOLDS", "PWD", "OLDPWD", "SHLVL", "_", "NODE"].includes(name) && !name.startsWith("npm_")
+        (name) =>
+          ![
+            "HOME",
+            "PATH",
+            "TMPDIR",
+            "BUN_INSTALL_CACHE_DIR",
+            "CACHE_HOLDS",
+            "PWD",
+            "OLDPWD",
+            "SHLVL",
+            "_",
+            "NODE",
+          ].includes(name) && !name.startsWith("npm_")
       )
       expect(others).toEqual([])
     }
@@ -567,7 +798,10 @@ describe("the second build's own build, without the network", () => {
 
   test("a step that cannot even start is a failed build with its step named, not a crash (security review RV9)", async () => {
     const repo = buildRepo({ runner: false })
-    const result = await realBuild(repo.root, repo.commit, tempDir("build"), { HOME: tempDir("build-home"), PATH: process.env.PATH ?? "/usr/bin:/bin" })
+    const result = await realBuild(repo.root, repo.commit, tempDir("build"), {
+      HOME: tempDir("build-home"),
+      PATH: process.env.PATH ?? "/usr/bin:/bin",
+    })
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.step).toBe("bun run compile:linux-x64")
@@ -589,7 +823,8 @@ test.skipIf(process.env.ZEKNO_REAL_BUILD !== "1")(
   "the real build gives the same bytes twice",
   async () => {
     const root = join(import.meta.dir, "../../../..")
-    const commit = process.env.ZEKNO_REAL_BUILD_COMMIT || git(root, "rev-parse", "HEAD")
+    const commit =
+      process.env.ZEKNO_REAL_BUILD_COMMIT || git(root, "rev-parse", "HEAD")
     const results = []
     for (const label of ["first", "second"]) {
       const folder = tempDir(`real-build-${label}`)
@@ -602,9 +837,21 @@ test.skipIf(process.env.ZEKNO_REAL_BUILD !== "1")(
       const runtimes = Object.fromEntries(
         readdirSync(cache, { recursive: true, withFileTypes: true })
           .filter((entry) => entry.isFile())
-          .map((entry) => [join(entry.parentPath, entry.name).slice(cache.length + 1), sha(new Uint8Array(readFileSync(join(entry.parentPath, entry.name))))])
+          .map((entry) => [
+            join(entry.parentPath, entry.name).slice(cache.length + 1),
+            sha(
+              new Uint8Array(readFileSync(join(entry.parentPath, entry.name)))
+            ),
+          ])
       )
-      results.push({ label, seconds, x64: sha(result.x64), arm64: sha(result.arm64), sizes: [result.x64.length, result.arm64.length], runtimes })
+      results.push({
+        label,
+        seconds,
+        x64: sha(result.x64),
+        arm64: sha(result.arm64),
+        sizes: [result.x64.length, result.arm64.length],
+        runtimes,
+      })
       rmSync(folder, { recursive: true, force: true })
     }
     console.log(JSON.stringify({ commit, bun: Bun.version, results }, null, 2))

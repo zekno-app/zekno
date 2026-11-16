@@ -5,8 +5,20 @@ import { publish, setup } from "../support/helpers"
 
 test("SC-004: a runner verifies and opens a deploy with 50 secrets in under 100 ms", async () => {
   const { founder, relay, server, trust } = await setup()
-  const values = Object.fromEntries(Array.from({ length: 50 }, (_, index) => [`SECRET_${index}`, `demo-value-${index}-${"x".repeat(200)}`]))
-  const deploy = await publish({ relay, trust, server, signer: founder.signer, sequence: 1, values })
+  const values = Object.fromEntries(
+    Array.from({ length: 50 }, (_, index) => [
+      `SECRET_${index}`,
+      `demo-value-${index}-${"x".repeat(200)}`,
+    ])
+  )
+  const deploy = await publish({
+    relay,
+    trust,
+    server,
+    signer: founder.signer,
+    sequence: 1,
+    values,
+  })
 
   // Warm up once, then take the best of five to keep the test steady on a busy machine.
   const run = () => {

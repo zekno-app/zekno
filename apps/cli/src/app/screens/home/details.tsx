@@ -15,11 +15,19 @@ import { Pane, Rule } from "../parts"
 import { DETAILS_WIDTH } from "./widths"
 
 /** What a deploy's result is called in the details pane. */
-export const OUTCOME_WORDS = { started: "started", start_failed: "did not start", sent: "no answer recorded" } as const
+export const OUTCOME_WORDS = {
+  started: "started",
+  start_failed: "did not start",
+  sent: "no answer recorded",
+} as const
 
 /** The second line of the selected app's details below 100 columns: its secrets, and its Compose file when this folder is linked to it. Empty when there is neither. */
 export function detailsSecondLine(app: AppRow, file?: string): string {
-  return [app.secrets === undefined ? undefined : secretsWords(app.secrets), file, file === undefined ? undefined : "this folder is linked"]
+  return [
+    app.secrets === undefined ? undefined : secretsWords(app.secrets),
+    file,
+    file === undefined ? undefined : "this folder is linked",
+  ]
     .filter((part) => part !== undefined)
     .join(", ")
 }
@@ -30,7 +38,10 @@ export function detailsSecondLine(app: AppRow, file?: string): string {
  * signed by ada` and `2 secrets, compose.yaml, this folder is linked`.
  */
 export function AppDetailsFoot({ app, file }: { app: AppRow; file?: string }) {
-  const deploy = app.deploy === undefined ? "none yet" : `${app.deploy}${app.outcome ? `, ${OUTCOME_WORDS[app.outcome]}` : ""}`
+  const deploy =
+    app.deploy === undefined
+      ? "none yet"
+      : `${app.deploy}${app.outcome ? `, ${OUTCOME_WORDS[app.outcome]}` : ""}`
   const signed = app.signer === undefined ? "" : `, signed by ${app.signer}`
   const second = detailsSecondLine(app, file)
   return (
@@ -75,7 +86,10 @@ export function DetailsPane({ app, file }: { app?: AppRow; file?: string }) {
       </Pane>
     )
   }
-  const deploy = app.deploy === undefined ? "none yet" : `${app.deploy}${app.outcome ? `, ${OUTCOME_WORDS[app.outcome]}` : ""}`
+  const deploy =
+    app.deploy === undefined
+      ? "none yet"
+      : `${app.deploy}${app.outcome ? `, ${OUTCOME_WORDS[app.outcome]}` : ""}`
   const rows: [string, ReactNode][] = [["deploy", deploy]]
   if (app.signer !== undefined) rows.push(["signed by", app.signer])
   if (app.secrets !== undefined) rows.push(["secrets", String(app.secrets)])
@@ -86,7 +100,9 @@ export function DetailsPane({ app, file }: { app?: AppRow; file?: string }) {
       <Rule />
       <Box flexDirection="column">
         <Action letter="d">Deploy this folder</Action>
-        {app.previous !== undefined ? <Action letter="r">Roll back to deploy {app.previous}</Action> : null}
+        {app.previous !== undefined ? (
+          <Action letter="r">Roll back to deploy {app.previous}</Action>
+        ) : null}
         <Action letter="l">Logs</Action>
         <Action letter="s">Secrets</Action>
       </Box>
@@ -95,7 +111,13 @@ export function DetailsPane({ app, file }: { app?: AppRow; file?: string }) {
 }
 
 /** The Compose file `d` deploys for an app: known when this folder is linked to that app on that server. */
-export function linkedFile(state: State, server: ServerRow | undefined, app: AppRow | undefined): string | undefined {
+export function linkedFile(
+  state: State,
+  server: ServerRow | undefined,
+  app: AppRow | undefined
+): string | undefined {
   const linked = state.linked
-  return linked && linked.server === server?.name && linked.app === app?.name ? linked.compose : undefined
+  return linked && linked.server === server?.name && linked.app === app?.name
+    ? linked.compose
+    : undefined
 }

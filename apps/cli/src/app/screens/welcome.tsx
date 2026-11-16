@@ -52,10 +52,12 @@ export function FirstRunSteps({ current }: { current: 1 | 2 | 3 }) {
 /** The name question, or while the key is being created, the name with the spinner. */
 function NameQuestion({ screen }: { screen: WelcomeState }) {
   const theme = useTheme()
-  if (!screen.creating) return <TextQuestion label="Your name" value={screen.value} />
+  if (!screen.creating)
+    return <TextQuestion label="Your name" value={screen.value} />
   return (
     <Text>
-      <Text color={theme.brand}>?</Text> Your name <Text dimColor>›</Text> {screen.value} <Spinner />
+      <Text color={theme.brand}>?</Text> Your name <Text dimColor>›</Text>{" "}
+      {screen.value} <Spinner />
     </Text>
   )
 }
@@ -66,31 +68,55 @@ function NameQuestion({ screen }: { screen: WelcomeState }) {
  * is kept. The header has no wordmark of its own: it is in the body, as on
  * the board.
  */
-export function WelcomeScreen({ screen, columns, rows, status }: { screen: WelcomeState; columns: number; rows: number; status?: ReactNode }) {
+export function WelcomeScreen({
+  screen,
+  columns,
+  rows,
+  status,
+}: {
+  screen: WelcomeState
+  columns: number
+  rows: number
+  status?: ReactNode
+}) {
   const width = Math.min(columns - 10, 72)
   // In a short window the panel's blank lines go first, so the whole screen still fits.
   const roomy = rows >= 28
   return (
-    <Frame header={<Header place={<Text dimColor>welcome</Text>} logo={false} />} hints={HINTS.welcome} status={status}>
+    <Frame
+      header={<Header place={<Text dimColor>welcome</Text>} logo={false} />}
+      hints={HINTS.welcome}
+      status={status}
+    >
       <Box flexDirection="column" rowGap={1} paddingX={3} flexShrink={0}>
         <Logo />
         <Box flexDirection="column" flexShrink={0}>
           <Text bold>Deploy to servers you own.</Text>
-          <Text dimColor>Secrets are encrypted and deploys are signed on this machine.</Text>
+          <Text dimColor>
+            Secrets are encrypted and deploys are signed on this machine.
+          </Text>
         </Box>
         <FirstRunSteps current={1} />
         <Box width={width} flexShrink={0}>
           <Panel title="Create your signing key" tone="focus" flexGrow={1}>
             <Box flexDirection="column" rowGap={roomy ? 1 : 0}>
-              <Text>Every deploy and every secret is signed with this key. Your servers refuse anything it did not sign.</Text>
+              <Text>
+                Every deploy and every secret is signed with this key. Your
+                servers refuse anything it did not sign.
+              </Text>
               <NameQuestion screen={screen} />
               <Text dimColor>Shown to teammates next to what you sign.</Text>
             </Box>
           </Panel>
         </Box>
         <Box flexDirection="column" flexShrink={0}>
-          <Text dimColor>The key goes into your system keychain. It is never written to a file.</Text>
-          <Text dimColor>If you lose this machine's keychain, the key cannot be recovered.</Text>
+          <Text dimColor>
+            The key goes into your system keychain. It is never written to a
+            file.
+          </Text>
+          <Text dimColor>
+            If you lose this machine's keychain, the key cannot be recovered.
+          </Text>
         </Box>
       </Box>
     </Frame>

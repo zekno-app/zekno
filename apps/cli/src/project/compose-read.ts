@@ -19,7 +19,16 @@
  * and to the limit, and never waited on as a pipe.
  */
 import { LIMITS } from "@workspace/core"
-import { closeSync, constants, fstatSync, openSync, readSync, realpathSync, statSync, type Stats } from "node:fs"
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  openSync,
+  readSync,
+  realpathSync,
+  statSync,
+  type Stats,
+} from "node:fs"
 import { resolve } from "node:path"
 
 import { CliError } from "../cli/errors"
@@ -60,7 +69,11 @@ function wordsFor(source: ComposeSource): Words {
     }
   }
   // A folder's name can hold anything, escape sequences included, so a path is cleaned before it is shown.
-  const path = sanitize(source.kind === "default" ? resolve(source.folder, DEFAULT_COMPOSE) : source.path)
+  const path = sanitize(
+    source.kind === "default"
+      ? resolve(source.folder, DEFAULT_COMPOSE)
+      : source.path
+  )
   return {
     subject: path,
     missing: `No Compose file at ${path}. Point to one with \`-f <file>\`.`,
@@ -108,18 +121,29 @@ function readInside(folder: string, name: string, words: Words): ComposeText {
   let fd: number
   try {
     // The real path has no link left in it; one put there since is not followed, and a pipe cannot hold the read up.
-    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    fd = openSync(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+    )
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ELOOP") throw new CliError(`${words.subject} was changed while zekno read it. Try again.`)
+    if ((error as NodeJS.ErrnoException).code === "ELOOP")
+      throw new CliError(
+        `${words.subject} was changed while zekno read it. Try again.`
+      )
     throw new CliError(`${words.subject} could not be read.`)
   }
   try {
     const opened = fstatSync(fd)
     if (!opened.isFile()) throw new CliError(`${words.subject} is not a file.`)
     if (opened.nlink !== 1) {
-      throw new CliError(`${words.subject} has more than one name on this disk (a hard link), so zekno cannot tell that it stays inside its folder.`)
+      throw new CliError(
+        `${words.subject} has more than one name on this disk (a hard link), so zekno cannot tell that it stays inside its folder.`
+      )
     }
-    if (!ownedByMe(opened)) throw new CliError(`${words.subject} belongs to another user, so zekno does not use it.`)
+    if (!ownedByMe(opened))
+      throw new CliError(
+        `${words.subject} belongs to another user, so zekno does not use it.`
+      )
     if (opened.size > LIMITS.composeBytes) throw new CliError(TOO_LARGE)
     const bytes = readAll(fd)
     // What was read must still be the file inside the folder: a folder on the way may have been swapped for a link meanwhile.
@@ -129,10 +153,18 @@ function readInside(folder: string, name: string, words: Words): ComposeText {
       again = realpathSync(path)
       now = statSync(again)
     } catch {
-      throw new CliError(`${words.subject} was changed while zekno read it. Try again.`)
+      throw new CliError(
+        `${words.subject} was changed while zekno read it. Try again.`
+      )
     }
-    if (!isAbove(root, again) || now.dev !== opened.dev || now.ino !== opened.ino) {
-      throw new CliError(`${words.subject} was changed while zekno read it. Try again.`)
+    if (
+      !isAbove(root, again) ||
+      now.dev !== opened.dev ||
+      now.ino !== opened.ino
+    ) {
+      throw new CliError(
+        `${words.subject} was changed while zekno read it. Try again.`
+      )
     }
     return { text: bytes.toString("utf8"), path }
   } catch (error) {
@@ -149,7 +181,8 @@ function readGiven(path: string, words: Words): ComposeText {
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new CliError(words.missing)
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      throw new CliError(words.missing)
     throw new CliError(`${words.subject} could not be read.`)
   }
   try {

@@ -18,20 +18,65 @@
  * to the prompt, and only Esc and Ctrl-C close it (set-secret.ts).
  */
 import type { AppKey } from "../keys"
-import { addCode, addLine, addStarted, addStep, failAdding, onAddServer, serverAdded, typeAddServer } from "./add-server"
+import {
+  addCode,
+  addLine,
+  addStarted,
+  addStep,
+  failAdding,
+  onAddServer,
+  serverAdded,
+  typeAddServer,
+} from "./add-server"
 import { onApp } from "./app"
-import { deployEnded, deployProgress, deployStage, deployStarted, onDeploy } from "./deploy"
+import {
+  deployEnded,
+  deployProgress,
+  deployStage,
+  deployStarted,
+  onDeploy,
+} from "./deploy"
 import type { AppEvent, Step } from "./events"
 import { onHome } from "./home"
 import { inputOf, isText } from "./input"
 import { onLogs, typeFilter, withLogLines } from "./logs"
 import { askDeployElsewhere, onQuestion } from "./questions"
-import { hiddenPromptOpen, refreshAllowed, textQuestionOpen, tooSmall, top } from "./reading"
-import { onHiddenPrompt, onSetSecret, secretRefused, secretSaved, setSecretScreen, typeSecretName } from "./set-secret"
-import { go, keep, pop, push, quit, replaceTop, stay, updateScreens } from "./steps"
+import {
+  hiddenPromptOpen,
+  refreshAllowed,
+  textQuestionOpen,
+  tooSmall,
+  top,
+} from "./reading"
+import {
+  onHiddenPrompt,
+  onSetSecret,
+  secretRefused,
+  secretSaved,
+  setSecretScreen,
+  typeSecretName,
+} from "./set-secret"
+import {
+  go,
+  keep,
+  pop,
+  push,
+  quit,
+  replaceTop,
+  stay,
+  updateScreens,
+} from "./steps"
 import { appStates, clampHome, serverReached, withApps } from "./team"
 import type { Notice } from "../../shared/notice"
-import { RUNNER_LINES, type Linked, type Question, type Screen, type Start, type State, type TeamView } from "./types"
+import {
+  RUNNER_LINES,
+  type Linked,
+  type Question,
+  type Screen,
+  type Start,
+  type State,
+  type TeamView,
+} from "./types"
 import { teamCreated, typeName } from "./welcome"
 
 // ---------------------------------------------------------------------------
@@ -42,11 +87,24 @@ import { teamCreated, typeName } from "./welcome"
  * "Linked folder"); on the first server when there is no link, or it names
  * a server Home does not list.
  */
-function homeOn(team: TeamView, linked: Linked | undefined): Extract<Screen, { name: "home" }> {
+function homeOn(
+  team: TeamView,
+  linked: Linked | undefined
+): Extract<Screen, { name: "home" }> {
   const found = team.servers.findIndex((entry) => entry.name === linked?.server)
   const server = Math.max(found, 0)
-  const app = found === -1 ? -1 : team.servers[found]!.apps.findIndex((entry) => entry.name === linked?.app)
-  return { name: "home", pane: app === -1 ? "servers" : "apps", server, app: Math.max(app, 0) }
+  const app =
+    found === -1
+      ? -1
+      : team.servers[found]!.apps.findIndex(
+          (entry) => entry.name === linked?.app
+        )
+  return {
+    name: "home",
+    pane: app === -1 ? "servers" : "apps",
+    server,
+    app: Math.max(app, 0),
+  }
 }
 
 /**
@@ -54,14 +112,26 @@ function homeOn(team: TeamView, linked: Linked | undefined): Extract<Screen, { n
  * first run, or the profile error. A zekno.json signed by the team that was
  * not used here before is asked about at once, over Home, which is on no app.
  */
-export function initialState(start: Start, size: { columns: number; rows: number }): State {
+export function initialState(
+  start: Start,
+  size: { columns: number; rows: number }
+): State {
   const base = { size, runnerLines: [], quitting: false, exiting: false }
-  if (start.kind === "no-team") return { ...base, stack: [{ name: "welcome", value: "", creating: false }] }
+  if (start.kind === "no-team")
+    return { ...base, stack: [{ name: "welcome", value: "", creating: false }] }
   if (start.kind === "profile-error") {
-    return { ...base, stack: [{ name: "profile-error", reason: start.reason, folder: start.folder }] }
+    return {
+      ...base,
+      stack: [
+        { name: "profile-error", reason: start.reason, folder: start.folder },
+      ],
+    }
   }
   const { team, linked, firstUse } = start
-  const notice: Notice | undefined = start.problem === undefined ? undefined : { tone: "error", text: start.problem }
+  const notice: Notice | undefined =
+    start.problem === undefined
+      ? undefined
+      : { tone: "error", text: start.problem }
   const question: Question | undefined = firstUse && {
     kind: "use-link",
     member: firstUse.member,
@@ -69,7 +139,14 @@ export function initialState(start: Start, size: { columns: number; rows: number
     app: firstUse.app,
     ...(firstUse.above ? { above: firstUse.above } : {}),
   }
-  return { ...base, stack: [homeOn(team, linked)], team, linked, notice, ...(question ? { question } : {}) }
+  return {
+    ...base,
+    stack: [homeOn(team, linked)],
+    team,
+    linked,
+    notice,
+    ...(question ? { question } : {}),
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +157,8 @@ function onTextQuestion(state: State, key: AppKey): Step {
   if (key.kind === "ctrl-c") return quit(state)
   const screen = top(state)
   const [input, flags] = inputOf(key)
-  if (input === "" && !flags.return && !flags.escape && !flags.backspace) return stay(state)
+  if (input === "" && !flags.return && !flags.escape && !flags.backspace)
+    return stay(state)
 
   switch (screen.name) {
     case "welcome":
@@ -100,7 +178,8 @@ function onTextQuestion(state: State, key: AppKey): Step {
 function onAnyScreen(state: State, screen: Screen, key: AppKey): Step {
   if (key.kind === "ctrl-c" || isText(key, "q")) return quit(state)
   if (screen.name === "profile-error") return stay(state)
-  if (isText(key, "?") && screen.name !== "help") return push(state, { name: "help" })
+  if (isText(key, "?") && screen.name !== "help")
+    return push(state, { name: "help" })
   if (key.kind === "escape") return pop(state)
   return stay(state)
 }
@@ -108,7 +187,8 @@ function onAnyScreen(state: State, screen: Screen, key: AppKey): Step {
 function onKey(state: State, key: AppKey): Step {
   if (state.exiting || state.quitting) return stay(state)
   // Below 80 by 24 the screen cannot be seen, so only quitting does anything.
-  if (tooSmall(state)) return key.kind === "ctrl-c" || isText(key, "q") ? quit(state) : stay(state)
+  if (tooSmall(state))
+    return key.kind === "ctrl-c" || isText(key, "q") ? quit(state) : stay(state)
   if (hiddenPromptOpen(state)) return onHiddenPrompt(state, key)
   if (state.question) return onQuestion(state, state.question, key)
   if (textQuestionOpen(state)) return onTextQuestion(state, key)
@@ -150,7 +230,10 @@ export function update(state: State, event: AppEvent): Step {
     case "key":
       return onKey(state, event.key)
     case "resize":
-      return stay({ ...state, size: { columns: event.columns, rows: event.rows } })
+      return stay({
+        ...state,
+        size: { columns: event.columns, rows: event.rows },
+      })
     case "team":
       return stay(clampHome({ ...state, team: event.team }))
     case "team-created":
@@ -166,24 +249,47 @@ export function update(state: State, event: AppEvent): Step {
     case "add-line":
       return addLine(state, event)
     case "app-view":
-      return stay({ ...state, appView: { server: event.server, app: event.app, deploys: event.deploys, secrets: event.secrets } })
+      return stay({
+        ...state,
+        appView: {
+          server: event.server,
+          app: event.app,
+          deploys: event.deploys,
+          secrets: event.secrets,
+        },
+      })
     case "notice":
       return stay({ ...state, notice: event.notice })
     case "failed": {
       // The name question and the server's details open again, as they were, for another try.
       const screen = top(state)
       if (screen.name === "welcome" && screen.creating) {
-        return stay({ ...replaceTop(state, { ...screen, creating: false }), notice: event.notice })
+        return stay({
+          ...replaceTop(state, { ...screen, creating: false }),
+          notice: event.notice,
+        })
       }
       // The step it stopped at is marked, and stays in view under the questions.
-      const adding = event.from === "add-server" && state.adding?.running ? failAdding(state.adding) : state.adding
+      const adding =
+        event.from === "add-server" && state.adding?.running
+          ? failAdding(state.adding)
+          : state.adding
       if (screen.name === "add-server" && screen.step === "working") {
-        return stay({ ...replaceTop({ ...state, adding }, { ...screen, step: "destination" }), notice: event.notice })
+        return stay({
+          ...replaceTop(
+            { ...state, adding },
+            { ...screen, step: "destination" }
+          ),
+          notice: event.notice,
+        })
       }
       return stay({ ...state, adding, notice: event.notice })
     }
     case "runner-line":
-      return stay({ ...state, runnerLines: keep(state.runnerLines, [event.line], RUNNER_LINES) })
+      return stay({
+        ...state,
+        runnerLines: keep(state.runnerLines, [event.line], RUNNER_LINES),
+      })
     case "server-reached":
       return serverReached(state, event)
     case "server-apps":
@@ -197,9 +303,22 @@ export function update(state: State, event: AppEvent): Step {
     case "deploy-ended":
       return deployEnded(state, event)
     case "missing-values":
-      return push(state, { ...setSecretScreen(event.server, event.app), missing: event.names, file: event.file, question: "value" })
+      return push(state, {
+        ...setSecretScreen(event.server, event.app),
+        missing: event.names,
+        file: event.file,
+        question: "value",
+      })
     case "ask-remember-folder":
-      return stay({ ...state, question: { kind: "remember-folder", server: event.server, app: event.app, compose: event.compose } })
+      return stay({
+        ...state,
+        question: {
+          kind: "remember-folder",
+          server: event.server,
+          app: event.app,
+          compose: event.compose,
+        },
+      })
     case "ask-deploy-elsewhere":
       return askDeployElsewhere(state, event)
     case "linked":
@@ -208,23 +327,42 @@ export function update(state: State, event: AppEvent): Step {
       // As a linked folder opens: Home on its server and app.
       const team = state.team
       const used = { ...state, linked: event.linked }
-      return stay(team ? updateScreens(used, "home", () => homeOn(team, event.linked)) : used)
+      return stay(
+        team
+          ? updateScreens(used, "home", () => homeOn(team, event.linked))
+          : used
+      )
     }
     case "secret-saved":
       return secretSaved(state, event)
     case "secret-refused":
       return secretRefused(state, event)
     case "log-lines":
-      return stay(updateScreens(state, "logs", (screen) => withLogLines(screen, event.lines, event.fresh === true)))
+      return stay(
+        updateScreens(state, "logs", (screen) =>
+          withLogLines(screen, event.lines, event.fresh === true)
+        )
+      )
     case "logs-dropped":
-      return stay(updateScreens(state, "logs", (screen) => ({ ...screen, dropped: true, problem: event.problem })))
+      return stay(
+        updateScreens(state, "logs", (screen) => ({
+          ...screen,
+          dropped: true,
+          problem: event.problem,
+        }))
+      )
     case "app-states":
       return appStates(state, event)
     case "tick": {
       if (!refreshAllowed(state)) return stay(state)
       const screen = top(state)
       // Home shows every server; the app screen shows one app of one server.
-      return go(state, screen.name === "app" ? { kind: "refresh", server: screen.server } : { kind: "refresh" })
+      return go(
+        state,
+        screen.name === "app"
+          ? { kind: "refresh", server: screen.server }
+          : { kind: "refresh" }
+      )
     }
   }
 }

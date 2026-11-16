@@ -17,7 +17,9 @@
  */
 import { join, resolve } from "node:path"
 
-const outfile = process.argv[2] ? resolve(process.argv[2]) : join(import.meta.dir, "dist/zekno")
+const outfile = process.argv[2]
+  ? resolve(process.argv[2])
+  : join(import.meta.dir, "dist/zekno")
 
 const result = await Bun.build({
   entrypoints: [join(import.meta.dir, "src/main.ts")],

@@ -2,11 +2,31 @@ import { z } from "zod"
 
 import { DEPLOY_ROLES } from "./deploy"
 import { isWellFormed, utf8 } from "../crypto/encoding"
-import { hasOtherVersion, openEnvelope, parseJson, PAYLOAD_TYPES, signEnvelope, type Envelope } from "../crypto/envelope"
+import {
+  hasOtherVersion,
+  openEnvelope,
+  parseJson,
+  PAYLOAD_TYPES,
+  signEnvelope,
+  type Envelope,
+} from "../crypto/envelope"
 import type { Signer } from "../crypto/keys"
 import { LIMITS } from "../protocol/limits"
-import { CoreError, ok, refuse, type LinkRefusal, type Result } from "../protocol/result"
-import { assertTrust, memberByKeyId, serverKeyOf, TEAM_ID, type Member, type TeamTrust } from "../team/roster"
+import {
+  CoreError,
+  ok,
+  refuse,
+  type LinkRefusal,
+  type Result,
+} from "../protocol/result"
+import {
+  assertTrust,
+  memberByKeyId,
+  serverKeyOf,
+  TEAM_ID,
+  type Member,
+  type TeamTrust,
+} from "../team/roster"
 import { APP_NAME, SERVER_ID } from "../secrets/secrets"
 
 /**
@@ -16,7 +36,9 @@ import { APP_NAME, SERVER_ID } from "../secrets/secrets"
  * folder through it, whatever it does with symbolic links.
  */
 const staysInside = (path: string): boolean =>
-  !path.startsWith("/") && !path.includes("\\") && !path.split("/").some((part) => part === "." || part === "..")
+  !path.startsWith("/") &&
+  !path.includes("\\") &&
+  !path.split("/").some((part) => part === "." || part === "..")
 
 /**
  * The Compose file's path, relative to the linked folder. A person reads it
@@ -69,11 +91,21 @@ export async function createLink(input: {
   signer: Signer
 }): Promise<Envelope> {
   assertTrust(input.trust)
-  if (!input.trust.members.some((member) => member.publicKey === input.signer.publicKey)) {
-    throw new CoreError("not_member", "The signer is not a member of this team.")
+  if (
+    !input.trust.members.some(
+      (member) => member.publicKey === input.signer.publicKey
+    )
+  ) {
+    throw new CoreError(
+      "not_member",
+      "The signer is not a member of this team."
+    )
   }
   if (!serverKeyOf(input.trust, input.serverId)) {
-    throw new CoreError("unknown_server", "This server is not in the team list.")
+    throw new CoreError(
+      "unknown_server",
+      "This server is not in the team list."
+    )
   }
   const link = {
     v: 1 as const,
@@ -83,9 +115,16 @@ export async function createLink(input: {
     compose: input.compose,
   }
   if (!LinkSchema.safeParse(link).success) {
-    throw new CoreError("invalid_argument", "The app name or the Compose file's path is not valid.")
+    throw new CoreError(
+      "invalid_argument",
+      "The app name or the Compose file's path is not valid."
+    )
   }
-  return signEnvelope(PAYLOAD_TYPES.link, utf8(JSON.stringify(link)), input.signer)
+  return signEnvelope(
+    PAYLOAD_TYPES.link,
+    utf8(JSON.stringify(link)),
+    input.signer
+  )
 }
 
 /**
@@ -95,29 +134,58 @@ export async function createLink(input: {
  * servers. A member removed since, or a server taken off the list, makes it
  * stop counting.
  */
-export function verifyLink(trust: TeamTrust, envelope: unknown): Result<VerifiedLink, LinkRefusal> {
+export function verifyLink(
+  trust: TeamTrust,
+  envelope: unknown
+): Result<VerifiedLink, LinkRefusal> {
   assertTrust(trust)
   // 1. Signature, against the team list held now. The size is checked before anything is parsed.
-  const opened = openEnvelope(envelope, PAYLOAD_TYPES.link, (keyId) => memberByKeyId(trust.members, keyId)?.publicKey)
+  const opened = openEnvelope(
+    envelope,
+    PAYLOAD_TYPES.link,
+    (keyId) => memberByKeyId(trust.members, keyId)?.publicKey
+  )
   if (!opened.ok) return opened
-  const signer = trust.members.find((member) => member.publicKey === opened.value.signerKey)!
+  const signer = trust.members.find(
+    (member) => member.publicKey === opened.value.signerKey
+  )!
 
   // 2. Only now is the content parsed.
   const json = parseJson(opened.value.payload)
-  if (json === undefined) return refuse("malformed", "The link is not valid JSON.")
+  if (json === undefined)
+    return refuse("malformed", "The link is not valid JSON.")
   if (hasOtherVersion(json)) {
-    return refuse("unsupported_version", "This link uses a format version this library does not know.")
+    return refuse(
+      "unsupported_version",
+      "This link uses a format version this library does not know."
+    )
   }
   const parsed = LinkSchema.safeParse(json)
-  if (!parsed.success) return refuse("malformed", "The link does not match its definition.")
+  if (!parsed.success)
+    return refuse("malformed", "The link does not match its definition.")
   const link = parsed.data
 
   // 3. Who signed it, and for whom. Every role there is today may deploy (`ROLES` equals
   // `DEPLOY_ROLES`), so this refuses nothing yet; it is kept for a role that may not deploy.
   if (!DEPLOY_ROLES.includes(signer.role)) {
-    return refuse("role_not_allowed", "The signer's role does not allow deploys.")
+    return refuse(
+      "role_not_allowed",
+      "The signer's role does not allow deploys."
+    )
   }
-  if (link.teamId !== trust.teamId) return refuse("wrong_team", "This link belongs to another team.")
-  if (!serverKeyOf(trust, link.serverId)) return refuse("unknown_server", "This link names a server that is not in the team list.")
-  return ok(Object.freeze({ serverId: link.serverId, app: link.app, compose: link.compose, signer }))
+  if (link.teamId !== trust.teamId)
+    return refuse("wrong_team", "This link belongs to another team.")
+  if (!serverKeyOf(trust, link.serverId))
+    return refuse(
+      "unknown_server",
+      "This link names a server that is not in the team list."
+    )
+  return ok(
+    Object.freeze({
+      serverId: link.serverId,
+      app: link.app,
+      compose: link.compose,
+      signer,
+    })
+  )
 }

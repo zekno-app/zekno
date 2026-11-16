@@ -31,7 +31,10 @@ export function teamView(team: Team, home: string): TeamView {
     code: team.teamCode,
     servers: team.profile.servers.map((server) => ({
       name: server.name,
-      destination: server.target.kind === "ssh" ? sanitize(server.target.destination) : undefined,
+      destination:
+        server.target.kind === "ssh"
+          ? sanitize(server.target.destination)
+          : undefined,
       apps: appsOf(team, server, home),
     })),
   }
@@ -50,7 +53,9 @@ export function teamView(team: Team, home: string): TeamView {
  * nothing: one not signed by the team, one that names a server that is not
  * connected, one that cannot be read. Nothing here reaches a server.
  */
-export async function loadStart(deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?: string }): Promise<Start> {
+export async function loadStart(
+  deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?: string }
+): Promise<Start> {
   if (!profileStore(deps.home).exists()) return { kind: "no-team" }
   let team: Team
   try {
@@ -59,24 +64,47 @@ export async function loadStart(deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?
     const reason = reasonOf(error)
     if (reason === undefined) throw error
     // A reason can quote a path or a name read from the profile folder.
-    return { kind: "profile-error", reason: sanitize(reason.replace(` ${TAMPERED}`, "")), folder: sanitize(tilde(deps.home)) }
+    return {
+      kind: "profile-error",
+      reason: sanitize(reason.replace(` ${TAMPERED}`, "")),
+      folder: sanitize(tilde(deps.home)),
+    }
   }
-  const verified: Extract<Start, { kind: "team" }> = { kind: "team", team: teamView(team, deps.home), trust: team.trust }
+  const verified: Extract<Start, { kind: "team" }> = {
+    kind: "team",
+    team: teamView(team, deps.home),
+    trust: team.trust,
+  }
   if (deps.cwd === undefined) return verified
   try {
     const link = findProject(deps.cwd)
     if (!link) return verified
     // A zekno.json from outside the team would otherwise choose the app that `d` replaces.
     const standing = standingOf(link, team.trust, deps.home)
-    if (standing.kind === "unsigned") return { ...verified, problem: notSignedHere(link, deps.cwd) }
+    if (standing.kind === "unsigned")
+      return { ...verified, problem: notSignedHere(link, deps.cwd) }
     // The server it names must be one of the verified team's; the app name was held to its pattern when it was read.
-    if (!team.profile.servers.some((server) => server.name === link.server)) return { ...verified, problem: notConnected(link) }
-    const linked = { server: link.server, app: link.app, compose: sanitize(link.compose) }
+    if (!team.profile.servers.some((server) => server.name === link.server))
+      return { ...verified, problem: notConnected(link) }
+    const linked = {
+      server: link.server,
+      app: link.app,
+      compose: sanitize(link.compose),
+    }
     // A copied file would otherwise deploy someone else's folder: the first time here, the person is asked.
     if (standing.kind === "new") {
       // A file in a folder above is named with its folder and Compose file: that is what a "yes" deploys.
       const above = aboveOf(link, deps.cwd)
-      return { ...verified, firstUse: { ...linked, member: standing.member, path: link.path, sha256: link.sha256, ...(above ? { above } : {}) } }
+      return {
+        ...verified,
+        firstUse: {
+          ...linked,
+          member: standing.member,
+          path: link.path,
+          sha256: link.sha256,
+          ...(above ? { above } : {}),
+        },
+      }
     }
     return { ...verified, linked }
   } catch (error) {
@@ -87,8 +115,14 @@ export async function loadStart(deps: Pick<OpDeps, "home" | "keyStore"> & { cwd?
 }
 
 /** First run: the key is created with the name typed, and step 2, adding a server, opens. */
-export async function createKey(context: Context, effect: Extract<Effect, { kind: "create-key" }>): Promise<void> {
+export async function createKey(
+  context: Context,
+  effect: Extract<Effect, { kind: "create-key" }>
+): Promise<void> {
   const { deps, ops, dispatch } = context
   await createTeam(ops, effect.name)
-  dispatch({ type: "team-created", team: teamView(await openTeam(ops), deps.home) })
+  dispatch({
+    type: "team-created",
+    team: teamView(await openTeam(ops), deps.home),
+  })
 }

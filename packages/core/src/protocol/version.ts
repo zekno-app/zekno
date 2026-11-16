@@ -12,13 +12,21 @@
  */
 
 /** The whole grammar. No `g` or `y` flag: `test` keeps no state between calls. */
-export const RUNNER_VERSION_PATTERN = /^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})(-dev\.[1-9][0-9]{0,8})?$/
+export const RUNNER_VERSION_PATTERN =
+  /^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})(-dev\.[1-9][0-9]{0,8})?$/
 
 /** A version's numbers. `dev` is the count of a dev version, undefined for a prod version. */
-export type ParsedRunnerVersion = { major: number; minor: number; patch: number; dev: number | undefined }
+export type ParsedRunnerVersion = {
+  major: number
+  minor: number
+  patch: number
+  dev: number | undefined
+}
 
 /** The numbers of `text`, or undefined when it is not a version. */
-export function parseRunnerVersion(text: string): ParsedRunnerVersion | undefined {
+export function parseRunnerVersion(
+  text: string
+): ParsedRunnerVersion | undefined {
   if (typeof text !== "string") return undefined
   const match = RUNNER_VERSION_PATTERN.exec(text)
   if (!match) return undefined
@@ -26,7 +34,10 @@ export function parseRunnerVersion(text: string): ParsedRunnerVersion | undefine
     major: Number(match[1]),
     minor: Number(match[2]),
     patch: Number(match[3]),
-    dev: match[4] === undefined ? undefined : Number(match[4].slice("-dev.".length)),
+    dev:
+      match[4] === undefined
+        ? undefined
+        : Number(match[4].slice("-dev.".length)),
   }
 }
 
@@ -41,9 +52,13 @@ export function compareRunnerVersions(a: string, b: string): number {
   const y = parseRunnerVersion(b)
   if (!x || !y) throw new Error("Only runner versions can be compared.")
   const order = (n: number, m: number) => (n === m ? 0 : n < m ? -1 : 1)
-  const core = order(x.major, y.major) || order(x.minor, y.minor) || order(x.patch, y.patch)
+  const core =
+    order(x.major, y.major) ||
+    order(x.minor, y.minor) ||
+    order(x.patch, y.patch)
   if (core !== 0) return core
-  if (x.dev === undefined || y.dev === undefined) return x.dev === y.dev ? 0 : x.dev === undefined ? 1 : -1
+  if (x.dev === undefined || y.dev === undefined)
+    return x.dev === y.dev ? 0 : x.dev === undefined ? 1 : -1
   return order(x.dev, y.dev)
 }
 

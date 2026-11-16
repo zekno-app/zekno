@@ -19,14 +19,20 @@ import type { Start } from "../state/types"
 
 /** The sentence for a failure a person can act on, or undefined for one nobody planned for. */
 export function reasonOf(error: unknown): string | undefined {
-  if (error instanceof CliError || error instanceof UsageError) return error.message
-  if (error instanceof CoreError) return `That could not be done (${error.code}).`
+  if (error instanceof CliError || error instanceof UsageError)
+    return error.message
+  if (error instanceof CoreError)
+    return `That could not be done (${error.code}).`
   return undefined
 }
 
 /** The same operations' needs, with standard error sent to `out` instead of the terminal. */
 export function routeErrorLines(deps: OpDeps, out: ErrorLines): OpDeps {
-  return { ...deps, connect: (target, localRunner, options) => deps.connect(target, localRunner, { errorLines: out, ...options }) }
+  return {
+    ...deps,
+    connect: (target, localRunner, options) =>
+      deps.connect(target, localRunner, { errorLines: out, ...options }),
+  }
 }
 
 export type Context = {
@@ -52,7 +58,10 @@ export type Context = {
    * opened every few seconds. They hold no key.
    */
   known: { team: Pick<Team, "trust">; servers: readonly Server[] } | undefined
-  remember(team: { trust: TeamTrust; profile: { servers: readonly Server[] } }): void
+  remember(team: {
+    trust: TeamTrust
+    profile: { servers: readonly Server[] }
+  }): void
   /** What the app opened on (`loadStart`), when it was a verified team. */
   opened: Extract<Start, { kind: "team" }> | undefined
   /**
@@ -87,7 +96,9 @@ export function createContext(
   terminal?: Terminal,
   start?: Start
 ): Context {
-  const base: OpDeps = terminal ? { ...deps, connect: askingConnect(deps.connect, oneAtATime(terminal)) } : deps
+  const base: OpDeps = terminal
+    ? { ...deps, connect: askingConnect(deps.connect, oneAtATime(terminal)) }
+    : deps
   const asking = new Set<string>()
   const purposeful: OpDeps = {
     ...base,
@@ -96,7 +107,9 @@ export function createContext(
       return base.connect(target, localRunner, options)
     },
   }
-  const ops = routeErrorLines(purposeful, (line) => dispatch({ type: "runner-line", line }))
+  const ops = routeErrorLines(purposeful, (line) =>
+    dispatch({ type: "runner-line", line })
+  )
   const opened = start?.kind === "team" ? start : undefined
 
   const context: Context = {
@@ -108,23 +121,37 @@ export function createContext(
     ops,
     known: undefined,
     remember(team) {
-      context.known = { team: { trust: team.trust }, servers: team.profile.servers }
+      context.known = {
+        team: { trust: team.trust },
+        servers: team.profile.servers,
+      }
     },
     opened,
     trustKnown: () => context.known?.team.trust ?? opened?.trust,
     trustNow: async () => context.trustKnown() ?? (await openTeam(ops)).trust,
     closed: false,
     carried: (deps.release ?? RUNNER_RELEASE).version,
-    notice: (tone, text) => dispatch({ type: "notice", notice: { tone, text } }),
+    notice: (tone, text) =>
+      dispatch({ type: "notice", notice: { tone, text } }),
     perform: (work) =>
       work().catch((error: unknown) => {
         const reason = reasonOf(error)
         if (reason === undefined) fail(error)
-        else dispatch({ type: "failed", notice: { tone: "error", text: reason } })
+        else
+          dispatch({ type: "failed", notice: { tone: "error", text: reason } })
       }),
     refresh(team, server, app) {
-      dispatch({ type: "server-apps", server: server.name, apps: appsOf(team, server, deps.home) })
-      dispatch({ type: "app-view", server: server.name, app, ...appDetails(team, server, app) })
+      dispatch({
+        type: "server-apps",
+        server: server.name,
+        apps: appsOf(team, server, deps.home),
+      })
+      dispatch({
+        type: "app-view",
+        server: server.name,
+        app,
+        ...appDetails(team, server, app),
+      })
     },
   }
   return context

@@ -6,15 +6,27 @@
  * the maintainer runs. Imports only @workspace/core and nothing that touches
  * a file, a process or the network.
  */
-import { isDevVersion, parseRunnerVersion, RUNNER_VERSION_PATTERN } from "@workspace/core"
+import {
+  isDevVersion,
+  parseRunnerVersion,
+  RUNNER_VERSION_PATTERN,
+} from "@workspace/core"
 
 export type Environment = "dev" | "prod"
 
 /** The two binaries, in the order every file lists them. */
-export const BINARIES = { x64: "zekno-runner-linux-x64", arm64: "zekno-runner-linux-arm64" } as const
+export const BINARIES = {
+  x64: "zekno-runner-linux-x64",
+  arm64: "zekno-runner-linux-arm64",
+} as const
 
 /** The release's four files, in the order they are published. */
-export const RELEASE_FILES = ["zekno-runner-linux-x64.gz", "zekno-runner-linux-arm64.gz", "SHA256SUMS", "RELEASE-NOTES.md"] as const
+export const RELEASE_FILES = [
+  "zekno-runner-linux-x64.gz",
+  "zekno-runner-linux-arm64.gz",
+  "SHA256SUMS",
+  "RELEASE-NOTES.md",
+] as const
 
 /** The largest binary a release carries, packed or unpacked: the installer's own limit. */
 export const BINARY_LIMIT = 256 * 1024 * 1024
@@ -26,7 +38,9 @@ const SHA256 = /^[0-9a-f]{64}$/
 const COMMIT = /^[0-9a-f]{40}$/
 
 /** `runner-v<version>`: its version and environment, or undefined when it is not a release tag. */
-export function parseTag(tag: string): { version: string; environment: Environment } | undefined {
+export function parseTag(
+  tag: string
+): { version: string; environment: Environment } | undefined {
   if (typeof tag !== "string" || !tag.startsWith("runner-v")) return undefined
   const version = tag.slice("runner-v".length)
   if (!RUNNER_VERSION_PATTERN.test(version)) return undefined
@@ -53,7 +67,8 @@ export const isCommit = (text: string): boolean => COMMIT.test(text)
  * longer than 80 characters.
  */
 export function shown(value: unknown): string {
-  if (typeof value === "string" && RUNNER_VERSION_PATTERN.test(value)) return value
+  if (typeof value === "string" && RUNNER_VERSION_PATTERN.test(value))
+    return value
   const text = JSON.stringify(value) ?? String(value)
   return text.length > 80 ? `${text.slice(0, 77)}...` : text
 }
@@ -69,15 +84,27 @@ export function sha256sumsText(x64: string, arm64: string): string {
 }
 
 /** The two checksums of a SHA256SUMS in exactly that form, or undefined. */
-export function parseSha256sums(text: string): { x64: string; arm64: string } | undefined {
-  const match = /^([0-9a-f]{64}) {2}zekno-runner-linux-x64\n([0-9a-f]{64}) {2}zekno-runner-linux-arm64\n$/.exec(text)
+export function parseSha256sums(
+  text: string
+): { x64: string; arm64: string } | undefined {
+  const match =
+    /^([0-9a-f]{64}) {2}zekno-runner-linux-x64\n([0-9a-f]{64}) {2}zekno-runner-linux-arm64\n$/.exec(
+      text
+    )
   return match ? { x64: match[1]!, arm64: match[2]! } : undefined
 }
 
 /** What the release notes say until the second build was made. */
 export const NOT_MADE_YET = "Not made yet."
 
-export type NotesInput = { version: string; environment: Environment; commit: string; bun: string; x64: string; arm64: string }
+export type NotesInput = {
+  version: string
+  environment: Environment
+  commit: string
+  bun: string
+  x64: string
+  arm64: string
+}
 
 /** RELEASE-NOTES.md, exactly as contracts/release.md writes it. */
 export function releaseNotes(input: NotesInput): string {
@@ -87,7 +114,12 @@ export function releaseNotes(input: NotesInput): string {
     "",
     "Pre-alpha and unaudited. Do not use it for anything you could not afford to lose.",
     "",
-    ...(dev ? ["This is a development release, for proving a runner on a real server. A zekno built from `main` never installs it.", ""] : []),
+    ...(dev
+      ? [
+          "This is a development release, for proving a runner on a real server. A zekno built from `main` never installs it.",
+          "",
+        ]
+      : []),
     "## Built for",
     "",
     "- Linux on x86-64 (`bun-linux-x64-baseline`): processors with SSE4.2, Intel Nehalem or AMD Bulldozer and newer.",
@@ -118,15 +150,25 @@ export function releaseNotes(input: NotesInput): string {
  * the version grammar and a full commit name, or undefined when it names
  * neither in that form.
  */
-export function notesNames(text: string): { version: string; commit: string } | undefined {
+export function notesNames(
+  text: string
+): { version: string; commit: string } | undefined {
   const first = text.split("\n", 1)[0] ?? ""
-  const match = /^zekno-runner (\S+), a (?:development release|release) built from commit ([0-9a-f]{40}) with Bun [0-9]+\.[0-9]+\.[0-9]+\.$/.exec(first)
+  const match =
+    /^zekno-runner (\S+), a (?:development release|release) built from commit ([0-9a-f]{40}) with Bun [0-9]+\.[0-9]+\.[0-9]+\.$/.exec(
+      first
+    )
   if (!match || !parseRunnerVersion(match[1]!)) return undefined
   return { version: match[1]!, commit: match[2]! }
 }
 
 /** One binary's three checksums in the second build. */
-export type RecordRow = { name: string; built: string; downloaded: string; sums: string }
+export type RecordRow = {
+  name: string
+  built: string
+  downloaded: string
+  sums: string
+}
 
 export type RecordInput = {
   tag: string
@@ -145,7 +187,8 @@ export type RecordInput = {
 }
 
 /** True when a binary's three checksums are the same. */
-export const rowMatches = (row: RecordRow): boolean => row.built === row.downloaded && row.downloaded === row.sums
+export const rowMatches = (row: RecordRow): boolean =>
+  row.built === row.downloaded && row.downloaded === row.sums
 
 /**
  * "The record" of contracts/second-build.md, ending with a line feed. It
@@ -155,7 +198,10 @@ export const rowMatches = (row: RecordRow): boolean => row.built === row.downloa
  */
 export function recordText(input: RecordInput): string {
   const matched = input.rows.every(rowMatches)
-  const name = input.by.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, "").trim().slice(0, 80)
+  const name = input.by
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, "")
+    .trim()
+    .slice(0, 80)
   const by = name === "" ? "" : ` by ${name}`
   return [
     `Second build of ${input.tag} (${input.environment}): ${matched ? "matched" : "did not match"}.`,
@@ -164,7 +210,10 @@ export function recordText(input: RecordInput): string {
     "",
     "| File | This build | Downloaded | SHA256SUMS | Result |",
     "|------|------------|------------|------------|--------|",
-    ...input.rows.map((row) => `| ${row.name} | ${row.built} | ${row.downloaded} | ${row.sums} | ${rowMatches(row) ? "match" : "differs"} |`),
+    ...input.rows.map(
+      (row) =>
+        `| ${row.name} | ${row.built} | ${row.downloaded} | ${row.sums} | ${rowMatches(row) ? "match" : "differs"} |`
+    ),
     "",
     matched
       ? `The checksums are recorded in ${RUNNER_RELEASE} on ${branchOf(input.environment)}.`
@@ -174,27 +223,56 @@ export function recordText(input: RecordInput): string {
 }
 
 /** apps/cli/src/version/runner-release.json with this version and these checksums: two-space JSON and a final line feed. */
-export function runnerReleaseJson(version: string, x64: string | null, arm64: string | null): string {
+export function runnerReleaseJson(
+  version: string,
+  x64: string | null,
+  arm64: string | null
+): string {
   return `${JSON.stringify({ version, files: { "linux-x64": { sha256: x64 }, "linux-arm64": { sha256: arm64 } } }, null, 2)}\n`
 }
 
 /** What apps/cli/src/version/runner-release.json records, read strictly, or undefined when it is not in that form. */
-export function parseRunnerReleaseJson(text: string): { version: string; x64: string | null; arm64: string | null } | undefined {
+export function parseRunnerReleaseJson(
+  text: string
+): { version: string; x64: string | null; arm64: string | null } | undefined {
   let value: unknown
   try {
     value = JSON.parse(text)
   } catch {
     return undefined
   }
-  const object = (item: unknown, keys: string[]): item is Record<string, unknown> =>
-    typeof item === "object" && item !== null && !Array.isArray(item) && Object.keys(item).sort().join() === [...keys].sort().join()
-  const checksum = (item: unknown) => (item === null || (typeof item === "string" && SHA256.test(item)) ? (item as string | null) : undefined)
-  if (!object(value, ["version", "files"]) || !object(value.files, ["linux-x64", "linux-arm64"])) return undefined
+  const object = (
+    item: unknown,
+    keys: string[]
+  ): item is Record<string, unknown> =>
+    typeof item === "object" &&
+    item !== null &&
+    !Array.isArray(item) &&
+    Object.keys(item).sort().join() === [...keys].sort().join()
+  const checksum = (item: unknown) =>
+    item === null || (typeof item === "string" && SHA256.test(item))
+      ? (item as string | null)
+      : undefined
+  if (
+    !object(value, ["version", "files"]) ||
+    !object(value.files, ["linux-x64", "linux-arm64"])
+  )
+    return undefined
   const files = value.files
-  if (!object(files["linux-x64"], ["sha256"]) || !object(files["linux-arm64"], ["sha256"])) return undefined
+  if (
+    !object(files["linux-x64"], ["sha256"]) ||
+    !object(files["linux-arm64"], ["sha256"])
+  )
+    return undefined
   const x64 = checksum(files["linux-x64"].sha256)
   const arm64 = checksum(files["linux-arm64"].sha256)
-  if (typeof value.version !== "string" || !parseRunnerVersion(value.version) || x64 === undefined || arm64 === undefined) return undefined
+  if (
+    typeof value.version !== "string" ||
+    !parseRunnerVersion(value.version) ||
+    x64 === undefined ||
+    arm64 === undefined
+  )
+    return undefined
   return { version: value.version, x64, arm64 }
 }
 
@@ -202,9 +280,17 @@ export function parseRunnerReleaseJson(text: string): { version: string; x64: st
  * Of the files main must hold a prod version in, those that do not: a dev
  * version, or anything that is not a version at all.
  */
-export function devVersionFiles(files: { path: string; version: unknown }[]): { path: string; version: unknown; dev: boolean }[] {
-  const isProd = (version: unknown) => typeof version === "string" && parseRunnerVersion(version) !== undefined && !isDevVersion(version)
+export function devVersionFiles(
+  files: { path: string; version: unknown }[]
+): { path: string; version: unknown; dev: boolean }[] {
+  const isProd = (version: unknown) =>
+    typeof version === "string" &&
+    parseRunnerVersion(version) !== undefined &&
+    !isDevVersion(version)
   return files
     .filter((file) => !isProd(file.version))
-    .map((file) => ({ ...file, dev: typeof file.version === "string" && isDevVersion(file.version) }))
+    .map((file) => ({
+      ...file,
+      dev: typeof file.version === "string" && isDevVersion(file.version),
+    }))
 }

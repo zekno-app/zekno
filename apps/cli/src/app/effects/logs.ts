@@ -2,7 +2,11 @@
 import { followLogs, LOG_TAIL, prepareLogs, type LogLine } from "../../ops/logs"
 import { sanitize } from "../../server/sanitize"
 import type { Effect } from "../state/events"
-import { LOG_LINES, LOG_TEXT_KEPT, type LogLine as ShownLine } from "../state/types"
+import {
+  LOG_LINES,
+  LOG_TEXT_KEPT,
+  type LogLine as ShownLine,
+} from "../state/types"
 import { batcher } from "./batcher"
 import { reasonOf, type Context } from "./context"
 
@@ -45,14 +49,25 @@ export function createLogs(context: Context) {
     const flush = batch.flush
     const onLine = (line: LogLine) => {
       if (!current()) return
-      const text = line.text.length <= LOG_TEXT_KEPT ? line.text : [...line.text].slice(0, LOG_TEXT_KEPT).join("")
+      const text =
+        line.text.length <= LOG_TEXT_KEPT
+          ? line.text
+          : [...line.text].slice(0, LOG_TEXT_KEPT).join("")
       return batch.add({ time: line.time, service: line.service, line: text })
     }
     void (async () => {
       let problem: string
       try {
-        const plan = await prepareLogs(ops, { app: effect.app, server: effect.server })
-        const end = await followLogs(ops, plan, { tail: LOG_TAIL, follow: true, stop: stop.signal }, onLine)
+        const plan = await prepareLogs(ops, {
+          app: effect.app,
+          server: effect.server,
+        })
+        const end = await followLogs(
+          ops,
+          plan,
+          { tail: LOG_TAIL, follow: true, stop: stop.signal },
+          onLine
+        )
         if (end === "stopped") return
         problem = `Docker stopped sending the logs of ${effect.app}.`
       } catch (error) {

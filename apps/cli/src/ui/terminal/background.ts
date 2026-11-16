@@ -51,7 +51,8 @@ export function parseBackgroundAnswer(text: string): Rgb | undefined {
 
 /** Relative luminance, as WCAG defines it. */
 function luminance({ r, g, b }: Rgb): number {
-  const linear = (value: number) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+  const linear = (value: number) =>
+    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
   return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
 }
 
@@ -77,10 +78,16 @@ export const answered = (text: string): boolean => DA1_ANSWER.test(text)
  * slower than detection's patience; such a piece is never taken as typing.
  */
 export function isLateAnswer(input: string): boolean {
-  return /^(?:\d+;)?rgba?:[0-9a-fA-F/]*\x07?$/.test(input) || /^\[\?[0-9;]*c$/.test(input)
+  return (
+    /^(?:\d+;)?rgba?:[0-9a-fA-F/]*\x07?$/.test(input) ||
+    /^\[\?[0-9;]*c$/.test(input)
+  )
 }
 
-type Input = Pick<NodeJS.ReadStream, "isTTY" | "on" | "removeListener" | "read"> & {
+type Input = Pick<
+  NodeJS.ReadStream,
+  "isTTY" | "on" | "removeListener" | "read"
+> & {
   isRaw?: boolean
   setRawMode?: (mode: boolean) => unknown
   ref?: () => unknown
@@ -102,9 +109,13 @@ type Output = Pick<NodeJS.WriteStream, "isTTY" | "write">
 export async function detectBackground(
   input: Input = process.stdin,
   output: Output = process.stdout,
-  patience: { quietMs: number; answeringMs: number } = { quietMs: QUIET_MS, answeringMs: ANSWERING_MS }
+  patience: { quietMs: number; answeringMs: number } = {
+    quietMs: QUIET_MS,
+    answeringMs: ANSWERING_MS,
+  }
 ): Promise<Background> {
-  if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== "function") return "dark"
+  if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== "function")
+    return "dark"
   const wasRaw = input.isRaw === true
   let text = ""
   let onReadable: (() => void) | undefined

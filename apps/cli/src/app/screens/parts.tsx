@@ -60,7 +60,13 @@ export function Pane({
  * wraps, and its last column is always left empty, so a cell that is cut
  * short never runs into the next.
  */
-export function Cell({ width, children }: { width?: number; children: ReactNode }) {
+export function Cell({
+  width,
+  children,
+}: {
+  width?: number
+  children: ReactNode
+}) {
   return (
     <Box
       width={width}
@@ -86,7 +92,17 @@ export function Marker({ selected }: { selected: boolean }) {
 
 /** A faint rule across a pane, between its list and its details. */
 export function Rule() {
-  return <Box borderStyle="single" borderTop borderBottom={false} borderLeft={false} borderRight={false} borderDimColor flexShrink={0} />
+  return (
+    <Box
+      borderStyle="single"
+      borderTop
+      borderBottom={false}
+      borderLeft={false}
+      borderRight={false}
+      borderDimColor
+      flexShrink={0}
+    />
+  )
 }
 
 /**
@@ -110,7 +126,8 @@ export function wordsThatFit(words: string, room?: number): string {
  * where it does not fit, its first words that do (`● partly`), never a word
  * cut in the middle.
  */
-export const stateWords = (state: RunState, room?: number): string => wordsThatFit(`● ${state}`, room)
+export const stateWords = (state: RunState, room?: number): string =>
+  wordsThatFit(`● ${state}`, room)
 
 /**
  * Whether an app is running, by a word and a symbol as well as a colour
@@ -120,7 +137,12 @@ export const stateWords = (state: RunState, room?: number): string => wordsThatF
  */
 export function StateCell({ state, room }: { state: RunState; room?: number }) {
   const theme = useTheme()
-  const color = { running: theme.success, stopped: theme.danger, "partly running": theme.warning, unknown: undefined }[state]
+  const color = {
+    running: theme.success,
+    stopped: theme.danger,
+    "partly running": theme.warning,
+    unknown: undefined,
+  }[state]
   return (
     <Text color={color} dimColor={state === "unknown"}>
       {stateWords(state, room)}

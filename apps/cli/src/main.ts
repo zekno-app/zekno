@@ -14,7 +14,9 @@ const argv = process.argv.slice(2)
 
 // From a source checkout, `--local` uses the runner next door. Installed, it uses the one on PATH.
 const sibling = join(import.meta.dir, "../../runner/src/main.ts")
-const localRunner = existsSync(sibling) ? [process.execPath, sibling] : ["zekno-runner"]
+const localRunner = existsSync(sibling)
+  ? [process.execPath, sibling]
+  : ["zekno-runner"]
 
 const deps: OpDeps = {
   home: process.env.ZEKNO_HOME || join(homedir(), ".zekno"),
@@ -47,7 +49,9 @@ async function withoutDev<T>(work: () => Promise<T>): Promise<T> {
 async function command(): Promise<number> {
   // Piped either way, in a script or with `--json` it is plain lines, so output stays stable for whatever reads it.
   const plain = wantsPlain(argv, process.stdout, process.stdin)
-  const ui = plain ? processPlainUi() : await withoutDev(async () => (await import("./ui/ink/ink")).inkUi())
+  const ui = plain
+    ? processPlainUi()
+    : await withoutDev(async () => (await import("./ui/ink/ink")).inkUi())
   try {
     return await run(argv, { ...deps, ui })
   } finally {
@@ -69,7 +73,10 @@ async function app(): Promise<number> {
   const { detectBackground } = await import("./ui/terminal/background")
   let closed: Promise<number> | undefined
   await withoutDev(async () => {
-    const [{ loadStart }, { openApp }] = await Promise.all([import("./app/effects/profile"), import("./app/app")])
+    const [{ loadStart }, { openApp }] = await Promise.all([
+      import("./app/effects/profile"),
+      import("./app/app"),
+    ])
     const start = await loadStart(deps)
     const background = await detectBackground()
     closed = openApp(deps, { start, background })
@@ -85,5 +92,9 @@ async function app(): Promise<number> {
 }
 
 // `zekno` alone at a terminal opens the app. Anywhere else, alone, it prints the help as before.
-const opensApp = argv.length === 0 && Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY) && process.env.TERM !== "dumb"
+const opensApp =
+  argv.length === 0 &&
+  Boolean(process.stdin.isTTY) &&
+  Boolean(process.stdout.isTTY) &&
+  process.env.TERM !== "dumb"
 process.exit(opensApp ? await app() : await command())

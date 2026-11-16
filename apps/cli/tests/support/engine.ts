@@ -48,15 +48,37 @@ const NAMED: Record<string, string> = {
 /** What a terminal sends for `key` (`Enter`, `Escape`, `d`, `Control+c`, `Shift+Tab`), or a refusal for one it has no bytes for. */
 export function keyBytes(key: string): string {
   const parsed = parseKey(key)
-  if (!parsed) throw new EngineError("UNSUPPORTED_CAPABILITY", `"${key}" is not a key a terminal can send`, { retryable: false })
-  const modifiers = new Set<string>(parsed.modifiers.map((modifier) => (modifier === "ControlOrMeta" ? "Control" : modifier)))
-  if (modifiers.has("Meta")) throw new EngineError("UNSUPPORTED_CAPABILITY", "a terminal has no Meta key", { retryable: false })
+  if (!parsed)
+    throw new EngineError(
+      "UNSUPPORTED_CAPABILITY",
+      `"${key}" is not a key a terminal can send`,
+      { retryable: false }
+    )
+  const modifiers = new Set<string>(
+    parsed.modifiers.map((modifier) =>
+      modifier === "ControlOrMeta" ? "Control" : modifier
+    )
+  )
+  if (modifiers.has("Meta"))
+    throw new EngineError(
+      "UNSUPPORTED_CAPABILITY",
+      "a terminal has no Meta key",
+      { retryable: false }
+    )
   if (parsed.key.kind === "named") {
     const name = parsed.key.name
     if (name === "Tab" && modifiers.has("Shift")) return "\x1b[Z"
     const bytes = NAMED[name]
-    if (bytes === undefined || modifiers.has("Control") || (modifiers.has("Shift") && name !== "Space")) {
-      throw new EngineError("UNSUPPORTED_CAPABILITY", `the terminal engine cannot send ${key}`, { retryable: false })
+    if (
+      bytes === undefined ||
+      modifiers.has("Control") ||
+      (modifiers.has("Shift") && name !== "Space")
+    ) {
+      throw new EngineError(
+        "UNSUPPORTED_CAPABILITY",
+        `the terminal engine cannot send ${key}`,
+        { retryable: false }
+      )
     }
     return modifiers.has("Alt") ? `\x1b${bytes}` : bytes
   }
@@ -64,7 +86,12 @@ export function keyBytes(key: string): string {
   if (modifiers.has("Shift")) char = char.toUpperCase()
   if (modifiers.has("Control")) {
     const code = char.toLowerCase().charCodeAt(0)
-    if (code < 97 || code > 122) throw new EngineError("UNSUPPORTED_CAPABILITY", `the terminal engine cannot send ${key}`, { retryable: false })
+    if (code < 97 || code > 122)
+      throw new EngineError(
+        "UNSUPPORTED_CAPABILITY",
+        `the terminal engine cannot send ${key}`,
+        { retryable: false }
+      )
     char = String.fromCharCode(code - 96)
   }
   return modifiers.has("Alt") ? `\x1b${char}` : char
@@ -106,7 +133,12 @@ export function zeknoTerminal(): EngineHandle {
   let current: TerminalProcess | undefined
 
   const open = (): TerminalProcess => {
-    if (!current) throw new EngineError("INVALID_STATE", "the app is not open: a test opens it with terminal.open()", { retryable: false })
+    if (!current)
+      throw new EngineError(
+        "INVALID_STATE",
+        "the app is not open: a test opens it with terminal.open()",
+        { retryable: false }
+      )
     return current
   }
 
@@ -114,13 +146,20 @@ export function zeknoTerminal(): EngineHandle {
   async function read(maxMs: number): Promise<ScreenTree> {
     const terminal = open()
     await terminal.settle({ quietMs: 50, maxMs })
-    return screenTree(Array.from({ length: terminal.screen.rows }, (_, row) => terminal.screen.row(row)))
+    return screenTree(
+      Array.from({ length: terminal.screen.rows }, (_, row) =>
+        terminal.screen.row(row)
+      )
+    )
   }
 
   /** Sends bytes as keys, then lets the app answer them. */
   async function send(bytes: string): Promise<void> {
     const terminal = open()
-    if (!terminal.running()) throw new EngineError("INVALID_STATE", "the app has exited", { retryable: false })
+    if (!terminal.running())
+      throw new EngineError("INVALID_STATE", "the app has exited", {
+        retryable: false,
+      })
     terminal.write(bytes)
     await terminal.settle({ quietMs: 80, minMs: 80, maxMs: 2000 })
   }
@@ -128,7 +167,10 @@ export function zeknoTerminal(): EngineHandle {
   /** Types text one key at a time, as a person does, so the app reads keys rather than a paste. */
   async function typeText(text: string): Promise<void> {
     const terminal = open()
-    if (!terminal.running()) throw new EngineError("INVALID_STATE", "the app has exited", { retryable: false })
+    if (!terminal.running())
+      throw new EngineError("INVALID_STATE", "the app has exited", {
+        retryable: false,
+      })
     for (const char of text) {
       terminal.write(char)
       await Bun.sleep(KEY_GAP_MS)
@@ -149,11 +191,21 @@ export function zeknoTerminal(): EngineHandle {
       const terminal = startTerminal(launch)
       current = terminal
       try {
-        await terminal.until(() => terminal.screen.frames > 0 && terminal.screen.alternate, "the app's first frame", 20_000)
+        await terminal.until(
+          () => terminal.screen.frames > 0 && terminal.screen.alternate,
+          "the app's first frame",
+          20_000
+        )
       } catch (error) {
         // What the app wrote instead, for the report: often the reason it stopped.
-        const said = terminal.screen.lines().filter(Boolean).join("\n").slice(-2000)
-        throw new Error(`${(error as Error).message}. The terminal showed:\n${said}`)
+        const said = terminal.screen
+          .lines()
+          .filter(Boolean)
+          .join("\n")
+          .slice(-2000)
+        throw new Error(
+          `${(error as Error).message}. The terminal showed:\n${said}`
+        )
       }
       await terminal.settle({ quietMs: 100, minMs: 150, maxMs: 3000 })
     },
@@ -171,8 +223,15 @@ export function zeknoTerminal(): EngineHandle {
     spiVersion: 1,
     platform: "terminal",
     validateApp(app, { targetName }) {
-      if (app.url !== undefined || app.bundleId !== undefined || app.appPath !== undefined) {
-        throw new ConfigurationError("INVALID_CONFIG", `target "${targetName}": the terminal engine opens the app with terminal.open(), so it takes no app`)
+      if (
+        app.url !== undefined ||
+        app.bundleId !== undefined ||
+        app.appPath !== undefined
+      ) {
+        throw new ConfigurationError(
+          "INVALID_CONFIG",
+          `target "${targetName}": the terminal engine opens the app with terminal.open(), so it takes no app`
+        )
       }
     },
     async observe() {
@@ -193,16 +252,30 @@ export function zeknoTerminal(): EngineHandle {
     async perform(ref, action) {
       const tree = await read(300)
       const node = findNode(tree.root, ref.id)
-      if (!node) throw new EngineError("NODE_STALE", `${ref.id} is no longer on the screen`, { retryable: true })
+      if (!node)
+        throw new EngineError(
+          "NODE_STALE",
+          `${ref.id} is no longer on the screen`,
+          { retryable: true }
+        )
       if (action.kind === "press") return send(keyBytes(action.key))
       if (action.kind === "fill") {
-        if (node.role !== "textbox") throw new EngineError("NOT_ACTIONABLE", "only a question's text box takes typing", { retryable: false })
+        if (node.role !== "textbox")
+          throw new EngineError(
+            "NOT_ACTIONABLE",
+            "only a question's text box takes typing",
+            { retryable: false }
+          )
         // A fill replaces what the box shows: what was typed is taken back first. A hidden value shows nothing to take back.
         const shown = [...(node.value ?? "")].length
         if (shown > 0) await typeText(NAMED.Backspace!.repeat(shown))
         return typeText(action.value)
       }
-      throw new EngineError("UNSUPPORTED_CAPABILITY", `the terminal engine cannot ${action.kind}`, { retryable: false })
+      throw new EngineError(
+        "UNSUPPORTED_CAPABILITY",
+        `the terminal engine cannot ${action.kind}`,
+        { retryable: false }
+      )
     },
     keyboard: {
       async type(text) {
@@ -215,15 +288,25 @@ export function zeknoTerminal(): EngineHandle {
     fixtures: {
       terminal: (context) =>
         context.fixture("terminal", surface(), {
-          open: { kind: "resource", label: (launch) => `${launch.cols}x${launch.rows}`, timeout: 30_000 },
+          open: {
+            kind: "resource",
+            label: (launch) => `${launch.cols}x${launch.rows}`,
+            timeout: 30_000,
+          },
           press: { kind: "resource", label: (key) => key },
-          type: { kind: "resource", label: (text) => `${[...text].length} characters` },
+          type: {
+            kind: "resource",
+            label: (text) => `${[...text].length} characters`,
+          },
           exited: { kind: "resource", timeout: 30_000 },
           close: { kind: "resource", timeout: 15_000 },
         }),
     },
     async startAttempt(context) {
-      context.environment({ surface: "pseudo-terminal", runtime: `bun ${Bun.version}` })
+      context.environment({
+        surface: "pseudo-terminal",
+        runtime: `bun ${Bun.version}`,
+      })
     },
     async endAttempt() {
       await close()

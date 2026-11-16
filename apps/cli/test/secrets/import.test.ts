@@ -8,7 +8,17 @@
  * process started are searched for each one.
  */
 import { describe, expect, spyOn, test } from "bun:test"
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
 import { join } from "node:path"
 
 import { tempDir } from "../../../runner/test/support/helpers"
@@ -25,7 +35,13 @@ import {
 } from "../../src/commands/secret"
 import { openTeam, type Team } from "../../src/cli/context"
 import { MISSING_APP, NOTHING_DONE } from "../../src/cli/errors"
-import { importTooMany, importTooManyRecords, importTooManySecrets, prepareSecretImport, storeSecrets } from "../../src/ops/secret"
+import {
+  importTooMany,
+  importTooManyRecords,
+  importTooManySecrets,
+  prepareSecretImport,
+  storeSecrets,
+} from "../../src/ops/secret"
 import { profileStore } from "../../src/profile/profile"
 import { sanitize } from "../../src/server/sanitize"
 import { parseImport, type ImportEntry } from "../../src/secrets/import-file"
@@ -44,7 +60,8 @@ const secret = (name: string) => `${SENTINEL}_${name.toLowerCase()}`
 /** The entries of a text that fits. */
 function entriesOf(text: string): ImportEntry[] {
   const parsed = parseImport(text)
-  if (!("entries" in parsed)) throw new Error(`the test's file stops at line ${parsed.line}`)
+  if (!("entries" in parsed))
+    throw new Error(`the test's file stops at line ${parsed.line}`)
   return parsed.entries
 }
 
@@ -53,28 +70,48 @@ function storeOf(m: Machine, app = "web", server = "dev") {
   const serverId = profileStore(m.home)
     .load()
     .servers.find((entry) => entry.name === server)!.serverId
-  return { serverId, folder: join(m.home, "secrets", serverId), path: join(m.home, "secrets", serverId, `${app}.json`) }
+  return {
+    serverId,
+    folder: join(m.home, "secrets", serverId),
+    path: join(m.home, "secrets", serverId, `${app}.json`),
+  }
 }
 
 /** Every file under `dir` that holds the sentinel in plain text. */
-const holding = (dir: string) => filesUnder(dir).filter((file) => file.content.includes(SENTINEL))
+const holding = (dir: string) =>
+  filesUnder(dir).filter((file) => file.content.includes(SENTINEL))
 
 /** The names and versions `zekno secret ls` lists. */
 async function listed(m: Machine, where = WEB): Promise<string[]> {
   const before = m.out.length
-  expect(await m.zekno("secret", "ls", "--app", where.app, "--server", where.server)).toBe(0)
+  expect(
+    await m.zekno("secret", "ls", "--app", where.app, "--server", where.server)
+  ).toBe(0)
   return m.out.slice(before)
 }
 
 /** A file of `count` values with distinct valid names, each holding the sentinel. */
 const manyValues = (count: number, prefix = "V") =>
-  Array.from({ length: count }, (_, index) => `${prefix}${index}=${secret(`${prefix}${index}`)}`).join("\n")
+  Array.from(
+    { length: count },
+    (_, index) => `${prefix}${index}=${secret(`${prefix}${index}`)}`
+  ).join("\n")
 
 describe("storing (contracts/import.md, Names and Limits; research R9)", () => {
   test("prepareSecretImport groups the names in the file's order, and gives each value its next version", async () => {
     const m = await ready()
     m.typing("hello")
-    expect(await m.zekno("secret", "set", "GREETING", "--app", "web", "--server", "dev")).toBe(0)
+    expect(
+      await m.zekno(
+        "secret",
+        "set",
+        "GREETING",
+        "--app",
+        "web",
+        "--server",
+        "dev"
+      )
+    ).toBe(0)
     const text = [
       `DATABASE_URL=${secret("db")}`,
       `SESSION_KEY=${secret("session")}`,
@@ -90,9 +127,18 @@ describe("storing (contracts/import.md, Names and Limits; research R9)", () => {
     expect(importGroups(plan)).toEqual([
       ["new", "DATABASE_URL, SESSION_KEY, STRIPE_KEY"],
       ["replaces", "GREETING"],
-      ["left out", "PATH (zekno keeps this name), line 5 (not a valid name), line 6 (empty), line 7 (a name longer than 128 characters), line 9 (larger than 64 KiB)"],
+      [
+        "left out",
+        "PATH (zekno keeps this name), line 5 (not a valid name), line 6 (empty), line 7 (a name longer than 128 characters), line 9 (larger than 64 KiB)",
+      ],
     ])
-    expect(plan.values.map(({ name, version, replaces }) => ({ name, version, replaces }))).toEqual([
+    expect(
+      plan.values.map(({ name, version, replaces }) => ({
+        name,
+        version,
+        replaces,
+      }))
+    ).toEqual([
       { name: "DATABASE_URL", version: 1, replaces: false },
       { name: "SESSION_KEY", version: 1, replaces: false },
       { name: "GREETING", version: 2, replaces: true },
@@ -105,18 +151,44 @@ describe("storing (contracts/import.md, Names and Limits; research R9)", () => {
   test("a name whose latest change was a removal is new, and gets the version after the removal", async () => {
     const m = await ready()
     m.typing("one")
-    expect(await m.zekno("secret", "set", "GONE", "--app", "web", "--server", "dev")).toBe(0)
-    expect(await m.zekno("secret", "rm", "GONE", "--app", "web", "--server", "dev")).toBe(0)
-    const plan = await prepareSecretImport(m.deps, WEB, entriesOf(`GONE=${secret("gone")}`), ".env")
+    expect(
+      await m.zekno("secret", "set", "GONE", "--app", "web", "--server", "dev")
+    ).toBe(0)
+    expect(
+      await m.zekno("secret", "rm", "GONE", "--app", "web", "--server", "dev")
+    ).toBe(0)
+    const plan = await prepareSecretImport(
+      m.deps,
+      WEB,
+      entriesOf(`GONE=${secret("gone")}`),
+      ".env"
+    )
     expect(importGroups(plan)).toEqual([["new", "GONE"]])
-    expect(plan.values.map(({ name, version }) => ({ name, version }))).toEqual([{ name: "GONE", version: 3 }])
+    expect(plan.values.map(({ name, version }) => ({ name, version }))).toEqual(
+      [{ name: "GONE", version: 3 }]
+    )
   }, 30_000)
 
   test("storeSecrets writes the store once, one new record per value at its version; secret ls lists them", async () => {
     const m = await ready()
     m.typing("hello")
-    expect(await m.zekno("secret", "set", "GREETING", "--app", "web", "--server", "dev")).toBe(0)
-    const plan = await prepareSecretImport(m.deps, WEB, entriesOf(`A=${secret("a")}\nGREETING=${secret("g")}\nB=${secret("b")}`), ".env")
+    expect(
+      await m.zekno(
+        "secret",
+        "set",
+        "GREETING",
+        "--app",
+        "web",
+        "--server",
+        "dev"
+      )
+    ).toBe(0)
+    const plan = await prepareSecretImport(
+      m.deps,
+      WEB,
+      entriesOf(`A=${secret("a")}\nGREETING=${secret("g")}\nB=${secret("b")}`),
+      ".env"
+    )
     const records = plan.secrets.records.length
     const save = spyOn(plan.team.store, "saveSecrets")
     const changes = await storeSecrets(plan)
@@ -128,7 +200,11 @@ describe("storing (contracts/import.md, Names and Limits; research R9)", () => {
     ])
     const stored = JSON.parse(readFileSync(storeOf(m).path, "utf8"))
     expect(stored.records.length).toBe(records + 3)
-    expect((await listed(m)).sort()).toEqual(["A\tversion 1", "B\tversion 1", "GREETING\tversion 2"])
+    expect((await listed(m)).sort()).toEqual([
+      "A\tversion 1",
+      "B\tversion 1",
+      "GREETING\tversion 2",
+    ])
     // The values are sealed: none is in any file of the profile folder in plain text.
     expect(holding(m.home)).toEqual([])
   }, 30_000)
@@ -136,10 +212,25 @@ describe("storing (contracts/import.md, Names and Limits; research R9)", () => {
   test("all or nothing: a signer that fails on the third record leaves the store byte for byte, and no temporary file", async () => {
     const m = await ready()
     m.typing("hello")
-    expect(await m.zekno("secret", "set", "GREETING", "--app", "web", "--server", "dev")).toBe(0)
+    expect(
+      await m.zekno(
+        "secret",
+        "set",
+        "GREETING",
+        "--app",
+        "web",
+        "--server",
+        "dev"
+      )
+    ).toBe(0)
     const store = storeOf(m)
     const before = readFileSync(store.path)
-    const plan = await prepareSecretImport(m.deps, WEB, entriesOf(manyValues(5)), ".env")
+    const plan = await prepareSecretImport(
+      m.deps,
+      WEB,
+      entriesOf(manyValues(5)),
+      ".env"
+    )
     const original = plan.team.withSigner
     let signed = 0
     const team: Team = {
@@ -156,7 +247,9 @@ describe("storing (contracts/import.md, Names and Limits; research R9)", () => {
           })
         ),
     }
-    await expect(storeSecrets({ ...plan, team })).rejects.toThrow("the signer stopped")
+    await expect(storeSecrets({ ...plan, team })).rejects.toThrow(
+      "the signer stopped"
+    )
     expect(signed).toBe(3)
     expect(readFileSync(store.path).equals(before)).toBe(true)
     expect(readdirSync(store.folder)).toEqual(["web.json"])
@@ -166,13 +259,30 @@ describe("storing (contracts/import.md, Names and Limits; research R9)", () => {
   test("all or nothing: a store folder that cannot be written leaves the file as it was, no temporary file, and says so", async () => {
     const m = await ready()
     m.typing("hello")
-    expect(await m.zekno("secret", "set", "GREETING", "--app", "web", "--server", "dev")).toBe(0)
+    expect(
+      await m.zekno(
+        "secret",
+        "set",
+        "GREETING",
+        "--app",
+        "web",
+        "--server",
+        "dev"
+      )
+    ).toBe(0)
     const store = storeOf(m)
     const before = readFileSync(store.path)
-    const plan = await prepareSecretImport(m.deps, WEB, entriesOf(manyValues(4)), ".env")
+    const plan = await prepareSecretImport(
+      m.deps,
+      WEB,
+      entriesOf(manyValues(4)),
+      ".env"
+    )
     chmodSync(store.folder, 0o500)
     try {
-      await expect(storeSecrets(plan)).rejects.toThrow(`Could not write ${store.path}.`)
+      await expect(storeSecrets(plan)).rejects.toThrow(
+        `Could not write ${store.path}.`
+      )
     } finally {
       chmodSync(store.folder, 0o700)
     }
@@ -186,24 +296,52 @@ describe("storing (contracts/import.md, Names and Limits; research R9)", () => {
     const team = await openTeam(m.deps)
     const signer = spyOn(team, "withSigner")
     const deps = { ...m.deps, team: async () => team }
-    await expect(prepareSecretImport(deps, WEB, entriesOf(manyValues(257)), ".env")).rejects.toThrow(importTooMany(".env"))
-    expect(importTooMany(".env")).toBe(".env has more than 256 values, more than one deploy carries. Nothing was stored.")
+    await expect(
+      prepareSecretImport(deps, WEB, entriesOf(manyValues(257)), ".env")
+    ).rejects.toThrow(importTooMany(".env"))
+    expect(importTooMany(".env")).toBe(
+      ".env has more than 256 values, more than one deploy carries. Nothing was stored."
+    )
 
     // The app has 250 secrets: 7 new names would make 257, past what one deploy carries. Names it has already do not count.
-    const many = await prepareSecretImport(m.deps, WEB, entriesOf(manyValues(250, "OLD")), ".env")
+    const many = await prepareSecretImport(
+      m.deps,
+      WEB,
+      entriesOf(manyValues(250, "OLD")),
+      ".env"
+    )
     await storeSecrets(many)
     signer.mockClear()
-    await expect(prepareSecretImport(deps, WEB, entriesOf(manyValues(7)), ".env")).rejects.toThrow(importTooManySecrets("web", "dev"))
-    expect(importTooManySecrets("web", "dev")).toBe("web on dev would have more than 256 secrets, more than one deploy carries. Nothing was stored.")
-    const fits = await prepareSecretImport(deps, WEB, entriesOf(`${manyValues(6)}\n${manyValues(7, "OLD")}`), ".env")
+    await expect(
+      prepareSecretImport(deps, WEB, entriesOf(manyValues(7)), ".env")
+    ).rejects.toThrow(importTooManySecrets("web", "dev"))
+    expect(importTooManySecrets("web", "dev")).toBe(
+      "web on dev would have more than 256 secrets, more than one deploy carries. Nothing was stored."
+    )
+    const fits = await prepareSecretImport(
+      deps,
+      WEB,
+      entriesOf(`${manyValues(6)}\n${manyValues(7, "OLD")}`),
+      ".env"
+    )
     expect(fits.values.length).toBe(13)
 
     // 4,094 records already: 3 more would pass the 4,096 past which none of them is read.
     const store = storeOf(m)
     const held = JSON.parse(readFileSync(store.path, "utf8"))
-    writeFileSync(store.path, JSON.stringify({ records: Array.from({ length: 4094 }, () => held.records[0]), removals: [] }))
-    await expect(prepareSecretImport(deps, WEB, entriesOf(manyValues(3)), ".env")).rejects.toThrow(importTooManyRecords("web", "dev"))
-    expect(importTooManyRecords("web", "dev")).toBe("web on dev would have more than 4096 secret records on this machine. Nothing was stored.")
+    writeFileSync(
+      store.path,
+      JSON.stringify({
+        records: Array.from({ length: 4094 }, () => held.records[0]),
+        removals: [],
+      })
+    )
+    await expect(
+      prepareSecretImport(deps, WEB, entriesOf(manyValues(3)), ".env")
+    ).rejects.toThrow(importTooManyRecords("web", "dev"))
+    expect(importTooManyRecords("web", "dev")).toBe(
+      "web on dev would have more than 4096 secret records on this machine. Nothing was stored."
+    )
     // Nothing was ever sealed for a refused import.
     expect(signer).not.toHaveBeenCalled()
   }, 60_000)
@@ -217,7 +355,9 @@ describe("storing (contracts/import.md, Names and Limits; research R9)", () => {
 async function mockUp4() {
   const m = machine()
   expect(await m.zekno("init", "--name", "Ada")).toBe(0)
-  expect(await m.zekno("server", "add", "prod", "--local", "--home", tempDir("prod"))).toBe(0)
+  expect(
+    await m.zekno("server", "add", "prod", "--local", "--home", tempDir("prod"))
+  ).toBe(0)
   m.compose("services:\n  web:\n    image: example/web:1\n")
   expect(await m.zekno("link", "--app", "demo", "--server", "prod")).toBe(0)
   m.typing("https://api.example.test")
@@ -245,28 +385,43 @@ const SUMMARY = [
   "replaces\tAPI_URL",
   "left out\tPATH (zekno keeps this name), line 7 (not a valid name)",
 ]
-const STORED = ["Stored 4 values for demo on prod. They take effect on the next deploy.", ".env still holds them in plain text. Delete it, or keep it out of git."] as const
+const STORED = [
+  "Stored 4 values for demo on prod. They take effect on the next deploy.",
+  ".env still holds them in plain text. Delete it, or keep it out of git.",
+] as const
 
 describe("the command (contracts/import.md, mock-up 4)", () => {
   test("the sentences of contracts/import.md", () => {
     expect(importFor(".env", "demo", "prod")).toBe(".env, for demo on prod")
     expect(SAY_WHICH_FILE).toBe("Say which file: `zekno secret import <file>`.")
-    expect(nothingToImport(".env")).toBe("No value in .env can be stored, so nothing was stored.")
+    expect(nothingToImport(".env")).toBe(
+      "No value in .env can be stored, so nothing was stored."
+    )
     expect(storeQuestion(1)).toBe("Store 1 value? Values are never shown.")
     expect(storeQuestion(4)).toBe("Store 4 values? Values are never shown.")
-    expect(importNeedsYes(".env")).toBe("There is no terminal to ask on. Add `--yes` to store the values from .env.")
-    expect(importStored(1, "demo", "prod")).toBe("Stored 1 value for demo on prod. It takes effect on the next deploy.")
+    expect(importNeedsYes(".env")).toBe(
+      "There is no terminal to ask on. Add `--yes` to store the values from .env."
+    )
+    expect(importStored(1, "demo", "prod")).toBe(
+      "Stored 1 value for demo on prod. It takes effect on the next deploy."
+    )
     expect(importStored(4, "demo", "prod")).toBe(STORED[0])
-    expect(importStillThere(".env", 1)).toBe(".env still holds it in plain text. Delete it, or keep it out of git.")
+    expect(importStillThere(".env", 1)).toBe(
+      ".env still holds it in plain text. Delete it, or keep it out of git."
+    )
     expect(importStillThere(".env", 4)).toBe(STORED[1])
-    expect(HELP).toContain("  zekno secret set <NAME> [--app <app>] [--server <name>] [--stdin]\n  zekno secret import <file> [--app <app>] [--server <name>] [--yes]\n")
+    expect(HELP).toContain(
+      "  zekno secret set <NAME> [--app <app>] [--server <name>] [--stdin]\n  zekno secret import <file> [--app <app>] [--server <name>] [--yes]\n"
+    )
   })
 
   test("at a terminal: the summary, one question, then stored; the file byte for byte as it was", async () => {
     const { m, text } = await mockUp4()
     const asking = answering(m, [{ yes: true }])
     expect(await m.zekno("secret", "import", ".env")).toBe(0)
-    expect(asking.asked).toEqual([{ kind: "confirm", question: "Store 4 values? Values are never shown." }])
+    expect(asking.asked).toEqual([
+      { kind: "confirm", question: "Store 4 values? Values are never shown." },
+    ])
     expect(asking.lines).toEqual([
       ["note", ".env, for demo on prod"],
       ["gap"],
@@ -276,7 +431,12 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     ])
     expect(m.out).toEqual([...SUMMARY, ...STORED])
     expect(m.err).toEqual([])
-    expect((await listed(m, { app: "demo", server: "prod" })).sort()).toEqual(["API_URL\tversion 2", "DATABASE_URL\tversion 1", "SESSION_KEY\tversion 1", "STRIPE_KEY\tversion 1"])
+    expect((await listed(m, { app: "demo", server: "prod" })).sort()).toEqual([
+      "API_URL\tversion 2",
+      "DATABASE_URL\tversion 1",
+      "SESSION_KEY\tversion 1",
+      "STRIPE_KEY\tversion 1",
+    ])
     expect(readFileSync(join(m.project, ".env"), "utf8")).toBe(text)
   }, 30_000)
 
@@ -299,14 +459,37 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
 
   test("at a terminal with no app or server: the file is read first, then the server and the app are asked", async () => {
     const m = await ready()
-    expect(await m.zekno("server", "add", "staging", "--local", "--home", tempDir("staging"))).toBe(0)
+    expect(
+      await m.zekno(
+        "server",
+        "add",
+        "staging",
+        "--local",
+        "--home",
+        tempDir("staging")
+      )
+    ).toBe(0)
     m.typing("hello")
-    expect(await m.zekno("secret", "set", "GREETING", "--app", "web", "--server", "dev")).toBe(0)
+    expect(
+      await m.zekno(
+        "secret",
+        "set",
+        "GREETING",
+        "--app",
+        "web",
+        "--server",
+        "dev"
+      )
+    ).toBe(0)
     expect(await m.zekno("deploy", "--app", "web", "--server", "dev")).toBe(0)
     // A missing file and a bad line each stop before any question, and before the server is read.
     for (const [file, content, said] of [
       ["missing.env", undefined, "No file at missing.env."],
-      ["bad.env", `A=1\nB=${secret("b")}#x\n`, "bad.env, line 2: a # inside a value. Quote the value to keep it, or put a space before # to start a comment. Nothing was stored."],
+      [
+        "bad.env",
+        `A=1\nB=${secret("b")}#x\n`,
+        "bad.env, line 2: a # inside a value. Quote the value to keep it, or put a space before # to start a comment. Nothing was stored.",
+      ],
     ] as const) {
       if (content !== undefined) writeFileSync(join(m.project, file), content)
       const asking = answering(m, [])
@@ -316,10 +499,21 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
       expect(m.err.slice(before)).toEqual([said])
     }
     writeFileSync(join(m.project, ".env"), `NEW_ONE=${secret("new")}\n`)
-    const asking = answering(m, [{ choose: "dev" }, { choose: "web" }, { yes: true }])
+    const asking = answering(m, [
+      { choose: "dev" },
+      { choose: "web" },
+      { yes: true },
+    ])
     expect(await m.zekno("secret", "import", ".env")).toBe(0)
-    expect(asking.asked.map((question) => question.question)).toEqual(["Which server?", "Which app on dev?", "Store 1 value? Values are never shown."])
-    expect(m.out.slice(-2)).toEqual(["Stored 1 value for web on dev. It takes effect on the next deploy.", ".env still holds it in plain text. Delete it, or keep it out of git."])
+    expect(asking.asked.map((question) => question.question)).toEqual([
+      "Which server?",
+      "Which app on dev?",
+      "Store 1 value? Values are never shown.",
+    ])
+    expect(m.out.slice(-2)).toEqual([
+      "Stored 1 value for web on dev. It takes effect on the next deploy.",
+      ".env still holds it in plain text. Delete it, or keep it out of git.",
+    ])
   }, 60_000)
 
   test("through the stand-in terminal: mock-up 4, line for line", async () => {
@@ -327,7 +521,9 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     const plain = m.deps.ui
     const t = terminal()
     m.deps.ui = t.ui
-    const done = m.zekno("secret", "import", ".env").finally(() => (m.deps.ui = plain))
+    const done = m
+      .zekno("secret", "import", ".env")
+      .finally(() => (m.deps.ui = plain))
     await shows(t, "? Store 4 values? Values are never shown. (y/N)", 20_000)
     expect(t.screen().slice(0, 7)).toEqual([
       "  .env, for demo on prod",
@@ -364,25 +560,40 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     const plain = m.deps.ui
     const t = terminal()
     m.deps.ui = t.ui
-    const done = m.zekno("secret", "import", ".env").finally(() => (m.deps.ui = plain))
+    const done = m
+      .zekno("secret", "import", ".env")
+      .finally(() => (m.deps.ui = plain))
     await shows(t, "? Store 4 values? Values are never shown. (y/N)", 20_000)
     t.keys("\x1b")
     expect(await done).toBe(1)
     await t.ui.close()
-    expect(t.lines().slice(-2)).toEqual(["? Store 4 values? Values are never shown. (y/N) no", "✖ Nothing was done."])
+    expect(t.lines().slice(-2)).toEqual([
+      "? Store 4 values? Values are never shown. (y/N) no",
+      "✖ Nothing was done.",
+    ])
     expect(readFileSync(store.path).equals(before)).toBe(true)
     expect(t.raw()).not.toContain(SENTINEL)
   }, 60_000)
 
   test("through the stand-in terminal: a bad line is named by its number, its first sentence after ✖ and the rest under it", async () => {
     const { m } = await mockUp4()
-    writeFileSync(join(m.project, ".env"), `A=1\nB=2\nC=3\nD=4\nE=5\nF=6\nnot a line ${SENTINEL}\n`)
+    writeFileSync(
+      join(m.project, ".env"),
+      `A=1\nB=2\nC=3\nD=4\nE=5\nF=6\nnot a line ${SENTINEL}\n`
+    )
     const plain = m.deps.ui
     const t = terminal()
     m.deps.ui = t.ui
-    expect(await m.zekno("secret", "import", ".env").finally(() => (m.deps.ui = plain))).toBe(1)
+    expect(
+      await m
+        .zekno("secret", "import", ".env")
+        .finally(() => (m.deps.ui = plain))
+    ).toBe(1)
     await t.ui.close()
-    expect(t.lines()).toEqual(["✖ .env, line 7: this is not a NAME=value line.", "  Nothing was stored."])
+    expect(t.lines()).toEqual([
+      "✖ .env, line 7: this is not a NAME=value line.",
+      "  Nothing was stored.",
+    ])
     expect(t.raw()).not.toContain(SENTINEL)
   }, 30_000)
 
@@ -392,7 +603,9 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     const before = readFileSync(store.path)
     expect(await m.zekno("secret", "import", ".env")).toBe(1)
     expect(m.out).toEqual(SUMMARY)
-    expect(m.err).toEqual(["There is no terminal to ask on. Add `--yes` to store the values from .env."])
+    expect(m.err).toEqual([
+      "There is no terminal to ask on. Add `--yes` to store the values from .env.",
+    ])
     expect(readFileSync(store.path).equals(before)).toBe(true)
     m.out.length = 0
     m.err.length = 0
@@ -406,20 +619,54 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     expect(await m.zekno("secret", "import")).toBe(2)
     expect(m.lastErr()).toBe(SAY_WHICH_FILE + HELP_LINE)
     expect(await m.zekno("secret", "import", ".env", "extra")).toBe(2)
-    expect(m.lastErr()).toBe('Unexpected "extra" after `zekno secret import`.' + HELP_LINE)
+    expect(m.lastErr()).toBe(
+      'Unexpected "extra" after `zekno secret import`.' + HELP_LINE
+    )
     writeFileSync(join(m.project, ".env"), `ONE=${secret("one")}\n`)
-    expect(await m.zekno("secret", "import", ".env", "--server", "dev", "--yes")).toBe(2)
+    expect(
+      await m.zekno("secret", "import", ".env", "--server", "dev", "--yes")
+    ).toBe(2)
     expect(m.lastErr()).toBe(MISSING_APP + HELP_LINE)
 
-    writeFileSync(join(m.project, "out.env"), `PATH=${secret("path")}\nmy-var=${secret("var")}\nEMPTY=\n`)
+    writeFileSync(
+      join(m.project, "out.env"),
+      `PATH=${secret("path")}\nmy-var=${secret("var")}\nEMPTY=\n`
+    )
     m.out.length = 0
-    expect(await m.zekno("secret", "import", "out.env", "--app", "web", "--server", "dev", "--yes")).toBe(1)
-    expect(m.out).toEqual(["out.env, for web on dev", "left out\tPATH (zekno keeps this name), line 2 (not a valid name), line 3 (empty)"])
-    expect(m.lastErr()).toBe("No value in out.env can be stored, so nothing was stored.")
+    expect(
+      await m.zekno(
+        "secret",
+        "import",
+        "out.env",
+        "--app",
+        "web",
+        "--server",
+        "dev",
+        "--yes"
+      )
+    ).toBe(1)
+    expect(m.out).toEqual([
+      "out.env, for web on dev",
+      "left out\tPATH (zekno keeps this name), line 2 (not a valid name), line 3 (empty)",
+    ])
+    expect(m.lastErr()).toBe(
+      "No value in out.env can be stored, so nothing was stored."
+    )
     expect(existsSync(storeOf(m).path)).toBe(false)
 
     m.out.length = 0
-    expect(await m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(
+      await m.zekno(
+        "secret",
+        "import",
+        ".env",
+        "--app",
+        "web",
+        "--server",
+        "dev",
+        "--yes"
+      )
+    ).toBe(0)
     expect(m.out).toEqual([
       ".env, for web on dev",
       "new\tONE",
@@ -434,7 +681,10 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     writeFileSync(join(m.project, "twenty.env"), text)
     const spawned: string[] = []
     const spawn = Bun.spawn
-    const spy = spyOn(Bun, "spawn").mockImplementation(((argv: string[], options: never) => {
+    const spy = spyOn(Bun, "spawn").mockImplementation(((
+      argv: string[],
+      options: never
+    ) => {
       spawned.push(JSON.stringify(argv), JSON.stringify(options ?? {}))
       return spawn(argv, options)
     }) as never)
@@ -443,7 +693,10 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     m.deps.ui = {
       ...plain,
       info: (line) => (drawn.push(line), plain.info(line)),
-      success: (line, detail, options) => (drawn.push(line), plain.success(line, detail, options)),
+      success: (line, detail, options) => (
+        drawn.push(line),
+        plain.success(line, detail, options)
+      ),
       warn: (line, options) => (drawn.push(line), plain.warn(line, options)),
       error: (line) => (drawn.push(line), plain.error(line)),
       note: (line) => (drawn.push(line), plain.note(line)),
@@ -455,15 +708,26 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     } finally {
       spy.mockRestore()
     }
-    expect(asking.asked).toEqual([{ kind: "confirm", question: "Store 20 values? Values are never shown." }])
+    expect(asking.asked).toEqual([
+      { kind: "confirm", question: "Store 20 values? Values are never shown." },
+    ])
     const versions = await listed(m, { app: "demo", server: "prod" })
     expect(versions.filter((line) => line.startsWith("VALUE_")).length).toBe(20)
-    expect(versions.filter((line) => line.startsWith("VALUE_")).every((line) => line.endsWith("\tversion 1"))).toBe(true)
+    expect(
+      versions
+        .filter((line) => line.startsWith("VALUE_"))
+        .every((line) => line.endsWith("\tversion 1"))
+    ).toBe(true)
     // Nowhere: standard output and error, every line drawn, every file of the profile and project folders but the
     // import file itself, and every process started with its arguments and environment.
-    for (const where of [m.out, m.err, drawn, spawned]) expect(where.filter((line) => line.includes(SENTINEL))).toEqual([])
+    for (const where of [m.out, m.err, drawn, spawned])
+      expect(where.filter((line) => line.includes(SENTINEL))).toEqual([])
     expect(holding(m.home)).toEqual([])
-    expect(holding(m.project).map((file) => file.path.split("/").at(-1)).sort()).toEqual([".env", "twenty.env"])
+    expect(
+      holding(m.project)
+        .map((file) => file.path.split("/").at(-1))
+        .sort()
+    ).toEqual([".env", "twenty.env"])
     expect(readFileSync(join(m.project, "twenty.env"), "utf8")).toBe(text)
   }, 60_000)
 
@@ -471,9 +735,16 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
     const m = await ready()
     // The review's file: line 2 is the last piece of GOOGLE_CREDENTIALS's value, line 4 the last piece of API_TOKEN's.
     const FIRST = "c2VydmljZS1hY2NvdW50LWtleS1hYmNkZWYxMjM0NTY3ODkw"
-    const PIECES = ["QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo1Ng", "dG9wc2VjcmV0dG9rZW4xMjM0NTY3ODkwYWJj", "c2VjcmV0LXdyYXBwZWQ"]
+    const PIECES = [
+      "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo1Ng",
+      "dG9wc2VjcmV0dG9rZW4xMjM0NTY3ODkwYWJj",
+      "c2VjcmV0LXdyYXBwZWQ",
+    ]
     const REVIEW = `GOOGLE_CREDENTIALS=${FIRST}\n${PIECES[0]}==\nAPI_TOKEN=x\n${PIECES[1]}=\n`
-    const nowhere = (lines: readonly string[]) => expect(lines.filter((line) => PIECES.some((piece) => line.includes(piece)))).toEqual([])
+    const nowhere = (lines: readonly string[]) =>
+      expect(
+        lines.filter((line) => PIECES.some((piece) => line.includes(piece)))
+      ).toEqual([])
     const plain = m.deps.ui
     const drawn: string[] = []
     const atTerminal = async (...args: string[]) => {
@@ -488,19 +759,60 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
 
     // Line 2 begins with `=` after its key: the whole import stops there, by the line's number, and nothing is stored.
     writeFileSync(join(m.project, ".env"), REVIEW)
-    expect(await m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toBe(1)
+    expect(
+      await m.zekno(
+        "secret",
+        "import",
+        ".env",
+        "--app",
+        "web",
+        "--server",
+        "dev",
+        "--yes"
+      )
+    ).toBe(1)
     expect(m.out.slice(out)).toEqual([])
-    expect(m.err.slice(err)).toEqual([".env, line 2: this is not a NAME=value line. Nothing was stored."])
-    expect(await atTerminal("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toEqual({
+    expect(m.err.slice(err)).toEqual([
+      ".env, line 2: this is not a NAME=value line. Nothing was stored.",
+    ])
+    expect(
+      await atTerminal(
+        "secret",
+        "import",
+        ".env",
+        "--app",
+        "web",
+        "--server",
+        "dev",
+        "--yes"
+      )
+    ).toEqual({
       code: 1,
-      lines: ["✖ .env, line 2: this is not a NAME=value line.", "  Nothing was stored."],
+      lines: [
+        "✖ .env, line 2: this is not a NAME=value line.",
+        "  Nothing was stored.",
+      ],
     })
     expect(existsSync(storeOf(m).path)).toBe(false)
 
     // Without line 2, the pieces left are left out by their line only: one read as an empty value, one as a name that does not fit.
-    writeFileSync(join(m.project, ".env"), `GOOGLE_CREDENTIALS=${FIRST}\n# wrapped\nAPI_TOKEN=x\n${PIECES[1]}=\nOTHER=y\n${PIECES[2]}-Zg=x\n`)
+    writeFileSync(
+      join(m.project, ".env"),
+      `GOOGLE_CREDENTIALS=${FIRST}\n# wrapped\nAPI_TOKEN=x\n${PIECES[1]}=\nOTHER=y\n${PIECES[2]}-Zg=x\n`
+    )
     const shown = m.out.length
-    expect(await m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(
+      await m.zekno(
+        "secret",
+        "import",
+        ".env",
+        "--app",
+        "web",
+        "--server",
+        "dev",
+        "--yes"
+      )
+    ).toBe(0)
     expect(m.out.slice(shown)).toEqual([
       ".env, for web on dev",
       "new\tGOOGLE_CREDENTIALS, API_TOKEN, OTHER",
@@ -508,12 +820,27 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
       "Stored 3 values for web on dev. They take effect on the next deploy.",
       ".env still holds them in plain text. Delete it, or keep it out of git.",
     ])
-    const screen = await atTerminal("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")
+    const screen = await atTerminal(
+      "secret",
+      "import",
+      ".env",
+      "--app",
+      "web",
+      "--server",
+      "dev",
+      "--yes"
+    )
     expect(screen.code).toBe(0)
-    expect(screen.lines).toContain("  left out    line 4 (empty), line 6 (not a valid name)")
+    expect(screen.lines).toContain(
+      "  left out    line 4 (empty), line 6 (not a valid name)"
+    )
 
     // The names stored are the three real ones; no piece is a name, a line, an error or a file in plain text.
-    expect((await listed(m)).sort()).toEqual(["API_TOKEN\tversion 2", "GOOGLE_CREDENTIALS\tversion 2", "OTHER\tversion 2"])
+    expect((await listed(m)).sort()).toEqual([
+      "API_TOKEN\tversion 2",
+      "GOOGLE_CREDENTIALS\tversion 2",
+      "OTHER\tversion 2",
+    ])
     nowhere([...m.out, ...m.err, ...drawn])
     nowhere(filesUnder(m.home).map((file) => file.content))
   }, 60_000)
@@ -521,7 +848,10 @@ describe("the command (contracts/import.md, mock-up 4)", () => {
   test("no value in any error: a bad line, a limit, a failed write", async () => {
     const { m } = await mockUp4()
     const lines: string[] = []
-    writeFileSync(join(m.project, "bad.env"), `GOOD=${secret("good")}\nBAD="${secret("bad")}\\q"\n`)
+    writeFileSync(
+      join(m.project, "bad.env"),
+      `GOOD=${secret("good")}\nBAD="${secret("bad")}\\q"\n`
+    )
     expect(await m.zekno("secret", "import", "bad.env", "--yes")).toBe(1)
     writeFileSync(join(m.project, "many.env"), manyValues(257))
     expect(await m.zekno("secret", "import", "many.env", "--yes")).toBe(1)
@@ -559,7 +889,18 @@ describe("an import file that is a link (security review S4, specs/008-cli-decis
   test("a link inside the folder to a file outside it: I1 names the real path of the file read, in plain output and at a terminal; I18 the path as typed; no value anywhere", async () => {
     const { m, target, text, real } = await linked()
     const [out, err] = [m.out.length, m.err.length]
-    expect(await m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(
+      await m.zekno(
+        "secret",
+        "import",
+        ".env",
+        "--app",
+        "web",
+        "--server",
+        "dev",
+        "--yes"
+      )
+    ).toBe(0)
     expect(m.out.slice(out)).toEqual([
       `.env (a link to ${real}), for web on dev`,
       "new\tOTHER_PROJECT_TOKEN",
@@ -572,20 +913,34 @@ describe("an import file that is a link (security review S4, specs/008-cli-decis
     const plain = m.deps.ui
     const t = terminal(300)
     m.deps.ui = t.ui
-    const done = m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev").finally(() => (m.deps.ui = plain))
+    const done = m
+      .zekno("secret", "import", ".env", "--app", "web", "--server", "dev")
+      .finally(() => (m.deps.ui = plain))
     await shows(t, "? Store 1 value? Values are never shown. (y/N)", 20_000)
-    expect(t.screen().slice(0, 5)).toEqual([`  .env (a link to ${real}), for web on dev`, "", "  replaces    OTHER_PROJECT_TOKEN", "", "? Store 1 value? Values are never shown. (y/N)"])
+    expect(t.screen().slice(0, 5)).toEqual([
+      `  .env (a link to ${real}), for web on dev`,
+      "",
+      "  replaces    OTHER_PROJECT_TOKEN",
+      "",
+      "? Store 1 value? Values are never shown. (y/N)",
+    ])
     t.keys("y")
     expect(await done).toBe(0)
     await t.ui.close()
-    expect(t.lines().slice(-2)).toEqual(["✔ Stored 1 value for web on dev. It takes effect on the next deploy.", "  .env still holds it in plain text. Delete it, or keep it out of git."])
+    expect(t.lines().slice(-2)).toEqual([
+      "✔ Stored 1 value for web on dev. It takes effect on the next deploy.",
+      "  .env still holds it in plain text. Delete it, or keep it out of git.",
+    ])
 
     // The value is nowhere but sealed; the link and its file are as they were.
-    for (const where of [m.out, m.err, [t.raw()]]) expect(where.filter((line) => line.includes(SENTINEL))).toEqual([])
+    for (const where of [m.out, m.err, [t.raw()]])
+      expect(where.filter((line) => line.includes(SENTINEL))).toEqual([])
     expect(holding(m.home)).toEqual([])
     expect(lstatSync(join(m.project, ".env")).isSymbolicLink()).toBe(true)
     expect(readFileSync(target, "utf8")).toBe(text)
-    expect((await listed(m)).filter((line) => line.startsWith("OTHER_PROJECT_TOKEN"))).toEqual(["OTHER_PROJECT_TOKEN\tversion 2"])
+    expect(
+      (await listed(m)).filter((line) => line.startsWith("OTHER_PROJECT_TOKEN"))
+    ).toEqual(["OTHER_PROJECT_TOKEN\tversion 2"])
   }, 60_000)
 
   test("a link in a folder of the path (security review S5): config/.env, config a link to a folder elsewhere, is named, in plain output and at a terminal", async () => {
@@ -597,7 +952,18 @@ describe("an import file that is a link (security review S4, specs/008-cli-decis
     symlinkSync(outside, join(m.project, "config"))
     const real = realpathSync(join(outside, ".env"))
     const [out, err] = [m.out.length, m.err.length]
-    expect(await m.zekno("secret", "import", "config/.env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(
+      await m.zekno(
+        "secret",
+        "import",
+        "config/.env",
+        "--app",
+        "web",
+        "--server",
+        "dev",
+        "--yes"
+      )
+    ).toBe(0)
     expect(m.out.slice(out)).toEqual([
       `config/.env (a link to ${real}), for web on dev`,
       "new\tOTHER_TOKEN",
@@ -609,14 +975,31 @@ describe("an import file that is a link (security review S4, specs/008-cli-decis
     const plain = m.deps.ui
     const t = terminal(300)
     m.deps.ui = t.ui
-    const done = m.zekno("secret", "import", "config/.env", "--app", "web", "--server", "dev").finally(() => (m.deps.ui = plain))
+    const done = m
+      .zekno(
+        "secret",
+        "import",
+        "config/.env",
+        "--app",
+        "web",
+        "--server",
+        "dev"
+      )
+      .finally(() => (m.deps.ui = plain))
     await shows(t, "? Store 1 value? Values are never shown. (y/N)", 20_000)
-    expect(t.screen().slice(0, 3)).toEqual([`  config/.env (a link to ${real}), for web on dev`, "", "  replaces    OTHER_TOKEN"])
+    expect(t.screen().slice(0, 3)).toEqual([
+      `  config/.env (a link to ${real}), for web on dev`,
+      "",
+      "  replaces    OTHER_TOKEN",
+    ])
     t.keys("y")
     expect(await done).toBe(0)
     await t.ui.close()
-    expect(t.lines().at(-1)).toBe("  config/.env still holds it in plain text. Delete it, or keep it out of git.")
-    for (const where of [m.out, m.err, [t.raw()]]) expect(where.filter((line) => line.includes(SENTINEL))).toEqual([])
+    expect(t.lines().at(-1)).toBe(
+      "  config/.env still holds it in plain text. Delete it, or keep it out of git."
+    )
+    for (const where of [m.out, m.err, [t.raw()]])
+      expect(where.filter((line) => line.includes(SENTINEL))).toEqual([])
     expect(holding(m.home)).toEqual([])
     expect(readFileSync(join(outside, ".env"), "utf8")).toBe(text)
   }, 60_000)
@@ -626,7 +1009,18 @@ describe("an import file that is a link (security review S4, specs/008-cli-decis
     mkdirSync(join(m.project, "env"))
     writeFileSync(join(m.project, "env", "dev.env"), `ONE=${secret("one")}\n`)
     const out = m.out.length
-    expect(await m.zekno("secret", "import", "env/dev.env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(
+      await m.zekno(
+        "secret",
+        "import",
+        "env/dev.env",
+        "--app",
+        "web",
+        "--server",
+        "dev",
+        "--yes"
+      )
+    ).toBe(0)
     expect(m.out[out]).toBe("env/dev.env, for web on dev")
   }, 60_000)
 
@@ -634,7 +1028,18 @@ describe("an import file that is a link (security review S4, specs/008-cli-decis
     const { m, real } = await linked("ev\x1b]52;c;ZXZpbA==\x07il\x1b[2J")
     expect(real).toContain("\x1b")
     const out = m.out.length
-    expect(await m.zekno("secret", "import", ".env", "--app", "web", "--server", "dev", "--yes")).toBe(0)
+    expect(
+      await m.zekno(
+        "secret",
+        "import",
+        ".env",
+        "--app",
+        "web",
+        "--server",
+        "dev",
+        "--yes"
+      )
+    ).toBe(0)
     const first = m.out[out]!
     expect(first).toBe(`.env (a link to ${sanitize(real)}), for web on dev`)
     expect(first).not.toMatch(/[\x00-\x1f\x7f-\x9f]/)
@@ -648,11 +1053,26 @@ describe("an import file that is a link (security review S4, specs/008-cli-decis
     for (const [name, to, said] of [
       ["to-folder.env", outside, "to-folder.env is not a file."],
       ["to-pipe.env", pipe, "to-pipe.env is not a file."],
-      ["to-nothing.env", join(outside, "nothing-here"), "No file at to-nothing.env."],
+      [
+        "to-nothing.env",
+        join(outside, "nothing-here"),
+        "No file at to-nothing.env.",
+      ],
     ] as const) {
       symlinkSync(to, join(m.project, name))
       const [out, err] = [m.out.length, m.err.length]
-      expect(await m.zekno("secret", "import", name, "--app", "web", "--server", "dev", "--yes")).toBe(1)
+      expect(
+        await m.zekno(
+          "secret",
+          "import",
+          name,
+          "--app",
+          "web",
+          "--server",
+          "dev",
+          "--yes"
+        )
+      ).toBe(1)
       expect(m.out.slice(out)).toEqual([])
       expect(m.err.slice(err)).toEqual([said])
     }

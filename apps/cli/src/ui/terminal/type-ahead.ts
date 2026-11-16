@@ -18,7 +18,10 @@
 /** How long what arrives is thrown away. Far longer than a terminal takes to hand over what it holds. */
 export const TYPED_AHEAD_MS = 50
 
-type Input = Pick<NodeJS.ReadStream, "isTTY" | "on" | "removeListener" | "read"> & {
+type Input = Pick<
+  NodeJS.ReadStream,
+  "isTTY" | "on" | "removeListener" | "read"
+> & {
   isRaw?: boolean
   setRawMode?: (mode: boolean) => unknown
   ref?: () => unknown
@@ -30,7 +33,10 @@ type Input = Pick<NodeJS.ReadStream, "isTTY" | "on" | "removeListener" | "read">
  * next `ms`. Raw mode is put back as it was, and nothing is left listening.
  * Does nothing where the input is not a terminal.
  */
-export async function discardTypedAhead(input: Input = process.stdin, ms = TYPED_AHEAD_MS): Promise<void> {
+export async function discardTypedAhead(
+  input: Input = process.stdin,
+  ms = TYPED_AHEAD_MS
+): Promise<void> {
   if (!input.isTTY || typeof input.setRawMode !== "function") return
   const wasRaw = input.isRaw === true
   const drop = () => {

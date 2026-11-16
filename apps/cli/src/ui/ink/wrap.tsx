@@ -16,7 +16,14 @@ import { Box, Text } from "ink"
  * A run of words in one look. `keep`: never broken at, such as the cursor of
  * a typed answer, which is drawn as a space.
  */
-export type Piece = { text: string; bold?: boolean; dim?: boolean; color?: string; inverse?: boolean; keep?: boolean }
+export type Piece = {
+  text: string
+  bold?: boolean
+  dim?: boolean
+  color?: string
+  inverse?: boolean
+  keep?: boolean
+}
 
 /** One character of the words, with the piece it came from. */
 type Char = { char: string; width: number; piece: number }
@@ -31,7 +38,10 @@ const columnsOf = (char: string): number => Bun.stringWidth(char)
  * where the line ends, as Ink does. A line break in the text starts a new
  * line. Spaces at the very start are kept.
  */
-export function wrapPieces(pieces: readonly Piece[], columns: number): Piece[][] {
+export function wrapPieces(
+  pieces: readonly Piece[],
+  columns: number
+): Piece[][] {
   const lines: Char[][] = [[]]
   let used = 0
   let spaces: Char[] = []
@@ -56,7 +66,10 @@ export function wrapPieces(pieces: readonly Piece[], columns: number): Piece[][]
       // unless starting on the next line saves a break. Otherwise the spaces before a word that does not fit are
       // where the line breaks: they are dropped, not carried over.
       const left = columns - used - room
-      const here = left > 0 ? 1 + Math.floor((wide - left - 1) / columns) : Number.POSITIVE_INFINITY
+      const here =
+        left > 0
+          ? 1 + Math.floor((wide - left - 1) / columns)
+          : Number.POSITIVE_INFINITY
       const next = Math.floor((wide - 1) / columns)
       if (wide > columns && here <= next) place(spaces)
       else newLine()
@@ -84,7 +97,11 @@ export function wrapPieces(pieces: readonly Piece[], columns: number): Piece[][]
   })
   endWord()
   // Spaces at the very end stay when they fit; nothing follows them to start a line with.
-  if (spaces.length > 0 && used + spaces.reduce((sum, char) => sum + char.width, 0) <= columns) place(spaces)
+  if (
+    spaces.length > 0 &&
+    used + spaces.reduce((sum, char) => sum + char.width, 0) <= columns
+  )
+    place(spaces)
   // Each line as runs of characters from one piece, in that piece's look.
   return lines.map((line) => {
     const runs: { piece: number; text: string }[] = []
@@ -100,7 +117,12 @@ export function wrapPieces(pieces: readonly Piece[], columns: number): Piece[][]
 /** One piece in its look. */
 function Styled({ piece }: { piece: Piece }) {
   return (
-    <Text bold={piece.bold === true} dimColor={piece.dim === true} color={piece.color} inverse={piece.inverse === true}>
+    <Text
+      bold={piece.bold === true}
+      dimColor={piece.dim === true}
+      color={piece.color}
+      inverse={piece.inverse === true}
+    >
       {piece.text}
     </Text>
   )
@@ -123,8 +145,15 @@ function Row({ line }: { line: readonly Piece[] }) {
  * Without a width, as when nothing tells the window's, they are drawn as one
  * text and left to Ink.
  */
-export function Wrapped({ pieces, columns }: { pieces: readonly Piece[]; columns: number | undefined }) {
-  if (columns === undefined || !Number.isFinite(columns) || columns <= 0) return <Row line={pieces} />
+export function Wrapped({
+  pieces,
+  columns,
+}: {
+  pieces: readonly Piece[]
+  columns: number | undefined
+}) {
+  if (columns === undefined || !Number.isFinite(columns) || columns <= 0)
+    return <Row line={pieces} />
   const lines = wrapPieces(pieces, columns)
   if (lines.length === 1) return <Row line={lines[0]!} />
   return (

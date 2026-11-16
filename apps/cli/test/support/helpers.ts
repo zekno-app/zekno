@@ -2,7 +2,11 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { fakeDocker, filesUnder, RUNNER_MAIN } from "../../../runner/test/support/helpers"
+import {
+  fakeDocker,
+  filesUnder,
+  RUNNER_MAIN,
+} from "../../../runner/test/support/helpers"
 import { run } from "../../src/cli/cli"
 import type { Deps } from "../../src/cli/context"
 import { Left } from "../../src/cli/errors"
@@ -13,7 +17,8 @@ import type { Ui } from "../../src/ui/types"
 
 export { filesUnder }
 
-export const COMPOSE_V1 = "services:\n  web:\n    image: example/web:1\n    environment:\n      - GREETING\n"
+export const COMPOSE_V1 =
+  "services:\n  web:\n    image: example/web:1\n    environment:\n      - GREETING\n"
 export const COMPOSE_V2 = COMPOSE_V1.replace("web:1", "web:2")
 
 /**
@@ -42,7 +47,8 @@ export function machine(options: { realDocker?: boolean } = {}) {
       ),
       askSecret: async () => {
         const answer = answers.shift()
-        if (answer === undefined) throw new Error("the test did not provide a secret value")
+        if (answer === undefined)
+          throw new Error("the test did not provide a secret value")
         return answer
       },
     },
@@ -63,11 +69,15 @@ export function machine(options: { realDocker?: boolean } = {}) {
     zekno: (...args: string[]) => run(args, deps),
     /** Queues the value the next `secret set` will read. */
     typing: (value: string) => void answers.push(value),
-    compose: (content: string, name = "compose.yaml") => writeFileSync(join(project, name), content),
+    compose: (content: string, name = "compose.yaml") =>
+      writeFileSync(join(project, name), content),
     /** Reads and rewrites one JSON file in the profile folder, as something other than zekno might. */
     tamper(file: string, change: (json: any) => unknown) {
       const path = join(home, file)
-      writeFileSync(path, JSON.stringify(change(JSON.parse(readFileSync(path, "utf8")))))
+      writeFileSync(
+        path,
+        JSON.stringify(change(JSON.parse(readFileSync(path, "utf8"))))
+      )
     },
     lastOut: () => out.at(-1) ?? "",
     lastErr: () => err.at(-1) ?? "",
@@ -132,17 +142,30 @@ export function screenOf(raw: string): string[] {
 /** A machine with a team, a connected local runner, and a Compose file. */
 export async function ready(options: { realDocker?: boolean } = {}) {
   const m = machine(options)
-  if ((await m.zekno("init", "--name", "Ada")) !== 0) throw new Error(m.lastErr())
-  if ((await m.zekno("server", "add", "dev", "--local")) !== 0) throw new Error(m.lastErr())
+  if ((await m.zekno("init", "--name", "Ada")) !== 0)
+    throw new Error(m.lastErr())
+  if ((await m.zekno("server", "add", "dev", "--local")) !== 0)
+    throw new Error(m.lastErr())
   m.compose(COMPOSE_V1)
   return m
 }
 
 /** One answer `answering` gives to the next question, in the order they are asked. */
-export type Answer = { choose: string } | { type: string } | { yes: boolean } | { value: string } | "skip" | "leave"
+export type Answer =
+  | { choose: string }
+  | { type: string }
+  | { yes: boolean }
+  | { value: string }
+  | "skip"
+  | "leave"
 
 /** A question as `answering` saw it: its kind, its words, the rows it offered (label and detail joined by a tab) and the value filled in. */
-export type Asked = { kind: "choose" | "ask" | "confirm" | "askValue"; question: string; rows?: string[]; fill?: string }
+export type Asked = {
+  kind: "choose" | "ask" | "confirm" | "askValue"
+  question: string
+  rows?: string[]
+  fill?: string
+}
 
 /**
  * A person at a terminal, for tests (specs/006-cli-small-features, research
@@ -164,28 +187,43 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
   const plain = m.deps.ui
   const next = (question: string): Answer => {
     const answer = queue.shift()
-    if (answer === undefined) throw new Error(`the test gave no answer for: ${question}`)
+    if (answer === undefined)
+      throw new Error(`the test gave no answer for: ${question}`)
     return answer
   }
-  const wrong = (question: string, answer: Answer): Error => new Error(`the test answered "${question}" with ${JSON.stringify(answer)}`)
+  const wrong = (question: string, answer: Answer): Error =>
+    new Error(`the test answered "${question}" with ${JSON.stringify(answer)}`)
   const ui: Ui = {
     ...plain,
     asks: true,
     async choose(question) {
-      asked.push({ kind: "choose", question: question.question, rows: question.rows.map((row) => (row.detail === undefined ? row.label : `${row.label}\t${row.detail}`)) })
+      asked.push({
+        kind: "choose",
+        question: question.question,
+        rows: question.rows.map((row) =>
+          row.detail === undefined ? row.label : `${row.label}\t${row.detail}`
+        ),
+      })
       const answer = next(question.question)
       if (answer === "leave") throw new Left()
-      if (typeof answer !== "object" || !("choose" in answer)) throw wrong(question.question, answer)
+      if (typeof answer !== "object" || !("choose" in answer))
+        throw wrong(question.question, answer)
       const row = question.rows.find((entry) => entry.label === answer.choose)
-      if (!row) throw new Error(`"${question.question}" offers no row ${answer.choose}`)
+      if (!row)
+        throw new Error(`"${question.question}" offers no row ${answer.choose}`)
       return row.value
     },
     async ask(question) {
-      asked.push({ kind: "ask", question: question.question, ...(question.fill === undefined ? {} : { fill: question.fill }) })
+      asked.push({
+        kind: "ask",
+        question: question.question,
+        ...(question.fill === undefined ? {} : { fill: question.fill }),
+      })
       for (;;) {
         const answer = next(question.question)
         if (answer === "leave") throw new Left()
-        if (typeof answer !== "object" || !("type" in answer)) throw wrong(question.question, answer)
+        if (typeof answer !== "object" || !("type" in answer))
+          throw wrong(question.question, answer)
         const reason = question.check(answer.type)
         if (reason === undefined) return answer.type
         refused.push({ answer: answer.type, reason })
@@ -198,7 +236,8 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
         if (options?.leave) throw new Left()
         return false
       }
-      if (typeof answer !== "object" || !("yes" in answer)) throw wrong(question, answer)
+      if (typeof answer !== "object" || !("yes" in answer))
+        throw wrong(question, answer)
       return answer.yes
     },
     async askValue(question) {
@@ -206,7 +245,8 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
       const answer = next(question)
       if (answer === "leave") throw new Left()
       if (answer === "skip") return undefined
-      if (typeof answer !== "object" || !("value" in answer)) throw wrong(question, answer)
+      if (typeof answer !== "object" || !("value" in answer))
+        throw wrong(question, answer)
       return answer.value
     },
     note(text) {
@@ -218,7 +258,10 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
       plain.code(label, value, about)
     },
     groups(rows) {
-      lines.push(["groups", ...rows.map(([label, text]) => `${label}\t${text}`)])
+      lines.push([
+        "groups",
+        ...rows.map(([label, text]) => `${label}\t${text}`),
+      ])
       plain.groups(rows)
     },
     gap() {
@@ -226,7 +269,11 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
       plain.gap()
     },
     doctorReport(report) {
-      lines.push(["doctorReport", `${report.problems} problems`, `${report.warnings} warnings`])
+      lines.push([
+        "doctorReport",
+        `${report.problems} problems`,
+        `${report.warnings} warnings`,
+      ])
       plain.doctorReport(report)
     },
   }

@@ -40,7 +40,9 @@ function normalizer(places: readonly (readonly [string, string])[]) {
     } catch {
       // Not there (any more): only the path as given can appear.
     }
-    return real === path ? [[path, name] as const] : [[real, name] as const, [path, name] as const]
+    return real === path
+      ? [[path, name] as const]
+      : [[real, name] as const, [path, name] as const]
   })
   pairs.sort((a, b) => b[0].length - a[0].length)
   return (text: string): string => {
@@ -68,7 +70,8 @@ function recorder(m: Machine, normalize: (text: string) => string) {
   let calls: string[] = []
   const typed: string[] = []
   const note = (line: string) => void calls.push(normalize(line))
-  const wrote = (stream: string, line: string) => void calls.push(`${stream}: ${normalize(line)}`)
+  const wrote = (stream: string, line: string) =>
+    void calls.push(`${stream}: ${normalize(line)}`)
   const plain = plainUi(
     (line) => wrote("out", line),
     (line) => wrote("err", line),
@@ -77,23 +80,37 @@ function recorder(m: Machine, normalize: (text: string) => string) {
   const wrapped = new Proxy(plain, {
     get(target, property, receiver) {
       const value = Reflect.get(target, property, receiver) as unknown
-      if (typeof value !== "function" || typeof property !== "string") return value
+      if (typeof value !== "function" || typeof property !== "string")
+        return value
       return (...args: unknown[]) => {
         if (property === "step") note(`ui.step ${String(args[0])}`)
-        else if (property === "askSecret") note(`ui.askSecret ${String(args[0])} ${String(args[1])}`)
+        else if (property === "askSecret")
+          note(`ui.askSecret ${String(args[0])} ${String(args[1])}`)
         else if (property === "confirm") note(`ui.confirm ${String(args[0])}`)
         else note(`ui.${property}`)
         if (property === "askSecret") {
           const value = typed.shift()
           if (value !== undefined) return Promise.resolve(value)
         }
-        const result = (value as (...rest: unknown[]) => unknown).apply(target, args)
+        const result = (value as (...rest: unknown[]) => unknown).apply(
+          target,
+          args
+        )
         if (property !== "deploy") return result
         const view = result as ReturnType<Ui["deploy"]>
         return {
-          stage: (stage: string, info: unknown) => (note(`deploy.stage ${stage}`), view.stage(stage as never, info as never)),
-          progress: (line: string) => (note(`deploy.progress ${line}`), view.progress(line)),
-          end: (ending: { outcome: string }) => (note(`deploy.end ${ending.outcome}`), view.end(ending as never)),
+          stage: (stage: string, info: unknown) => (
+            note(`deploy.stage ${stage}`),
+            view.stage(stage as never, info as never)
+          ),
+          progress: (line: string) => (
+            note(`deploy.progress ${line}`),
+            view.progress(line)
+          ),
+          end: (ending: { outcome: string }) => (
+            note(`deploy.end ${ending.outcome}`),
+            view.end(ending as never)
+          ),
         }
       }
     },
@@ -109,7 +126,10 @@ function recorder(m: Machine, normalize: (text: string) => string) {
     ...m.deps,
     keyStore: counted,
     ui: wrapped,
-    connect: (target, localRunner, options) => (note(`connect ${target.kind}${options?.batch ? " batch" : ""}`), connect(target, localRunner, options)),
+    connect: (target, localRunner, options) => (
+      note(`connect ${target.kind}${options?.batch ? " batch" : ""}`),
+      connect(target, localRunner, options)
+    ),
   }
   return {
     async run(step: Step): Promise<Transcript> {
@@ -124,8 +144,16 @@ function recorder(m: Machine, normalize: (text: string) => string) {
 const where = ["--app", "web", "--server", "dev"]
 
 /** Runs the steps on one machine, in order, and gives back what each did. */
-async function scene(m: Machine, steps: readonly Step[], extra: readonly (readonly [string, string])[] = []): Promise<Transcript[]> {
-  const normalize = normalizer([[m.home, "<home>"], [m.project, "<project>"], ...extra])
+async function scene(
+  m: Machine,
+  steps: readonly Step[],
+  extra: readonly (readonly [string, string])[] = []
+): Promise<Transcript[]> {
+  const normalize = normalizer([
+    [m.home, "<home>"],
+    [m.project, "<project>"],
+    ...extra,
+  ])
   const r = recorder(m, normalize)
   const records: Transcript[] = []
   for (const step of steps) records.push(await r.run(step))
@@ -204,9 +232,15 @@ export async function servers(): Promise<Transcript[]> {
   const m = machine()
   m.compose(COMPOSE_V1)
   const staging = tempDir("staging")
-  m.docker.ps("web", '{"Service":"web","State":"running","ExitCode":0,"Health":""}\n')
+  m.docker.ps(
+    "web",
+    '{"Service":"web","State":"running","ExitCode":0,"Health":""}\n'
+  )
   // A server's line with an escape sequence and a tab in it: plain output cleans it.
-  m.docker.logs("web", "web-1     | 2026-11-13T16:56:04.136118801Z \x1b[31mstarted\x1b[0m on\t8080\n")
+  m.docker.logs(
+    "web",
+    "web-1     | 2026-11-13T16:56:04.136118801Z \x1b[31mstarted\x1b[0m on\t8080\n"
+  )
   return scene(
     m,
     [
@@ -296,8 +330,14 @@ export async function servers(): Promise<Transcript[]> {
 export async function unsignedLink(): Promise<Transcript[]> {
   const m = machine()
   m.compose(COMPOSE_V1)
-  const setup = await scene(m, [s("init", "--name", "Ada"), s("server", "add", "dev", "--local")])
-  await Bun.write(join(m.project, "zekno.json"), `${JSON.stringify({ app: "web", server: "dev", compose: "compose.yaml" })}\n`)
+  const setup = await scene(m, [
+    s("init", "--name", "Ada"),
+    s("server", "add", "dev", "--local"),
+  ])
+  await Bun.write(
+    join(m.project, "zekno.json"),
+    `${JSON.stringify({ app: "web", server: "dev", compose: "compose.yaml" })}\n`
+  )
   return [
     ...setup,
     ...(await scene(m, [
@@ -322,7 +362,12 @@ export async function unsignedLink(): Promise<Transcript[]> {
 export async function signedElsewhere(): Promise<Transcript[]> {
   const m = machine()
   m.compose(COMPOSE_V1)
-  const first = await scene(m, [s("init", "--name", "Ada"), s("server", "add", "dev", "--local"), s("link", ...where), s("deploy")])
+  const first = await scene(m, [
+    s("init", "--name", "Ada"),
+    s("server", "add", "dev", "--local"),
+    s("link", ...where),
+    s("deploy"),
+  ])
   const other = await twin(m)
   other.deps.cwd = m.project
   return [
@@ -344,10 +389,19 @@ export async function signedElsewhere(): Promise<Transcript[]> {
         s("status"),
         s("secret", "ls"),
       ],
-      [[m.project, "<project>"], [m.home, "<first-home>"]]
+      [
+        [m.project, "<project>"],
+        [m.home, "<first-home>"],
+      ]
     )),
   ]
 }
 
 /** Every scene, by name. */
-export const SCENES = { noTeam, noServer, servers, unsignedLink, signedElsewhere } as const
+export const SCENES = {
+  noTeam,
+  noServer,
+  servers,
+  unsignedLink,
+  signedElsewhere,
+} as const

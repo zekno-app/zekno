@@ -57,7 +57,9 @@ const TOOLS = [
 
 /** How the real SHA-256 of a file is computed on this machine, for the stand-in `sha256sum`. */
 function realSha256(): string {
-  const sha256sum = Bun.which("sha256sum", { PATH: "/usr/bin:/bin:/sbin:/usr/sbin" })
+  const sha256sum = Bun.which("sha256sum", {
+    PATH: "/usr/bin:/bin:/sbin:/usr/sbin",
+  })
   if (sha256sum) return `exec "${sha256sum}" "$@"`
   const shasum = Bun.which("shasum", { PATH: "/usr/bin:/bin" })
   if (!shasum) throw new Error("this machine has neither sha256sum nor shasum")
@@ -71,7 +73,10 @@ const write = (path: string, text: string, mode = 0o755) => {
 
 /** A stand-in runner: answers `version` with `version`, and in `session` echoes each line it reads after saying `session`. */
 export function fakeRunner(version: string | undefined): string {
-  const versionLine = version === undefined ? "exit 2" : `printf '%s\\n' '{"version":"${version}","protocol":2}'`
+  const versionLine =
+    version === undefined
+      ? "exit 2"
+      : `printf '%s\\n' '{"version":"${version}","protocol":2}'`
   return `#!/bin/sh
 case $1 in
   version) ${versionLine} ;;
@@ -104,7 +109,11 @@ exec env ZEKNO_DOCKER="${docker}" "${process.execPath}" "${RUNNER_MAIN}" "$@"
  * CLI's request for its version, with `version` and `protocol`; the rest of
  * the session, and everything else, the runner of this repository does.
  */
-export function reportingRunner(docker: string, version: string, protocol: number): string {
+export function reportingRunner(
+  docker: string,
+  version: string,
+  protocol: number
+): string {
   const answer = JSON.stringify({ version, protocol })
   return `#!/bin/sh
 if [ "$1" = version ]; then printf '%s\\n' '${answer}'; exit 0; fi
@@ -145,7 +154,9 @@ esac
 
 /** The processes named in `pids` that are still running once `ms` have passed for them to go. */
 export async function stillRunning(pids: string, ms = 3000): Promise<number[]> {
-  const ids = existsSync(pids) ? readFileSync(pids, "utf8").trim().split("\n").filter(Boolean).map(Number) : []
+  const ids = existsSync(pids)
+    ? readFileSync(pids, "utf8").trim().split("\n").filter(Boolean).map(Number)
+    : []
   const alive = (pid: number) => {
     try {
       process.kill(pid, 0)
@@ -159,7 +170,8 @@ export async function stillRunning(pids: string, ms = 3000): Promise<number[]> {
   return ids.filter(alive)
 }
 
-export const sha256 = (bytes: Uint8Array | string): string => new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
+export const sha256 = (bytes: Uint8Array | string): string =>
+  new Bun.CryptoHasher("sha256").update(bytes).digest("hex")
 
 /**
  * Every entry under `root`, with its bytes (as a hash) and its mode, a link
@@ -177,11 +189,15 @@ export function snapshot(root: string): string[] {
       const relative = path.slice(root.length)
       if (/^\/state\/(.*\.log|wget\.urls)$/.test(relative)) continue
       const stat = lstatSync(path)
-      if (stat.isSymbolicLink()) entries.push(`${relative} -> ${readlinkSync(path)}`)
+      if (stat.isSymbolicLink())
+        entries.push(`${relative} -> ${readlinkSync(path)}`)
       else if (stat.isDirectory()) {
         entries.push(`${relative}/ ${(stat.mode & 0o7777).toString(8)}`)
         walk(path)
-      } else entries.push(`${relative} ${(stat.mode & 0o7777).toString(8)} ${sha256(readFileSync(path))}`)
+      } else
+        entries.push(
+          `${relative} ${(stat.mode & 0o7777).toString(8)} ${sha256(readFileSync(path))}`
+        )
     }
   }
   walk(root)
@@ -265,7 +281,10 @@ function standInFile(name: string): string {
   if (!sharedStandIns) {
     sharedStandIns = tempDir("stand-ins")
     for (const [tool, text] of Object.entries(STAND_IN_TEXT)) {
-      write(join(sharedStandIns, tool), `#!/bin/sh\nstate=$(dirname "$0")/../state\n${text}`)
+      write(
+        join(sharedStandIns, tool),
+        `#!/bin/sh\nstate=$(dirname "$0")/../state\n${text}`
+      )
     }
   }
   return join(sharedStandIns, name)
@@ -291,7 +310,8 @@ export function standInServer() {
   const tools = join(root, "tools")
   const state = join(root, "state")
   const tmp = join(root, "tmp")
-  for (const dir of [home, standIns, tools, state, tmp]) mkdirSync(dir, { recursive: true })
+  for (const dir of [home, standIns, tools, state, tmp])
+    mkdirSync(dir, { recursive: true })
   for (const tool of TOOLS) {
     const real = Bun.which(tool, { PATH: "/bin:/usr/bin" })
     if (!real) throw new Error(`this machine has no ${tool}`)
@@ -300,13 +320,25 @@ export function standInServer() {
   const at = (name: string) => join(state, name)
 
   // `df`, `getconf` and `ldd` are off: a server without them, until a test gives an answer.
-  for (const name of ["uname", "id", "sha256sum", "docker", "curl", "wget"]) placeStandIn(standIns, name)
+  for (const name of ["uname", "id", "sha256sum", "docker", "curl", "wget"])
+    placeStandIn(standIns, name)
   write(at("uname"), "Linux x86_64\n", 0o644)
   write(at("fetch"), "ok\n", 0o644)
-  writeFileSync(at("evil.gz"), Bun.gzipSync(new TextEncoder().encode(fakeRunner("6.6.6"))))
+  writeFileSync(
+    at("evil.gz"),
+    Bun.gzipSync(new TextEncoder().encode(fakeRunner("6.6.6")))
+  )
 
-  const env = (): Record<string, string> => ({ HOME: home, PATH: `${standIns}:${tools}`, TMPDIR: tmp, LC_ALL: "C" })
-  const lines = (file: string) => (existsSync(at(file)) ? readFileSync(at(file), "utf8").trim().split("\n").filter(Boolean) : [])
+  const env = (): Record<string, string> => ({
+    HOME: home,
+    PATH: `${standIns}:${tools}`,
+    TMPDIR: tmp,
+    LC_ALL: "C",
+  })
+  const lines = (file: string) =>
+    existsSync(at(file))
+      ? readFileSync(at(file), "utf8").trim().split("\n").filter(Boolean)
+      : []
 
   const server = {
     root,
@@ -319,7 +351,10 @@ export function standInServer() {
     folder: join(home, ".local", "state", "zekno"),
     /** The file a download yields, gzip-compressed; returns the SHA-256 of what it unpacks to. */
     release(content: string): string {
-      writeFileSync(at("release.gz"), Bun.gzipSync(new TextEncoder().encode(content)))
+      writeFileSync(
+        at("release.gz"),
+        Bun.gzipSync(new TextEncoder().encode(content))
+      )
       return sha256(content)
     },
     /** The file a download yields, as it is: for a `.gz` the test made itself. */
@@ -339,7 +374,10 @@ export function standInServer() {
     /** `ldd --version` prints this: on standard error with status 1, as musl's does, or on standard output, as glibc's does. */
     ldd(text: string, stream: "stderr" | "stdout" = "stderr") {
       rmSync(at("ldd.err"), { force: true })
-      writeFileSync(at(stream === "stderr" ? "ldd.err" : "ldd.out"), `${text}\n`)
+      writeFileSync(
+        at(stream === "stderr" ? "ldd.err" : "ldd.out"),
+        `${text}\n`
+      )
       placeStandIn(standIns, "ldd")
     },
     /** `ok`, `fail` or `redirect-http`. */
@@ -370,7 +408,9 @@ export function standInServer() {
     /** Anything the installer left behind: its temporary folders, and anything in TMPDIR. */
     leftovers(): string[] {
       const bin = join(home, ".local", "bin")
-      const inBin = existsSync(bin) ? readdirSync(bin).filter((name) => name.startsWith(".zekno-install.")) : []
+      const inBin = existsSync(bin)
+        ? readdirSync(bin).filter((name) => name.startsWith(".zekno-install."))
+        : []
       return [...inBin, ...readdirSync(tmp)]
     },
     mode: (path: string) => statSync(path).mode & 0o777,
@@ -385,15 +425,24 @@ export function standInServer() {
      */
     async run(
       words: readonly string[],
-      options: { shell?: string; file?: Uint8Array; afterDone?: string; env?: Record<string, string>; script?: string } = {}
+      options: {
+        shell?: string
+        file?: Uint8Array
+        afterDone?: string
+        env?: Record<string, string>
+        script?: string
+      } = {}
     ): Promise<ScriptRun> {
-      const child = Bun.spawn([options.shell ?? "/bin/sh", "-s", "--", ...words], {
-        stdin: "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
-        env: { ...env(), ...options.env },
-        cwd: home,
-      })
+      const child = Bun.spawn(
+        [options.shell ?? "/bin/sh", "-s", "--", ...words],
+        {
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...env(), ...options.env },
+          cwd: home,
+        }
+      )
       child.stdin.write(options.script ?? INSTALL_SCRIPT)
       await child.stdin.flush()
       const closedAtOnce = words[0] === "update" || options.script !== undefined
@@ -409,7 +458,9 @@ export function standInServer() {
         await child.stdin.end()
       }
       for await (const chunk of child.stdout) {
-        const parts = (rest + decoder.decode(chunk, { stream: true })).split("\n")
+        const parts = (rest + decoder.decode(chunk, { stream: true })).split(
+          "\n"
+        )
         rest = parts.pop() ?? ""
         for (const line of parts) {
           out.push(line)
@@ -417,7 +468,11 @@ export function standInServer() {
             child.stdin.write(options.file)
             await child.stdin.flush()
             await close()
-          } else if (line.startsWith("done ") && options.afterDone !== undefined && !closed) {
+          } else if (
+            line.startsWith("done ") &&
+            options.afterDone !== undefined &&
+            !closed
+          ) {
             child.stdin.write(options.afterDone)
             await child.stdin.flush()
             await close()
@@ -482,7 +537,10 @@ exec env -i HOME="${env.HOME}" PATH="${env.PATH}" TMPDIR="${env.TMPDIR}" LC_ALL=
   return {
     path,
     /** Each call, its arguments on one line. */
-    calls: () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").filter(Boolean) : []),
+    calls: () =>
+      existsSync(log)
+        ? readFileSync(log, "utf8").trim().split("\n").filter(Boolean)
+        : [],
     /** SSH would have to ask: batch mode fails, and a call without it goes ahead. */
     ask: () => writeFileSync(asks, ""),
     /** Without batch mode, the stand-in asks for a password on the terminal, and wants "open sesame". */
@@ -492,18 +550,28 @@ exec env -i HOME="${env.HOME}" PATH="${env.PATH}" TMPDIR="${env.TMPDIR}" LC_ALL=
      * password), without touching any terminal: a call without batch mode
      * fails as SSH does then. `false` answers it again.
      */
-    unanswered: (yes = true) => (yes ? writeFileSync(unanswered, "") : rmSync(unanswered, { force: true })),
+    unanswered: (yes = true) =>
+      yes ? writeFileSync(unanswered, "") : rmSync(unanswered, { force: true }),
     /** The host refuses connections: every call fails with SSH's own status, as SSH does then, asking nothing. */
     down: () => writeFileSync(down, ""),
   }
 }
 
 /** Makes `ssh` mean the stand-in for the length of `work`, as session.test.ts does. */
-export async function withSsh<T>(ssh: { path: string }, work: () => Promise<T>): Promise<T> {
+export async function withSsh<T>(
+  ssh: { path: string },
+  work: () => Promise<T>
+): Promise<T> {
   const { spyOn } = await import("bun:test")
   const spawn = Bun.spawn
-  const spy = spyOn(Bun, "spawn").mockImplementation(((argv: string[], options: never) =>
-    spawn(argv[0] === "ssh" ? [ssh.path, ...argv.slice(1)] : argv, options)) as never)
+  const spy = spyOn(Bun, "spawn").mockImplementation(((
+    argv: string[],
+    options: never
+  ) =>
+    spawn(
+      argv[0] === "ssh" ? [ssh.path, ...argv.slice(1)] : argv,
+      options
+    )) as never)
   try {
     return await work()
   } finally {

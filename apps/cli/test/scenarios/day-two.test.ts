@@ -14,7 +14,10 @@ describe("User Story 3: change, roll back and retire", () => {
     expect(await m.zekno("secret", "set", "GREETING", ...where)).toBe(0)
     expect(m.lastOut()).toContain("(version 2)")
     expect(await m.zekno("deploy", ...where)).toBe(0)
-    expect(m.docker.calls().map((call) => call.env.GREETING)).toEqual(["demo-first", "demo-second"])
+    expect(m.docker.calls().map((call) => call.env.GREETING)).toEqual([
+      "demo-first",
+      "demo-second",
+    ])
   })
 
   test("rollback deploys the earlier definition under the next number, with the current secrets", async () => {
@@ -31,12 +34,16 @@ describe("User Story 3: change, roll back and retire", () => {
     expect(m.lastOut()).toBe("Deploy 3 of web is running on dev with 1 secret.")
     const { readFileSync } = await import("node:fs")
     const { join } = await import("node:path")
-    expect(readFileSync(join(m.runnerHome, "apps/web/compose.yaml"), "utf8")).toBe(COMPOSE_V1)
+    expect(
+      readFileSync(join(m.runnerHome, "apps/web/compose.yaml"), "utf8")
+    ).toBe(COMPOSE_V1)
     expect(m.docker.calls().at(-1)!.env.GREETING).toBe("demo-second")
 
     // Rolling back to a named deploy, and to one that does not exist.
     expect(await m.zekno("rollback", ...where, "--to", "2")).toBe(0)
-    expect(readFileSync(join(m.runnerHome, "apps/web/compose.yaml"), "utf8")).toBe(COMPOSE_V2)
+    expect(
+      readFileSync(join(m.runnerHome, "apps/web/compose.yaml"), "utf8")
+    ).toBe(COMPOSE_V2)
     expect(await m.zekno("rollback", ...where, "--to", "99")).toBe(1)
     expect(m.lastErr()).toContain("No deploy numbered 99")
   })
@@ -89,10 +96,23 @@ describe("User Story 3: change, roll back and retire", () => {
     m.typing("demo-web")
     await m.zekno("secret", "set", "TOKEN", "--app", "web", "--server", "dev")
     m.typing("demo-worker")
-    await m.zekno("secret", "set", "TOKEN", "--app", "worker", "--server", "dev")
+    await m.zekno(
+      "secret",
+      "set",
+      "TOKEN",
+      "--app",
+      "worker",
+      "--server",
+      "dev"
+    )
     expect(await m.zekno("deploy", "--app", "web", "--server", "dev")).toBe(0)
-    expect(await m.zekno("deploy", "--app", "worker", "--server", "dev")).toBe(0)
+    expect(await m.zekno("deploy", "--app", "worker", "--server", "dev")).toBe(
+      0
+    )
     expect(m.lastOut()).toContain("Deploy 1 of worker")
-    expect(m.docker.calls().map((call) => call.env.TOKEN)).toEqual(["demo-web", "demo-worker"])
+    expect(m.docker.calls().map((call) => call.env.TOKEN)).toEqual([
+      "demo-web",
+      "demo-worker",
+    ])
   })
 })

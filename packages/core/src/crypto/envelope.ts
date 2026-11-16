@@ -18,7 +18,10 @@ export const PAYLOAD_TYPES = {
 export type PayloadType = (typeof PAYLOAD_TYPES)[keyof typeof PAYLOAD_TYPES]
 
 const base64Url = (maxBytes: number) =>
-  z.string().regex(/^[A-Za-z0-9_-]*$/).max(base64UrlLength(maxBytes))
+  z
+    .string()
+    .regex(/^[A-Za-z0-9_-]*$/)
+    .max(base64UrlLength(maxBytes))
 
 /**
  * Signed bytes and who signed them. `payload` is the exact bytes that were
@@ -36,7 +39,10 @@ export type Envelope = z.infer<typeof EnvelopeSchema>
 
 /** What is actually signed: a fixed tag, the kind, the length, then the payload. */
 function signingInput(payloadType: string, payload: Uint8Array): Uint8Array {
-  return concat(utf8(`zekno-sig-v1\n${payloadType}\n${payload.length}\n`), payload)
+  return concat(
+    utf8(`zekno-sig-v1\n${payloadType}\n${payload.length}\n`),
+    payload
+  )
 }
 
 /** Signs a payload and checks the signer really produced a signature for its stated key. */
@@ -46,7 +52,10 @@ export async function signEnvelope(
   signer: Signer
 ): Promise<Envelope> {
   if (payload.length > LIMITS.payloadBytes) {
-    throw new CoreError("too_large", "The content to sign is larger than the payload limit.")
+    throw new CoreError(
+      "too_large",
+      "The content to sign is larger than the payload limit."
+    )
   }
   const publicKey = decodeKey("memberPublic", signer.publicKey)
   const input = signingInput(payloadType, payload)
@@ -56,7 +65,10 @@ export async function signEnvelope(
     sig.length !== sodium.crypto_sign_BYTES ||
     !sodium.crypto_sign_verify_detached(sig, input, publicKey)
   ) {
-    throw new CoreError("signer_failed", "The signer did not produce a valid signature for its public key.")
+    throw new CoreError(
+      "signer_failed",
+      "The signer did not produce a valid signature for its public key."
+    )
   }
   return {
     payloadType,
@@ -88,7 +100,10 @@ export function readEnvelope(
     typeof candidate?.payload === "string" &&
     candidate.payload.length > base64UrlLength(LIMITS.payloadBytes)
   ) {
-    return refuse("too_large", "The signed content is larger than the payload limit.")
+    return refuse(
+      "too_large",
+      "The signed content is larger than the payload limit."
+    )
   }
   const parsed = EnvelopeSchema.safeParse(input)
   if (!parsed.success) return refuse("malformed", "Not a signed envelope.")
@@ -96,12 +111,16 @@ export function readEnvelope(
     return refuse("wrong_payload_type", `Expected a ${expectedType} envelope.`)
   }
   const payload = fromBase64Url(parsed.data.payload)
-  if (!payload) return refuse("malformed", "The signed content is not valid base64url.")
+  if (!payload)
+    return refuse("malformed", "The signed content is not valid base64url.")
   return ok({ envelope: parsed.data, payload })
 }
 
 /** True when `publicKey` signed exactly these bytes as this kind of message. */
-export function verifySignature(read: ReadEnvelope, publicKey: MemberPublicKey): boolean {
+export function verifySignature(
+  read: ReadEnvelope,
+  publicKey: MemberPublicKey
+): boolean {
   const sig = fromBase64Url(read.envelope.signature.sig)
   if (!sig || sig.length !== sodium.crypto_sign_BYTES) return false
   try {
@@ -123,11 +142,15 @@ export function openEnvelope(
   input: unknown,
   expectedType: PayloadType,
   resolveKey: (keyId: string) => MemberPublicKey | undefined
-): Result<ReadEnvelope & { readonly signerKey: MemberPublicKey }, EnvelopeRefusal> {
+): Result<
+  ReadEnvelope & { readonly signerKey: MemberPublicKey },
+  EnvelopeRefusal
+> {
   const read = readEnvelope(input, expectedType)
   if (!read.ok) return read
   const signerKey = resolveKey(read.value.envelope.signature.keyId)
-  if (!signerKey) return refuse("unknown_signer", "The signer is not a member of the team.")
+  if (!signerKey)
+    return refuse("unknown_signer", "The signer is not a member of the team.")
   if (!verifySignature(read.value, signerKey)) {
     return refuse("bad_signature", "The signature does not match the content.")
   }

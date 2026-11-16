@@ -5,7 +5,10 @@ import type { KeyHint } from "../../ui/parts/key-hints"
 import { Frame, Header, Trail } from "../frame"
 
 /** The board "Help", column by column: each group's heading and its keys. */
-export const HELP: readonly (readonly { heading: string; keys: readonly KeyHint[] }[])[] = [
+export const HELP: readonly (readonly {
+  heading: string
+  keys: readonly KeyHint[]
+}[])[] = [
   [
     {
       heading: "Move around",
@@ -76,17 +79,34 @@ const GAP = 3
  * left after the app's margins, the border, its padding and the gaps. Whole
  * columns, so text wraps inside its column and never runs into the next.
  */
-export const helpColumnWidth = (columns: number): number => Math.floor((columns - 2 - 2 - 2 - GAP * (HELP.length - 1)) / HELP.length)
+export const helpColumnWidth = (columns: number): number =>
+  Math.floor((columns - 2 - 2 - 2 - GAP * (HELP.length - 1)) / HELP.length)
 
 /** Every key of the app, grouped as on the board "Help". `esc` closes it. */
-export function HelpScreen({ columns, status }: { columns: number; status?: ReactNode }) {
+export function HelpScreen({
+  columns,
+  status,
+}: {
+  columns: number
+  status?: ReactNode
+}) {
   const width = helpColumnWidth(columns)
   return (
-    <Frame header={<Header place={<Trail parts={["help"]} />} />} hints={HELP_HINTS} status={status}>
+    <Frame
+      header={<Header place={<Trail parts={["help"]} />} />}
+      hints={HELP_HINTS}
+      status={status}
+    >
       <Box flexDirection="column" rowGap={1}>
         <Box borderStyle="round" borderDimColor paddingX={1} columnGap={GAP}>
           {HELP.map((column, index) => (
-            <Box key={index} flexDirection="column" width={width} flexShrink={0} rowGap={1}>
+            <Box
+              key={index}
+              flexDirection="column"
+              width={width}
+              flexShrink={0}
+              rowGap={1}
+            >
               {column.map((group) => (
                 <Box key={group.heading} flexDirection="column">
                   <Text bold dimColor>

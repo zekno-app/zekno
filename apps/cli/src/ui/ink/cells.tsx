@@ -15,18 +15,32 @@ const TONE = { success: "green", danger: "red", warning: "yellow" } as const
 export const drawnCell = (cell: Cell | undefined): string => {
   if (cell === undefined) return ""
   if (typeof cell === "string") return cell
-  return "mark" in cell ? `${cell.mark} ${cell.text}` : (cell.terminal ?? cell.text)
+  return "mark" in cell
+    ? `${cell.mark} ${cell.text}`
+    : (cell.terminal ?? cell.text)
 }
 
 /**
  * One cell in its look: a marked cell in its tone's colour, a styled cell
  * bold, faint or in the text colour, and a bare word as `bare` says.
  */
-export function CellText({ cell, text, bare }: { cell: Cell; text: string; bare: "plain" | "quiet" }) {
-  if (typeof cell === "string") return <Text dimColor={bare === "quiet"}>{text}</Text>
+export function CellText({
+  cell,
+  text,
+  bare,
+}: {
+  cell: Cell
+  text: string
+  bare: "plain" | "quiet"
+}) {
+  if (typeof cell === "string")
+    return <Text dimColor={bare === "quiet"}>{text}</Text>
   if ("mark" in cell) {
     return (
-      <Text color={cell.tone === "quiet" ? undefined : TONE[cell.tone]} dimColor={cell.tone === "quiet"}>
+      <Text
+        color={cell.tone === "quiet" ? undefined : TONE[cell.tone]}
+        dimColor={cell.tone === "quiet"}
+      >
         {text}
       </Text>
     )
@@ -46,7 +60,8 @@ export function CellText({ cell, text, bare }: { cell: Cell; text: string; bare:
 export function linePieces(cells: readonly Cell[]): Piece[] {
   return cells.flatMap((cell, index): Piece[] => {
     const piece = cellPieces(cell, drawnCell(cell), "plain")
-    const tight = typeof cell === "object" && "style" in cell && cell.tight === true
+    const tight =
+      typeof cell === "object" && "style" in cell && cell.tight === true
     return index > 0 && !tight ? [{ text: " " }, piece] : [piece]
   })
 }
@@ -54,6 +69,9 @@ export function linePieces(cells: readonly Cell[]): Piece[] {
 /** A cell as pieces in its look, as `CellText` draws it. */
 function cellPieces(cell: Cell, text: string, bare: "plain" | "quiet"): Piece {
   if (typeof cell === "string") return { text, dim: bare === "quiet" }
-  if ("mark" in cell) return cell.tone === "quiet" ? { text, dim: true } : { text, color: TONE[cell.tone] }
+  if ("mark" in cell)
+    return cell.tone === "quiet"
+      ? { text, dim: true }
+      : { text, color: TONE[cell.tone] }
   return { text, bold: cell.style === "strong", dim: cell.style === "quiet" }
 }

@@ -20,7 +20,11 @@ export function doctorJson(report: DoctorReport) {
     zekno: report.zekno,
     runner: report.runner,
     machine: report.machine.map(check),
-    servers: report.servers.map((server) => ({ name: server.name, where: server.where, checks: server.checks.map(check) })),
+    servers: report.servers.map((server) => ({
+      name: server.name,
+      where: server.where,
+      checks: server.checks.map(check),
+    })),
     serversSkipped: report.serversSkipped,
     latest: report.latest,
     problems: report.problems,
@@ -44,7 +48,9 @@ function stepLabel(home: string, server: string | undefined): string {
     servers = []
   }
   if (servers.length === 1) return `Checking ${servers[0]}`
-  return servers.length > 1 ? `Checking ${servers.length} servers` : "Checking this machine"
+  return servers.length > 1
+    ? `Checking ${servers.length} servers`
+    : "Checking this machine"
 }
 
 /**
@@ -53,8 +59,13 @@ function stepLabel(home: string, server: string | undefined): string {
  * It never asks anything and changes nothing. Exit status 0 when no check is
  * a problem, 1 otherwise: a warning does not fail it.
  */
-export async function doctor(deps: Deps, options: { server?: string; json?: boolean }): Promise<number> {
-  const report = await deps.ui.step(stepLabel(deps.home, options.server), () => runDoctor(deps, { server: options.server }))
+export async function doctor(
+  deps: Deps,
+  options: { server?: string; json?: boolean }
+): Promise<number> {
+  const report = await deps.ui.step(stepLabel(deps.home, options.server), () =>
+    runDoctor(deps, { server: options.server })
+  )
   if (options.json) deps.ui.json(doctorJson(report))
   else deps.ui.doctorReport(report)
   return report.problems === 0 ? 0 : 1

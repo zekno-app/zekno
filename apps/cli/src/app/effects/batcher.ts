@@ -28,7 +28,9 @@ export function batcher<T>(limit: number, handOn: (items: T[]) => void) {
     add(item: T): Promise<void> | undefined {
       items.push(item)
       timer ??= setTimeout(flush, LOG_BATCH_MS)
-      return items.length < limit ? undefined : new Promise((resolve) => waiting.push(resolve))
+      return items.length < limit
+        ? undefined
+        : new Promise((resolve) => waiting.push(resolve))
     },
     flush,
   }

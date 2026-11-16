@@ -13,17 +13,28 @@ import { openTeam, TAMPERED } from "../../src/cli/context"
 import { memoryKeyStore } from "../../src/profile/keystore"
 import { tilde } from "../../src/project/shown"
 import { openSession } from "../../src/server/session"
-import { connect, type ConnectOptions, type Target } from "../../src/server/transport"
+import {
+  connect,
+  type ConnectOptions,
+  type Target,
+} from "../../src/server/transport"
 import { machine, ready } from "../support/helpers"
 
 /** A runner that only writes to standard error, with a colour code and a screen clear in it, then says it does not know `session`. */
-const NOISY = ["sh", "-c", "printf 'Usage: zekno-runner \\033[31m<setup|sync|apply|status>\\033[0m\\n\\033[2Jagain' >&2; exit 2", "sh"]
+const NOISY = [
+  "sh",
+  "-c",
+  "printf 'Usage: zekno-runner \\033[31m<setup|sync|apply|status>\\033[0m\\n\\033[2Jagain' >&2; exit 2",
+  "sh",
+]
 
 describe("starting the app", () => {
   test("no profile is first run, and nothing is read from the keychain", async () => {
     const keyStore = memoryKeyStore()
     const get = spyOn(keyStore, "get")
-    expect(await loadStart({ home: tempDir("empty"), keyStore })).toEqual({ kind: "no-team" })
+    expect(await loadStart({ home: tempDir("empty"), keyStore })).toEqual({
+      kind: "no-team",
+    })
     expect(get).not.toHaveBeenCalled()
   })
 
@@ -32,7 +43,12 @@ describe("starting the app", () => {
     const team = await openTeam(m.deps)
     expect(await loadStart(m.deps)).toEqual({
       kind: "team",
-      team: { member: "Ada", version: 2, code: team.teamCode, servers: [{ name: "dev", destination: undefined, apps: [] }] },
+      team: {
+        member: "Ada",
+        version: 2,
+        code: team.teamCode,
+        servers: [{ name: "dev", destination: undefined, apps: [] }],
+      },
       // The verified team list a zekno.json here is judged against. It holds no key.
       trust: team.trust,
     })
@@ -41,19 +57,30 @@ describe("starting the app", () => {
   test("a name or address in the profile folder changed to hold escape sequences is a damaged profile, never drawn", async () => {
     // The member's name and a server's address are not signed: anything on this machine could change them.
     const changes: Record<string, (profile: any) => unknown> = {
-      memberName: (profile) => ({ ...profile, memberName: "\x1b]52;c;aGVsbG8=\x07Ada\x1b[2J" }),
+      memberName: (profile) => ({
+        ...profile,
+        memberName: "\x1b]52;c;aGVsbG8=\x07Ada\x1b[2J",
+      }),
       destination: (profile) => ({
         ...profile,
         servers: profile.servers.map((server: object) => ({
           ...server,
-          target: { kind: "ssh", destination: "x\x1b]8;;https://evil\x07y", runnerPath: "zekno-runner" },
+          target: {
+            kind: "ssh",
+            destination: "x\x1b]8;;https://evil\x07y",
+            runnerPath: "zekno-runner",
+          },
         })),
       }),
       runnerPath: (profile) => ({
         ...profile,
         servers: profile.servers.map((server: object) => ({
           ...server,
-          target: { kind: "ssh", destination: "deploy@203.0.113.7", runnerPath: "zekno-runner\x1b[2J" },
+          target: {
+            kind: "ssh",
+            destination: "deploy@203.0.113.7",
+            runnerPath: "zekno-runner\x1b[2J",
+          },
         })),
       }),
     }
@@ -62,7 +89,11 @@ describe("starting the app", () => {
       m.tamper("profile.json", change)
       expect({ field, start: await loadStart(m.deps) }).toEqual({
         field,
-        start: { kind: "profile-error", reason: `The profile at ${join(m.home, "profile.json")} is damaged.`, folder: tilde(m.home) },
+        start: {
+          kind: "profile-error",
+          reason: `The profile at ${join(m.home, "profile.json")} is damaged.`,
+          folder: tilde(m.home),
+        },
       })
     }
   })
@@ -77,14 +108,23 @@ describe("starting the app", () => {
       memberName: member,
       servers: profile.servers.map((server: object) => ({
         ...server,
-        target: { kind: "ssh", destination: "deploy@203.0.113.7", runnerPath: "zekno-runner" },
+        target: {
+          kind: "ssh",
+          destination: "deploy@203.0.113.7",
+          runnerPath: "zekno-runner",
+        },
       })),
     }))
     const start = await loadStart(m.deps)
     const team = await openTeam(m.deps)
     expect(start).toEqual({
       kind: "team",
-      team: { member: "Ada", version: 2, code: team.teamCode, servers: [{ name: "dev", destination: "deploy@203.0.113.7", apps: [] }] },
+      team: {
+        member: "Ada",
+        version: 2,
+        code: team.teamCode,
+        servers: [{ name: "dev", destination: "deploy@203.0.113.7", apps: [] }],
+      },
       trust: team.trust,
     })
     expect(member).not.toBe("Ada")
@@ -94,36 +134,52 @@ describe("starting the app", () => {
     const m = await ready()
     const other = machine()
     expect(await other.zekno("init", "--name", "Eve")).toBe(0)
-    const theirs = JSON.parse(await Bun.file(join(other.home, "profile.json")).text())
-    m.tamper("profile.json", (profile) => ({ ...profile, rosters: theirs.rosters }))
+    const theirs = JSON.parse(
+      await Bun.file(join(other.home, "profile.json")).text()
+    )
+    m.tamper("profile.json", (profile) => ({
+      ...profile,
+      rosters: theirs.rosters,
+    }))
     const start = await loadStart(m.deps)
     expect(start).toEqual({
       kind: "profile-error",
-      reason: "The team list in the profile is not the one this machine's key belongs to.",
+      reason:
+        "The team list in the profile is not the one this machine's key belongs to.",
       folder: tilde(m.home),
     })
     // The screen says in its own words that the folder may have been changed.
-    expect(start.kind === "profile-error" && start.reason).not.toContain(TAMPERED)
+    expect(start.kind === "profile-error" && start.reason).not.toContain(
+      TAMPERED
+    )
   })
 
   test("a profile whose key is not in the keychain, or that cannot be read, is the error screen", async () => {
     const m = await ready()
-    expect(await loadStart({ home: m.home, keyStore: memoryKeyStore() })).toMatchObject({
+    expect(
+      await loadStart({ home: m.home, keyStore: memoryKeyStore() })
+    ).toMatchObject({
       kind: "profile-error",
       reason: "The signing key is not in the system keychain on this machine.",
     })
     writeFileSync(join(m.home, "profile.json"), "{ not json")
     const damaged = await loadStart(m.deps)
     expect(damaged).toMatchObject({ kind: "profile-error" })
-    expect(damaged.kind === "profile-error" && damaged.reason).toContain("is not readable")
+    expect(damaged.kind === "profile-error" && damaged.reason).toContain(
+      "is not readable"
+    )
   })
 
   test("a keychain that refuses is the error screen with its reason", async () => {
     const m = await ready()
-    const keyStore = { ...memoryKeyStore(), get: async () => Promise.reject(new Error("denied")) }
+    const keyStore = {
+      ...memoryKeyStore(),
+      get: async () => Promise.reject(new Error("denied")),
+    }
     expect(await loadStart({ home: m.home, keyStore })).toMatchObject({
       kind: "profile-error",
-      reason: "The system keychain could not be read. The signing key is kept nowhere else.",
+      reason:
+        "The system keychain could not be read. The signing key is kept nowhere else.",
     })
   })
 
@@ -140,13 +196,20 @@ describe("what runners write on standard error, while the app is on screen", () 
     const lines: string[] = []
     const write = spyOn(process.stderr, "write")
     try {
-      const transport = connect({ kind: "local", home: tempDir("runner") }, NOISY, { errorLines: (line) => lines.push(line) })
+      const transport = connect(
+        { kind: "local", home: tempDir("runner") },
+        NOISY,
+        { errorLines: (line) => lines.push(line) }
+      )
       expect((await transport.run("status")).exitCode).toBe(2)
       expect(write).not.toHaveBeenCalled()
     } finally {
       write.mockRestore()
     }
-    expect(lines).toEqual(["Usage: zekno-runner <setup|sync|apply|status>", "again"])
+    expect(lines).toEqual([
+      "Usage: zekno-runner <setup|sync|apply|status>",
+      "again",
+    ])
   })
 
   test("a single command still writes it to standard error, cleaned, as before", async () => {
@@ -156,48 +219,81 @@ describe("what runners write on standard error, while the app is on screen", () 
       return true
     })
     try {
-      await connect({ kind: "local", home: tempDir("runner") }, NOISY).run("status")
+      await connect({ kind: "local", home: tempDir("runner") }, NOISY).run(
+        "status"
+      )
     } finally {
       write.mockRestore()
     }
-    expect(written).toEqual(["Usage: zekno-runner <setup|sync|apply|status>\n", "again\n"])
+    expect(written).toEqual([
+      "Usage: zekno-runner <setup|sync|apply|status>\n",
+      "again\n",
+    ])
   })
 
   test("the app's operations send it as events, also from a session", async () => {
     const events: AppEvent[] = []
-    const effects = createEffects(machine().deps, (event) => events.push(event), (error) => {
-      throw error
-    })
+    const effects = createEffects(
+      machine().deps,
+      (event) => events.push(event),
+      (error) => {
+        throw error
+      }
+    )
     const write = spyOn(process.stderr, "write")
     try {
-      const session = await openSession(effects.deps.connect({ kind: "local", home: tempDir("runner") }, NOISY))
+      const session = await openSession(
+        effects.deps.connect({ kind: "local", home: tempDir("runner") }, NOISY)
+      )
       expect(session.mode).toBe("one-shot")
       expect(write).not.toHaveBeenCalled()
     } finally {
       write.mockRestore()
     }
     expect(events).toEqual([
-      { type: "runner-line", line: "Usage: zekno-runner <setup|sync|apply|status>" },
+      {
+        type: "runner-line",
+        line: "Usage: zekno-runner <setup|sync|apply|status>",
+      },
       { type: "runner-line", line: "again" },
     ])
   })
 
   test("other options are kept when the callback is added", async () => {
     const seen: unknown[] = []
-    const recording = { ...machine().deps, connect: (target: Target, runner: string[], options?: ConnectOptions) => (seen.push(options), connect(target, runner, options)) }
+    const recording = {
+      ...machine().deps,
+      connect: (target: Target, runner: string[], options?: ConnectOptions) => (
+        seen.push(options),
+        connect(target, runner, options)
+      ),
+    }
     const deps = routeErrorLines(recording, () => {})
     deps.connect({ kind: "local", home: tempDir("runner") }, NOISY)
     expect(seen).toHaveLength(1)
-    expect(typeof (seen[0] as { errorLines?: unknown }).errorLines).toBe("function")
+    expect(typeof (seen[0] as { errorLines?: unknown }).errorLines).toBe(
+      "function"
+    )
   })
 
   test("a real runner over the app's operations answers as usual", async () => {
     const m = await ready()
-    const effects = createEffects(m.deps, () => {}, (error) => {
-      throw error
-    })
-    const session = await openSession(effects.deps.connect({ kind: "local", home: m.runnerHome }, m.deps.localRunner))
-    expect((await session.request("status", RunnerStatusSchema)).team.version).toBe(2)
+    const effects = createEffects(
+      m.deps,
+      () => {},
+      (error) => {
+        throw error
+      }
+    )
+    const session = await openSession(
+      effects.deps.connect(
+        { kind: "local", home: m.runnerHome },
+        m.deps.localRunner
+      )
+    )
+    expect(
+      (await session.request("status", RunnerStatusSchema)).team.version
+    ).toBe(2)
     expect(await session.close()).toBe(0)
   })
 })
@@ -206,13 +302,27 @@ describe("effects", () => {
   test("exit is left to the shell; an answer to a question nothing waits for does nothing", async () => {
     const events: AppEvent[] = []
     const m = machine()
-    const effects = createEffects(m.deps, (event) => events.push(event), (error) => {
-      throw error
-    })
+    const effects = createEffects(
+      m.deps,
+      (event) => events.push(event),
+      (error) => {
+        throw error
+      }
+    )
     effects.run({ kind: "exit" })
     // No deploy asked these questions, so nothing is written, signed or sent.
-    for (const answer of ["write-link", "skip-link", "values-set", "skip-values"] as const) {
-      effects.run({ kind: "deploy-continue", server: "prod", app: "demo", answer })
+    for (const answer of [
+      "write-link",
+      "skip-link",
+      "values-set",
+      "skip-values",
+    ] as const) {
+      effects.run({
+        kind: "deploy-continue",
+        server: "prod",
+        app: "demo",
+        answer,
+      })
     }
     await Bun.sleep(10)
     expect(events).toEqual([])

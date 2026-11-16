@@ -81,7 +81,9 @@ export function rawMode(input: NodeJS.ReadStream, store: Store) {
    * is echoed or held back by the terminal; what was typed before is thrown
    * away; then the question is drawn by `open`, which settles once.
    */
-  async function asking<T>(open: (resolve: (value: T) => void, reject: (error: Error) => void) => void): Promise<T> {
+  async function asking<T>(
+    open: (resolve: (value: T) => void, reject: (error: Error) => void) => void
+  ): Promise<T> {
     input.setRawMode(true)
     try {
       // What was typed before the question is drawn is not its answer, such as a `y` typed while the keychain asked.

@@ -1,7 +1,13 @@
 import { z } from "zod"
 
 import { rosterCodeFromHash, confirmationCodesMatch } from "../crypto/confirm"
-import { fromHex, isWellFormed, toBase64Url, toHex, utf8 } from "../crypto/encoding"
+import {
+  fromHex,
+  isWellFormed,
+  toBase64Url,
+  toHex,
+  utf8,
+} from "../crypto/encoding"
 import {
   hasOtherVersion,
   openEnvelope,
@@ -22,7 +28,13 @@ import {
   type Signer,
 } from "../crypto/keys"
 import { LIMITS } from "../protocol/limits"
-import { CoreError, ok, refuse, type Result, type RosterRefusal } from "../protocol/result"
+import {
+  CoreError,
+  ok,
+  refuse,
+  type Result,
+  type RosterRefusal,
+} from "../protocol/result"
 import { sodium } from "../crypto/sodium"
 
 export const ROLES = ["admin", "deployer"] as const
@@ -46,7 +58,9 @@ const displayName = z
   .max(LIMITS.memberNameLength)
   .refine(
     (name) =>
-      isWellFormed(name) && !/[\p{C}\u2028\u2029]/u.test(name) && name === name.trim()
+      isWellFormed(name) &&
+      !/[\p{C}\u2028\u2029]/u.test(name) &&
+      name === name.trim()
   )
 
 const MemberSchema = z.strictObject({
@@ -102,7 +116,9 @@ export const TeamTrustSchema = z.strictObject({
   members: z.array(MemberSchema).min(1).max(LIMITS.members),
   servers: z
     .array(
-      ServerEntrySchema.extend({ serverId: z.string().regex(/^srv_[0-9a-f]{32}$/) })
+      ServerEntrySchema.extend({
+        serverId: z.string().regex(/^srv_[0-9a-f]{32}$/),
+      })
         // A stored id must be the one that belongs to the stored key.
         .refine((server) => serverIdOf(server.publicKey) === server.serverId)
     )
@@ -112,13 +128,20 @@ export const TeamTrustSchema = z.strictObject({
 /** Throws when stored trust is not usable, instead of failing somewhere less clear. */
 export function assertTrust(trust: TeamTrust): void {
   if (!TeamTrustSchema.safeParse(trust).success) {
-    throw new CoreError("invalid_argument", "The stored team trust is not valid.")
+    throw new CoreError(
+      "invalid_argument",
+      "The stored team trust is not valid."
+    )
   }
 }
 
 /** Members: unique keys, unique names, at least one admin. Servers: unique keys and names. */
-function rosterIsValid(members: readonly Member[], servers: readonly ServerEntry[]): boolean {
-  const unique = (values: readonly string[]) => new Set(values).size === values.length
+function rosterIsValid(
+  members: readonly Member[],
+  servers: readonly ServerEntry[]
+): boolean {
+  const unique = (values: readonly string[]) =>
+    new Set(values).size === values.length
   return (
     unique(members.map((member) => member.publicKey)) &&
     unique(members.map((member) => member.name)) &&
@@ -132,14 +155,20 @@ function rosterHash(payload: Uint8Array): Uint8Array {
   return hash("zekno/v1/roster", payload)
 }
 
-function toTrust(roster: Roster, payload: Uint8Array, foundingHash?: string): TeamTrust {
+function toTrust(
+  roster: Roster,
+  payload: Uint8Array,
+  foundingHash?: string
+): TeamTrust {
   const hash = toHex(rosterHash(payload))
   return Object.freeze({
     teamId: roster.teamId,
     version: roster.version,
     hash,
     foundingHash: foundingHash ?? hash,
-    members: Object.freeze(roster.members.map((member) => Object.freeze({ ...member }))),
+    members: Object.freeze(
+      roster.members.map((member) => Object.freeze({ ...member }))
+    ),
     servers: Object.freeze(
       roster.servers.map((server) =>
         Object.freeze({ ...server, serverId: serverIdOf(server.publicKey) })
@@ -149,7 +178,10 @@ function toTrust(roster: Roster, payload: Uint8Array, foundingHash?: string): Te
 }
 
 /** The key of a server in the team list, or undefined when the team has no such server. */
-export function serverKeyOf(trust: TeamTrust, serverId: string): ServerPublicKey | undefined {
+export function serverKeyOf(
+  trust: TeamTrust,
+  serverId: string
+): ServerPublicKey | undefined {
   return trust.servers.find((server) => server.serverId === serverId)?.publicKey
 }
 
@@ -173,14 +205,22 @@ export function memberByKeyId(
 
 function parseRoster(payload: Uint8Array): Result<Roster, RosterRefusal> {
   const json = parseJson(payload)
-  if (json === undefined) return refuse("malformed", "The team list is not valid JSON.")
+  if (json === undefined)
+    return refuse("malformed", "The team list is not valid JSON.")
   if (hasOtherVersion(json)) {
-    return refuse("unsupported_version", "This team list uses a format version this library does not know.")
+    return refuse(
+      "unsupported_version",
+      "This team list uses a format version this library does not know."
+    )
   }
   const parsed = RosterSchema.safeParse(json)
-  if (!parsed.success) return refuse("malformed", "The team list does not match its definition.")
+  if (!parsed.success)
+    return refuse("malformed", "The team list does not match its definition.")
   if (!rosterIsValid(parsed.data.members, parsed.data.servers)) {
-    return refuse("invalid_members", "A team list needs unique keys, unique names and at least one admin.")
+    return refuse(
+      "invalid_members",
+      "A team list needs unique keys, unique names and at least one admin."
+    )
   }
   return ok(parsed.data)
 }
@@ -198,8 +238,18 @@ export async function createTeam(input: {
   founderName: string
   signer: Signer
   now?: Date
-}): Promise<{ envelope: Envelope; trust: TeamTrust; confirmationCode: string }> {
-  const members = [{ name: input.founderName, publicKey: input.signer.publicKey, role: "admin" as const }]
+}): Promise<{
+  envelope: Envelope
+  trust: TeamTrust
+  confirmationCode: string
+}> {
+  const members = [
+    {
+      name: input.founderName,
+      publicKey: input.signer.publicKey,
+      role: "admin" as const,
+    },
+  ]
   const roster = {
     v: 1 as const,
     teamId: `team_${toBase64Url(sodium.randombytes_buf(16))}`,
@@ -210,10 +260,17 @@ export async function createTeam(input: {
     servers: [],
   }
   if (!RosterSchema.safeParse(roster).success) {
-    throw new CoreError("invalid_members", "The founder's name or key is not valid.")
+    throw new CoreError(
+      "invalid_members",
+      "The founder's name or key is not valid."
+    )
   }
   const payload = utf8(JSON.stringify(roster))
-  const envelope = await signEnvelope(PAYLOAD_TYPES.roster, payload, input.signer)
+  const envelope = await signEnvelope(
+    PAYLOAD_TYPES.roster,
+    payload,
+    input.signer
+  )
   const trust = toTrust(roster, payload)
   return { envelope, trust, confirmationCode: teamConfirmationCode(trust) }
 }
@@ -233,7 +290,10 @@ export function trustFoundingRoster(
   // Compare the code first: an unconfirmed list is not worth parsing.
   const code = rosterCodeFromHash(rosterHash(read.value.payload))
   if (!confirmationCodesMatch(code, confirmedCode)) {
-    return refuse("code_mismatch", "The confirmation code does not match this team list.")
+    return refuse(
+      "code_mismatch",
+      "The confirmation code does not match this team list."
+    )
   }
 
   const roster = parseRoster(read.value.payload)
@@ -242,12 +302,25 @@ export function trustFoundingRoster(
     return refuse("wrong_version", "A founding team list must be version 1.")
   }
   if (roster.value.previous !== null) {
-    return refuse("wrong_previous", "A founding team list cannot refer to an earlier one.")
+    return refuse(
+      "wrong_previous",
+      "A founding team list cannot refer to an earlier one."
+    )
   }
-  const signer = memberByKeyId(roster.value.members, read.value.envelope.signature.keyId)
-  if (!signer) return refuse("unknown_signer", "The founding list is not signed by one of its members.")
+  const signer = memberByKeyId(
+    roster.value.members,
+    read.value.envelope.signature.keyId
+  )
+  if (!signer)
+    return refuse(
+      "unknown_signer",
+      "The founding list is not signed by one of its members."
+    )
   if (!verifySignature(read.value, signer.publicKey)) {
-    return refuse("bad_signature", "The signature does not match the founding list.")
+    return refuse(
+      "bad_signature",
+      "The signature does not match the founding list."
+    )
   }
   if (signer.role !== "admin") {
     return refuse("not_admin", "The founding list must be signed by an admin.")
@@ -273,9 +346,14 @@ export async function proposeRoster(input: {
   now?: Date
 }): Promise<{ envelope: Envelope; trust: TeamTrust }> {
   assertTrust(input.trust)
-  const author = input.trust.members.find((member) => member.publicKey === input.signer.publicKey)
+  const author = input.trust.members.find(
+    (member) => member.publicKey === input.signer.publicKey
+  )
   if (author?.role !== "admin") {
-    throw new CoreError("not_admin", "Only an admin of the current team list can change the team.")
+    throw new CoreError(
+      "not_admin",
+      "Only an admin of the current team list can change the team."
+    )
   }
   const roster = {
     v: 1 as const,
@@ -283,17 +361,28 @@ export async function proposeRoster(input: {
     version: input.trust.version + 1,
     previous: input.trust.hash,
     createdAt: timestamp(input.now),
-    members: (input.members ?? input.trust.members).map(({ name, publicKey, role }) => ({ name, publicKey, role })),
-    servers: (input.servers ?? input.trust.servers).map(({ name, publicKey }) => ({ name, publicKey })),
+    members: (input.members ?? input.trust.members).map(
+      ({ name, publicKey, role }) => ({ name, publicKey, role })
+    ),
+    servers: (input.servers ?? input.trust.servers).map(
+      ({ name, publicKey }) => ({ name, publicKey })
+    ),
   }
-  if (!RosterSchema.safeParse(roster).success || !rosterIsValid(roster.members, roster.servers)) {
+  if (
+    !RosterSchema.safeParse(roster).success ||
+    !rosterIsValid(roster.members, roster.servers)
+  ) {
     throw new CoreError(
       "invalid_members",
       "A team list needs valid members and servers with unique keys, unique names and at least one admin."
     )
   }
   const payload = utf8(JSON.stringify(roster))
-  const envelope = await signEnvelope(PAYLOAD_TYPES.roster, payload, input.signer)
+  const envelope = await signEnvelope(
+    PAYLOAD_TYPES.roster,
+    payload,
+    input.signer
+  )
   return { envelope, trust: toTrust(roster, payload, input.trust.foundingHash) }
 }
 
@@ -313,7 +402,9 @@ export function applyRosterUpdate(
     (keyId) => memberByKeyId(trust.members, keyId)?.publicKey
   )
   if (!opened.ok) return opened
-  const signer = trust.members.find((member) => member.publicKey === opened.value.signerKey)
+  const signer = trust.members.find(
+    (member) => member.publicKey === opened.value.signerKey
+  )
   if (signer?.role !== "admin") {
     return refuse("not_admin", "Only an admin can change the team.")
   }
@@ -324,12 +415,19 @@ export function applyRosterUpdate(
     return refuse("wrong_team", "This team list belongs to another team.")
   }
   if (roster.value.version !== trust.version + 1) {
-    return refuse("wrong_version", `Expected team list version ${trust.version + 1}.`)
+    return refuse(
+      "wrong_version",
+      `Expected team list version ${trust.version + 1}.`
+    )
   }
-  const previous = roster.value.previous === null ? undefined : fromHex(roster.value.previous)
+  const previous =
+    roster.value.previous === null ? undefined : fromHex(roster.value.previous)
   const current = fromHex(trust.hash)
   if (!previous || !current || !sodium.memcmp(previous, current)) {
-    return refuse("wrong_previous", "This team list does not follow the current one.")
+    return refuse(
+      "wrong_previous",
+      "This team list does not follow the current one."
+    )
   }
   return ok(toTrust(roster.value, opened.value.payload, trust.foundingHash))
 }

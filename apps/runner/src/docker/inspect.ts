@@ -48,9 +48,16 @@ function toService(value: unknown): Service | undefined {
   const exitCode = Number(row.ExitCode)
   return {
     service,
-    state: (SERVICE_STATES as readonly string[]).includes(state) ? (state as Service["state"]) : "unknown",
-    exitCode: Number.isInteger(exitCode) && exitCode >= 0 && exitCode <= 255 ? exitCode : 0,
-    health: (SERVICE_HEALTH as readonly string[]).includes(health) ? (health as Service["health"]) : "",
+    state: (SERVICE_STATES as readonly string[]).includes(state)
+      ? (state as Service["state"])
+      : "unknown",
+    exitCode:
+      Number.isInteger(exitCode) && exitCode >= 0 && exitCode <= 255
+        ? exitCode
+        : 0,
+    health: (SERVICE_HEALTH as readonly string[]).includes(health)
+      ? (health as Service["health"])
+      : "",
   }
 }
 
@@ -81,7 +88,10 @@ export function parsePs(output: string): Service[] {
 async function stopChild(child: Bun.Subprocess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return
   child.kill()
-  const stopped = await Promise.race([child.exited.then(() => true), Bun.sleep(STOP_GRACE_MS).then(() => false)])
+  const stopped = await Promise.race([
+    child.exited.then(() => true),
+    Bun.sleep(STOP_GRACE_MS).then(() => false),
+  ])
   if (!stopped) child.kill("SIGKILL")
 }
 
@@ -90,13 +100,24 @@ async function stopChild(child: Bun.Subprocess): Promise<void> {
  * printed. Undefined when it failed, printed too much, took longer than
  * `timeoutMs`, or `stop` was signalled; the command is then stopped.
  */
-async function dockerOutput(dir: string, args: string[], stop: AbortSignal, timeoutMs: number): Promise<string | undefined> {
+async function dockerOutput(
+  dir: string,
+  args: string[],
+  stop: AbortSignal,
+  timeoutMs: number
+): Promise<string | undefined> {
   if (stop.aborted) return undefined
   let child
   try {
     // Started in the runner's private folder: Docker Compose reads files from
     // where it runs, and wherever the runner was started is not the runner's to trust.
-    child = Bun.spawn([dockerCommand(), ...args], { cwd: dir, env: dockerEnv(), stdin: "ignore", stdout: "pipe", stderr: "ignore" })
+    child = Bun.spawn([dockerCommand(), ...args], {
+      cwd: dir,
+      env: dockerEnv(),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    })
   } catch {
     return undefined
   }
@@ -109,7 +130,9 @@ async function dockerOutput(dir: string, args: string[], stop: AbortSignal, time
       if (size > LIMITS.messageBytes) return undefined
       chunks.push(chunk)
     }
-    return (await exited) === 0 ? Buffer.concat(chunks).toString("utf8") : undefined
+    return (await exited) === 0
+      ? Buffer.concat(chunks).toString("utf8")
+      : undefined
   })().catch(() => undefined)
   let timer: ReturnType<typeof setTimeout> | undefined
   let giveUp = () => {}
@@ -138,14 +161,23 @@ async function dockerOutput(dir: string, args: string[], stop: AbortSignal, time
  * `LIMITS.servicesPerServer` services, as the message allows. An app past
  * either is left out too: not known, never reported with half its services.
  */
-export async function appStates(dir: string, stop: AbortSignal, timeoutMs = PS_TIMEOUT_MS): Promise<RunnerAppStates | RunnerReport> {
+export async function appStates(
+  dir: string,
+  stop: AbortSignal,
+  timeoutMs = PS_TIMEOUT_MS
+): Promise<RunnerAppStates | RunnerReport> {
   const loaded = load(dir)
   if (isReport(loaded)) return loaded
   const apps: RunnerAppStates["apps"] = {}
   let services = 0
   for (const app of deployedApps(loaded.state).slice(0, LIMITS.appsPerServer)) {
     if (services >= LIMITS.servicesPerServer) break
-    const output = await dockerOutput(dir, ["compose", "-p", `zekno-${app}`, "ps", "--all", "--format", "json"], stop, timeoutMs)
+    const output = await dockerOutput(
+      dir,
+      ["compose", "-p", `zekno-${app}`, "ps", "--all", "--format", "json"],
+      stop,
+      timeoutMs
+    )
     if (output === undefined) continue
     const found = parsePs(output)
     if (services + found.length > LIMITS.servicesPerServer) continue
@@ -156,10 +188,14 @@ export async function appStates(dir: string, stop: AbortSignal, timeoutMs = PS_T
 }
 
 const LOG_PREFIX = /^(\S+?)\s*\|\s?(.*)$/s
-const LOG_TIME = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2}))\s?(.*)$/s
+const LOG_TIME =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2}))\s?(.*)$/s
 
 /** Turns one line of `docker compose logs --timestamps` into an event, or nothing when it is not a log line. */
-export function parseLogLine(line: string, now: () => Date = () => new Date()): LogEvent | undefined {
+export function parseLogLine(
+  line: string,
+  now: () => Date = () => new Date()
+): LogEvent | undefined {
   const prefixed = LOG_PREFIX.exec(line)
   if (!prefixed) return undefined
   // "web-1" is the first container of the service "web".
@@ -193,16 +229,34 @@ export async function followLogs(
   const loaded = load(dir)
   if (isReport(loaded)) return loaded
   const { app, tail, follow = true } = request.value
-  if (!deployedApps(loaded.state).includes(app)) return refused("invalid_request")
+  if (!deployedApps(loaded.state).includes(app))
+    return refused("invalid_request")
   // Nobody is left to read: Docker is not even asked.
   if (stop.aborted) return { outcome: "ok" }
 
   let child
   try {
     child = Bun.spawn(
-      [dockerCommand(), "compose", "-p", `zekno-${app}`, "logs", ...(follow ? ["--follow"] : []), "--timestamps", "--no-color", "--tail", String(tail)],
+      [
+        dockerCommand(),
+        "compose",
+        "-p",
+        `zekno-${app}`,
+        "logs",
+        ...(follow ? ["--follow"] : []),
+        "--timestamps",
+        "--no-color",
+        "--tail",
+        String(tail),
+      ],
       // In the runner's private folder, for the same reason as `ps`.
-      { cwd: dir, env: dockerEnv(), stdin: "ignore", stdout: "pipe", stderr: "ignore" }
+      {
+        cwd: dir,
+        env: dockerEnv(),
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "ignore",
+      }
     )
   } catch {
     return { outcome: "ok" }

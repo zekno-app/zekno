@@ -53,7 +53,10 @@ function hintRows(hints: readonly KeyHint[], columns: number): number {
 function statusRows(state: State, columns: number): number {
   if (state.quitting) return 1
   if (!state.notice) return 0
-  return inkRows(state.notice.tone === "info" ? state.notice.text : `✖ ${state.notice.text}`, columns - 2)
+  return inkRows(
+    state.notice.tone === "info" ? state.notice.text : `✖ ${state.notice.text}`,
+    columns - 2
+  )
 }
 
 export function HomeScreen({
@@ -86,22 +89,46 @@ export function HomeScreen({
       {team.member}'s team
     </Text>
   ) : null
-  const question = state.question?.kind === "update-runner" ? state.question : undefined
-  const asked = question ? servers.find((entry) => entry.name === question.server) : undefined
+  const question =
+    state.question?.kind === "update-runner" ? state.question : undefined
+  const asked = question
+    ? servers.find((entry) => entry.name === question.server)
+    : undefined
   if (asked) {
     return (
-      <Frame header={<Header place={place} right={right} />} hints={UPDATE_HINTS} status={status}>
+      <Frame
+        header={<Header place={place} right={right} />}
+        hints={UPDATE_HINTS}
+        status={status}
+      >
         <UpdateQuestion server={asked} columns={columns} />
       </Frame>
     )
   }
   const hints = homeHints(server, !wide, screen.pane)
   // The header, the gaps around the body and the line above the hints (Frame), the hints, and the panes' borders.
-  const inside = rows - 3 - 1 - 1 - 1 - statusRows(state, columns) - hintRows(hints, columns) - 2
+  const inside =
+    rows -
+    3 -
+    1 -
+    1 -
+    1 -
+    statusRows(state, columns) -
+    hintRows(hints, columns) -
+    2
   return (
-    <Frame header={<Header place={place} right={right} />} hints={hints} status={status}>
+    <Frame
+      header={<Header place={place} right={right} />}
+      hints={hints}
+      status={status}
+    >
       <Box flexGrow={1} columnGap={1}>
-        <ServersPane servers={servers} selected={screen.server} focused={screen.pane === "servers"} narrow={!wide} />
+        <ServersPane
+          servers={servers}
+          selected={screen.server}
+          focused={screen.pane === "servers"}
+          narrow={!wide}
+        />
         <AppsPane
           state={state}
           server={server}
@@ -110,9 +137,13 @@ export function HomeScreen({
           now={new Date()}
           columns={columns}
           inside={inside}
-          details={wide ? undefined : { app, file: linkedFile(state, server, app) }}
+          details={
+            wide ? undefined : { app, file: linkedFile(state, server, app) }
+          }
         />
-        {wide ? <DetailsPane app={app} file={linkedFile(state, server, app)} /> : null}
+        {wide ? (
+          <DetailsPane app={app} file={linkedFile(state, server, app)} />
+        ) : null}
       </Box>
     </Frame>
   )

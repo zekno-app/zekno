@@ -22,7 +22,17 @@
  * never written through.
  */
 import { createHash, randomBytes } from "node:crypto"
-import { closeSync, constants, fchmodSync, fstatSync, openSync, readSync, renameSync, rmSync, writeSync } from "node:fs"
+import {
+  closeSync,
+  constants,
+  fchmodSync,
+  fstatSync,
+  openSync,
+  readSync,
+  renameSync,
+  rmSync,
+  writeSync,
+} from "node:fs"
 import { join } from "node:path"
 import { z } from "zod"
 
@@ -48,7 +58,8 @@ const LinksSchema = z
   .max(LINKS_KEPT)
 
 /** The SHA-256 of text or bytes, in lowercase hex. */
-export const sha256Of = (data: string | Uint8Array): string => createHash("sha256").update(data).digest("hex")
+export const sha256Of = (data: string | Uint8Array): string =>
+  createHash("sha256").update(data).digest("hex")
 
 /** Whether a file belongs to the user running zekno. Where there are no user ids, there is nothing to compare. */
 function ownedByMe(uid: number): boolean {
@@ -60,13 +71,17 @@ function ownedByMe(uid: number): boolean {
 function readLinksText(path: string): string | undefined {
   let fd: number
   try {
-    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    fd = openSync(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+    )
   } catch {
     return undefined
   }
   try {
     const stat = fstatSync(fd)
-    if (!stat.isFile() || !ownedByMe(stat.uid) || stat.size > LINKS_BYTES) return undefined
+    if (!stat.isFile() || !ownedByMe(stat.uid) || stat.size > LINKS_BYTES)
+      return undefined
     const buffer = Buffer.alloc(LINKS_BYTES + 1)
     let length = 0
     while (length < buffer.length) {
@@ -75,7 +90,9 @@ function readLinksText(path: string): string | undefined {
       length += read
     }
     if (length > LINKS_BYTES) return undefined
-    return new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, length))
+    return new TextDecoder("utf-8", { fatal: true }).decode(
+      buffer.subarray(0, length)
+    )
   } catch {
     return undefined
   } finally {
@@ -97,7 +114,9 @@ export function acceptedLinks(home: string): AcceptedLink[] {
 
 /** Whether this machine accepted the project file at `link.path` with exactly these bytes. */
 export function isAccepted(home: string, link: AcceptedLink): boolean {
-  return acceptedLinks(home).some((entry) => entry.path === link.path && entry.sha256 === link.sha256)
+  return acceptedLinks(home).some(
+    (entry) => entry.path === link.path && entry.sha256 === link.sha256
+  )
 }
 
 /**
@@ -119,7 +138,9 @@ function linksText(entries: readonly AcceptedLink[]): string {
  * in place by a rename, which replaces a link instead of writing through it.
  */
 export function accept(home: string, link: AcceptedLink): void {
-  const entries = acceptedLinks(home).filter((entry) => entry.path !== link.path)
+  const entries = acceptedLinks(home).filter(
+    (entry) => entry.path !== link.path
+  )
   writeLinks(home, [...entries, { path: link.path, sha256: link.sha256 }])
 }
 
@@ -131,7 +152,9 @@ export function accept(home: string, link: AcceptedLink): void {
  */
 export function forget(home: string, link: AcceptedLink): void {
   const entries = acceptedLinks(home)
-  const kept = entries.filter((entry) => entry.path !== link.path || entry.sha256 !== link.sha256)
+  const kept = entries.filter(
+    (entry) => entry.path !== link.path || entry.sha256 !== link.sha256
+  )
   if (kept.length !== entries.length) writeLinks(home, kept)
 }
 
@@ -139,7 +162,10 @@ export function forget(home: string, link: AcceptedLink): void {
 function writeLinks(home: string, entries: readonly AcceptedLink[]): void {
   const text = linksText(entries)
   const path = join(home, LINKS_FILE)
-  const temporary = join(home, `.${LINKS_FILE}.${randomBytes(8).toString("hex")}.tmp`)
+  const temporary = join(
+    home,
+    `.${LINKS_FILE}.${randomBytes(8).toString("hex")}.tmp`
+  )
   try {
     // `wx` refuses a file or link that is already there under this name.
     const fd = openSync(temporary, "wx", 0o600)

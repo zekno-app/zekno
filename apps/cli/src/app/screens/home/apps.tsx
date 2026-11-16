@@ -15,12 +15,32 @@ import { Cell, Marker, Pane, StateCell } from "../parts"
 import { AppDetailsFoot, detailsSecondLine } from "./details"
 import { inkRows, rowsOf } from "./rows"
 import { needsAnswerHere } from "./servers"
-import { DEPLOY_WIDTH, DETAILS_WIDTH, HOME_WIDE, SERVERS_WIDTH, stateWidth, WHEN_WIDTH } from "./widths"
+import {
+  DEPLOY_WIDTH,
+  DETAILS_WIDTH,
+  HOME_WIDE,
+  SERVERS_WIDTH,
+  stateWidth,
+  WHEN_WIDTH,
+} from "./widths"
 
 /** The table is never made shorter: what is below it gives way (`footRoom`), so each row stays whole. */
-function AppTable({ apps, selected, now, columns }: { apps: readonly AppRow[]; selected: number; now: Date; columns: number }) {
+function AppTable({
+  apps,
+  selected,
+  now,
+  columns,
+}: {
+  apps: readonly AppRow[]
+  selected: number
+  now: Date
+  columns: number
+}) {
   const when = apps.map((app) => (app.at ? relativeTime(app.at, now) : ""))
-  const whenWidth = Math.max(columns >= HOME_WIDE ? WHEN_WIDTH.wide : WHEN_WIDTH.narrow, ...when.map((text) => text.length + 1))
+  const whenWidth = Math.max(
+    columns >= HOME_WIDE ? WHEN_WIDTH.wide : WHEN_WIDTH.narrow,
+    ...when.map((text) => text.length + 1)
+  )
   const state = stateWidth(columns, whenWidth)
   return (
     <Box flexDirection="column" flexShrink={0}>
@@ -59,10 +79,12 @@ function AppTable({ apps, selected, now, columns }: { apps: readonly AppRow[]; s
 }
 
 /** The sentence under the apps of a server that could not be reached. */
-const unreachedWords = (server: ServerRow): string => `${server.name} could not be reached. Numbers are from this machine's history.`
+const unreachedWords = (server: ServerRow): string =>
+  `${server.name} could not be reached. Numbers are from this machine's history.`
 
 /** The sentence that says which app this folder is linked to. */
-const linkedWords = (linked: Linked): string => `This folder is linked to ${linked.app} on ${linked.server} by zekno.json.`
+const linkedWords = (linked: Linked): string =>
+  `This folder is linked to ${linked.app} on ${linked.server} by zekno.json.`
 
 /**
  * The foot of the apps pane: whether the server could be reached and why
@@ -77,17 +99,42 @@ const linkedWords = (linked: Linked): string => `This folder is linked to ${link
  * and the reason, which a server or SSH may make long, in the rows that are
  * left, cut at a word with "…".
  */
-function AppsFoot({ state, server, said, room, width }: { state: State; server: ServerRow; said: boolean; room: number; width: number }) {
+function AppsFoot({
+  state,
+  server,
+  said,
+  room,
+  width,
+}: {
+  state: State
+  server: ServerRow
+  said: boolean
+  room: number
+  width: number
+}) {
   const theme = useTheme()
   const unreached = server.reachable === false
   const asks = needsAnswerHere(server)
   const mark = asks ? "!" : "✖"
-  const linked = state.linked?.server === server.name && !said ? state.linked : undefined
-  const sentence = unreached ? inkRows(`${mark} ${unreachedWords(server)}`, width) : 0
+  const linked =
+    state.linked?.server === server.name && !said ? state.linked : undefined
+  const sentence = unreached
+    ? inkRows(`${mark} ${unreachedWords(server)}`, width)
+    : 0
   const short = unreached && sentence > room
   const linkRows = linked ? inkRows(linkedWords(linked), width) : 0
-  const showLink = linked !== undefined && !short && (unreached ? sentence + 1 + linkRows : linkRows) <= room
-  const reason = unreached && !short && server.problem ? rowsOf(server.problem, room - sentence - (showLink ? 1 + linkRows : 0), width) : []
+  const showLink =
+    linked !== undefined &&
+    !short &&
+    (unreached ? sentence + 1 + linkRows : linkRows) <= room
+  const reason =
+    unreached && !short && server.problem
+      ? rowsOf(
+          server.problem,
+          room - sentence - (showLink ? 1 + linkRows : 0),
+          width
+        )
+      : []
   const lines: ReactNode[] = []
   if (short) {
     // Not even the sentence fits whole: as much of it as there is room for.
@@ -97,7 +144,9 @@ function AppsFoot({ state, server, said, room, width }: { state: State; server: 
         <Box key="unreachable" flexDirection="column">
           {cut.map((line, index) => (
             <Text key={index} wrap="truncate-end">
-              {index === 0 ? <Text color={asks ? theme.warning : theme.danger}>{mark}</Text> : null}
+              {index === 0 ? (
+                <Text color={asks ? theme.warning : theme.danger}>{mark}</Text>
+              ) : null}
               {index === 0 ? line.slice(mark.length) : line}
             </Text>
           ))}
@@ -108,7 +157,8 @@ function AppsFoot({ state, server, said, room, width }: { state: State; server: 
     lines.push(
       <Box key="unreachable" flexDirection="column">
         <Text>
-          <Text color={asks ? theme.warning : theme.danger}>{mark}</Text> {unreachedWords(server)}
+          <Text color={asks ? theme.warning : theme.danger}>{mark}</Text>{" "}
+          {unreachedWords(server)}
         </Text>
         {reason.map((line, index) => (
           <Text key={index} dimColor wrap="truncate-end">
@@ -168,24 +218,53 @@ export function AppsPane({
   }
   const wide = columns >= HOME_WIDE
   // The window's margins, the panes beside this one and the gaps between them, and this pane's border and padding.
-  const width = columns - 2 - (wide ? SERVERS_WIDTH.wide + DETAILS_WIDTH + 2 : SERVERS_WIDTH.narrow + 1) - 4
+  const width =
+    columns -
+    2 -
+    (wide ? SERVERS_WIDTH.wide + DETAILS_WIDTH + 2 : SERVERS_WIDTH.narrow + 1) -
+    4
   const empty = `Nothing deployed to ${server.name} from this machine yet.`
-  const table = server.apps.length > 0 ? 1 + server.apps.length : inkRows(empty, width)
-  const below = details?.app ? 2 + (detailsSecondLine(details.app, details.file) === "" ? 0 : 1) + 1 : 0
+  const table =
+    server.apps.length > 0 ? 1 + server.apps.length : inkRows(empty, width)
+  const below = details?.app
+    ? 2 + (detailsSecondLine(details.app, details.file) === "" ? 0 : 1) + 1
+    : 0
   // What the foot may take: the rows inside the pane less its title, the table, the details below it, and the gaps between them.
   const room = inside - 1 - 1 - table - 1 - below
   return (
-    <Pane title={`Apps on ${server.name}`} right={<Text dimColor>{server.apps.length}</Text>} focused={focused}>
+    <Pane
+      title={`Apps on ${server.name}`}
+      right={<Text dimColor>{server.apps.length}</Text>}
+      focused={focused}
+    >
       {server.apps.length > 0 ? (
-        <AppTable apps={server.apps} selected={selected} now={now} columns={columns} />
+        <AppTable
+          apps={server.apps}
+          selected={selected}
+          now={now}
+          columns={columns}
+        />
       ) : (
         <Text dimColor>{empty}</Text>
       )}
       {/* The foot sits at the bottom of the room the table leaves; were it ever taller than that room, it is cut, never the table. */}
-      <Box flexGrow={1} flexDirection="column" justifyContent="flex-end" overflow="hidden">
-        <AppsFoot state={state} server={server} said={details?.file !== undefined} room={room} width={width} />
+      <Box
+        flexGrow={1}
+        flexDirection="column"
+        justifyContent="flex-end"
+        overflow="hidden"
+      >
+        <AppsFoot
+          state={state}
+          server={server}
+          said={details?.file !== undefined}
+          room={room}
+          width={width}
+        />
       </Box>
-      {details?.app ? <AppDetailsFoot app={details.app} file={details.file} /> : null}
+      {details?.app ? (
+        <AppDetailsFoot app={details.app} file={details.file} />
+      ) : null}
     </Pane>
   )
 }

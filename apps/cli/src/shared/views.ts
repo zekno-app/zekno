@@ -12,7 +12,13 @@
  * secret counts only when its record verifies. A file name counts only when
  * it is an app name. Text that is drawn is cleaned.
  */
-import { currentSecrets, readSignedDeploy, verifySecret, verifySecretRemoval, type Deploy } from "@workspace/core"
+import {
+  currentSecrets,
+  readSignedDeploy,
+  verifySecret,
+  verifySecretRemoval,
+  type Deploy,
+} from "@workspace/core"
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 
@@ -74,14 +80,22 @@ export type SecretRow = {
 /** A history file's name: an app name and `.json`. Anything else in the folder is not an app. */
 const HISTORY_FILE = /^([a-z0-9][a-z0-9-]{0,62})\.json$/
 
-type Verified = { deploy: Deploy; signer: string; outcome: History[number]["outcome"] }
+type Verified = {
+  deploy: Deploy
+  signer: string
+  outcome: History[number]["outcome"]
+}
 
 /**
  * The deploys this machine sent for one app on one server that verify,
  * oldest first, one per number. A history file that cannot be read shows no
  * deploys here; the deploy and rollback operations say what is wrong with it.
  */
-export function verifiedDeploys(team: Team, server: Server, app: string): Verified[] {
+export function verifiedDeploys(
+  team: Team,
+  server: Server,
+  app: string
+): Verified[] {
   let history: History
   try {
     history = team.store.history(server.serverId, app)
@@ -90,17 +104,32 @@ export function verifiedDeploys(team: Team, server: Server, app: string): Verifi
   }
   const byNumber = new Map<number, Verified>()
   for (const entry of history) {
-    const read = readSignedDeploy({ envelope: entry.envelope, trust: team.trust })
+    const read = readSignedDeploy({
+      envelope: entry.envelope,
+      trust: team.trust,
+    })
     if (!read.ok) continue
     const { deploy, signer } = read.value
-    if (deploy.teamId !== team.trust.teamId || deploy.serverId !== server.serverId || deploy.app !== app) continue
+    if (
+      deploy.teamId !== team.trust.teamId ||
+      deploy.serverId !== server.serverId ||
+      deploy.app !== app
+    )
+      continue
     // The same number twice is not something zekno writes. The later entry is the one it would have written last.
-    byNumber.set(deploy.sequence, { deploy, signer: sanitize(signer.name), outcome: entry.outcome })
+    byNumber.set(deploy.sequence, {
+      deploy,
+      signer: sanitize(signer.name),
+      outcome: entry.outcome,
+    })
   }
-  return [...byNumber.values()].sort((a, b) => a.deploy.sequence - b.deploy.sequence)
+  return [...byNumber.values()].sort(
+    (a, b) => a.deploy.sequence - b.deploy.sequence
+  )
 }
 
-const accepted = (entries: readonly Verified[]) => entries.filter((entry) => entry.outcome !== "sent")
+const accepted = (entries: readonly Verified[]) =>
+  entries.filter((entry) => entry.outcome !== "sent")
 
 /**
  * The apps this machine has a history for on one server, by the name of each
@@ -121,7 +150,10 @@ export function appNames(home: string, server: Server): string[] {
  * Home's order of apps, which `zekno status` keeps too: the one this machine
  * deployed most recently first, then by name; one with no deploy time last.
  */
-export const latestFirst = (a: { name: string; at?: string }, b: { name: string; at?: string }): number =>
+export const latestFirst = (
+  a: { name: string; at?: string },
+  b: { name: string; at?: string }
+): number =>
   (b.at ?? "").localeCompare(a.at ?? "") || a.name.localeCompare(b.name)
 
 /**
@@ -166,7 +198,12 @@ export function composeServices(compose: string): string[] {
     return []
   }
   const services = (parsed as { services?: unknown } | null)?.services
-  if (typeof services !== "object" || services === null || Array.isArray(services)) return []
+  if (
+    typeof services !== "object" ||
+    services === null ||
+    Array.isArray(services)
+  )
+    return []
   return Object.entries(services).map(([name, service]) => {
     const image = (service as { image?: unknown } | null)?.image
     return sanitize(typeof image === "string" ? `${name} (${image})` : name)
@@ -180,7 +217,11 @@ function teamVersionOf(team: Team, hash: string): number | undefined {
 }
 
 /** One deploy for the app screen. */
-function deployRow(team: Team, entries: readonly Verified[], index: number): DeployRow {
+function deployRow(
+  team: Team,
+  entries: readonly Verified[],
+  index: number
+): DeployRow {
   const { deploy, signer, outcome } = entries[index]!
   // A rollback deploys an earlier deploy's service definition again. A
   // definition equal to the one just before is a deploy of the same thing.
@@ -208,48 +249,88 @@ function deployRow(team: Team, entries: readonly Verified[], index: number): Dep
  * value is never read: records are verified, not opened. Each is marked when
  * it changed after the latest deploy the runner accepted.
  */
-function secretRows(team: Team, server: Server, app: string, latest: Deploy | undefined): SecretRow[] {
+function secretRows(
+  team: Team,
+  server: Server,
+  app: string,
+  latest: Deploy | undefined
+): SecretRow[] {
   const { trust } = team
   const serverId = server.serverId
   let current
   try {
-    current = currentSecrets({ trust, serverId, app, ...team.store.secrets(serverId, app) })
+    current = currentSecrets({
+      trust,
+      serverId,
+      app,
+      ...team.store.secrets(serverId, app),
+    })
   } catch {
     return []
   }
-  const deployed = (name: string) => latest?.secrets.find((secret) => secret.name === name)
+  const deployed = (name: string) =>
+    latest?.secrets.find((secret) => secret.name === name)
   const rows: SecretRow[] = []
   for (const record of current.secrets) {
     const checked = verifySecret({ record, trust, serverId, app })
     if (!checked.ok) continue
     const { name, version } = checked.value
     const before = deployed(name)
-    rows.push({ name, version, removed: false, afterDeploy: latest !== undefined && (before === undefined || before.version < version) })
+    rows.push({
+      name,
+      version,
+      removed: false,
+      afterDeploy:
+        latest !== undefined &&
+        (before === undefined || before.version < version),
+    })
   }
   for (const removal of current.removals) {
     const checked = verifySecretRemoval({ removal, trust, serverId, app })
     if (!checked.ok) continue
     const { name, version } = checked.value
-    rows.push({ name, version, removed: true, afterDeploy: latest !== undefined && deployed(name) !== undefined })
+    rows.push({
+      name,
+      version,
+      removed: true,
+      afterDeploy: latest !== undefined && deployed(name) !== undefined,
+    })
   }
   return rows
 }
 
 /** An app's deploy history, newest first, and its secrets. */
-export function appDetails(team: Team, server: Server, app: string): { deploys: DeployRow[]; secrets: SecretRow[] } {
+export function appDetails(
+  team: Team,
+  server: Server,
+  app: string
+): { deploys: DeployRow[]; secrets: SecretRow[] } {
   const entries = verifiedDeploys(team, server, app)
-  const deploys = entries.map((_, index) => deployRow(team, entries, index)).reverse()
-  return { deploys, secrets: secretRows(team, server, app, accepted(entries).at(-1)?.deploy) }
+  const deploys = entries
+    .map((_, index) => deployRow(team, entries, index))
+    .reverse()
+  return {
+    deploys,
+    secrets: secretRows(team, server, app, accepted(entries).at(-1)?.deploy),
+  }
 }
 
 /** The names of the secrets the next deploy of an app carries. */
-export function secretNamesOf(team: Team, server: Server, app: string): string[] {
+export function secretNamesOf(
+  team: Team,
+  server: Server,
+  app: string
+): string[] {
   return secretRows(team, server, app, undefined)
     .filter((secret) => !secret.removed)
     .map((secret) => secret.name)
 }
 
 /** The latest deploy of an app the runner accepted, from this machine's history. */
-export function latestAccepted(team: Team, server: Server, app: string): number | undefined {
+export function latestAccepted(
+  team: Team,
+  server: Server,
+  app: string
+): number | undefined {
   return accepted(verifiedDeploys(team, server, app)).at(-1)?.deploy.sequence
 }

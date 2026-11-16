@@ -10,7 +10,14 @@ import { inkUi } from "../../src/ui/ink/ink"
 import { screenOf } from "./helpers"
 
 /** Keys as a terminal hands them over. */
-export const KEYS = { up: "\x1b[A", down: "\x1b[B", enter: "\r", esc: "\x1b", ctrlC: "\x03", backspace: "\x7f" } as const
+export const KEYS = {
+  up: "\x1b[A",
+  down: "\x1b[B",
+  enter: "\r",
+  esc: "\x1b",
+  ctrlC: "\x03",
+  backspace: "\x7f",
+} as const
 
 /**
  * An input that says it is a terminal, records each change of raw mode and
@@ -40,7 +47,11 @@ export function terminal(columns = 100, rows = 30) {
     }),
     { columns, rows, isTTY: true }
   )
-  const ui = inkUi({ stdin: input as unknown as NodeJS.ReadStream, stdout: output as unknown as NodeJS.WriteStream, interactive: true })
+  const ui = inkUi({
+    stdin: input as unknown as NodeJS.ReadStream,
+    stdout: output as unknown as NodeJS.WriteStream,
+    interactive: true,
+  })
   return {
     ui,
     input,
@@ -58,7 +69,11 @@ export function terminal(columns = 100, rows = 30) {
 export type Terminal = ReturnType<typeof terminal>
 
 /** Waits until `ready` holds, `ms` at most. */
-export async function until(ready: () => boolean, what: string, ms = 3000): Promise<void> {
+export async function until(
+  ready: () => boolean,
+  what: string,
+  ms = 3000
+): Promise<void> {
   const started = Date.now()
   while (!ready()) {
     if (Date.now() - started > ms) throw new Error(`never happened: ${what}`)
@@ -67,7 +82,13 @@ export async function until(ready: () => boolean, what: string, ms = 3000): Prom
 }
 
 /** Waits until a line on the screen is exactly `line`. */
-export const shows = (t: Terminal, line: string, ms?: number) => until(() => t.lines().includes(line), `the line ${JSON.stringify(line)}`, ms)
+export const shows = (t: Terminal, line: string, ms?: number) =>
+  until(() => t.lines().includes(line), `the line ${JSON.stringify(line)}`, ms)
 
 /** Waits until a line on the screen starts with `start`. */
-export const showsStart = (t: Terminal, start: string, ms?: number) => until(() => t.lines().some((line) => line.startsWith(start)), `a line starting ${JSON.stringify(start)}`, ms)
+export const showsStart = (t: Terminal, start: string, ms?: number) =>
+  until(
+    () => t.lines().some((line) => line.startsWith(start)),
+    `a line starting ${JSON.stringify(start)}`,
+    ms
+  )

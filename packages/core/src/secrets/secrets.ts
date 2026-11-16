@@ -1,6 +1,14 @@
 import { z } from "zod"
 
-import { fromBase64Url, fromUtf8, isWellFormed, toBase64Url, toHex, utf8, wipe } from "../crypto/encoding"
+import {
+  fromBase64Url,
+  fromUtf8,
+  isWellFormed,
+  toBase64Url,
+  toHex,
+  utf8,
+  wipe,
+} from "../crypto/encoding"
 import { hash } from "../crypto/hash"
 import { decodeKey, serverIdOf, type ServerPublicKey } from "../crypto/keys"
 import { base64UrlLength, LIMITS } from "../protocol/limits"
@@ -12,7 +20,10 @@ export const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 export const APP_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/
 export const SERVER_ID = /^srv_[0-9a-f]{32}$/
 
-export const secretName = z.string().regex(SECRET_NAME).max(LIMITS.secretNameLength)
+export const secretName = z
+  .string()
+  .regex(SECRET_NAME)
+  .max(LIMITS.secretNameLength)
 
 /**
  * Names a runner keeps for itself when it starts an app: a secret with one of
@@ -33,7 +44,10 @@ const MAX_CIPHERTEXT = MAX_PLAINTEXT + 48 // a sealed box adds 48 bytes
 /** One secret, encrypted for one server. Safe to hand to the control plane. */
 export const SealedSecretSchema = z.strictObject({
   name: secretName,
-  ciphertext: z.string().regex(/^[A-Za-z0-9_-]+$/).max(base64UrlLength(MAX_CIPHERTEXT)),
+  ciphertext: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .max(base64UrlLength(MAX_CIPHERTEXT)),
 })
 export type SealedSecret = z.infer<typeof SealedSecretSchema>
 
@@ -62,13 +76,22 @@ export function sealSecret(input: {
     throw new CoreError("invalid_argument", "The app name is not valid.")
   }
   if (!secretName.safeParse(input.name).success) {
-    throw new CoreError("invalid_name", "A secret name uses letters, digits and underscore, and does not start with a digit.")
+    throw new CoreError(
+      "invalid_name",
+      "A secret name uses letters, digits and underscore, and does not start with a digit."
+    )
   }
   if (typeof input.value !== "string" || !isWellFormed(input.value)) {
-    throw new CoreError("invalid_value", "A secret value must be well-formed text.")
+    throw new CoreError(
+      "invalid_value",
+      "A secret value must be well-formed text."
+    )
   }
   if (utf8(input.value).length > LIMITS.secretValueBytes) {
-    throw new CoreError("too_large", "The secret value is larger than the limit.")
+    throw new CoreError(
+      "too_large",
+      "The secret value is larger than the limit."
+    )
   }
   const record = utf8(
     JSON.stringify({
@@ -80,7 +103,10 @@ export function sealSecret(input: {
     })
   )
   try {
-    return { name: input.name, ciphertext: toBase64Url(sodium.crypto_box_seal(record, key)) }
+    return {
+      name: input.name,
+      ciphertext: toBase64Url(sodium.crypto_box_seal(record, key)),
+    }
   } finally {
     wipe(record)
   }
@@ -104,10 +130,15 @@ export function openSealedSecret(
   serverSecretKey: Uint8Array
 ): Result<string, "decrypt_failed" | "binding_mismatch"> {
   const ciphertext = fromBase64Url(sealed.ciphertext)
-  if (!ciphertext) return refuse("decrypt_failed", "A secret could not be decrypted.")
+  if (!ciphertext)
+    return refuse("decrypt_failed", "A secret could not be decrypted.")
   let plaintext: Uint8Array
   try {
-    plaintext = sodium.crypto_box_seal_open(ciphertext, serverPublicKey, serverSecretKey)
+    plaintext = sodium.crypto_box_seal_open(
+      ciphertext,
+      serverPublicKey,
+      serverSecretKey
+    )
   } catch {
     return refuse("decrypt_failed", "A secret could not be decrypted.")
   }
@@ -120,13 +151,17 @@ export function openSealedSecret(
       json = undefined
     }
     const record = RecordSchema.safeParse(json)
-    if (!record.success) return refuse("decrypt_failed", "A secret could not be decrypted.")
+    if (!record.success)
+      return refuse("decrypt_failed", "A secret could not be decrypted.")
     if (
       record.data.serverId !== expected.serverId ||
       record.data.app !== expected.app ||
       record.data.name !== sealed.name
     ) {
-      return refuse("binding_mismatch", "A secret was sealed for a different name, app or server.")
+      return refuse(
+        "binding_mismatch",
+        "A secret was sealed for a different name, app or server."
+      )
     }
     return ok(record.data.value)
   } finally {

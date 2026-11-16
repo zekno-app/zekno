@@ -1,4 +1,9 @@
-import { LIMITS, parseMessage, RunnerReportSchema, type RunnerReport } from "@workspace/core"
+import {
+  LIMITS,
+  parseMessage,
+  RunnerReportSchema,
+  type RunnerReport,
+} from "@workspace/core"
 import type { z } from "zod"
 
 import { CliError, RunnerRefused } from "../cli/errors"
@@ -13,7 +18,9 @@ export const RUNNER_PATH = /^[A-Za-z0-9._/~-]+$/
  * target names only the runner's folder. The program that is started is
  * decided by the CLI itself, never read from a file.
  */
-export type Target = { kind: "ssh"; destination: string; runnerPath: string } | { kind: "local"; home: string }
+export type Target =
+  | { kind: "ssh"; destination: string; runnerPath: string }
+  | { kind: "local"; home: string }
 
 export type RunnerCommand = "setup" | "sync" | "apply" | "status"
 
@@ -57,7 +64,11 @@ export type Transport = {
    * reads its one answer. `signal`, when given, stops the process at once
    * whenever it comes, and the call rejects without waiting for it further.
    */
-  run(command: RunnerCommand, input?: string, signal?: AbortSignal): Promise<{ exitCode: number; stdout: string }>
+  run(
+    command: RunnerCommand,
+    input?: string,
+    signal?: AbortSignal
+  ): Promise<{ exitCode: number; stdout: string }>
   /** Starts `zekno-runner session` and keeps it running. */
   open(): RunnerProcess
   /**
@@ -121,7 +132,10 @@ export type ConnectOptions = {
  * server that writes faster than the lines can be shown is slowed down
  * instead of filling this process's memory.
  */
-async function passOn(stream: ReadableStream<Uint8Array>, out: ErrorLines): Promise<void> {
+async function passOn(
+  stream: ReadableStream<Uint8Array>,
+  out: ErrorLines
+): Promise<void> {
   const decoder = new TextDecoder()
   const emit = async (line: string) => {
     try {
@@ -160,7 +174,10 @@ async function passOn(stream: ReadableStream<Uint8Array>, out: ErrorLines): Prom
 }
 
 /** Reads a stream to the end, or returns undefined once it is larger than `limit` bytes. */
-async function readUpTo(stream: ReadableStream<Uint8Array>, limit: number): Promise<string | undefined> {
+async function readUpTo(
+  stream: ReadableStream<Uint8Array>,
+  limit: number
+): Promise<string | undefined> {
   const chunks: Uint8Array[] = []
   let size = 0
   for await (const chunk of stream) {
@@ -171,11 +188,21 @@ async function readUpTo(stream: ReadableStream<Uint8Array>, limit: number): Prom
   return Buffer.concat(chunks).toString("utf8")
 }
 
-function spawn(argv: string[], env: Record<string, string | undefined> | undefined) {
+function spawn(
+  argv: string[],
+  env: Record<string, string | undefined> | undefined
+) {
   try {
-    return Bun.spawn(argv, { stdin: "pipe", stdout: "pipe", stderr: "pipe", env })
+    return Bun.spawn(argv, {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      env,
+    })
   } catch {
-    throw new CliError(`Could not start \`${argv[0]}\`. Is it installed and on your PATH?`)
+    throw new CliError(
+      `Could not start \`${argv[0]}\`. Is it installed and on your PATH?`
+    )
   }
 }
 
@@ -188,7 +215,13 @@ function quietly(work: () => unknown): void {
   }
 }
 
-async function run(argv: string[], input: string | undefined, env: Record<string, string | undefined> | undefined, out: ErrorLines, signal?: AbortSignal) {
+async function run(
+  argv: string[],
+  input: string | undefined,
+  env: Record<string, string | undefined> | undefined,
+  out: ErrorLines,
+  signal?: AbortSignal
+) {
   if (signal?.aborted) throw signal.reason
   const child = spawn(argv, env)
   const answer = answerOf(child, input, out)
@@ -214,7 +247,11 @@ async function run(argv: string[], input: string | undefined, env: Record<string
 }
 
 /** Hands `input` to a runner command started as `child`, and reads its answer and its exit status. */
-async function answerOf(child: ReturnType<typeof spawn>, input: string | undefined, out: ErrorLines) {
+async function answerOf(
+  child: ReturnType<typeof spawn>,
+  input: string | undefined,
+  out: ErrorLines
+) {
   const errors = passOn(child.stderr, out)
   try {
     if (input !== undefined) child.stdin.write(input)
@@ -226,14 +263,20 @@ async function answerOf(child: ReturnType<typeof spawn>, input: string | undefin
   const stdout = await readUpTo(child.stdout, LIMITS.messageBytes)
   if (stdout === undefined) {
     child.kill()
-    throw new CliError("The runner sent more than an answer can hold. Check what is installed at that path.")
+    throw new CliError(
+      "The runner sent more than an answer can hold. Check what is installed at that path."
+    )
   }
   const exitCode = await child.exited
   await Promise.race([errors, Bun.sleep(ERROR_GRACE_MS)])
   return { exitCode, stdout }
 }
 
-function open(argv: string[], env: Record<string, string | undefined> | undefined, out: ErrorLines): RunnerProcess {
+function open(
+  argv: string[],
+  env: Record<string, string | undefined> | undefined,
+  out: ErrorLines
+): RunnerProcess {
   const child = spawn(argv, env)
   const errorsRead = passOn(child.stderr, out)
   let writable = true
@@ -278,11 +321,13 @@ function transport(
 ): Transport {
   const command = (word: string): string[] => {
     // The type already says so; this holds even for a caller that got around it.
-    if (!WORDS.includes(word)) throw new CliError(`"${word}" is not a runner command.`)
+    if (!WORDS.includes(word))
+      throw new CliError(`"${word}" is not a runner command.`)
     return argv(word)
   }
   return {
-    run: async (word, input, signal) => run(command(word), input, env(), out, signal),
+    run: async (word, input, signal) =>
+      run(command(word), input, env(), out, signal),
     open: () => open(command("session"), env(), out),
     firstAnswerMs,
   }
@@ -312,7 +357,11 @@ function ssh(destination: string, remote: string, batch: boolean): string[] {
  * What the runner writes on standard error goes to `options.errorLines`, or
  * to this process's standard error when there is none.
  */
-export function connect(target: Target, localRunner: string[], options: ConnectOptions = {}): Transport {
+export function connect(
+  target: Target,
+  localRunner: string[],
+  options: ConnectOptions = {}
+): Transport {
   const out = options.errorLines ?? toStandardError
   if (target.kind === "local") {
     return transport(
@@ -322,23 +371,42 @@ export function connect(target: Target, localRunner: string[], options: ConnectO
       LOCAL_FIRST_ANSWER_MS
     )
   }
-  if (!SSH_DESTINATION.test(target.destination) || !RUNNER_PATH.test(target.runnerPath)) {
-    throw new CliError("The stored SSH destination or runner path is not valid.")
+  if (
+    !SSH_DESTINATION.test(target.destination) ||
+    !RUNNER_PATH.test(target.runnerPath)
+  ) {
+    throw new CliError(
+      "The stored SSH destination or runner path is not valid."
+    )
   }
   // `--` ends ssh's own options, and both values match strict patterns, so
   // neither can be read as an option or carry a shell command. The word after
   // the path is one of a fixed few, so the remote command is built from
   // nothing else.
   const batch = options.batch === true
-  const runner = transport((word) => ssh(target.destination, `${target.runnerPath} ${word}`, batch), () => undefined, out)
+  const runner = transport(
+    (word) => ssh(target.destination, `${target.runnerPath} ${word}`, batch),
+    () => undefined,
+    out
+  )
   return {
     ...runner,
     destination: target.destination,
     script(words) {
-      if (words.length === 0 || words.length > SCRIPT_WORDS || !words.every((word) => SCRIPT_WORD.test(word))) {
-        throw new CliError("The installer's arguments are not valid, so nothing was sent to the server.")
+      if (
+        words.length === 0 ||
+        words.length > SCRIPT_WORDS ||
+        !words.every((word) => SCRIPT_WORD.test(word))
+      ) {
+        throw new CliError(
+          "The installer's arguments are not valid, so nothing was sent to the server."
+        )
       }
-      return open(ssh(target.destination, ["sh", "-s", "--", ...words].join(" "), batch), undefined, out)
+      return open(
+        ssh(target.destination, ["sh", "-s", "--", ...words].join(" "), batch),
+        undefined,
+        out
+      )
     },
   }
 }
@@ -355,13 +423,20 @@ export async function ask<Schema extends z.ZodType>(
   message?: unknown,
   signal?: AbortSignal
 ): Promise<z.infer<Schema>> {
-  const { stdout } = await transport.run(command, message === undefined ? undefined : JSON.stringify(message), signal)
+  const { stdout } = await transport.run(
+    command,
+    message === undefined ? undefined : JSON.stringify(message),
+    signal
+  )
   const line = stdout.trim().split("\n").at(-1) ?? ""
   const report = parseMessage(RunnerReportSchema, line)
-  if (report.ok && report.value.outcome === "refused") throw new RunnerRefused(report.value.reason!)
+  if (report.ok && report.value.outcome === "refused")
+    throw new RunnerRefused(report.value.reason!)
   const parsed = parseMessage(schema, line)
   if (!parsed.ok) {
-    throw new CliError("The runner did not answer as expected. Check that it is installed and reachable.")
+    throw new CliError(
+      "The runner did not answer as expected. Check that it is installed and reachable."
+    )
   }
   return parsed.value
 }

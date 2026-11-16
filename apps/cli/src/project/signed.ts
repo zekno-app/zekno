@@ -22,13 +22,20 @@ import { shownPath } from "./shown"
  * removed member's, one edited after signing, or one for a server of
  * another name.
  */
-export function signerOf(link: ProjectLink, trust: TeamTrust): Member | undefined {
+export function signerOf(
+  link: ProjectLink,
+  trust: TeamTrust
+): Member | undefined {
   if (link.signed === undefined) return undefined
   const verified = verifyLink(trust, link.signed)
   if (!verified.ok) return undefined
   const { serverId, app, compose, signer } = verified.value
   const server = trust.servers.find((entry) => entry.serverId === serverId)
-  return app === link.app && compose === link.compose && server?.name === link.server ? signer : undefined
+  return app === link.app &&
+    compose === link.compose &&
+    server?.name === link.server
+    ? signer
+    : undefined
 }
 
 /**
@@ -37,12 +44,20 @@ export function signerOf(link: ProjectLink, trust: TeamTrust): Member | undefine
  * in its folder here (`new`); or signed and used here before, byte for byte
  * (`used`). `member` is the signer's name from the team list, cleaned.
  */
-export type Standing = { kind: "unsigned" } | { kind: "new" | "used"; member: string }
+export type Standing =
+  { kind: "unsigned" } | { kind: "new" | "used"; member: string }
 
-export function standingOf(link: ProjectLink, trust: TeamTrust, profile: string): Standing {
+export function standingOf(
+  link: ProjectLink,
+  trust: TeamTrust,
+  profile: string
+): Standing {
   const signer = signerOf(link, trust)
   if (!signer) return { kind: "unsigned" }
-  return { kind: isAccepted(profile, link) ? "used" : "new", member: sanitize(signer.name) }
+  return {
+    kind: isAccepted(profile, link) ? "used" : "new",
+    member: sanitize(signer.name),
+  }
 }
 
 /** Said when a command would take a name from a zekno.json not signed by the team (S1). */

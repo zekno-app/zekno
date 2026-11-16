@@ -12,7 +12,11 @@ import { z } from "zod"
 import { CliError } from "./errors"
 import type { KeyStore } from "../profile/keystore"
 import type { Fetch } from "../version/newest"
-import { profileStore, type Profile, type ProfileStore } from "../profile/profile"
+import {
+  profileStore,
+  type Profile,
+  type ProfileStore,
+} from "../profile/profile"
 import type { RunnerRelease } from "../version/runner-release"
 import type { ConnectOptions, Target, Transport } from "../server/transport"
 import type { Ui } from "../ui/types"
@@ -24,7 +28,11 @@ export type Deps = {
   /** The folder commands were run from, for finding the Compose file. */
   cwd: string
   keyStore: KeyStore
-  connect(target: Target, localRunner: string[], options?: ConnectOptions): Transport
+  connect(
+    target: Target,
+    localRunner: string[],
+    options?: ConnectOptions
+  ): Transport
   /** How results, progress and questions reach the person. */
   ui: Ui
   /** The command that starts a runner on this machine, for `--local`. */
@@ -55,8 +63,10 @@ export type Deps = {
  */
 export type OpDeps = Omit<Deps, "ui">
 
-export const reach = (deps: Pick<Deps, "connect" | "localRunner">, target: Target): Transport =>
-  deps.connect(target, deps.localRunner)
+export const reach = (
+  deps: Pick<Deps, "connect" | "localRunner">,
+  target: Target
+): Transport => deps.connect(target, deps.localRunner)
 
 /**
  * A single command's way of showing what a runner, Docker or SSH write on
@@ -69,7 +79,10 @@ export function remoteThroughUi(deps: Deps): Deps {
   return {
     ...deps,
     connect: (target, localRunner, options) =>
-      deps.connect(target, localRunner, { ...options, errorLines: options?.errorLines ?? ((line) => deps.ui.remote(line)) }),
+      deps.connect(target, localRunner, {
+        ...options,
+        errorLines: options?.errorLines ?? ((line) => deps.ui.remote(line)),
+      }),
   }
 }
 
@@ -85,8 +98,15 @@ const IdentitySchema = z.strictObject({
 })
 type Identity = z.infer<typeof IdentitySchema>
 
-export const writeIdentity = (keyStore: KeyStore, keyName: string, identity: Omit<Identity, "v">): Promise<void> =>
-  keyStore.set(keyName, JSON.stringify({ v: 1, ...identity } satisfies Identity))
+export const writeIdentity = (
+  keyStore: KeyStore,
+  keyName: string,
+  identity: Omit<Identity, "v">
+): Promise<void> =>
+  keyStore.set(
+    keyName,
+    JSON.stringify({ v: 1, ...identity } satisfies Identity)
+  )
 
 /**
  * Why the keychain entry could not be read, with the sentence every command
@@ -103,14 +123,24 @@ export class KeyEntryError extends CliError {
 }
 
 /** Reads the signing key and the team code from the keychain entry `keyName`. Exported for `zekno doctor`'s Key line. */
-export async function readIdentity(keyStore: KeyStore, keyName: string): Promise<Identity> {
+export async function readIdentity(
+  keyStore: KeyStore,
+  keyName: string
+): Promise<Identity> {
   let entry: string | null
   try {
     entry = await keyStore.get(keyName)
   } catch {
-    throw new KeyEntryError("unreadable", "The system keychain could not be read. The signing key is kept nowhere else.")
+    throw new KeyEntryError(
+      "unreadable",
+      "The system keychain could not be read. The signing key is kept nowhere else."
+    )
   }
-  if (!entry) throw new KeyEntryError("missing", "The signing key is not in the system keychain on this machine.")
+  if (!entry)
+    throw new KeyEntryError(
+      "missing",
+      "The signing key is not in the system keychain on this machine."
+    )
   let json: unknown
   try {
     json = JSON.parse(entry)
@@ -118,7 +148,11 @@ export async function readIdentity(keyStore: KeyStore, keyName: string): Promise
     json = undefined
   }
   const identity = IdentitySchema.safeParse(json)
-  if (!identity.success) throw new KeyEntryError("form", "The keychain entry for the signing key is not in a form this version reads.")
+  if (!identity.success)
+    throw new KeyEntryError(
+      "form",
+      "The keychain entry for the signing key is not in a form this version reads."
+    )
   return identity.data
 }
 
@@ -135,7 +169,8 @@ export type Team = {
   withSigner<T>(work: (signer: Signer) => Promise<T>): Promise<T>
 }
 
-export const TAMPERED = "The profile folder may have been changed by something other than zekno."
+export const TAMPERED =
+  "The profile folder may have been changed by something other than zekno."
 
 /**
  * Loads the profile and proves it. The profile folder is ordinary files, so
@@ -144,7 +179,9 @@ export const TAMPERED = "The profile folder may have been changed by something o
  * admin of the one before, and every server the profile names must be in the
  * signed list under that name.
  */
-export async function openTeam(deps: Pick<Deps, "home" | "keyStore">): Promise<Team> {
+export async function openTeam(
+  deps: Pick<Deps, "home" | "keyStore">
+): Promise<Team> {
   const store = profileStore(deps.home)
   const profile = store.load()
   const identity = await readIdentity(deps.keyStore, profile.keyName)
@@ -167,21 +204,35 @@ export async function openTeam(deps: Pick<Deps, "home" | "keyStore">): Promise<T
  * before, and every server the profile names must be in the signed list
  * under that name.
  */
-function verifiedProfile(store: ProfileStore, profile: Profile, teamCode: string): Omit<Team, "withSigner"> {
+function verifiedProfile(
+  store: ProfileStore,
+  profile: Profile,
+  teamCode: string
+): Omit<Team, "withSigner"> {
   const founding = trustFoundingRoster(profile.rosters[0], teamCode)
-  if (!founding.ok) throw new CliError(`The team list in the profile is not the one this machine's key belongs to. ${TAMPERED}`)
+  if (!founding.ok)
+    throw new CliError(
+      `The team list in the profile is not the one this machine's key belongs to. ${TAMPERED}`
+    )
   const chain = [founding.value]
   for (const envelope of profile.rosters.slice(1)) {
     const next = applyRosterUpdate(chain.at(-1)!, envelope)
-    if (!next.ok) throw new CliError(`A team list in the profile could not be verified (${next.error.code}). ${TAMPERED}`)
+    if (!next.ok)
+      throw new CliError(
+        `A team list in the profile could not be verified (${next.error.code}). ${TAMPERED}`
+      )
     chain.push(next.value)
   }
   const trust = chain.at(-1)!
 
   for (const server of profile.servers) {
-    const signed = trust.servers.find((entry) => entry.serverId === server.serverId)
+    const signed = trust.servers.find(
+      (entry) => entry.serverId === server.serverId
+    )
     if (signed?.name !== server.name) {
-      throw new CliError(`The profile names a server "${server.name}" that is not in the signed team list. ${TAMPERED}`)
+      throw new CliError(
+        `The profile names a server "${server.name}" that is not in the signed team list. ${TAMPERED}`
+      )
     }
   }
   return { store, profile, trust, chain, teamCode }
@@ -198,12 +249,20 @@ function verifiedProfile(store: ProfileStore, profile: Profile, teamCode: string
  */
 export function reopenTeam(team: Team): Team {
   const profile = team.store.load()
-  if (profile.keyName !== team.profile.keyName) throw new CliError(`The profile names another signing key than it did a moment ago. ${TAMPERED}`)
-  return { ...verifiedProfile(team.store, profile, team.teamCode), withSigner: team.withSigner }
+  if (profile.keyName !== team.profile.keyName)
+    throw new CliError(
+      `The profile names another signing key than it did a moment ago. ${TAMPERED}`
+    )
+  return {
+    ...verifiedProfile(team.store, profile, team.teamCode),
+    withSigner: team.withSigner,
+  }
 }
 
 /** The verified team an operation works with: the one this run of a command opened already, or opened now. */
-export const teamOf = (deps: Pick<Deps, "home" | "keyStore" | "team">): Promise<Team> => deps.team?.() ?? openTeam(deps)
+export const teamOf = (
+  deps: Pick<Deps, "home" | "keyStore" | "team">
+): Promise<Team> => deps.team?.() ?? openTeam(deps)
 
 /**
  * The verified team for one run of a command, opened at most once, when it
@@ -215,7 +274,11 @@ export const teamOf = (deps: Pick<Deps, "home" | "keyStore" | "team">): Promise<
  * operation holds it. An open that failed is not kept either: the next one
  * opens again, so a team made since (a first deploy makes one) is found.
  */
-export function teamOnce(deps: Pick<Deps, "home" | "keyStore">): { trust(): Promise<TeamTrust>; peek(): Promise<Team>; take(): Promise<Team> } {
+export function teamOnce(deps: Pick<Deps, "home" | "keyStore">): {
+  trust(): Promise<TeamTrust>
+  peek(): Promise<Team>
+  take(): Promise<Team>
+} {
   let opened: Promise<Team> | undefined
   const open = (): Promise<Team> => {
     if (opened) return opened

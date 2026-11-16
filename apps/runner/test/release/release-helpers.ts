@@ -23,17 +23,30 @@ export const GIT_ENV: Record<string, string> = {
 }
 
 /** The environment for a process that runs git in these repositories. */
-export const gitEnv = (): Record<string, string> => ({ ...(process.env as Record<string, string>), ...GIT_ENV })
+export const gitEnv = (): Record<string, string> => ({
+  ...(process.env as Record<string, string>),
+  ...GIT_ENV,
+})
 
 /** Runs git in `cwd` and gives its standard output, trimmed; throws when it fails. */
 export function git(cwd: string, ...args: string[]): string {
-  const result = Bun.spawnSync(["git", ...args], { cwd, env: gitEnv(), stdout: "pipe", stderr: "pipe" })
-  if (result.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr.toString()}`)
+  const result = Bun.spawnSync(["git", ...args], {
+    cwd,
+    env: gitEnv(),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  if (result.exitCode !== 0)
+    throw new Error(`git ${args.join(" ")}: ${result.stderr.toString()}`)
   return result.stdout.toString().trim()
 }
 
 /** What one commit says: the runner's version, the CLI's carried version, and the Bun pin (none when null). */
-export type CommitVersions = { runner: string; cli: string; bun?: string | null }
+export type CommitVersions = {
+  runner: string
+  cli: string
+  bun?: string | null
+}
 
 function writeCommit(root: string, label: string, versions: CommitVersions) {
   const write = (path: string, text: string) => {
@@ -41,9 +54,18 @@ function writeCommit(root: string, label: string, versions: CommitVersions) {
     writeFileSync(join(root, path), text)
   }
   const bun = versions.bun === undefined ? "1.4.4" : versions.bun
-  write("package.json", `${JSON.stringify({ name: "zekno", private: true, ...(bun === null ? {} : { packageManager: `bun@${bun}` }) }, null, 2)}\n`)
-  write("apps/runner/package.json", `${JSON.stringify({ name: "@workspace/runner", version: versions.runner }, null, 2)}\n`)
-  write("apps/cli/src/version/runner-release.json", runnerRelease(versions.cli, null, null))
+  write(
+    "package.json",
+    `${JSON.stringify({ name: "zekno", private: true, ...(bun === null ? {} : { packageManager: `bun@${bun}` }) }, null, 2)}\n`
+  )
+  write(
+    "apps/runner/package.json",
+    `${JSON.stringify({ name: "@workspace/runner", version: versions.runner }, null, 2)}\n`
+  )
+  write(
+    "apps/cli/src/version/runner-release.json",
+    runnerRelease(versions.cli, null, null)
+  )
   write(`notes/${label}.txt`, `${label}\n`)
   git(root, "add", "-A")
   git(root, "commit", "-q", "-m", label)
@@ -51,7 +73,11 @@ function writeCommit(root: string, label: string, versions: CommitVersions) {
 }
 
 /** apps/cli/src/version/runner-release.json as the second build writes it. */
-export function runnerRelease(version: string, x64: string | null, arm64: string | null): string {
+export function runnerRelease(
+  version: string,
+  x64: string | null,
+  arm64: string | null
+): string {
   return `${JSON.stringify({ version, files: { "linux-x64": { sha256: x64 }, "linux-arm64": { sha256: arm64 } } }, null, 2)}\n`
 }
 
@@ -65,7 +91,11 @@ export type ReleaseRepo = {
   checkout(tag: string, commit: string): void
 }
 
-function repoAt(root: string, origin: string, commits: ReleaseRepo["commits"]): ReleaseRepo {
+function repoAt(
+  root: string,
+  origin: string,
+  commits: ReleaseRepo["commits"]
+): ReleaseRepo {
   return {
     root,
     origin,
@@ -92,7 +122,8 @@ export function copied(key: string, make: () => ReleaseRepo): ReleaseRepo {
   }
   const dir = tempDir("release")
   const copy = Bun.spawnSync(["cp", "-R", `${dirname(template.root)}/.`, dir])
-  if (copy.exitCode !== 0) throw new Error(`could not copy a repository: ${copy.stderr.toString()}`)
+  if (copy.exitCode !== 0)
+    throw new Error(`could not copy a repository: ${copy.stderr.toString()}`)
   const root = join(dir, "clone")
   const origin = join(dir, "origin.git")
   git(root, "remote", "set-url", "origin", origin)
@@ -100,7 +131,9 @@ export function copied(key: string, make: () => ReleaseRepo): ReleaseRepo {
 }
 
 /** A repository with A on main, B on dev, C on feature; by default all three say 0.1.0-dev.1. */
-export function releaseRepo(versions: Partial<Record<"a" | "b" | "c", CommitVersions>> = {}): ReleaseRepo {
+export function releaseRepo(
+  versions: Partial<Record<"a" | "b" | "c", CommitVersions>> = {}
+): ReleaseRepo {
   return copied(JSON.stringify(versions), () => {
     const dev: CommitVersions = { runner: "0.1.0-dev.1", cli: "0.1.0-dev.1" }
     const dir = tempDir("release")

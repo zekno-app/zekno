@@ -18,7 +18,12 @@ import { inkUi } from "../../../src/ui/ink/ink"
 import { plainUi } from "../../../src/ui/plain/plain"
 import type { ListRow } from "../../../src/ui/types"
 import { COMPOSE_V1, machine, ready, screenOf } from "../../support/helpers"
-import { realRunner, sshStandIn, standInServer, withSsh } from "../../support/stand-in-server"
+import {
+  realRunner,
+  sshStandIn,
+  standInServer,
+  withSsh,
+} from "../../support/stand-in-server"
 import { shows, terminal, until } from "../../support/terminal"
 
 const UP = "\x1b[A"
@@ -35,9 +40,19 @@ const SERVERS: ListRow<string>[] = [
   { value: "prod", label: "prod", detail: "deploy@203.0.113.7" },
   { value: "staging", label: "staging", detail: "this machine" },
 ]
-const MOCK_UP_1 = ["? Which server?", "  ❯ prod       deploy@203.0.113.7", "    staging    this machine", "  ↑↓ move   enter choose   esc leave"]
+const MOCK_UP_1 = [
+  "? Which server?",
+  "  ❯ prod       deploy@203.0.113.7",
+  "    staging    this machine",
+  "  ↑↓ move   enter choose   esc leave",
+]
 const missing = new Error("the sentence the command has today")
-const whichServer = (rows: ListRow<string>[] = SERVERS) => ({ question: "Which server?", rows, collapsed: "Server", missing })
+const whichServer = (rows: ListRow<string>[] = SERVERS) => ({
+  question: "Which server?",
+  rows,
+  collapsed: "Server",
+  missing,
+})
 
 describe("a list (mock-up 1)", () => {
   test("it draws the four lines of mock-up 1; ↓ and ↑ move and stop at the ends; Enter chooses and leaves one line", async () => {
@@ -66,7 +81,17 @@ describe("a list (mock-up 1)", () => {
     const t = terminal()
     const chosen = t.ui.choose(whichServer())
     await shows(t, "? Which server?")
-    for (const key of ["y", "n", "q", " ", "\t", "\x1b[C", "\x1b[D", "2", BACKSPACE]) {
+    for (const key of [
+      "y",
+      "n",
+      "q",
+      " ",
+      "\t",
+      "\x1b[C",
+      "\x1b[D",
+      "2",
+      BACKSPACE,
+    ]) {
       t.keys(key)
       await Bun.sleep(30)
     }
@@ -92,14 +117,26 @@ describe("a list (mock-up 1)", () => {
 
   test("a row that asks a question of its own, such as + a new app, leaves no line when chosen: that question follows the list", async () => {
     const t = terminal()
-    const chosen = t.ui.choose({ ...whichServer([...SERVERS, { value: "new", label: "+ a new app", asksNext: true }]), question: "Which app on prod?", collapsed: "App" })
+    const chosen = t.ui.choose({
+      ...whichServer([
+        ...SERVERS,
+        { value: "new", label: "+ a new app", asksNext: true },
+      ]),
+      question: "Which app on prod?",
+      collapsed: "App",
+    })
     await shows(t, "? Which app on prod?")
     t.keys(DOWN)
     t.keys(DOWN)
     await shows(t, "  ❯ + a new app")
     t.keys(ENTER)
     expect(await chosen).toBe("new")
-    const named = t.ui.ask({ question: "Name for the new app", fill: "my-folder", check: () => undefined, missing })
+    const named = t.ui.ask({
+      question: "Name for the new app",
+      fill: "my-folder",
+      check: () => undefined,
+      missing,
+    })
     await shows(t, "? Name for the new app › my-folder")
     expect(t.lines()).toEqual(["? Name for the new app › my-folder"])
     t.keys(ENTER)
@@ -112,10 +149,24 @@ describe("a list (mock-up 1)", () => {
   test("the label column is max(11, longest label + 2); a row with no detail ends after its label", async () => {
     const t = terminal()
     const chosen = t.ui.choose(
-      whichServer([{ value: "a", label: "a-very-long-server-name", detail: "this machine" }, { value: "b", label: "b", detail: "deploy@x" }, { value: "new", label: "+ a new app" }])
+      whichServer([
+        {
+          value: "a",
+          label: "a-very-long-server-name",
+          detail: "this machine",
+        },
+        { value: "b", label: "b", detail: "deploy@x" },
+        { value: "new", label: "+ a new app" },
+      ])
     )
     await shows(t, "? Which server?")
-    expect(t.lines()).toEqual(["? Which server?", "  ❯ a-very-long-server-name  this machine", "    b                        deploy@x", "    + a new app", "  ↑↓ move   enter choose   esc leave"])
+    expect(t.lines()).toEqual([
+      "? Which server?",
+      "  ❯ a-very-long-server-name  this machine",
+      "    b                        deploy@x",
+      "    + a new app",
+      "  ↑↓ move   enter choose   esc leave",
+    ])
     t.keys(ESC)
     await chosen.catch(() => {})
     await t.ui.close()
@@ -123,8 +174,17 @@ describe("a list (mock-up 1)", () => {
 
   test("fifty rows in a window of 80 by 10: at least three rows, how many more below, and above once at the end; every line fits", async () => {
     const t = terminal(80, 10)
-    const rows = Array.from({ length: 50 }, (_, index) => ({ value: index + 1, label: `server-${index + 1}`, detail: `deploy@203.0.113.${index + 1}` }))
-    const chosen = t.ui.choose({ question: "Which server?", rows, collapsed: "Server", missing })
+    const rows = Array.from({ length: 50 }, (_, index) => ({
+      value: index + 1,
+      label: `server-${index + 1}`,
+      detail: `deploy@203.0.113.${index + 1}`,
+    }))
+    const chosen = t.ui.choose({
+      question: "Which server?",
+      rows,
+      collapsed: "Server",
+      missing,
+    })
     await shows(t, "? Which server?")
     const isRow = (line: string) => /^ {2}(❯| ) server-\d+ /.test(line)
     const top = t.lines()
@@ -132,10 +192,15 @@ describe("a list (mock-up 1)", () => {
     const below = top.find((line) => /^ {2}↓ \d+ more$/.test(line))
     expect(below).toBeDefined()
     expect(top.filter(isRow).length + Number(/\d+/.exec(below!)![0])).toBe(50)
-    expect(top.some((line) => line.includes("↑") && line.includes("more"))).toBe(false)
+    expect(
+      top.some((line) => line.includes("↑") && line.includes("more"))
+    ).toBe(false)
     for (const line of top) expect([...line].length).toBeLessThanOrEqual(80)
     t.keys(DOWN.repeat(60))
-    await until(() => t.lines().some((line) => line.startsWith("  ❯ server-50 ")), "the last row selected")
+    await until(
+      () => t.lines().some((line) => line.startsWith("  ❯ server-50 ")),
+      "the last row selected"
+    )
     const end = t.lines()
     expect(end.some((line) => /^ {2}↑ \d+ more$/.test(line))).toBe(true)
     expect(end.some((line) => /^ {2}↓ \d+ more$/.test(line))).toBe(false)
@@ -148,7 +213,9 @@ describe("a list (mock-up 1)", () => {
 })
 
 describe("a typed answer (mock-up 2)", () => {
-  const nameForTheNewApp = (check: (answer: string) => string | undefined = () => undefined) => ({ question: "Name for the new app", fill: "my-folder", check, missing })
+  const nameForTheNewApp = (
+    check: (answer: string) => string | undefined = () => undefined
+  ) => ({ question: "Name for the new app", fill: "my-folder", check, missing })
 
   test("the value filled in is the answer so far; Backspace takes one character; a good answer leaves its line without the cursor", async () => {
     const t = terminal()
@@ -171,12 +238,19 @@ describe("a typed answer (mock-up 2)", () => {
 
   test("a refused answer stays open as typed, with the reason under it in line with the question's words and no mark; a paste of two lines changes nothing", async () => {
     const t = terminal()
-    const answered = t.ui.ask(nameForTheNewApp((answer) => (answer === "my-folder" ? "Not that one." : undefined)))
+    const answered = t.ui.ask(
+      nameForTheNewApp((answer) =>
+        answer === "my-folder" ? "Not that one." : undefined
+      )
+    )
     await shows(t, "? Name for the new app › my-folder")
     t.keys(ENTER)
     // As the board "Questions in single commands" draws it: from column 2, under the question's words, without `!`.
     await shows(t, "  Not that one.")
-    expect(t.lines()).toEqual(["? Name for the new app › my-folder", "  Not that one."])
+    expect(t.lines()).toEqual([
+      "? Name for the new app › my-folder",
+      "  Not that one.",
+    ])
     expect(t.raw()).not.toContain("!")
     t.keys("x\ny")
     await settle()
@@ -190,7 +264,12 @@ describe("a typed answer (mock-up 2)", () => {
 
   test("a reason wider than the window goes on under itself, never at the left edge", async () => {
     const t = terminal(40)
-    const answered = t.ui.ask(nameForTheNewApp(() => "Use lowercase letters, digits and hyphens, starting with a letter or a digit."))
+    const answered = t.ui.ask(
+      nameForTheNewApp(
+        () =>
+          "Use lowercase letters, digits and hyphens, starting with a letter or a digit."
+      )
+    )
     await shows(t, "? Name for the new app › my-folder")
     t.keys(ENTER)
     await shows(t, "  Use lowercase letters, digits and")
@@ -235,24 +314,41 @@ describe("one question after another", () => {
     await shows(t, "  ❯ staging    this machine")
     t.keys(ENTER)
     expect(await first).toBe("staging")
-    const second = t.ui.choose({ ...whichServer(), question: "Which app on staging?", collapsed: "App" })
+    const second = t.ui.choose({
+      ...whichServer(),
+      question: "Which app on staging?",
+      collapsed: "App",
+    })
     await shows(t, "? Which app on staging?")
     expect(t.lines()).toContain("  ❯ prod       deploy@203.0.113.7")
     t.keys(ENTER)
     expect(await second).toBe("prod")
-    const where = t.ui.ask({ question: "Where is the server?", check: () => undefined, missing })
+    const where = t.ui.ask({
+      question: "Where is the server?",
+      check: () => undefined,
+      missing,
+    })
     await shows(t, "? Where is the server? ›")
     t.keys("deploy@203.0.113.7")
     await shows(t, "? Where is the server? › deploy@203.0.113.7")
     t.keys(ENTER)
     expect(await where).toBe("deploy@203.0.113.7")
-    const name = t.ui.ask({ question: "A name for it", check: () => undefined, missing })
+    const name = t.ui.ask({
+      question: "A name for it",
+      check: () => undefined,
+      missing,
+    })
     await shows(t, "? A name for it ›")
     t.keys("prod")
     t.keys(ENTER)
     expect(await name).toBe("prod")
     await settle()
-    expect(t.lines()).toEqual(["✔ Server  staging", "✔ App  prod", "? Where is the server? › deploy@203.0.113.7", "? A name for it › prod"])
+    expect(t.lines()).toEqual([
+      "✔ Server  staging",
+      "✔ App  prod",
+      "? Where is the server? › deploy@203.0.113.7",
+      "? A name for it › prod",
+    ])
     await t.ui.close()
   })
 })
@@ -278,7 +374,9 @@ describe("a yes-or-no question", () => {
 
   test("no other key answers it", async () => {
     const t = terminal()
-    const asked = t.ui.confirm("Remember this folder?", "no terminal", { leave: true })
+    const asked = t.ui.confirm("Remember this folder?", "no terminal", {
+      leave: true,
+    })
     await shows(t, "? Remember this folder? (y/N)")
     for (const key of ["x", "q", " ", "1", "\t", DOWN, "yes"]) {
       t.keys(key)
@@ -293,18 +391,26 @@ describe("a yes-or-no question", () => {
   test("asked with leave: Esc and Ctrl-C leave, and its line stays as it was drawn; n and Enter are no", async () => {
     for (const key of [ESC, CTRL_C]) {
       const t = terminal()
-      const asked = t.ui.confirm("Remember this folder? It writes zekno.json.", "no terminal", { leave: true })
+      const asked = t.ui.confirm(
+        "Remember this folder? It writes zekno.json.",
+        "no terminal",
+        { leave: true }
+      )
       await shows(t, "? Remember this folder? It writes zekno.json. (y/N)")
       t.keys(key)
       expect(asked).rejects.toBeInstanceOf(Left)
       await asked.catch(() => {})
       await settle()
-      expect(t.lines()).toEqual(["? Remember this folder? It writes zekno.json. (y/N)"])
+      expect(t.lines()).toEqual([
+        "? Remember this folder? It writes zekno.json. (y/N)",
+      ])
       await t.ui.close()
     }
     for (const key of ["n", ENTER]) {
       const t = terminal()
-      const asked = t.ui.confirm("Remember this folder?", "no terminal", { leave: true })
+      const asked = t.ui.confirm("Remember this folder?", "no terminal", {
+        leave: true,
+      })
       await shows(t, "? Remember this folder? (y/N)")
       t.keys(key)
       expect(await asked).toBe(false)
@@ -315,7 +421,8 @@ describe("a yes-or-no question", () => {
 
 describe("the hidden prompt that can be skipped (mock-up 3)", () => {
   const QUESTION = "Value for DATABASE_URL (demo on prod): "
-  const OPEN = "? Value for DATABASE_URL (demo on prod): (hidden)   esc skips it"
+  const OPEN =
+    "? Value for DATABASE_URL (demo on prod): (hidden)   esc skips it"
 
   test("it draws the line of mock-up 3, takes a value without drawing any of it, and leaves the line ending (hidden)", async () => {
     const t = terminal()
@@ -338,11 +445,20 @@ describe("the hidden prompt that can be skipped (mock-up 3)", () => {
     t.keys(ENTER)
     // Drawn as a refused typed answer's reason (specs/008-cli-decisions): from column 2, under the question's words, without `!`.
     await shows(t, "  A value cannot be empty. Press esc to skip it.")
-    expect(t.lines()).toEqual([OPEN, "  A value cannot be empty. Press esc to skip it."])
+    expect(t.lines()).toEqual([
+      OPEN,
+      "  A value cannot be empty. Press esc to skip it.",
+    ])
     t.keys("zk_first_9f3a\nzk_second_9f3a\n")
     // The command without its backticks, as an error line draws one at a terminal.
-    await shows(t, "  That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin.")
-    expect(t.lines()).toEqual([OPEN, "  That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin."])
+    await shows(
+      t,
+      "  That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin."
+    )
+    expect(t.lines()).toEqual([
+      OPEN,
+      "  That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin.",
+    ])
     expect(t.raw()).not.toContain("!")
     expect(t.raw()).not.toContain("`")
     t.keys(ESC)
@@ -350,7 +466,9 @@ describe("the hidden prompt that can be skipped (mock-up 3)", () => {
     await shows(t, "? Value for DATABASE_URL (demo on prod): skipped")
     // The reason goes with the prompt: only the line that says the value was skipped stays.
     await settle()
-    expect(t.lines()).toEqual(["? Value for DATABASE_URL (demo on prod): skipped"])
+    expect(t.lines()).toEqual([
+      "? Value for DATABASE_URL (demo on prod): skipped",
+    ])
     expect(t.raw()).not.toContain("9f3a")
     await t.ui.close()
   })
@@ -377,7 +495,10 @@ describe("the hidden prompt that can be skipped (mock-up 3)", () => {
     const value = t.ui.askValue(QUESTION, "DATABASE_URL")
     await shows(t, OPEN)
     t.keys("zk_first_9f3a\nzk_second_9f3a\n")
-    await shows(t, "  That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin.")
+    await shows(
+      t,
+      "  That value has more than one line. Press esc to skip it, and set it later with zekno secret set DATABASE_URL --stdin."
+    )
     t.keys(CTRL_C)
     expect(value).rejects.toBeInstanceOf(Left)
     await value.catch(() => {})
@@ -392,12 +513,20 @@ describe("the hidden prompt that can be skipped (mock-up 3)", () => {
     const m = await ready()
     const plain = m.deps.ui
     for (const [typed, said] of [
-      ["zk_first_9f3a\nzk_second_9f3a\n", ["✖ That value has more than one line.", "  Pipe it in and add --stdin."]],
+      [
+        "zk_first_9f3a\nzk_second_9f3a\n",
+        [
+          "✖ That value has more than one line.",
+          "  Pipe it in and add --stdin.",
+        ],
+      ],
       [ENTER, ["✖ No value was given, so nothing was set."]],
     ] as const) {
       const t = terminal(200)
       m.deps.ui = t.ui
-      const done = m.zekno("secret", "set", "GREETING", "--app", "web", "--server", "dev").finally(() => (m.deps.ui = plain))
+      const done = m
+        .zekno("secret", "set", "GREETING", "--app", "web", "--server", "dev")
+        .finally(() => (m.deps.ui = plain))
       await shows(t, "? Value for GREETING (web on dev): (hidden)", 20_000)
       t.keys(typed)
       expect(await done).toBe(1)
@@ -526,7 +655,10 @@ describe("keys typed before a question is on the screen never answer it (FR-007,
     if (keys.before !== undefined) t.keys(keys.before)
     const asked = open(t)
     if (keys.during !== undefined) setTimeout(() => t.keys(keys.during!), 10)
-    await until(() => t.lines().some((line) => line.startsWith(keys.drawn)), `the question ${keys.drawn}`)
+    await until(
+      () => t.lines().some((line) => line.startsWith(keys.drawn)),
+      `the question ${keys.drawn}`
+    )
     for (const key of keys.late) {
       t.keys(key)
       await settle()
@@ -543,47 +675,101 @@ describe("keys typed before a question is on the screen never answer it (FR-007,
 
   test("a list: y, Enter and abc typed before, or Enter while it opens, never choose", async () => {
     for (const before of ["y", ENTER, "abc"]) {
-      const { answer, raw } = await early((t) => t.ui.choose(whichServer()), { before, drawn: "? Which server?", late: [DOWN, ENTER] })
-      expect({ before, answer, raw }).toEqual({ before, answer: "staging", raw: false })
+      const { answer, raw } = await early((t) => t.ui.choose(whichServer()), {
+        before,
+        drawn: "? Which server?",
+        late: [DOWN, ENTER],
+      })
+      expect({ before, answer, raw }).toEqual({
+        before,
+        answer: "staging",
+        raw: false,
+      })
     }
-    const { answer } = await early((t) => t.ui.choose(whichServer()), { during: ENTER, drawn: "? Which server?", late: [DOWN, ENTER] })
+    const { answer } = await early((t) => t.ui.choose(whichServer()), {
+      during: ENTER,
+      drawn: "? Which server?",
+      late: [DOWN, ENTER],
+    })
     expect(answer).toBe("staging")
   })
 
   test("a typed answer: nothing typed before becomes part of it or answers it", async () => {
     for (const before of ["y", ENTER, "abc"]) {
-      const { answer, raw } = await early((t) => t.ui.ask({ question: "Your name", fill: "ada", check: () => undefined, missing }), { before, drawn: "? Your name", late: ["z", ENTER] })
-      expect({ before, answer, raw }).toEqual({ before, answer: "adaz", raw: false })
+      const { answer, raw } = await early(
+        (t) =>
+          t.ui.ask({
+            question: "Your name",
+            fill: "ada",
+            check: () => undefined,
+            missing,
+          }),
+        { before, drawn: "? Your name", late: ["z", ENTER] }
+      )
+      expect({ before, answer, raw }).toEqual({
+        before,
+        answer: "adaz",
+        raw: false,
+      })
     }
   })
 
   test("a yes-or-no question: y and Enter typed before, or y while it opens, never answer it", async () => {
-    const ask = (t: ReturnType<typeof terminal>) => t.ui.confirm("Use it here?", "no terminal")
+    const ask = (t: ReturnType<typeof terminal>) =>
+      t.ui.confirm("Use it here?", "no terminal")
     for (const [before, late, expected] of [
       ["y", "n", false],
       [ENTER, "y", true],
       ["abc", "y", true],
     ] as const) {
-      const { answer, raw } = await early(ask, { before, drawn: "? Use it here?", late: [late] })
-      expect({ before, answer, raw }).toEqual({ before, answer: expected, raw: false })
+      const { answer, raw } = await early(ask, {
+        before,
+        drawn: "? Use it here?",
+        late: [late],
+      })
+      expect({ before, answer, raw }).toEqual({
+        before,
+        answer: expected,
+        raw: false,
+      })
     }
-    expect((await early(ask, { during: "y", drawn: "? Use it here?", late: ["n"] })).answer).toBe(false)
+    expect(
+      (await early(ask, { during: "y", drawn: "? Use it here?", late: ["n"] }))
+        .answer
+    ).toBe(false)
   })
 
   test("the hidden prompt that can be skipped: nothing typed before reaches the value", async () => {
     for (const before of ["y", ENTER, "abc"]) {
-      const { answer, raw, screen } = await early((t) => t.ui.askValue("Value for A (demo on prod): ", "A"), { before, drawn: "? Value for A", late: ["v", ENTER] })
-      expect({ before, answer, raw }).toEqual({ before, answer: "v", raw: false })
+      const { answer, raw, screen } = await early(
+        (t) => t.ui.askValue("Value for A (demo on prod): ", "A"),
+        { before, drawn: "? Value for A", late: ["v", ENTER] }
+      )
+      expect({ before, answer, raw }).toEqual({
+        before,
+        answer: "v",
+        raw: false,
+      })
       expect(screen).not.toContain("cannot be empty")
     }
   })
 
   test("the hidden prompt of zekno secret set: nothing typed before reaches the value", async () => {
     for (const before of ["y", ENTER, "abc"]) {
-      const { answer, raw } = await early((t) => t.ui.askSecret("Value for A (demo on prod): ", false), { before, drawn: "? Value for A", late: ["v", ENTER] })
-      expect({ before, answer, raw }).toEqual({ before, answer: "v", raw: false })
+      const { answer, raw } = await early(
+        (t) => t.ui.askSecret("Value for A (demo on prod): ", false),
+        { before, drawn: "? Value for A", late: ["v", ENTER] }
+      )
+      expect({ before, answer, raw }).toEqual({
+        before,
+        answer: "v",
+        raw: false,
+      })
     }
-    const { answer } = await early((t) => t.ui.askSecret("Value for A (demo on prod): ", false), { during: "x", drawn: "? Value for A", late: ["v", ENTER] })
+    const { answer } = await early(
+      (t) => t.ui.askSecret("Value for A (demo on prod): ", false),
+      { during: "x", drawn: "? Value for A", late: ["v", ENTER] }
+    )
     expect(answer).toBe("v")
   })
 })
@@ -600,11 +786,22 @@ describe("lines between questions: note, code, groups, gap", () => {
       }),
       { columns: 100, rows: 30 }
     )
-    const ui = inkUi({ stdout: output as unknown as NodeJS.WriteStream, stdin: new PassThrough() as unknown as NodeJS.ReadStream })
+    const ui = inkUi({
+      stdout: output as unknown as NodeJS.WriteStream,
+      stdin: new PassThrough() as unknown as NodeJS.ReadStream,
+    })
     ui.note("Using prod, your only server.")
     ui.gap()
-    ui.code("Team code", "J4QF-AM29", "Identifies your team. A server checks it before it agrees to obey your team.")
-    ui.code("Server code", "MM4G-GPD7", "Identifies this server's key. Teammates compare it before they trust the server.")
+    ui.code(
+      "Team code",
+      "J4QF-AM29",
+      "Identifies your team. A server checks it before it agrees to obey your team."
+    )
+    ui.code(
+      "Server code",
+      "MM4G-GPD7",
+      "Identifies this server's key. Teammates compare it before they trust the server."
+    )
     ui.groups([
       ["new", "A, B"],
       ["left out", "PATH (zekno keeps this name)"],
@@ -639,8 +836,15 @@ describe("lines between questions: note, code, groups, gap", () => {
       }),
       { columns: 40, rows: 30 }
     )
-    const ui = inkUi({ stdout: output as unknown as NodeJS.WriteStream, stdin: new PassThrough() as unknown as NodeJS.ReadStream })
-    ui.code("Server code", "MM4G-GPD7", "Identifies this server's key. Teammates compare it before they trust the server.")
+    const ui = inkUi({
+      stdout: output as unknown as NodeJS.WriteStream,
+      stdin: new PassThrough() as unknown as NodeJS.ReadStream,
+    })
+    ui.code(
+      "Server code",
+      "MM4G-GPD7",
+      "Identifies this server's key. Teammates compare it before they trust the server."
+    )
     await settle()
     await ui.close()
     const lines = screenOf(raw).filter(Boolean)
@@ -678,9 +882,15 @@ describe("the plain interface never asks (contracts/questions.md, 'The plain int
     )
     expect(plain.asks).toBe(false)
     expect(plain.choose(whichServer())).rejects.toBe(missing)
-    expect(plain.ask({ question: "Your name", check: () => undefined, missing })).rejects.toBe(missing)
-    expect(plain.askValue("Value for A (demo on prod): ", "A")).rejects.toThrow("There is no terminal to ask on. Pipe the value in and add `--stdin`.")
-    expect(plain.confirm("Remember this folder?", "the refusal", { leave: true })).rejects.toThrow("the refusal")
+    expect(
+      plain.ask({ question: "Your name", check: () => undefined, missing })
+    ).rejects.toBe(missing)
+    expect(plain.askValue("Value for A (demo on prod): ", "A")).rejects.toThrow(
+      "There is no terminal to ask on. Pipe the value in and add `--stdin`."
+    )
+    expect(
+      plain.confirm("Remember this folder?", "the refusal", { leave: true })
+    ).rejects.toThrow("the refusal")
     plain.note("Using prod, your only server.")
     plain.code("Team code", "J4QF-AM29", "Identifies your team.")
     plain.groups([
@@ -688,23 +898,50 @@ describe("the plain interface never asks (contracts/questions.md, 'The plain int
       ["left out", "PATH (zekno keeps this name)"],
     ])
     plain.gap()
-    expect(out).toEqual(["Using prod, your only server.", "Team code: J4QF-AM29", "Identifies your team.", "new\tA, B", "left out\tPATH (zekno keeps this name)"])
+    expect(out).toEqual([
+      "Using prod, your only server.",
+      "Team code: J4QF-AM29",
+      "Identifies your team.",
+      "new\tA, B",
+      "left out\tPATH (zekno keeps this name)",
+    ])
     expect(err).toEqual([])
   })
 })
 
 describe("mock-ups 1 and 2 through the commands", () => {
-  const RUNNING = '{"Service":"web","State":"running","ExitCode":0,"Health":""}\n'
+  const RUNNING =
+    '{"Service":"web","State":"running","ExitCode":0,"Health":""}\n'
 
   /** A team with prod, a server over the stand-in `ssh` at deploy@203.0.113.7, and, unless `only`, staging on this machine. */
   async function servers(options: { only?: boolean } = {}) {
     const m = machine()
     expect(await m.zekno("init", "--name", "Ada")).toBe(0)
     const server = standInServer()
-    m.deps.release = { version: runnerPackage.version, files: { "linux-x64": { sha256: server.release(realRunner(m.docker.path)) }, "linux-arm64": { sha256: null } } }
+    m.deps.release = {
+      version: runnerPackage.version,
+      files: {
+        "linux-x64": { sha256: server.release(realRunner(m.docker.path)) },
+        "linux-arm64": { sha256: null },
+      },
+    }
     const ssh = sshStandIn(server)
-    await withSsh(ssh, async () => expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@203.0.113.7")).toBe(0))
-    if (!options.only) expect(await m.zekno("server", "add", "staging", "--local", "--home", tempDir("staging"))).toBe(0)
+    await withSsh(ssh, async () =>
+      expect(
+        await m.zekno("server", "add", "prod", "--ssh", "deploy@203.0.113.7")
+      ).toBe(0)
+    )
+    if (!options.only)
+      expect(
+        await m.zekno(
+          "server",
+          "add",
+          "staging",
+          "--local",
+          "--home",
+          tempDir("staging")
+        )
+      ).toBe(0)
     const plain = m.deps.ui
     return {
       m,
@@ -712,7 +949,9 @@ describe("mock-ups 1 and 2 through the commands", () => {
       /** Runs `zekno <args>` on the stand-in terminal, with `ssh` meaning the stand-in. */
       start(t: ReturnType<typeof terminal>, ...args: string[]) {
         m.deps.ui = t.ui
-        return withSsh(ssh, () => m.zekno(...args)).finally(() => (m.deps.ui = plain))
+        return withSsh(ssh, () => m.zekno(...args)).finally(
+          () => (m.deps.ui = plain)
+        )
       },
     }
   }
@@ -755,17 +994,30 @@ describe("mock-ups 1 and 2 through the commands", () => {
     s.m.compose(COMPOSE_V1)
     // api first and demo last, so this machine's latest deploy, demo, comes first, as in mock-up 2.
     await withSsh(s.ssh, async () => {
-      for (let deploy = 0; deploy < 12; deploy++) expect(await s.m.zekno("deploy", "--app", "api", "--server", "prod")).toBe(0)
-      for (let deploy = 0; deploy < 4; deploy++) expect(await s.m.zekno("deploy", "--app", "demo", "--server", "prod")).toBe(0)
+      for (let deploy = 0; deploy < 12; deploy++)
+        expect(
+          await s.m.zekno("deploy", "--app", "api", "--server", "prod")
+        ).toBe(0)
+      for (let deploy = 0; deploy < 4; deploy++)
+        expect(
+          await s.m.zekno("deploy", "--app", "demo", "--server", "prod")
+        ).toBe(0)
     })
     s.m.docker.ps("demo", RUNNING)
     s.m.docker.ps("api", RUNNING)
-    const rows = ["  ❯ demo       deploy 4, running", "    api        deploy 12, running"]
+    const rows = [
+      "  ❯ demo       deploy 4, running",
+      "    api        deploy 12, running",
+    ]
 
     const logs = terminal()
     const following = s.start(logs, "logs", "--server", "prod", "--no-follow")
     await shows(logs, "? Which app on prod?", 20_000)
-    expect(logs.lines()).toEqual(["? Which app on prod?", ...rows, "  ↑↓ move   enter choose   esc leave"])
+    expect(logs.lines()).toEqual([
+      "? Which app on prod?",
+      ...rows,
+      "  ↑↓ move   enter choose   esc leave",
+    ])
     logs.keys(ENTER)
     expect(await following).toBe(0)
     await logs.ui.close()
@@ -778,7 +1030,12 @@ describe("mock-ups 1 and 2 through the commands", () => {
     const deploy = terminal()
     const deploying = s.start(deploy, "deploy", "--server", "prod")
     await shows(deploy, "? Which app on prod?", 20_000)
-    expect(deploy.lines()).toEqual(["? Which app on prod?", ...rows, "    + a new app", "  ↑↓ move   enter choose   esc leave"])
+    expect(deploy.lines()).toEqual([
+      "? Which app on prod?",
+      ...rows,
+      "    + a new app",
+      "  ↑↓ move   enter choose   esc leave",
+    ])
     deploy.keys(DOWN)
     await shows(deploy, "    api        deploy 12, running")
     deploy.keys(DOWN)
@@ -790,6 +1047,9 @@ describe("mock-ups 1 and 2 through the commands", () => {
     deploy.keys(ESC)
     expect(await deploying).toBe(1)
     await deploy.ui.close()
-    expect(deploy.lines()).toEqual(["? Name for the new app › my-folder", "✖ Nothing was done."])
+    expect(deploy.lines()).toEqual([
+      "? Name for the new app › my-folder",
+      "✖ Nothing was done.",
+    ])
   }, 60_000)
 })

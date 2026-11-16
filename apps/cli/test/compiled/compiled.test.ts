@@ -21,8 +21,14 @@ let binary = ""
 
 beforeAll(async () => {
   binary = join(tempDir("compiled-cli"), "zekno")
-  const build = Bun.spawn([process.execPath, BUILD, binary], { stdout: "pipe", stderr: "pipe" })
-  const [code, err] = await Promise.all([build.exited, new Response(build.stderr).text()])
+  const build = Bun.spawn([process.execPath, BUILD, binary], {
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [code, err] = await Promise.all([
+    build.exited,
+    new Response(build.stderr).text(),
+  ])
   if (code !== 0) throw new Error(`zekno did not compile: ${err}`)
 }, 120_000)
 
@@ -39,7 +45,10 @@ function hostileFolder() {
   writeFileSync(join(theirs, "profile.json"), "not a profile")
   writeFileSync(join(dir, ".env"), `ZEKNO_HOME=${theirs}\n`)
   writeFileSync(join(dir, "bunfig.toml"), 'preload = ["./evil.ts"]\n')
-  writeFileSync(join(dir, "evil.ts"), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")\n`)
+  writeFileSync(
+    join(dir, "evil.ts"),
+    `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")\n`
+  )
   return { dir, marker }
 }
 
@@ -49,24 +58,47 @@ function hostileFolder() {
  * it would read the keychain.
  */
 async function inFolder(cwd: string, argv: string[]) {
-  const child = Bun.spawn(argv, { cwd, env: { HOME: tempDir("home"), PATH: process.env.PATH ?? "/usr/bin:/bin" }, stdin: "ignore", stdout: "pipe", stderr: "pipe" })
-  const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
+  const child = Bun.spawn(argv, {
+    cwd,
+    env: { HOME: tempDir("home"), PATH: process.env.PATH ?? "/usr/bin:/bin" },
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [stdout, stderr] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ])
   return { code: await child.exited, stdout, stderr }
 }
 
-const NO_TEAM = "No team on this machine yet. Run `zekno init --name <you>` first.\n"
+const NO_TEAM =
+  "No team on this machine yet. Run `zekno init --name <you>` first.\n"
 
 /** What `zekno --version` prints (contracts/version.md), from the two files the versions come from, read here as text. */
 function versionText(): string {
-  const cli = JSON.parse(readFileSync(join(import.meta.dir, "../../package.json"), "utf8")) as { version: string }
-  const release = JSON.parse(readFileSync(join(import.meta.dir, "../../src/version/runner-release.json"), "utf8")) as { version: string }
+  const cli = JSON.parse(
+    readFileSync(join(import.meta.dir, "../../package.json"), "utf8")
+  ) as { version: string }
+  const release = JSON.parse(
+    readFileSync(
+      join(import.meta.dir, "../../src/version/runner-release.json"),
+      "utf8"
+    )
+  ) as { version: string }
   return `zekno ${cli.version}\nrunner ${release.version}, the runner release this zekno installs\n`
 }
 
 describe("the compiled zekno reads no configuration from the folder it starts in", () => {
   test("build.ts turns every config file a compiled program could read off", () => {
     const source = readFileSync(BUILD, "utf8")
-    for (const option of ["autoloadDotenv", "autoloadBunfig", "autoloadTsconfig", "autoloadPackageJson"]) expect(source).toContain(`${option}: false,`)
+    for (const option of [
+      "autoloadDotenv",
+      "autoloadBunfig",
+      "autoloadTsconfig",
+      "autoloadPackageJson",
+    ])
+      expect(source).toContain(`${option}: false,`)
   })
 
   test("--help: it answers as usual, and the folder's preload never runs", async () => {
@@ -89,7 +121,9 @@ describe("the compiled zekno reads no configuration from the folder it starts in
     // Shows the folder above is one Bun reads: a negative result for the compiled zekno means something.
     const { dir, marker } = hostileFolder()
     const run = await inFolder(dir, [process.execPath, MAIN, "server", "ls"])
-    expect(run.stderr).toBe(`The profile at ${join(dir, "their-profile", "profile.json")} is not readable.\n`)
+    expect(run.stderr).toBe(
+      `The profile at ${join(dir, "their-profile", "profile.json")} is not readable.\n`
+    )
     expect(existsSync(marker)).toBe(true)
   })
 })
@@ -97,7 +131,10 @@ describe("the compiled zekno reads no configuration from the folder it starts in
 describe("the version is built into zekno, never read from the folder it starts in (contracts/version.md, SC-008)", () => {
   test("compiled and from source, in a folder holding another package.json, --version names apps/cli's own versions", async () => {
     const dir = tempDir("their-package")
-    writeFileSync(join(dir, "package.json"), '{"name":"theirs","version":"9.9.9"}\n')
+    writeFileSync(
+      join(dir, "package.json"),
+      '{"name":"theirs","version":"9.9.9"}\n'
+    )
     const compiled = await inFolder(dir, [binary, "--version"])
     const source = await inFolder(dir, [process.execPath, MAIN, "--version"])
     expect(compiled).toEqual({ code: 0, stdout: versionText(), stderr: "" })

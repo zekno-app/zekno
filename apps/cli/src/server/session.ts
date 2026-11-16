@@ -55,7 +55,11 @@ export type Session = {
    * returns. A refusal rejects with `RunnerRefused` and the session goes on;
    * any other failure ends the session.
    */
-  request<Schema extends z.ZodType>(command: SessionCommand, schema: Schema, options?: RequestOptions): Promise<z.infer<Schema>>
+  request<Schema extends z.ZodType>(
+    command: SessionCommand,
+    schema: Schema,
+    options?: RequestOptions
+  ): Promise<z.infer<Schema>>
   /**
    * Closes the runner's input and waits for it to exit, for `graceMs` at
    * most (5 seconds unless given), then stops it. Returns its exit status, if
@@ -64,10 +68,13 @@ export type Session = {
   close(graceMs?: number): Promise<number | undefined>
 }
 
-export const UNEXPECTED = "The runner did not answer as expected. Check that it is installed and reachable."
-export const TOO_LARGE = "The runner sent more than an answer can hold. Check what is installed at that path."
+export const UNEXPECTED =
+  "The runner did not answer as expected. Check that it is installed and reachable."
+export const TOO_LARGE =
+  "The runner sent more than an answer can hold. Check what is installed at that path."
 export const ENDED = "The connection to the runner ended before it answered."
-export const TOO_OLD = "The runner on that server is too old for this. State and logs need a runner update."
+export const TOO_OLD =
+  "The runner on that server is too old for this. State and logs need a runner update."
 
 /**
  * Said when SSH itself could not connect, as on the board "Status, lists,
@@ -90,11 +97,16 @@ export class SshUnreachable extends CliError {
 
 /** The same failure, named by its server: `prod could not be reached over SSH.` Anything else is passed on as it is. */
 export function namedUnreachable(error: unknown, server: string): unknown {
-  return error instanceof SshUnreachable ? new CliError(sshUnreachable(server, error.destination)) : error
+  return error instanceof SshUnreachable
+    ? new CliError(sshUnreachable(server, error.destination))
+    : error
 }
 
 /** The one kind of event each request may send before its result. */
-const EVENTS: Partial<Record<SessionCommand, SessionEvent["event"]>> = { apply: "progress", logs: "log" }
+const EVENTS: Partial<Record<SessionCommand, SessionEvent["event"]>> = {
+  apply: "progress",
+  logs: "log",
+}
 
 /** How long a runner has to exit once its session is closed, before it is stopped. */
 const CLOSE_GRACE_MS = 5000
@@ -108,9 +120,11 @@ const CLOSE_GRACE_MS = 5000
 const TURN_MS = 10
 
 /** Lets everything else that is waiting run first. */
-const nextTurn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+const nextTurn = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve))
 
-type Line = { kind: "line"; bytes: Uint8Array } | { kind: "too_long" } | { kind: "end" }
+type Line =
+  { kind: "line"; bytes: Uint8Array } | { kind: "too_long" } | { kind: "end" }
 
 /**
  * Splits a stream into lines and never holds more than `limit` bytes of one:
@@ -137,7 +151,10 @@ function lineReader(stream: ReadableStream<Uint8Array>) {
       if (pending) {
         const end = pending.indexOf(0x0a)
         const piece = end === -1 ? pending : pending.subarray(0, end)
-        pending = end === -1 || end + 1 === pending.length ? undefined : pending.subarray(end + 1)
+        pending =
+          end === -1 || end + 1 === pending.length
+            ? undefined
+            : pending.subarray(end + 1)
         size += piece.length
         if (size > limit) {
           held = []
@@ -182,12 +199,20 @@ const LATE = Symbol("late")
 /** Resolves with what `promise` gives, or with `LATE` after `ms` milliseconds. */
 function within<T>(promise: Promise<T>, ms: number): Promise<T | typeof LATE> {
   let timer: ReturnType<typeof setTimeout> | undefined
-  const late = new Promise<typeof LATE>((resolve) => (timer = setTimeout(() => resolve(LATE), ms)))
+  const late = new Promise<typeof LATE>(
+    (resolve) => (timer = setTimeout(() => resolve(LATE), ms))
+  )
   return Promise.race([promise, late]).finally(() => clearTimeout(timer))
 }
 
 type Started =
-  | { kind: "session"; child: RunnerProcess; lines: LineReader; runner: RunnerVersion; late: boolean }
+  | {
+      kind: "session"
+      child: RunnerProcess
+      lines: LineReader
+      runner: RunnerVersion
+      late: boolean
+    }
   | { kind: "one-shot" }
 
 /** Stops a runner process and its output at once. */
@@ -204,7 +229,11 @@ function stop(child: RunnerProcess, lines: LineReader): void {
  * that changes anything. `signal` stops the process at once, whenever it
  * comes: while SSH connects or asks, or while the runner has not answered.
  */
-async function start(transport: Transport, patience: number | undefined, signal: AbortSignal | undefined): Promise<Started> {
+async function start(
+  transport: Transport,
+  patience: number | undefined,
+  signal: AbortSignal | undefined
+): Promise<Started> {
   if (signal?.aborted) throw new CliError(ENDED)
   const child = transport.open()
   const lines = lineReader(child.output)
@@ -231,7 +260,8 @@ async function start(transport: Transport, patience: number | undefined, signal:
       const code = await within(child.exited, CLOSE_GRACE_MS)
       if (code === 2) return { kind: "one-shot" }
       stop(child, lines)
-      if (code === 255 && transport.destination !== undefined) throw new SshUnreachable(transport.destination)
+      if (code === 255 && transport.destination !== undefined)
+        throw new SshUnreachable(transport.destination)
       throw new CliError(UNEXPECTED)
     }
     const frame = parseMessage(SessionFrameSchema, line.bytes)
@@ -240,7 +270,10 @@ async function start(transport: Transport, patience: number | undefined, signal:
       stop(child, lines)
       return { kind: "one-shot" }
     }
-    const version = "result" in frame.value ? parseMessage(RunnerVersionSchema, frame.value.result) : undefined
+    const version =
+      "result" in frame.value
+        ? parseMessage(RunnerVersionSchema, frame.value.result)
+        : undefined
     if (!version?.ok) {
       stop(child, lines)
       throw new CliError(UNEXPECTED)
@@ -256,12 +289,21 @@ async function start(transport: Transport, patience: number | undefined, signal:
 
 /** Removes terminal control sequences from the text of an event. Service names and times are held to patterns already. */
 function clean(event: SessionEvent): SessionEvent {
-  if (event.event === "progress") return { event: "progress", line: sanitize(event.line) }
-  return { event: "log", service: sanitize(event.service), time: event.time, line: sanitize(event.line) }
+  if (event.event === "progress")
+    return { event: "progress", line: sanitize(event.line) }
+  return {
+    event: "log",
+    service: sanitize(event.service),
+    time: event.time,
+    line: sanitize(event.line),
+  }
 }
 
 /** A session over one runner process. `signal` stops it at once, as `stop` does. */
-function live(started: Extract<Started, { kind: "session" }>, signal: AbortSignal | undefined): Session {
+function live(
+  started: Extract<Started, { kind: "session" }>,
+  signal: AbortSignal | undefined
+): Session {
   const { child, lines } = started
   let busy = false
   let ended = false
@@ -275,7 +317,11 @@ function live(started: Extract<Started, { kind: "session" }>, signal: AbortSigna
   if (signal?.aborted) end()
   else signal?.addEventListener("abort", end, { once: true })
 
-  async function answer<Schema extends z.ZodType>(command: SessionCommand, schema: Schema, onEvent?: RequestOptions["onEvent"]) {
+  async function answer<Schema extends z.ZodType>(
+    command: SessionCommand,
+    schema: Schema,
+    onEvent?: RequestOptions["onEvent"]
+  ) {
     // Each line is read up to the longest frame this request can bring, and no further.
     const limit = SESSION_FRAME_BYTES[command]
     let turn = performance.now()
@@ -299,7 +345,8 @@ function live(started: Extract<Started, { kind: "session" }>, signal: AbortSigna
           continue
         }
         const report = parseMessage(RunnerReportSchema, value.result)
-        if (report.ok && report.value.outcome === "refused") throw new RunnerRefused(report.value.reason!)
+        if (report.ok && report.value.outcome === "refused")
+          throw new RunnerRefused(report.value.reason!)
         const parsed = parseMessage(schema, value.result)
         if (!parsed.ok) throw new CliError(UNEXPECTED)
         return parsed.value as z.infer<Schema>
@@ -319,11 +366,19 @@ function live(started: Extract<Started, { kind: "session" }>, signal: AbortSigna
     runner: started.runner,
     request(command, schema, options = {}) {
       if (ended) return Promise.reject(new CliError(ENDED))
-      if (busy) return Promise.reject(new Error("A session carries one request at a time."))
+      if (busy)
+        return Promise.reject(
+          new Error("A session carries one request at a time.")
+        )
       busy = true
-      const request = options.input === undefined ? { command } : { command, input: options.input }
+      const request =
+        options.input === undefined
+          ? { command }
+          : { command, input: options.input }
       child.write(`${JSON.stringify(request)}\n`)
-      return answer(command, schema, options.onEvent).finally(() => (busy = false))
+      return answer(command, schema, options.onEvent).finally(
+        () => (busy = false)
+      )
     },
     close(graceMs = CLOSE_GRACE_MS) {
       exit ??= (async () => {
@@ -348,17 +403,28 @@ function live(started: Extract<Started, { kind: "session" }>, signal: AbortSigna
  * keeps nobody who gave a limit waiting (security review S2). Without a
  * signal, a request waits for its process as it always has.
  */
-function oneShot(transport: Transport, signal: AbortSignal | undefined): Session {
+function oneShot(
+  transport: Transport,
+  signal: AbortSignal | undefined
+): Session {
   return {
     mode: "one-shot",
     runner: undefined,
     request(command, schema, options = {}) {
-      if (command === "setup" || command === "sync" || command === "apply" || command === "status") {
-        if (signal === undefined) return ask(transport, command, schema, options.input)
+      if (
+        command === "setup" ||
+        command === "sync" ||
+        command === "apply" ||
+        command === "status"
+      ) {
+        if (signal === undefined)
+          return ask(transport, command, schema, options.input)
         if (signal.aborted) return Promise.reject(new CliError(ENDED))
-        return ask(transport, command, schema, options.input, signal).catch((error: unknown) => {
-          throw signal.aborted ? new CliError(ENDED) : error
-        })
+        return ask(transport, command, schema, options.input, signal).catch(
+          (error: unknown) => {
+            throw signal.aborted ? new CliError(ENDED) : error
+          }
+        )
       }
       return Promise.reject(new CliError(TOO_OLD))
     },
@@ -383,19 +449,27 @@ export type OpenOptions = {
  * runner has said which version it is, or once it is known that it does not
  * speak sessions.
  */
-export async function openSession(transport: Transport, options: OpenOptions = {}): Promise<Session> {
+export async function openSession(
+  transport: Transport,
+  options: OpenOptions = {}
+): Promise<Session> {
   const { signal } = options
   let started = await start(transport, transport.firstAnswerMs, signal)
   // It speaks sessions but was slow to start, and its input is already
   // closed. It is started once more, this time given as long as it needs.
-  if (started.kind === "session" && started.late) started = await start(transport, undefined, signal)
+  if (started.kind === "session" && started.late)
+    started = await start(transport, undefined, signal)
   if (started.kind === "session") return live(started, signal)
   if (signal?.aborted) throw new CliError(ENDED)
   return oneShot(transport, signal)
 }
 
 /** Runs `work` with one session and closes it afterwards, however the work ends. */
-export async function withSession<T>(transport: Transport, work: (session: Session) => Promise<T>, options: OpenOptions = {}): Promise<T> {
+export async function withSession<T>(
+  transport: Transport,
+  work: (session: Session) => Promise<T>,
+  options: OpenOptions = {}
+): Promise<T> {
   const session = await openSession(transport, options)
   try {
     return await work(session)

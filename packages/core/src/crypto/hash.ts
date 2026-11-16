@@ -16,6 +16,14 @@ export type HashDomain =
 const SEPARATOR = new Uint8Array([0])
 
 /** BLAKE2b over `domain || 0x00 || data`. Domains never contain a zero byte. */
-export function hash(domain: HashDomain, data: Uint8Array, length = 32): Uint8Array {
-  return sodium.crypto_generichash(length, concat(utf8(domain), SEPARATOR, data), null)
+export function hash(
+  domain: HashDomain,
+  data: Uint8Array,
+  length = 32
+): Uint8Array {
+  return sodium.crypto_generichash(
+    length,
+    concat(utf8(domain), SEPARATOR, data),
+    null
+  )
 }

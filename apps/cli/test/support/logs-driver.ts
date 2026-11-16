@@ -42,7 +42,16 @@ const deps: Deps = {
   keyStore: memoryKeyStore(),
   connect,
   ui: quiet,
-  localRunner: ["sh", "-c", 'echo $$ >> "$0"; exec "$@"', join(dir, "runner.pids"), "env", `ZEKNO_DOCKER=${flooding}`, process.execPath, RUNNER_MAIN],
+  localRunner: [
+    "sh",
+    "-c",
+    'echo $$ >> "$0"; exec "$@"',
+    join(dir, "runner.pids"),
+    "env",
+    `ZEKNO_DOCKER=${flooding}`,
+    process.execPath,
+    RUNNER_MAIN,
+  ],
 }
 for (const args of [
   ["init", "--name", "Ada"],
@@ -52,4 +61,9 @@ for (const args of [
   if ((await run(args, deps)) !== 0) process.exit(3)
 }
 writeFileSync(join(dir, "ready"), "")
-process.exit(await run(["logs", "--app", "demo", "--server", "dev"], { ...deps, ui: processPlainUi() }))
+process.exit(
+  await run(["logs", "--app", "demo", "--server", "dev"], {
+    ...deps,
+    ui: processPlainUi(),
+  })
+)

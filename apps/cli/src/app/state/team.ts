@@ -14,7 +14,11 @@ export function clampHome(state: State): State {
   return updateScreens(state, "home", (screen) => {
     const servers = state.team?.servers ?? []
     const server = clampIndex(screen.server, servers.length + 1)
-    return { ...screen, server, app: clampIndex(screen.app, servers[server]?.apps.length ?? 0) }
+    return {
+      ...screen,
+      server,
+      app: clampIndex(screen.app, servers[server]?.apps.length ?? 0),
+    }
   })
 }
 
@@ -32,43 +36,86 @@ export function withApps(state: State, name: string, apps: AppRow[]): State {
     const was = before.find((row) => row.name === app.name)
     return { ...app, state: was?.state ?? app.state, accepted: was?.accepted }
   })
-  const servers = team.servers.map((server, at) => (at === index ? { ...server, apps: known } : server))
-  const next = updateScreens({ ...state, team: { ...team, servers } }, "home", (screen) => {
-    if (screen.server !== index) return screen
-    const moved = known.findIndex((app) => app.name === before[screen.app]?.name)
-    return moved === -1 ? screen : { ...screen, app: moved }
-  })
+  const servers = team.servers.map((server, at) =>
+    at === index ? { ...server, apps: known } : server
+  )
+  const next = updateScreens(
+    { ...state, team: { ...team, servers } },
+    "home",
+    (screen) => {
+      if (screen.server !== index) return screen
+      const moved = known.findIndex(
+        (app) => app.name === before[screen.app]?.name
+      )
+      return moved === -1 ? screen : { ...screen, app: moved }
+    }
+  )
   return clampHome(next)
 }
 
 /** Changes each of one server's apps. Nothing else changes, the selection included. */
-export function withAppRows(state: State, name: string, change: (app: AppRow) => AppRow): State {
+export function withAppRows(
+  state: State,
+  name: string,
+  change: (app: AppRow) => AppRow
+): State {
   const team = state.team
   if (!team?.servers.some((server) => server.name === name)) return state
-  const servers = team.servers.map((server) => (server.name === name ? { ...server, apps: server.apps.map(change) } : server))
+  const servers = team.servers.map((server) =>
+    server.name === name ? { ...server, apps: server.apps.map(change) } : server
+  )
   return { ...state, team: { ...team, servers } }
 }
 
 /** Only the record's own entries count, never something an object has by default, such as `constructor`. */
-const own = <T>(record: Record<string, T> | undefined, key: string): T | undefined =>
+const own = <T>(
+  record: Record<string, T> | undefined,
+  key: string
+): T | undefined =>
   record !== undefined && Object.hasOwn(record, key) ? record[key] : undefined
 
 /** A server answered, or could not be reached and why. */
-export function serverReached(state: State, event: EventOf<"server-reached">): Step {
+export function serverReached(
+  state: State,
+  event: EventOf<"server-reached">
+): Step {
   if (!state.team) return stay(state)
   const reached = (server: ServerRow): ServerRow => {
     if (server.name !== event.server) return server
     // Only a server that was not reached can be waiting on SSH's question, and only when the effects say SSH said so.
     const asks = !event.reachable && event.asks === true ? true : undefined
-    const next: ServerRow = { ...server, reachable: event.reachable, problem: event.reachable ? undefined : event.problem, asks }
+    const next: ServerRow = {
+      ...server,
+      reachable: event.reachable,
+      problem: event.reachable ? undefined : event.problem,
+      asks,
+    }
     // A server that cannot be reached has a runner nobody can tell the version of now, and apps whose state is not known:
     // their deploy numbers are this machine's again.
-    if (!event.reachable) return { ...next, runner: undefined, apps: server.apps.map((app) => ({ ...app, state: "unknown", accepted: undefined })) }
+    if (!event.reachable)
+      return {
+        ...next,
+        runner: undefined,
+        apps: server.apps.map((app) => ({
+          ...app,
+          state: "unknown",
+          accepted: undefined,
+        })),
+      }
     return event.runner ? { ...next, runner: event.runner } : next
   }
-  return stay({ ...state, team: { ...state.team, servers: state.team.servers.map(reached) } })
+  return stay({
+    ...state,
+    team: { ...state.team, servers: state.team.servers.map(reached) },
+  })
 }
 
 /** What is running on one server's apps, and the last deploy of each it accepted, as its runner said. */
 export const appStates = (state: State, event: EventOf<"app-states">): Step =>
-  stay(withAppRows(state, event.server, (app) => ({ ...app, state: own(event.states, app.name) ?? "unknown", accepted: own(event.accepted, app.name) })))
+  stay(
+    withAppRows(state, event.server, (app) => ({
+      ...app,
+      state: own(event.states, app.name) ?? "unknown",
+      accepted: own(event.accepted, app.name),
+    }))
+  )

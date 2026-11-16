@@ -2,7 +2,13 @@ import { realpathSync } from "node:fs"
 import { isAbsolute, relative, resolve } from "node:path"
 
 import { remoteThroughUi, type Deps } from "../cli/context"
-import { prepareDeploy, prepareRollback, sendDeploy, type DeployPlan, type Where } from "../ops/deploy"
+import {
+  prepareDeploy,
+  prepareRollback,
+  sendDeploy,
+  type DeployPlan,
+  type Where,
+} from "../ops/deploy"
 import { shownPath } from "../project/shown"
 import { sanitize } from "../server/sanitize"
 import { plainDeployView, type DeployStart } from "../shared/deploy"
@@ -15,7 +21,10 @@ export { HELD_LINES, heldLines, leftOut } from "../shared/deploy"
  * zekno.json gave, so that what a result suggests running next acts on the
  * same app and server.
  */
-type Options = Where & { json?: boolean; typed?: { app?: string; server?: string } }
+type Options = Where & {
+  json?: boolean
+  typed?: { app?: string; server?: string }
+}
 
 /** The flags to type again for the same app and server: those typed, and none that zekno.json gives anyway. Both are names held to a pattern. */
 export function flagsAgain(typed: Options["typed"]): string {
@@ -33,7 +42,8 @@ export function shownFile(cwd: string, path: string): string {
   }
   for (const folder of folders) {
     const inside = relative(folder, path)
-    if (inside !== "" && !inside.startsWith("..") && !isAbsolute(inside)) return sanitize(inside)
+    if (inside !== "" && !inside.startsWith("..") && !isAbsolute(inside))
+      return sanitize(inside)
   }
   return shownPath(path)
 }
@@ -46,8 +56,15 @@ export function shownFile(cwd: string, path: string): string {
  * lines on standard error when the app did not start. `zekno deploy` at a
  * terminal sends through it too (asking/first-deploy.ts).
  */
-export async function send(deps: Deps, plan: DeployPlan, options: Options, start: DeployStart): Promise<number> {
-  const view = options.json ? plainDeployView(deps.ui, false) : deps.ui.deploy(start)
+export async function send(
+  deps: Deps,
+  plan: DeployPlan,
+  options: Options,
+  start: DeployStart
+): Promise<number> {
+  const view = options.json
+    ? plainDeployView(deps.ui, false)
+    : deps.ui.deploy(start)
   const began = Date.now()
   let result
   try {
@@ -73,15 +90,33 @@ export async function send(deps: Deps, plan: DeployPlan, options: Options, start
   return result.outcome === "start_failed" ? 1 : 0
 }
 
-export async function deploy(deps: Deps, options: Options & { file?: string }): Promise<number> {
+export async function deploy(
+  deps: Deps,
+  options: Options & { file?: string }
+): Promise<number> {
   const plan = await prepareDeploy(deps, options)
-  const start = { app: plan.app, server: plan.server.name, file: shownFile(deps.cwd, plan.from), flags: flagsAgain(options.typed) }
+  const start = {
+    app: plan.app,
+    server: plan.server.name,
+    file: shownFile(deps.cwd, plan.from),
+    flags: flagsAgain(options.typed),
+  }
   return send(deps, plan, options, start)
 }
 
 /** Deploys an earlier service definition again, under the next number, with the current secrets. */
-export async function rollback(deps: Deps, options: Options & { to?: string }): Promise<number> {
-  const plan = await prepareRollback(deps, options, { warning: (text) => deps.ui.warn(text) })
-  if (!options.json) deps.ui.info(`Rolling back ${plan.app} to what deploy ${plan.from} ran.`)
-  return send(deps, plan, options, { app: plan.app, server: plan.server.name, flags: flagsAgain(options.typed) })
+export async function rollback(
+  deps: Deps,
+  options: Options & { to?: string }
+): Promise<number> {
+  const plan = await prepareRollback(deps, options, {
+    warning: (text) => deps.ui.warn(text),
+  })
+  if (!options.json)
+    deps.ui.info(`Rolling back ${plan.app} to what deploy ${plan.from} ran.`)
+  return send(deps, plan, options, {
+    app: plan.app,
+    server: plan.server.name,
+    flags: flagsAgain(options.typed),
+  })
 }

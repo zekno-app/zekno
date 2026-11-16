@@ -40,6 +40,14 @@ export const WHEN_WIDTH = { wide: 11, narrow: 11 }
 export function stateWidth(columns: number, whenWidth: number): number {
   const wide = columns >= HOME_WIDE
   // The window's margins, the panes beside the apps pane and the gaps between them, the pane's border and padding, the marker.
-  const pane = columns - 2 - (wide ? SERVERS_WIDTH.wide : SERVERS_WIDTH.narrow) - (wide ? DETAILS_WIDTH + 2 : 1) - 4 - 2
-  return pane - DEPLOY_WIDTH - whenWidth - STATE_FULL_WIDTH >= MIN_APP_WIDTH ? STATE_FULL_WIDTH : STATE_WIDTH
+  const pane =
+    columns -
+    2 -
+    (wide ? SERVERS_WIDTH.wide : SERVERS_WIDTH.narrow) -
+    (wide ? DETAILS_WIDTH + 2 : 1) -
+    4 -
+    2
+  return pane - DEPLOY_WIDTH - whenWidth - STATE_FULL_WIDTH >= MIN_APP_WIDTH
+    ? STATE_FULL_WIDTH
+    : STATE_WIDTH
 }

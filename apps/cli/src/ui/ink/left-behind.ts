@@ -19,14 +19,34 @@ import type { Item } from "./lines"
  * leaves nothing, as before.
  */
 export const LEFT_BEHIND = {
-  choose: (collapsed: string, label: string) => ({ kind: "chosen", collapsed, label }),
-  left: (question: string, form: "list" | "typed" | "yes-or-no" | "hidden", answer?: string) => ({
+  choose: (collapsed: string, label: string) => ({
+    kind: "chosen",
+    collapsed,
+    label,
+  }),
+  left: (
+    question: string,
+    form: "list" | "typed" | "yes-or-no" | "hidden",
+    answer?: string
+  ) => ({
     kind: "left",
     question,
     form,
     ...(answer === undefined ? {} : { answer }),
   }),
-  ask: (question: string, answer: string) => ({ kind: "asked", question, answer }),
-  confirm: (question: string, yes: boolean) => ({ kind: "answered", question, yes }),
-  askValue: (question: string, skipped: boolean) => ({ kind: "hidden", question, skipped }),
+  ask: (question: string, answer: string) => ({
+    kind: "asked",
+    question,
+    answer,
+  }),
+  confirm: (question: string, yes: boolean) => ({
+    kind: "answered",
+    question,
+    yes,
+  }),
+  askValue: (question: string, skipped: boolean) => ({
+    kind: "hidden",
+    question,
+    skipped,
+  }),
 } satisfies Record<string, (...args: never[]) => Omit<Item, "id">>

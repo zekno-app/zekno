@@ -44,20 +44,39 @@ if (kind === "stderr") {
   }
   mkdirSync(deps.home, { recursive: true })
   if ((await run(["init", "--name", "Ada"], deps)) !== 0) process.exit(3)
-  if ((await run(["server", "add", "dev", "--local"], deps)) !== 0) process.exit(3)
+  if ((await run(["server", "add", "dev", "--local"], deps)) !== 0)
+    process.exit(3)
   // From here on the runner is one that only writes on standard error.
-  deps.localRunner = ["sh", "-c", `echo $$ > "$0"; yes "$1" | head -c ${FLOOD_BYTES} >&2; touch "$0.done"; exit 2`, join(dir, "pid"), LINE]
+  deps.localRunner = [
+    "sh",
+    "-c",
+    `echo $$ > "$0"; yes "$1" | head -c ${FLOOD_BYTES} >&2; touch "$0.done"; exit 2`,
+    join(dir, "pid"),
+    LINE,
+  ]
   writeFileSync(join(dir, "ready"), "")
   await run(["status", "--server", "dev"], deps)
 } else if (kind === "progress") {
-  const view = ui.deploy({ app: "web", server: "dev", file: "compose.yaml", flags: "" })
+  const view = ui.deploy({
+    app: "web",
+    server: "dev",
+    file: "compose.yaml",
+    flags: "",
+  })
   writeFileSync(join(dir, "ready"), "")
   for (let index = 0; index < FLOOD_BYTES / LINE.length; index++) {
     view.progress(LINE)
     // A session hands lines over as it reads their frames, and waits for input now and then.
     if (index % 500 === 0) await Bun.sleep(0)
   }
-  await view.end({ outcome: "start_failed", sequence: 1, app: "web", server: "dev", secrets: 0, ms: 1 })
+  await view.end({
+    outcome: "start_failed",
+    sequence: 1,
+    app: "web",
+    server: "dev",
+    secrets: 0,
+    ms: 1,
+  })
 }
 await ui.close()
 writeFileSync(join(dir, "done"), "")

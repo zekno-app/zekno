@@ -13,8 +13,14 @@ export function createRunnerUpdates(context: Context, servers: Servers) {
   const updating = new Set<string>()
 
   /** Replaces a server's runner, after the question was answered, then asks the server again. */
-  async function update(effect: Extract<Effect, { kind: "update-runner" }>): Promise<void> {
-    if (updating.has(effect.server)) return notice("info", `The runner on ${effect.server} is already being updated.`)
+  async function update(
+    effect: Extract<Effect, { kind: "update-runner" }>
+  ): Promise<void> {
+    if (updating.has(effect.server))
+      return notice(
+        "info",
+        `The runner on ${effect.server} is already being updated.`
+      )
     updating.add(effect.server)
     try {
       await replace(effect)
@@ -23,10 +29,17 @@ export function createRunnerUpdates(context: Context, servers: Servers) {
     }
   }
 
-  async function replace(effect: Extract<Effect, { kind: "update-runner" }>): Promise<void> {
+  async function replace(
+    effect: Extract<Effect, { kind: "update-runner" }>
+  ): Promise<void> {
     const plan = await prepareServerUpdate(ops, effect.server)
-    notice("info", `Updating the runner on ${plan.server.name}. The server downloads it and checks it before it replaces the old one.`)
-    const result = await updateRunner(ops, plan, { detail: (line) => dispatch({ type: "runner-line", line }) })
+    notice(
+      "info",
+      `Updating the runner on ${plan.server.name}. The server downloads it and checks it before it replaces the old one.`
+    )
+    const result = await updateRunner(ops, plan, {
+      detail: (line) => dispatch({ type: "runner-line", line }),
+    })
     notice(
       "success",
       result.updated

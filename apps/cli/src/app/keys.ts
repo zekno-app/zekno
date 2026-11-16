@@ -36,6 +36,7 @@ export function toAppKey(input: string, key: Partial<Key>): AppKey | undefined {
   if (key.return) return { kind: "enter" }
   if (key.escape) return { kind: "escape" }
   if (key.backspace || key.delete) return { kind: "backspace" }
-  if (key.ctrl || key.meta || input === "" || isLateAnswer(input)) return undefined
+  if (key.ctrl || key.meta || input === "" || isLateAnswer(input))
+    return undefined
   return { kind: "text", text: input }
 }

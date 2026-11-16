@@ -7,7 +7,14 @@ import type { DeployStage } from "../../shared/deploy"
 import type { AppRow, DeployRow, RunState, SecretRow } from "../../shared/views"
 import type { AppKey } from "../keys"
 import type { Notice } from "../../shared/notice"
-import type { AddStepName, Linked, LogLine, RunnerRow, State, TeamView } from "./types"
+import type {
+  AddStepName,
+  Linked,
+  LogLine,
+  RunnerRow,
+  State,
+  TeamView,
+} from "./types"
 
 // ---------------------------------------------------------------------------
 // Effects: what the reducer asks for. effects/ runs them.
@@ -28,7 +35,12 @@ export type Effect =
       kind: "deploy-continue"
       server: string
       app: string
-      answer: "write-link" | "skip-link" | "values-set" | "skip-values" | "deploy-elsewhere"
+      answer:
+        | "write-link"
+        | "skip-link"
+        | "values-set"
+        | "skip-values"
+        | "deploy-elsewhere"
     }
   /** `to` undefined: the deploy before the latest. */
   | { kind: "rollback"; server: string; app: string; to?: number }
@@ -61,7 +73,13 @@ export type AppEvent =
   | { type: "team-created"; team: TeamView }
   /** A server was added. `code`, its server code, is said on Home only when its panel was not seen. */
   | { type: "server-added"; team: TeamView; notice: Notice; code?: string }
-  | { type: "app-view"; server: string; app: string; deploys: DeployRow[]; secrets: SecretRow[] }
+  | {
+      type: "app-view"
+      server: string
+      app: string
+      deploys: DeployRow[]
+      secrets: SecretRow[]
+    }
   | { type: "notice"; notice: Notice }
   /**
    * An effect failed with a reason a person can act on. What was waiting for
@@ -103,16 +121,42 @@ export type AppEvent =
       replaces?: number
       secretNames?: string[]
     }
-  | { type: "deploy-stage"; stage: DeployStage; sequence: number; secrets: number }
+  | {
+      type: "deploy-stage"
+      stage: DeployStage
+      sequence: number
+      secrets: number
+    }
   /** Docker's lines during the deploy, cleaned, in the order it printed them. */
   | { type: "deploy-progress"; lines: readonly string[] }
-  | { type: "deploy-ended"; outcome: "started" | "start_failed" | "error"; notice: Notice; at?: number }
+  | {
+      type: "deploy-ended"
+      outcome: "started" | "start_failed" | "error"
+      notice: Notice
+      at?: number
+    }
   /** Before a deploy: names the Compose file `file` expects that have no secret. */
-  | { type: "missing-values"; server: string; app: string; names: string[]; file?: string }
+  | {
+      type: "missing-values"
+      server: string
+      app: string
+      names: string[]
+      file?: string
+    }
   /** Before the first deploy of a folder that is not linked. */
-  | { type: "ask-remember-folder"; server: string; app: string; compose: string }
+  | {
+      type: "ask-remember-folder"
+      server: string
+      app: string
+      compose: string
+    }
   /** `d` in a linked folder with another app selected than the folder's own (`linked`). */
-  | { type: "ask-deploy-elsewhere"; server: string; app: string; linked: { server: string; app: string } }
+  | {
+      type: "ask-deploy-elsewhere"
+      server: string
+      app: string
+      linked: { server: string; app: string }
+    }
   /** zekno.json was written: this folder is now linked to that app on that server. */
   | { type: "linked"; linked: Linked }
   /** This folder's zekno.json, signed by the team, was recorded as used here: Home moves to its server and app. */
@@ -124,7 +168,12 @@ export type AppEvent =
    * What is running on one server's apps, and the last deploy of each that
    * it accepted, as its runner said. An app it does not name is unknown.
    */
-  | { type: "app-states"; server: string; states: Record<string, RunState>; accepted?: Record<string, number> }
+  | {
+      type: "app-states"
+      server: string
+      states: Record<string, RunState>
+      accepted?: Record<string, number>
+    }
   /** Every `REFRESH_MS` while the app is open: Home and the app screen read again what is running. */
   | { type: "tick" }
   /** Lines of the logs being followed, cleaned. `fresh`: the first of a new connection, which replace what was there. */
@@ -133,7 +182,10 @@ export type AppEvent =
   | { type: "logs-dropped"; problem?: string }
 
 /** One kind of event, for the part of the reducer that handles it. */
-export type EventOf<Type extends AppEvent["type"]> = Extract<AppEvent, { type: Type }>
+export type EventOf<Type extends AppEvent["type"]> = Extract<
+  AppEvent,
+  { type: Type }
+>
 
 /** The next state, and the effects to run. */
 export type Step = { state: State; effects: Effect[] }

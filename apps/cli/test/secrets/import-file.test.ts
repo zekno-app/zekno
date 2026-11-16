@@ -6,7 +6,17 @@
  * wrong line, and the error it becomes never holds it.
  */
 import { describe, expect, test } from "bun:test"
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, realpathSync, symlinkSync, truncateSync, writeFileSync } from "node:fs"
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  realpathSync,
+  symlinkSync,
+  truncateSync,
+  writeFileSync,
+} from "node:fs"
 import { join } from "node:path"
 
 import { tempDir } from "../../../runner/test/support/helpers"
@@ -31,14 +41,20 @@ const SENTINEL = "zk_SENTINEL_9f3a"
 /** The entries of a text that fits, as `name=value` pairs. */
 function read(text: string): [string, string][] {
   const parsed = parseImport(text)
-  if (!("entries" in parsed)) throw new Error(`expected the text to fit, it stopped at line ${parsed.line} (${parsed.reason})`)
+  if (!("entries" in parsed))
+    throw new Error(
+      `expected the text to fit, it stopped at line ${parsed.line} (${parsed.reason})`
+    )
   return parsed.entries.map((entry) => [entry.name, entry.value])
 }
 
 /** The failure of a text that does not fit. */
 function stops(text: string): ImportFailure {
   const parsed = parseImport(text)
-  if ("entries" in parsed) throw new Error(`expected the text to stop, it gave ${parsed.entries.length} entries`)
+  if ("entries" in parsed)
+    throw new Error(
+      `expected the text to stop, it gave ${parsed.entries.length} entries`
+    )
   return parsed
 }
 
@@ -83,7 +99,8 @@ describe("the grammar, case by case (contracts/import.md, What each case means)"
       ["NAME=ünïcødé ✓", [["NAME", "ünïcødé ✓"]]],
       ["NAME=a=b", [["NAME", "a=b"]]],
     ]
-    for (const [text, entries] of cases) expect({ text, entries: read(text) }).toEqual({ text, entries })
+    for (const [text, entries] of cases)
+      expect({ text, entries: read(text) }).toEqual({ text, entries })
   })
 
   test("lines that do not fit, and the reason each gets", () => {
@@ -124,7 +141,8 @@ describe("the grammar, case by case (contracts/import.md, What each case means)"
       ["NAME='a\u0007b'", "control"],
       ["\rNAME=x", "control"],
     ]
-    for (const [text, reason] of cases) expect({ text, reason: stops(text).reason }).toEqual({ text, reason })
+    for (const [text, reason] of cases)
+      expect({ text, reason: stops(text).reason }).toEqual({ text, reason })
   })
 
   test("a tab is not a control character", () => {
@@ -132,9 +150,21 @@ describe("the grammar, case by case (contracts/import.md, What each case means)"
   })
 
   test("the same key twice stops at the second line, naming both; letter case counts", () => {
-    const text = ["A=1", "", "SAME=first", "# comment", "B=2", "C=3", "", "D=4", "SAME=second"].join("\n")
+    const text = [
+      "A=1",
+      "",
+      "SAME=first",
+      "# comment",
+      "B=2",
+      "C=3",
+      "",
+      "D=4",
+      "SAME=second",
+    ].join("\n")
     expect(stops(text)).toEqual({ line: 9, reason: "twice", first: 3 })
-    expect(importLineSentence(".env", { line: 9, reason: "twice", first: 3 })).toBe(".env, line 9: the same name as line 3. Nothing was stored.")
+    expect(
+      importLineSentence(".env", { line: 9, reason: "twice", first: 3 })
+    ).toBe(".env, line 9: the same name as line 3. Nothing was stored.")
     expect(read("Foo=1\nFOO=2")).toEqual([
       ["Foo", "1"],
       ["FOO", "2"],
@@ -146,15 +176,51 @@ describe("which sentence a line that does not fit gets (I2 to I9)", () => {
   /** One line for each step of the order, with the value on it, and the sentence it gets. */
   const cases: [string, ImportReason, string][] = [
     [`NAME=${SENTINEL}\u0007`, "control", "a control character."],
-    [`${SENTINEL} is not a line`, "not_entry", "this is not a NAME=value line."],
-    [`NAME='${SENTINEL}`, "unclosed", "a quoted value does not end on this line. Write a line break as \\n inside double quotes."],
-    [`NAME='${SENTINEL}' tail`, "after_quote", "there is text after the closing quote."],
-    [`NAME="${SENTINEL}\\q"`, "escape", 'an escape zekno does not read. Inside double quotes only \\\\ \\" \\n \\r \\t and \\$ are read.'],
-    [`NAME="${SENTINEL}$X"`, "dollar", "a $ that zekno would not expand. Put the value in single quotes to keep it as it is."],
-    [`NAME="${SENTINEL}`, "unclosed", "a quoted value does not end on this line. Write a line break as \\n inside double quotes."],
-    [`NAME="${SENTINEL}" tail`, "after_quote", "there is text after the closing quote."],
-    [`NAME=${SENTINEL}$X`, "dollar", "a $ that zekno would not expand. Put the value in single quotes to keep it as it is."],
-    [`NAME=${SENTINEL}#x`, "hash", "a # inside a value. Quote the value to keep it, or put a space before # to start a comment."],
+    [
+      `${SENTINEL} is not a line`,
+      "not_entry",
+      "this is not a NAME=value line.",
+    ],
+    [
+      `NAME='${SENTINEL}`,
+      "unclosed",
+      "a quoted value does not end on this line. Write a line break as \\n inside double quotes.",
+    ],
+    [
+      `NAME='${SENTINEL}' tail`,
+      "after_quote",
+      "there is text after the closing quote.",
+    ],
+    [
+      `NAME="${SENTINEL}\\q"`,
+      "escape",
+      'an escape zekno does not read. Inside double quotes only \\\\ \\" \\n \\r \\t and \\$ are read.',
+    ],
+    [
+      `NAME="${SENTINEL}$X"`,
+      "dollar",
+      "a $ that zekno would not expand. Put the value in single quotes to keep it as it is.",
+    ],
+    [
+      `NAME="${SENTINEL}`,
+      "unclosed",
+      "a quoted value does not end on this line. Write a line break as \\n inside double quotes.",
+    ],
+    [
+      `NAME="${SENTINEL}" tail`,
+      "after_quote",
+      "there is text after the closing quote.",
+    ],
+    [
+      `NAME=${SENTINEL}$X`,
+      "dollar",
+      "a $ that zekno would not expand. Put the value in single quotes to keep it as it is.",
+    ],
+    [
+      `NAME=${SENTINEL}#x`,
+      "hash",
+      "a # inside a value. Quote the value to keep it, or put a space before # to start a comment.",
+    ],
     [`NAME=${SENTINEL}"x`, "not_entry", "this is not a NAME=value line."],
     [`${SENTINEL}==`, "not_entry", "this is not a NAME=value line."],
   ]
@@ -162,9 +228,22 @@ describe("which sentence a line that does not fit gets (I2 to I9)", () => {
   test("each step of the order, on line 4 after a blank line, a comment and an entry, in an LF file and a CRLF file", () => {
     for (const eol of ["\n", "\r\n"]) {
       for (const [line, reason, said] of cases) {
-        const failure = stops(["", "# the values of this project", `GOOD=${SENTINEL}`, line, "LATER=1"].join(eol))
-        expect({ line, failure }).toEqual({ line, failure: { line: 4, reason } })
-        expect(importLineSentence(".env", failure)).toBe(`.env, line 4: ${said} Nothing was stored.`)
+        const failure = stops(
+          [
+            "",
+            "# the values of this project",
+            `GOOD=${SENTINEL}`,
+            line,
+            "LATER=1",
+          ].join(eol)
+        )
+        expect({ line, failure }).toEqual({
+          line,
+          failure: { line: 4, reason },
+        })
+        expect(importLineSentence(".env", failure)).toBe(
+          `.env, line 4: ${said} Nothing was stored.`
+        )
         holdsNoValue(failure)
       }
     }
@@ -180,7 +259,10 @@ describe("which sentence a line that does not fit gets (I2 to I9)", () => {
     expect(stops("NAME=a#b$c").reason).toBe("hash")
     expect(stops("NAME=a$b#c").reason).toBe("dollar")
     // The same key below a wrong line: the wrong line is named.
-    expect(stops(`A=1\nB=x#y\nA=${SENTINEL}`)).toEqual({ line: 2, reason: "hash" })
+    expect(stops(`A=1\nB=x#y\nA=${SENTINEL}`)).toEqual({
+      line: 2,
+      reason: "hash",
+    })
     const twice = stops(`A=1\nA=${SENTINEL}`)
     expect(twice).toEqual({ line: 2, reason: "twice", first: 1 })
     holdsNoValue(twice)
@@ -242,7 +324,12 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
   test("a good file is read once and given back as text, without a byte order mark", () => {
     expect(readImportFile(at("good.env", "A=1\n"), "good.env")).toBe("A=1\n")
     expect(readImportFile(at("bom.env", "﻿A=1\n"), "bom.env")).toBe("A=1\n")
-    expect(readImportFile(at("limit.env", "#".repeat(IMPORT_FILE_LIMIT)), "limit.env").length).toBe(IMPORT_FILE_LIMIT)
+    expect(
+      readImportFile(
+        at("limit.env", "#".repeat(IMPORT_FILE_LIMIT)),
+        "limit.env"
+      ).length
+    ).toBe(IMPORT_FILE_LIMIT)
   })
 
   test("a missing path is I19; a folder and a named pipe are I20, the pipe at once", async () => {
@@ -260,10 +347,20 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
   test("a file over 1 MiB is I21, a sparse one too; one that is not UTF-8 is I22, with the value in it", () => {
     const big = at("big.env", "")
     truncateSync(big, 2 * 1024 * 1024)
-    expect(refused(big)).toBe("shown is larger than the 1 MiB an import file may be. Nothing was stored.")
-    expect(refused(at("over.env", "#".repeat(IMPORT_FILE_LIMIT + 1)))).toBe("shown is larger than the 1 MiB an import file may be. Nothing was stored.")
-    const bytes = new Uint8Array([...new TextEncoder().encode(`A=${SENTINEL}`), 0xff, 0x0a])
-    expect(refused(at("binary.env", bytes))).toBe("shown is not UTF-8 text. Nothing was stored.")
+    expect(refused(big)).toBe(
+      "shown is larger than the 1 MiB an import file may be. Nothing was stored."
+    )
+    expect(refused(at("over.env", "#".repeat(IMPORT_FILE_LIMIT + 1)))).toBe(
+      "shown is larger than the 1 MiB an import file may be. Nothing was stored."
+    )
+    const bytes = new Uint8Array([
+      ...new TextEncoder().encode(`A=${SENTINEL}`),
+      0xff,
+      0x0a,
+    ])
+    expect(refused(at("binary.env", bytes))).toBe(
+      "shown is not UTF-8 text. Nothing was stored."
+    )
   })
 
   test("a symbolic link to a good file is followed, as `-f` follows one", () => {
@@ -282,16 +379,28 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
     writeFileSync(target, "OTHER=yes\n")
     symlinkSync(target, join(folder, "outside-link.env"))
     // Each path as typed, from the command's folder.
-    expect(readImportFileAndLink("outside-link.env", "outside-link.env", folder)).toEqual({ text: "OTHER=yes\n", linkedTo: realpathSync(target) })
+    expect(
+      readImportFileAndLink("outside-link.env", "outside-link.env", folder)
+    ).toEqual({ text: "OTHER=yes\n", linkedTo: realpathSync(target) })
     // A link to a link: the real path of the file at the end.
     symlinkSync(join(folder, "outside-link.env"), join(folder, "twice.env"))
-    expect(readImportFileAndLink("twice.env", "twice.env", folder)).toEqual({ text: "OTHER=yes\n", linkedTo: realpathSync(target) })
+    expect(readImportFileAndLink("twice.env", "twice.env", folder)).toEqual({
+      text: "OTHER=yes\n",
+      linkedTo: realpathSync(target),
+    })
     // A relative link, as git checks one out.
     symlinkSync("good.env", join(folder, "relative.env"))
     at("good.env", "A=1\n")
-    expect(readImportFileAndLink("relative.env", "relative.env", folder)).toEqual({ text: "A=1\n", linkedTo: realpathSync(join(folder, "good.env")) })
+    expect(
+      readImportFileAndLink("relative.env", "relative.env", folder)
+    ).toEqual({
+      text: "A=1\n",
+      linkedTo: realpathSync(join(folder, "good.env")),
+    })
     at("plain.env", "A=1\n")
-    expect(readImportFileAndLink("plain.env", "plain.env", folder)).toEqual({ text: "A=1\n" })
+    expect(readImportFileAndLink("plain.env", "plain.env", folder)).toEqual({
+      text: "A=1\n",
+    })
   })
 
   test("a link in a folder of the path is named too (security review S5); a `..`, and the folders above where the path starts, are not looked at", () => {
@@ -302,25 +411,51 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
     const real = realpathSync(join(outside, ".env"))
     // `config` is a link to a folder elsewhere; the file in it is not a link.
     symlinkSync(outside, join(folder, "config"))
-    expect(readImportFileAndLink("config/.env", "config/.env", folder)).toEqual({ text: "OTHER=yes\n", linkedTo: real })
+    expect(readImportFileAndLink("config/.env", "config/.env", folder)).toEqual(
+      { text: "OTHER=yes\n", linkedTo: real }
+    )
     // Deeper: a real folder, then a link to a folder.
     mkdirSync(join(folder, "deep"))
     symlinkSync(outside, join(folder, "deep", "inner"))
-    expect(readImportFileAndLink("deep/inner/.env", "deep/inner/.env", folder)).toEqual({ text: "OTHER=yes\n", linkedTo: real })
+    expect(
+      readImportFileAndLink("deep/inner/.env", "deep/inner/.env", folder)
+    ).toEqual({ text: "OTHER=yes\n", linkedTo: real })
     // The same file by an absolute path through the link.
-    expect(readImportFileAndLink(join(realpathSync(folder), "config", ".env"), "shown", "/")).toEqual({ text: "OTHER=yes\n", linkedTo: real })
+    expect(
+      readImportFileAndLink(
+        join(realpathSync(folder), "config", ".env"),
+        "shown",
+        "/"
+      )
+    ).toEqual({ text: "OTHER=yes\n", linkedTo: real })
     // `config/../plain.env` is cleaned to `plain.env` before it is opened, so the link is never passed through.
-    expect(readImportFileAndLink("config/../plain.env", "shown", folder)).toEqual({ text: "A=1\n" })
+    expect(
+      readImportFileAndLink("config/../plain.env", "shown", folder)
+    ).toEqual({ text: "A=1\n" })
     // From a folder below, `../plain.env`: a `..` holds no link of its own.
     mkdirSync(join(folder, "below"))
-    expect(readImportFileAndLink("../plain.env", "shown", join(folder, "below"))).toEqual({ text: "A=1\n" })
+    expect(
+      readImportFileAndLink("../plain.env", "shown", join(folder, "below"))
+    ).toEqual({ text: "A=1\n" })
     // An absolute path whose folders hold no link names nothing.
-    expect(readImportFileAndLink(join(realpathSync(folder), "plain.env"), "shown", "/")).toEqual({ text: "A=1\n" })
+    expect(
+      readImportFileAndLink(
+        join(realpathSync(folder), "plain.env"),
+        "shown",
+        "/"
+      )
+    ).toEqual({ text: "A=1\n" })
     // An absolute path through a link the system keeps (on macOS the temporary folders are under /var, a link to
     // /private/var) is named: the person typed that folder. A relative path from such a folder is not: `folder` is
     // one, and `plain.env` above was not named.
     const system = realpathSync(folder) !== folder
-    expect(readImportFileAndLink(join(folder, "plain.env"), "shown", "/")).toEqual(system ? { text: "A=1\n", linkedTo: realpathSync(join(folder, "plain.env")) } : { text: "A=1\n" })
+    expect(
+      readImportFileAndLink(join(folder, "plain.env"), "shown", "/")
+    ).toEqual(
+      system
+        ? { text: "A=1\n", linkedTo: realpathSync(join(folder, "plain.env")) }
+        : { text: "A=1\n" }
+    )
   })
 
   test("a name typed in another letter case than the disk keeps is no link, where the file system ignores case", () => {
@@ -329,16 +464,32 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
     writeFileSync(join(folder, "Folder", "case.env"), "A=1\n")
     if (!existsSync(join(folder, "folder", "CASE.ENV"))) return
     // realpath gives the disk's own case (Folder/case.env); no name is compared as text, so nothing is named.
-    expect(realpathSync(join(folder, "folder", "CASE.ENV"))).toBe(join(realpathSync(folder), "Folder", "case.env"))
-    expect(readImportFileAndLink("folder/CASE.ENV", "shown", folder)).toEqual({ text: "A=1\n" })
+    expect(realpathSync(join(folder, "folder", "CASE.ENV"))).toBe(
+      join(realpathSync(folder), "Folder", "case.env")
+    )
+    expect(readImportFileAndLink("folder/CASE.ENV", "shown", folder)).toEqual({
+      text: "A=1\n",
+    })
   })
 
   test("typedParts: where the path as typed starts, and its parts", () => {
-    expect(typedParts("/a/b", "c/d")).toEqual({ from: "/a/b", parts: ["c", "d"] })
-    expect(typedParts("/a/b", "../c/d")).toEqual({ from: "/a", parts: ["c", "d"] })
+    expect(typedParts("/a/b", "c/d")).toEqual({
+      from: "/a/b",
+      parts: ["c", "d"],
+    })
+    expect(typedParts("/a/b", "../c/d")).toEqual({
+      from: "/a",
+      parts: ["c", "d"],
+    })
     expect(typedParts("/a/b", "c/../d")).toEqual({ from: "/a/b", parts: ["d"] })
-    expect(typedParts("/a/b", "./c//d/")).toEqual({ from: "/a/b", parts: ["c", "d"] })
-    expect(typedParts("/a/b", "../../../x")).toEqual({ from: "/", parts: ["x"] })
+    expect(typedParts("/a/b", "./c//d/")).toEqual({
+      from: "/a/b",
+      parts: ["c", "d"],
+    })
+    expect(typedParts("/a/b", "../../../x")).toEqual({
+      from: "/",
+      parts: ["x"],
+    })
     expect(typedParts("/a/b", "/x/y")).toEqual({ from: "/", parts: ["x", "y"] })
     expect(typedParts("/a/b", "/x/../y")).toEqual({ from: "/", parts: ["y"] })
   })
@@ -371,16 +522,26 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
     }
     const link = join(folder, "swapped.env")
     symlinkSync(a, link)
-    expect(whereLinkLeads(folder, "swapped.env", opened(a))).toBe(realpathSync(a))
+    expect(whereLinkLeads(folder, "swapped.env", opened(a))).toBe(
+      realpathSync(a)
+    )
     expect(whereLinkLeads(folder, "first.env", opened(a))).toBeUndefined()
     // The link now leads to the second file, while the first is the one open: no name is given.
-    expect(() => whereLinkLeads(folder, "swapped.env", opened(b))).toThrow("The link leads to another file than the one opened.")
+    expect(() => whereLinkLeads(folder, "swapped.env", opened(b))).toThrow(
+      "The link leads to another file than the one opened."
+    )
     // The path is now another regular file than the one open.
-    expect(() => whereLinkLeads(folder, "second.env", opened(a))).toThrow("The path names another file than the one opened.")
+    expect(() => whereLinkLeads(folder, "second.env", opened(a))).toThrow(
+      "The path names another file than the one opened."
+    )
     // A folder link that now leads elsewhere: the same.
     symlinkSync(folder, join(folder, "here"))
-    expect(whereLinkLeads(folder, "here/first.env", opened(a))).toBe(realpathSync(a))
-    expect(() => whereLinkLeads(folder, "here/second.env", opened(a))).toThrow("The link leads to another file than the one opened.")
+    expect(whereLinkLeads(folder, "here/first.env", opened(a))).toBe(
+      realpathSync(a)
+    )
+    expect(() => whereLinkLeads(folder, "here/second.env", opened(a))).toThrow(
+      "The link leads to another file than the one opened."
+    )
   })
 
   test("a link changed over and over while it is read: each read names the file whose text it gives, or stops as unreadable", async () => {
@@ -400,7 +561,10 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
       ],
       { stdout: "ignore", stderr: "ignore" }
     )
-    const named = { [realpathSync(a)]: "WHICH=a\n", [realpathSync(b)]: "WHICH=b\n" }
+    const named = {
+      [realpathSync(a)]: "WHICH=a\n",
+      [realpathSync(b)]: "WHICH=b\n",
+    }
     const outcomes = new Set<string>()
     const started = Date.now()
     while (Date.now() - started < 1000) {
@@ -422,8 +586,12 @@ describe("reading the file (contracts/import.md, Reading the file)", () => {
   test("the folder's own zekno.json is not a file of values: line 1 is named", async () => {
     const m = await ready()
     expect(await m.zekno("link", "--app", "web", "--server", "dev")).toBe(0)
-    const failure = stops(readImportFile(join(m.project, "zekno.json"), "zekno.json"))
+    const failure = stops(
+      readImportFile(join(m.project, "zekno.json"), "zekno.json")
+    )
     expect(failure).toEqual({ line: 1, reason: "not_entry" })
-    expect(importLineSentence("zekno.json", failure)).toBe("zekno.json, line 1: this is not a NAME=value line. Nothing was stored.")
+    expect(importLineSentence("zekno.json", failure)).toBe(
+      "zekno.json, line 1: this is not a NAME=value line. Nothing was stored."
+    )
   }, 30_000)
 })

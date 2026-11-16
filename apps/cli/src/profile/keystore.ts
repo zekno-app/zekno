@@ -15,7 +15,8 @@ export const KEYCHAIN_SERVICE = "app.zekno.cli"
 export function osKeychain(): KeyStore {
   return {
     get: (name) => Bun.secrets.get({ service: KEYCHAIN_SERVICE, name }),
-    set: (name, value) => Bun.secrets.set({ service: KEYCHAIN_SERVICE, name, value }),
+    set: (name, value) =>
+      Bun.secrets.set({ service: KEYCHAIN_SERVICE, name, value }),
     delete: async (name) => {
       await Bun.secrets.delete({ service: KEYCHAIN_SERVICE, name })
     },

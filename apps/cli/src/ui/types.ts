@@ -14,7 +14,11 @@ export const REMOTE_MARK = "remote:"
  * output prints its word only. At a terminal its symbol and colour go with
  * the word, so the state is never shown by colour alone (FR-008).
  */
-export type MarkedCell = { text: string; mark: string; tone: "success" | "danger" | "warning" | "quiet" }
+export type MarkedCell = {
+  text: string
+  mark: string
+  tone: "success" | "danger" | "warning" | "quiet"
+}
 /**
  * A cell with a look of its own at a terminal: `strong` bold, `plain` the
  * text colour, `quiet` faint. Plain output prints `text`. A terminal draws
@@ -36,14 +40,21 @@ export type StyledCell = {
 export type Cell = string | MarkedCell | StyledCell
 
 /** The words of a cell, as plain output prints them. */
-export const cellText = (cell: Cell): string => (typeof cell === "string" ? cell : cell.text)
+export const cellText = (cell: Cell): string =>
+  typeof cell === "string" ? cell : cell.text
 
 /** A bold cell at a terminal. */
 export const strong = (text: string): StyledCell => ({ text, style: "strong" })
 /** A faint cell at a terminal. */
-export const quiet = (text: string, terminal?: string): StyledCell => (terminal === undefined ? { text, style: "quiet" } : { text, style: "quiet", terminal })
+export const quiet = (text: string, terminal?: string): StyledCell =>
+  terminal === undefined
+    ? { text, style: "quiet" }
+    : { text, style: "quiet", terminal }
 /** A cell in the terminal's text colour, where a table would make it faint. */
-export const plainCell = (text: string): StyledCell => ({ text, style: "plain" })
+export const plainCell = (text: string): StyledCell => ({
+  text,
+  style: "plain",
+})
 
 /**
  * One row of a list a person picks from (specs/006-cli-small-features,
@@ -53,7 +64,12 @@ export const plainCell = (text: string): StyledCell => ({ text, style: "plain" }
  * so at a terminal it leaves no line behind and that question is drawn in
  * the list's place (mock-up 2).
  */
-export type ListRow<T> = { value: T; label: string; detail?: string; asksNext?: boolean }
+export type ListRow<T> = {
+  value: T
+  label: string
+  detail?: string
+  asksNext?: boolean
+}
 
 /**
  * A list to pick one row from. `rows` is never empty: a caller with nothing
@@ -61,7 +77,12 @@ export type ListRow<T> = { value: T; label: string; detail?: string; asksNext?: 
  * left behind once a row is chosen (`✔ Server  prod`). `missing` is what the
  * plain interface throws: the sentence the command has for that detail.
  */
-export type ListQuestion<T> = { question: string; rows: readonly ListRow<T>[]; collapsed: string; missing: Error }
+export type ListQuestion<T> = {
+  question: string
+  rows: readonly ListRow<T>[]
+  collapsed: string
+  missing: Error
+}
 
 /**
  * A one-line answer to type. `fill` is the answer so far when the question
@@ -69,7 +90,12 @@ export type ListQuestion<T> = { question: string; rows: readonly ListRow<T>[]; c
  * one; it is the same rule the matching flag is held to. `missing` is what
  * the plain interface throws.
  */
-export type TypedQuestion = { question: string; fill?: string; check(answer: string): string | undefined; missing: Error }
+export type TypedQuestion = {
+  question: string
+  fill?: string
+  check(answer: string): string | undefined
+  missing: Error
+}
 
 /**
  * D30, the last line of `zekno doctor` (specs/006-cli-small-features,
@@ -77,13 +103,15 @@ export type TypedQuestion = { question: string; fill?: string; check(answer: str
  * letter in capitals. `1 problem, 1 warning.` is the mock-up's.
  */
 export function doctorCounts(problems: number, warnings: number): string {
-  const count = (n: number, word: string) => (n === 0 ? `no ${word}s` : `${n} ${word}${n === 1 ? "" : "s"}`)
+  const count = (n: number, word: string) =>
+    n === 0 ? `no ${word}s` : `${n} ${word}${n === 1 ? "" : "s"}`
   const text = `${count(problems, "problem")}, ${count(warnings, "warning")}.`
   return text[0]!.toUpperCase() + text.slice(1)
 }
 
 /** D31: in place of the servers, when the profile did not verify and no server was contacted. Needs approval (research Q4). */
-export const SERVERS_SKIPPED = "No server was checked, because the profile could not be verified."
+export const SERVERS_SKIPPED =
+  "No server was checked, because the profile could not be verified."
 
 /** One line of an app's logs, as `zekno logs` prints it. Each part is already cleaned or held to a pattern. */
 export type LogOutput = { time: string; service: string; text: string }
@@ -112,7 +140,11 @@ export interface Ui {
    * import" draws `✔ Stored 4 values for demo on prod. They take effect on
    * the next deploy.`; plain output is the same either way.
    */
-  success(text: string, detail?: string, options?: { firstBold?: boolean }): void
+  success(
+    text: string,
+    detail?: string,
+    options?: { firstBold?: boolean }
+  ): void
   /** Why a command failed. Goes to standard error in plain output. */
   error(text: string): void
   /**
@@ -172,7 +204,11 @@ export interface Ui {
    * password: the label is then drawn once and nothing is animated over it.
    * Either way it is gone once the work ends.
    */
-  step<T>(label: string, work: () => Promise<T>, options?: { quiet?: boolean }): Promise<T>
+  step<T>(
+    label: string,
+    work: () => Promise<T>,
+    options?: { quiet?: boolean }
+  ): Promise<T>
   /** Reads a secret value: hidden at a terminal, or everything on standard input. */
   askSecret(question: string, fromStdin: boolean): Promise<string>
   /**
@@ -181,7 +217,11 @@ export interface Ui {
    * asks where nobody can answer, and never takes yes for granted. Esc and
    * Ctrl-C answer no, unless `leave` is given: then they throw `Left`.
    */
-  confirm(question: string, refusal: string, options?: { leave?: boolean }): Promise<boolean>
+  confirm(
+    question: string,
+    refusal: string,
+    options?: { leave?: boolean }
+  ): Promise<boolean>
   /**
    * Whether this interface can ask a person anything: true only at a
    * terminal (`wantsPlain` false and the input a terminal). Every question

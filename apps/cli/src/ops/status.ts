@@ -1,9 +1,20 @@
-import { RunnerAppStatesSchema, RunnerStatusSchema, type RunnerAppStates, type RunnerStatus, type RunnerVersion } from "@workspace/core"
+import {
+  RunnerAppStatesSchema,
+  RunnerStatusSchema,
+  type RunnerAppStates,
+  type RunnerStatus,
+  type RunnerVersion,
+} from "@workspace/core"
 
 import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
 import { CliError, RunnerRefused } from "../cli/errors"
 import { findServer, type Server } from "../profile/profile"
-import { namedUnreachable, withSession, type Session, type SessionMode } from "../server/session"
+import {
+  namedUnreachable,
+  withSession,
+  type Session,
+  type SessionMode,
+} from "../server/session"
 import type { RunState } from "../shared/views"
 
 /** A server of the verified team, found by name. Nothing has been asked of it yet. */
@@ -17,15 +28,28 @@ export type Located = { team: Team; server: Server }
 export type Checked = { team: Pick<Team, "trust">; server: Server }
 
 /** Verifies the team and finds one of its servers. `from`: the project file, when the name was read from it. */
-export async function locateServer(deps: OpDeps, name: string | undefined, from?: string): Promise<Located> {
+export async function locateServer(
+  deps: OpDeps,
+  name: string | undefined,
+  from?: string
+): Promise<Located> {
   const team = await teamOf(deps)
   return { team, server: findServer(team.profile, name, from) }
 }
 
 /** The runner must be the server that was connected, and on this team. */
-export function checkIdentity(team: Pick<Team, "trust">, server: Server, status: RunnerStatus): void {
-  if (status.serverId !== server.serverId || status.team.teamId !== team.trust.teamId) {
-    throw new CliError(`"${server.name}" answered as a different server than the one that was connected.`)
+export function checkIdentity(
+  team: Pick<Team, "trust">,
+  server: Server,
+  status: RunnerStatus
+): void {
+  if (
+    status.serverId !== server.serverId ||
+    status.team.teamId !== team.trust.teamId
+  ) {
+    throw new CliError(
+      `"${server.name}" answered as a different server than the one that was connected.`
+    )
   }
 }
 
@@ -42,7 +66,9 @@ export type AppStates = RunnerAppStates["apps"]
  * it is stopped.
  */
 export function runStateOf(services: readonly ServiceState[]): RunState {
-  const running = services.filter((service) => service.state === "running").length
+  const running = services.filter(
+    (service) => service.state === "running"
+  ).length
   if (running === 0) return "stopped"
   return running === services.length ? "running" : "partly running"
 }
@@ -85,12 +111,16 @@ export type StatusResult = {
  * answer also ends the session (session.ts), and a session that is kept for
  * more reads then fails here with the reason, rather than on the next read.
  */
-async function readStates(session: Session, whole: boolean): Promise<AppStates | undefined> {
+async function readStates(
+  session: Session,
+  whole: boolean
+): Promise<AppStates | undefined> {
   if (session.mode !== "session") return undefined
   try {
     return (await session.request("state", RunnerAppStatesSchema)).apps
   } catch (error) {
-    if (error instanceof RunnerRefused || (error instanceof CliError && !whole)) return undefined
+    if (error instanceof RunnerRefused || (error instanceof CliError && !whole))
+      return undefined
     throw error
   }
 }
@@ -101,7 +131,11 @@ async function readStates(session: Session, whole: boolean): Promise<AppStates |
  * team. The app keeps one session per server for this (app/effects/servers.ts); see
  * `readStates` for `whole`.
  */
-export async function readOver(session: Session, { team, server }: Checked, options: { whole?: boolean } = {}): Promise<StatusResult> {
+export async function readOver(
+  session: Session,
+  { team, server }: Checked,
+  options: { whole?: boolean } = {}
+): Promise<StatusResult> {
   const status = await session.request("status", RunnerStatusSchema)
   checkIdentity(team, server, status)
   const states = await readStates(session, options.whole === true)
@@ -116,8 +150,13 @@ export async function readOver(session: Session, { team, server }: Checked, opti
 }
 
 /** Asks a server what it holds and what is running, over one session of its own. */
-export async function readStatus(deps: OpDeps, checked: Checked): Promise<StatusResult> {
-  return withSession(reach(deps, checked.server.target), (session) => readOver(session, checked)).catch((error: unknown) => {
+export async function readStatus(
+  deps: OpDeps,
+  checked: Checked
+): Promise<StatusResult> {
+  return withSession(reach(deps, checked.server.target), (session) =>
+    readOver(session, checked)
+  ).catch((error: unknown) => {
     throw namedUnreachable(error, checked.server.name)
   })
 }

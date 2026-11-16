@@ -10,7 +10,12 @@
  */
 
 /** One character cell: what is in it and how it is drawn. A wide character's second cell is `""`. */
-export type Cell = { char: string; bold: boolean; dim: boolean; fg: string | undefined }
+export type Cell = {
+  char: string
+  bold: boolean
+  dim: boolean
+  fg: string | undefined
+}
 
 /** The attributes SGR sets. */
 type Pen = { bold: boolean; dim: boolean; fg: string | undefined }
@@ -18,7 +23,8 @@ type Pen = { bold: boolean; dim: boolean; fg: string | undefined }
 const PLAIN: Pen = { bold: false, dim: false, fg: undefined }
 
 const blankCell = (): Cell => ({ char: " ", ...PLAIN })
-const blankRow = (cols: number): Cell[] => Array.from({ length: cols }, blankCell)
+const blankRow = (cols: number): Cell[] =>
+  Array.from({ length: cols }, blankCell)
 
 /** A CSI sequence: private marker, parameters, intermediates and final byte. */
 const CSI = /^\x1b\[([?>=<]?)([0-9;:]*)([ -/]*)([@-~])/
@@ -36,8 +42,9 @@ export function applySgr(pen: Pen, params: string): Pen {
     if (code === 0) ({ bold, dim, fg } = PLAIN)
     else if (code === 1) bold = true
     else if (code === 2) dim = true
-    else if (code === 22) (bold = false), (dim = false)
-    else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) fg = String(code)
+    else if (code === 22) ((bold = false), (dim = false))
+    else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97))
+      fg = String(code)
     else if (code === 39) fg = undefined
     else if (code === 38 || code === 48) {
       // 38;5;n or 38;2;r;g;b: the colour's own numbers are not codes.
@@ -115,7 +122,8 @@ export function createScreen(initialCols: number, initialRows: number) {
 
   function eraseInLine(mode: number) {
     const row = grid()[y]!
-    const [from, to] = mode === 0 ? [x, cols] : mode === 1 ? [0, x + 1] : [0, cols]
+    const [from, to] =
+      mode === 0 ? [x, cols] : mode === 1 ? [0, x + 1] : [0, cols]
     for (let column = from; column < to; column++) row[column] = blankCell()
   }
 
@@ -153,14 +161,22 @@ export function createScreen(initialCols: number, initialRows: number) {
     }
   }
 
-  function csi(marker: string, params: string, intermediates: string, final: string) {
-    if (marker === "?" && (final === "h" || final === "l")) return privateMode(final === "h", params)
-    if (marker !== "" || intermediates !== "") return void unknown.add(`CSI ${marker}${params}${intermediates}${final}`)
+  function csi(
+    marker: string,
+    params: string,
+    intermediates: string,
+    final: string
+  ) {
+    if (marker === "?" && (final === "h" || final === "l"))
+      return privateMode(final === "h", params)
+    if (marker !== "" || intermediates !== "")
+      return void unknown.add(`CSI ${marker}${params}${intermediates}${final}`)
     if (final === "m") {
       pen = applySgr(pen, params)
       return
     }
-    const numbers = params === "" ? [] : params.split(";").map((part) => Number(part) || 0)
+    const numbers =
+      params === "" ? [] : params.split(";").map((part) => Number(part) || 0)
     const n = numbers[0] || 1
     wrapPending = false
     switch (final) {
@@ -313,7 +329,12 @@ export function createScreen(initialCols: number, initialRows: number) {
     /** A new window size. What is drawn is kept where it fits; the program redraws after it learns the size. */
     resize(newCols: number, newRows: number) {
       const fit = (g: Cell[][]) =>
-        Array.from({ length: newRows }, (_, row) => Array.from({ length: newCols }, (_, column) => g[row]?.[column] ?? blankCell()))
+        Array.from({ length: newRows }, (_, row) =>
+          Array.from(
+            { length: newCols },
+            (_, column) => g[row]?.[column] ?? blankCell()
+          )
+        )
       main = fit(main)
       if (alternate) alternate = fit(alternate)
       cols = newCols

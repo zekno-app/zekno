@@ -96,24 +96,46 @@ export type RunnerState = {
    * The latest version accepted for each secret, keyed by "app/NAME", with
    * its ciphertext hash, or null when that version was a removal.
    */
-  readonly secrets: Readonly<Record<string, { readonly version: number; readonly hash: string | null }>>
+  readonly secrets: Readonly<
+    Record<string, { readonly version: number; readonly hash: string | null }>
+  >
 }
 
 const RunnerStateSchema = z.strictObject({
   serverId: z.string().regex(SERVER_ID),
   team: TeamTrustSchema,
-  lastSequence: z.record(z.string().regex(APP_NAME), z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)),
+  lastSequence: z.record(
+    z.string().regex(APP_NAME),
+    z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+  ),
   secrets: z.record(
     z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}\/[A-Za-z_][A-Za-z0-9_]*$/),
-    z.strictObject({ version: secretVersion, hash: z.string().regex(/^[0-9a-f]{64}$/).nullable() })
+    z.strictObject({
+      version: secretVersion,
+      hash: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .nullable(),
+    })
   ),
 })
 
 /** The state of a server that has just pinned its team and accepted nothing yet. */
-export function initialRunnerState(input: { serverId: string; team: TeamTrust }): RunnerState {
-  const state = { serverId: input.serverId, team: input.team, lastSequence: {}, secrets: {} }
+export function initialRunnerState(input: {
+  serverId: string
+  team: TeamTrust
+}): RunnerState {
+  const state = {
+    serverId: input.serverId,
+    team: input.team,
+    lastSequence: {},
+    secrets: {},
+  }
   if (!RunnerStateSchema.safeParse(state).success) {
-    throw new CoreError("invalid_argument", "The server id or team trust is not valid.")
+    throw new CoreError(
+      "invalid_argument",
+      "The server id or team trust is not valid."
+    )
   }
   return state
 }
@@ -161,21 +183,48 @@ export async function createDeploy(input: {
   now?: Date
 }): Promise<{ envelope: Envelope; secrets: SealedSecret[] }> {
   assertTrust(input.trust)
-  if (!input.trust.members.some((member) => member.publicKey === input.signer.publicKey)) {
-    throw new CoreError("not_member", "The signer is not a member of this team.")
+  if (
+    !input.trust.members.some(
+      (member) => member.publicKey === input.signer.publicKey
+    )
+  ) {
+    throw new CoreError(
+      "not_member",
+      "The signer is not a member of this team."
+    )
   }
   if (!serverKeyOf(input.trust, input.serverId)) {
-    throw new CoreError("unknown_server", "This server is not in the team list. An admin adds it after confirming its code.")
+    throw new CoreError(
+      "unknown_server",
+      "This server is not in the team list. An admin adds it after confirming its code."
+    )
   }
-  if (typeof input.compose !== "string" || utf8(input.compose).length > LIMITS.composeBytes) {
-    throw new CoreError("too_large", "The service definition is larger than the limit.")
+  if (
+    typeof input.compose !== "string" ||
+    utf8(input.compose).length > LIMITS.composeBytes
+  ) {
+    throw new CoreError(
+      "too_large",
+      "The service definition is larger than the limit."
+    )
   }
-  if (!Array.isArray(input.secrets) || input.secrets.length > LIMITS.secretsPerDeploy) {
-    throw new CoreError("invalid_argument", "The secrets are not a list within the limit.")
+  if (
+    !Array.isArray(input.secrets) ||
+    input.secrets.length > LIMITS.secretsPerDeploy
+  ) {
+    throw new CoreError(
+      "invalid_argument",
+      "The secrets are not a list within the limit."
+    )
   }
   const serverId = input.serverId
   const secrets = input.secrets.map((record) => {
-    const checked = verifySecret({ record, trust: input.trust, serverId, app: input.app })
+    const checked = verifySecret({
+      record,
+      trust: input.trust,
+      serverId,
+      app: input.app,
+    })
     if (!checked.ok) {
       throw new CoreError(
         "untrusted_secret",
@@ -187,10 +236,18 @@ export async function createDeploy(input: {
   secrets.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   const supplied = input.removals ?? []
   if (!Array.isArray(supplied) || supplied.length > LIMITS.secretsPerDeploy) {
-    throw new CoreError("invalid_argument", "The removals are not a list within the limit.")
+    throw new CoreError(
+      "invalid_argument",
+      "The removals are not a list within the limit."
+    )
   }
   const removed = supplied.map((removal) => {
-    const checked = verifySecretRemoval({ removal, trust: input.trust, serverId, app: input.app })
+    const checked = verifySecretRemoval({
+      removal,
+      trust: input.trust,
+      serverId,
+      app: input.app,
+    })
     if (!checked.ok) {
       throw new CoreError(
         "untrusted_secret",
@@ -200,13 +257,19 @@ export async function createDeploy(input: {
     return { name: checked.value.name, version: checked.value.version }
   })
   removed.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-  const names = [...secrets.map((secret) => secret.name), ...removed.map((removal) => removal.name)]
+  const names = [
+    ...secrets.map((secret) => secret.name),
+    ...removed.map((removal) => removal.name),
+  ]
   if (
     !namesAreSortedAndUnique(secrets.map((secret) => secret.name)) ||
     !namesAreSortedAndUnique(removed.map((removal) => removal.name)) ||
     new Set(names).size !== names.length
   ) {
-    throw new CoreError("invalid_argument", "Each secret name can appear only once in a deploy.")
+    throw new CoreError(
+      "invalid_argument",
+      "Each secret name can appear only once in a deploy."
+    )
   }
   const deploy = {
     v: 1 as const,
@@ -217,13 +280,24 @@ export async function createDeploy(input: {
     sequence: input.sequence,
     createdAt: (input.now ?? new Date()).toISOString(),
     compose: input.compose,
-    secrets: secrets.map(({ name, hash, version }) => ({ name, hash, version })),
+    secrets: secrets.map(({ name, hash, version }) => ({
+      name,
+      hash,
+      version,
+    })),
     removed,
   }
   if (!DeploySchema.safeParse(deploy).success) {
-    throw new CoreError("invalid_argument", "The app name or deploy number is not valid.")
+    throw new CoreError(
+      "invalid_argument",
+      "The app name or deploy number is not valid."
+    )
   }
-  const envelope = await signEnvelope(PAYLOAD_TYPES.deploy, utf8(JSON.stringify(deploy)), input.signer)
+  const envelope = await signEnvelope(
+    PAYLOAD_TYPES.deploy,
+    utf8(JSON.stringify(deploy)),
+    input.signer
+  )
   return { envelope, secrets: secrets.map((secret) => secret.sealed) }
 }
 
@@ -246,10 +320,14 @@ export function readSignedDeploy(input: {
   )
   if (!opened.ok) return opened
   const json = parseJson(opened.value.payload)
-  if (json === undefined || hasOtherVersion(json)) return refuse("malformed", "The deploy is not readable.")
+  if (json === undefined || hasOtherVersion(json))
+    return refuse("malformed", "The deploy is not readable.")
   const parsed = DeploySchema.safeParse(json)
-  if (!parsed.success) return refuse("malformed", "The deploy does not match its definition.")
-  const signer = input.trust.members.find((member) => member.publicKey === opened.value.signerKey)!
+  if (!parsed.success)
+    return refuse("malformed", "The deploy does not match its definition.")
+  const signer = input.trust.members.find(
+    (member) => member.publicKey === opened.value.signerKey
+  )!
   return ok({ deploy: parsed.data, signer })
 }
 
@@ -265,7 +343,8 @@ export function parseRunnerState(value: unknown): RunnerState {
 /** Stored state is checked in full, so a damaged or incomplete file is an error, not a weaker check. */
 function readState(state: RunnerState): RunnerState {
   const parsed = RunnerStateSchema.safeParse(state)
-  if (!parsed.success) throw new CoreError("invalid_argument", "The runner state is not valid.")
+  if (!parsed.success)
+    throw new CoreError("invalid_argument", "The runner state is not valid.")
   return parsed.data as RunnerState
 }
 
@@ -290,18 +369,27 @@ export function verifyDeploy(input: {
     (keyId) => memberByKeyId(state.team.members, keyId)?.publicKey
   )
   if (!opened.ok) return opened
-  const signer = state.team.members.find((member) => member.publicKey === opened.value.signerKey)!
+  const signer = state.team.members.find(
+    (member) => member.publicKey === opened.value.signerKey
+  )!
 
   // 2. Only now is the content parsed.
   const json = parseJson(opened.value.payload)
-  if (json === undefined) return refuse("malformed", "The deploy is not valid JSON.")
+  if (json === undefined)
+    return refuse("malformed", "The deploy is not valid JSON.")
   if (hasOtherVersion(json)) {
-    return refuse("unsupported_version", "This deploy uses a format version this library does not know.")
+    return refuse(
+      "unsupported_version",
+      "This deploy uses a format version this library does not know."
+    )
   }
   const parsed = DeploySchema.safeParse(json)
-  if (!parsed.success) return refuse("malformed", "The deploy does not match its definition.")
+  if (!parsed.success)
+    return refuse("malformed", "The deploy does not match its definition.")
   const deploy = parsed.data
-  const listedNames = [...deploy.secrets, ...deploy.removed].map((entry) => entry.name)
+  const listedNames = [...deploy.secrets, ...deploy.removed].map(
+    (entry) => entry.name
+  )
   if (
     utf8(deploy.compose).length > LIMITS.composeBytes ||
     !namesAreSortedAndUnique(deploy.secrets.map((secret) => secret.name)) ||
@@ -313,13 +401,19 @@ export function verifyDeploy(input: {
 
   // 3. Who signed it, and for whom.
   if (!DEPLOY_ROLES.includes(signer.role)) {
-    return refuse("role_not_allowed", "The signer's role does not allow deploys.")
+    return refuse(
+      "role_not_allowed",
+      "The signer's role does not allow deploys."
+    )
   }
   if (deploy.teamId !== state.team.teamId) {
     return refuse("wrong_team", "This deploy belongs to another team.")
   }
   if (deploy.teamHash !== state.team.hash) {
-    return refuse("stale_team", "The signer and this server are on different versions of the team list.")
+    return refuse(
+      "stale_team",
+      "The signer and this server are on different versions of the team list."
+    )
   }
   if (deploy.serverId !== state.serverId) {
     return refuse("wrong_server", "This deploy is addressed to another server.")
@@ -330,23 +424,40 @@ export function verifyDeploy(input: {
 
   // 4. Order: an old deploy, however validly signed, is not accepted again,
   //    and a number far ahead of the last one would lock the app for good.
-  const last = Object.hasOwn(state.lastSequence, deploy.app) ? state.lastSequence[deploy.app]! : 0
+  const last = Object.hasOwn(state.lastSequence, deploy.app)
+    ? state.lastSequence[deploy.app]!
+    : 0
   if (deploy.sequence <= last) {
-    return refuse("replayed", "A deploy with this number or a higher one was already accepted.")
+    return refuse(
+      "replayed",
+      "A deploy with this number or a higher one was already accepted."
+    )
   }
   if (deploy.sequence - last > LIMITS.sequenceStep) {
-    return refuse("sequence_jump", "The deploy number is too far above the last one accepted.")
+    return refuse(
+      "sequence_jump",
+      "The deploy number is too far above the last one accepted."
+    )
   }
 
   // 5. The sealed secrets supplied are exactly the ones the signer listed.
-  const sealed = z.array(SealedSecretSchema).max(LIMITS.secretsPerDeploy).safeParse(input.secrets)
+  const sealed = z
+    .array(SealedSecretSchema)
+    .max(LIMITS.secretsPerDeploy)
+    .safeParse(input.secrets)
   if (!sealed.success || sealed.data.length !== deploy.secrets.length) {
-    return refuse("secrets_mismatch", "The sealed secrets do not match the deploy.")
+    return refuse(
+      "secrets_mismatch",
+      "The sealed secrets do not match the deploy."
+    )
   }
   const supplied = new Map<string, SealedSecret>()
   for (const secret of sealed.data) {
     if (supplied.has(secret.name)) {
-      return refuse("secrets_mismatch", "The sealed secrets do not match the deploy.")
+      return refuse(
+        "secrets_mismatch",
+        "The sealed secrets do not match the deploy."
+      )
     }
     supplied.set(secret.name, secret)
   }
@@ -354,7 +465,10 @@ export function verifyDeploy(input: {
   for (const listed of deploy.secrets) {
     const secret = supplied.get(listed.name)
     if (!secret || sealedSecretHash(secret) !== listed.hash) {
-      return refuse("secrets_mismatch", "The sealed secrets do not match the deploy.")
+      return refuse(
+        "secrets_mismatch",
+        "The sealed secrets do not match the deploy."
+      )
     }
     checked.push(secret)
   }
@@ -362,16 +476,35 @@ export function verifyDeploy(input: {
   // 6. No secret goes back: not to a lower version, and not to a different
   //    value under the version this runner already accepted.
   //    A removal counts as a version too, so a retired secret stays retired.
-  const secrets: Record<string, { version: number; hash: string | null }> = { ...state.secrets }
+  const secrets: Record<string, { version: number; hash: string | null }> = {
+    ...state.secrets,
+  }
   const entries = [
-    ...deploy.secrets.map(({ name, version, hash }) => ({ name, version, hash: hash as string | null })),
-    ...deploy.removed.map(({ name, version }) => ({ name, version, hash: null })),
+    ...deploy.secrets.map(({ name, version, hash }) => ({
+      name,
+      version,
+      hash: hash as string | null,
+    })),
+    ...deploy.removed.map(({ name, version }) => ({
+      name,
+      version,
+      hash: null,
+    })),
   ]
   for (const listed of entries) {
     const key = `${deploy.app}/${listed.name}`
-    const known = Object.hasOwn(state.secrets, key) ? state.secrets[key] : undefined
-    if (known && (listed.version < known.version || (listed.version === known.version && listed.hash !== known.hash))) {
-      return refuse("stale_secret", "This deploy carries an older version of a secret than one already accepted.")
+    const known = Object.hasOwn(state.secrets, key)
+      ? state.secrets[key]
+      : undefined
+    if (
+      known &&
+      (listed.version < known.version ||
+        (listed.version === known.version && listed.hash !== known.hash))
+    ) {
+      return refuse(
+        "stale_secret",
+        "This deploy carries an older version of a secret than one already accepted."
+      )
     }
     secrets[key] = Object.freeze({ version: listed.version, hash: listed.hash })
   }
@@ -382,7 +515,10 @@ export function verifyDeploy(input: {
     nextState: Object.freeze({
       serverId: state.serverId,
       team: state.team,
-      lastSequence: Object.freeze({ ...state.lastSequence, [deploy.app]: deploy.sequence }),
+      lastSequence: Object.freeze({
+        ...state.lastSequence,
+        [deploy.app]: deploy.sequence,
+      }),
       secrets: Object.freeze(secrets),
     }),
   })
@@ -401,18 +537,28 @@ export function openSecrets(
 ): Result<Record<string, string>, OpenRefusal> {
   const sealed = verified.get(deploy)
   if (!sealed) {
-    return refuse("not_verified", "Secrets can only be opened for a deploy returned by verifyDeploy.")
+    return refuse(
+      "not_verified",
+      "Secrets can only be opened for a deploy returned by verifyDeploy."
+    )
   }
   const secretKey = tryDecodeKey("serverSecret", serverSecretKey)
-  if (!secretKey) return refuse("wrong_server_key", "Expected this server's secret key.")
+  if (!secretKey)
+    return refuse("wrong_server_key", "Expected this server's secret key.")
   try {
     const publicKey = serverPublicKeyOf(secretKey)
     if (serverIdOf(publicKey) !== deploy.deploy.serverId) {
-      return refuse("wrong_server_key", "This key does not belong to the server the deploy is addressed to.")
+      return refuse(
+        "wrong_server_key",
+        "This key does not belong to the server the deploy is addressed to."
+      )
     }
     const publicKeyBytes = decodeKey("serverPublic", publicKey)
     // No prototype, so a secret named "__proto__" or "constructor" is just a key.
-    const values: Record<string, string> = Object.create(null) as Record<string, string>
+    const values: Record<string, string> = Object.create(null) as Record<
+      string,
+      string
+    >
     for (const secret of sealed) {
       const opened = openSealedSecret(
         secret,

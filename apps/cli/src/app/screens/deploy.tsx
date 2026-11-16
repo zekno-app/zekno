@@ -8,7 +8,12 @@ import type { KeyHint } from "../../ui/parts/key-hints"
 import { Panel } from "../../ui/parts/panel"
 import { Stages } from "../../ui/parts/stages"
 import { Frame, Header, NoticeLine, Trail } from "../frame"
-import { CHOICES, elsewhereChoices, elsewhereWords, useLinkWords } from "../state/questions"
+import {
+  CHOICES,
+  elsewhereChoices,
+  elsewhereWords,
+  useLinkWords,
+} from "../state/questions"
 import type { Question, Screen, State } from "../state/types"
 import { seconds } from "../../shared/time"
 import { HINTS } from "./placeholder"
@@ -38,7 +43,8 @@ function tailOf(text: string, rows: number, width: number): string {
   const chars = [...text]
   let room = rows * Math.max(width, 1) - 1
   let start = chars.length
-  while (start > 0 && room - columnsOf(chars[start - 1]!) >= 0) room -= columnsOf(chars[--start]!)
+  while (start > 0 && room - columnsOf(chars[start - 1]!) >= 0)
+    room -= columnsOf(chars[--start]!)
   return `…${chars.slice(start).join("")}`
 }
 
@@ -47,7 +53,11 @@ function tailOf(text: string, rows: number, width: number): string {
  * whole: the end of Docker's output is where it says what went wrong. A last
  * line too long by itself is shown by its end.
  */
-export function lastLines(lines: readonly string[], rows: number, width: number): string[] {
+export function lastLines(
+  lines: readonly string[],
+  rows: number,
+  width: number
+): string[] {
   const kept: string[] = []
   let used = 0
   for (let index = lines.length - 1; index >= 0; index--) {
@@ -62,7 +72,15 @@ export function lastLines(lines: readonly string[], rows: number, width: number)
 }
 
 /** Docker's lines, the last that fit. */
-function DockerLines({ lines, rows, width }: { lines: readonly string[]; rows: number; width: number }) {
+function DockerLines({
+  lines,
+  rows,
+  width,
+}: {
+  lines: readonly string[]
+  rows: number
+  width: number
+}) {
   return (
     <Box flexDirection="column">
       {lastLines(lines, rows, width).map((line, index) => (
@@ -81,7 +99,8 @@ function Outcome({ deploy }: { deploy: DeployProgress }) {
       {numberUsed(deploy) ? (
         <Box paddingLeft={2}>
           <Text dimColor>
-            Number {deploy.sequence} is used, so the next deploy will be {deploy.sequence! + 1}.
+            Number {deploy.sequence} is used, so the next deploy will be{" "}
+            {deploy.sequence! + 1}.
           </Text>
         </Box>
       ) : null}
@@ -94,8 +113,13 @@ function Outcome({ deploy }: { deploy: DeployProgress }) {
  * app's margin rows, the header and the key hints with the gaps between,
  * the summary panel, the stage row, the result and the gaps between them.
  */
-function outputRows(rows: number, deploy: DeployProgress, status: boolean): number {
-  const panel = 2 + 2 + (deploy.from ? 1 : 0) + 1 + (deploy.replaces !== undefined ? 1 : 0)
+function outputRows(
+  rows: number,
+  deploy: DeployProgress,
+  status: boolean
+): number {
+  const panel =
+    2 + 2 + (deploy.from ? 1 : 0) + 1 + (deploy.replaces !== undefined ? 1 : 0)
   const frame = 3 + 1 + 1 + 1 + (status ? 2 : 0)
   const result = deploy.running ? 2 : numberUsed(deploy) ? 3 : 2
   const footer = deploy.running ? 2 : 0
@@ -133,10 +157,17 @@ export function DeployScreen({
     ["esc", deploy.running ? "back, deploy keeps going" : "back"],
   ]
   const header = (
-    <Header place={<Trail parts={[deploy.server, deploy.app, "deploy"]} />} right={<Elapsed deploy={deploy} />} />
+    <Header
+      place={<Trail parts={[deploy.server, deploy.app, "deploy"]} />}
+      right={<Elapsed deploy={deploy} />}
+    />
   )
   return (
-    <Frame header={header} hints={screen.output || !deploy.running ? hints : HINTS.deploy} status={shownStatus}>
+    <Frame
+      header={header}
+      hints={screen.output || !deploy.running ? hints : HINTS.deploy}
+      status={shownStatus}
+    >
       <Box flexDirection="column" flexGrow={1} rowGap={1} paddingX={2}>
         <Summary deploy={deploy} width={Math.min(columns - 6, 64)} />
         <Stages stages={stagesOf(deploy)} />
@@ -150,15 +181,25 @@ export function DeployScreen({
           <Outcome deploy={deploy} />
         )}
         {showLines ? (
-          <Panel title={failed ? "Docker said" : "Docker's output"} tone={failed ? "danger" : "quiet"}>
+          <Panel
+            title={failed ? "Docker said" : "Docker's output"}
+            tone={failed ? "danger" : "quiet"}
+          >
             {/* The app's margins, this body's padding, and the panel's border and padding. */}
-            <DockerLines lines={deploy.lines} rows={count} width={columns - 2 - 4 - 4} />
+            <DockerLines
+              lines={deploy.lines}
+              rows={count}
+              width={columns - 2 - 4 - 4}
+            />
           </Panel>
         ) : null}
         {deploy.running ? (
           <>
             <Box flexGrow={1} />
-            <Text dimColor>Leaving this screen does not cancel the deploy. Quitting zekno waits for it to finish.</Text>
+            <Text dimColor>
+              Leaving this screen does not cancel the deploy. Quitting zekno
+              waits for it to finish.
+            </Text>
           </>
         ) : null}
       </Box>
@@ -167,7 +208,9 @@ export function DeployScreen({
 }
 
 /** The answers to "remember this folder?", the reducer's own (state/questions.ts `CHOICES`). */
-const REMEMBER_HINTS: readonly KeyHint[] = CHOICES["remember-folder"].map((choice) => [choice.key, choice.does] as const)
+const REMEMBER_HINTS: readonly KeyHint[] = CHOICES["remember-folder"].map(
+  (choice) => [choice.key, choice.does] as const
+)
 
 /**
  * `d` in a linked folder with another app selected than the folder's own:
@@ -188,7 +231,11 @@ export function DeployElsewhereScreen({
   const said = elsewhereWords(question)
   return (
     <Frame
-      header={<Header place={<Trail parts={[question.server, question.app, "deploy"]} />} />}
+      header={
+        <Header
+          place={<Trail parts={[question.server, question.app, "deploy"]} />}
+        />
+      }
       hints={choices.map((choice) => [choice.key, choice.does] as const)}
       status={status}
     >
@@ -205,7 +252,9 @@ export function DeployElsewhereScreen({
 }
 
 /** The answers to "use it here?", the reducer's own (state/questions.ts `CHOICES`). */
-const USE_LINK_HINTS: readonly KeyHint[] = CHOICES["use-link"].map((choice) => [choice.key, choice.does] as const)
+const USE_LINK_HINTS: readonly KeyHint[] = CHOICES["use-link"].map(
+  (choice) => [choice.key, choice.does] as const
+)
 
 /**
  * When the app opens in a folder whose zekno.json is signed by the team and
@@ -229,7 +278,13 @@ export function UseLinkScreen({
   // The panel's top line: "╭─ ", the title, a space and at least "─╮".
   const cut = [...said.title].length > width - 6
   return (
-    <Frame header={<Header place={<Trail parts={[question.server, question.app]} />} />} hints={USE_LINK_HINTS} status={status}>
+    <Frame
+      header={
+        <Header place={<Trail parts={[question.server, question.app]} />} />
+      }
+      hints={USE_LINK_HINTS}
+      status={status}
+    >
       <Box width={width}>
         <Confirm title={said.title} tone="focus" choices={CHOICES["use-link"]}>
           <Box flexDirection="column">
@@ -257,15 +312,37 @@ export function RememberFolderScreen({
   status?: ReactNode
 }) {
   // The same three names, in the same order, as project/write.ts writes them.
-  const json = JSON.stringify({ app: question.app, server: question.server, compose: question.compose }, null, 2).split("\n")
+  const json = JSON.stringify(
+    { app: question.app, server: question.server, compose: question.compose },
+    null,
+    2
+  ).split("\n")
   return (
-    <Frame header={<Header place={<Trail parts={[question.server, question.app, "deploy"]} />} />} hints={REMEMBER_HINTS} status={status}>
+    <Frame
+      header={
+        <Header
+          place={<Trail parts={[question.server, question.app, "deploy"]} />}
+        />
+      }
+      hints={REMEMBER_HINTS}
+      status={status}
+    >
       <Box width={Math.min(columns - 2, 76)}>
-        <Confirm title="Remember this folder?" tone="focus" choices={CHOICES["remember-folder"]}>
+        <Confirm
+          title="Remember this folder?"
+          tone="focus"
+          choices={CHOICES["remember-folder"]}
+        >
           <Text>
-            Write zekno.json here, so this folder always deploys {question.app} to {question.server}.
+            Write zekno.json here, so this folder always deploys {question.app}{" "}
+            to {question.server}.
           </Text>
-          <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
+          <Box
+            flexDirection="column"
+            borderStyle="round"
+            borderDimColor
+            paddingX={1}
+          >
             {json.map((line, index) => (
               <Text key={index} dimColor>
                 {line}

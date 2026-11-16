@@ -27,7 +27,13 @@ export type Item =
    * `detail`: dim, two spaces after the words (`✔ Runner installed  52 MB, checksum verified`, board "zekno deploy from nothing").
    * `firstBold`: the first sentence in bold (`✔ Stored 4 values for demo on prod.`, board "zekno secret import").
    */
-  | { id: number; kind: "success"; text: string; detail?: string; firstBold?: boolean }
+  | {
+      id: number
+      kind: "success"
+      text: string
+      detail?: string
+      firstBold?: boolean
+    }
   /** `firstBold`: the first sentence in bold (`zekno version`'s newer release, board "The version, and a newer release"). */
   | { id: number; kind: "warn"; text: string; firstBold?: boolean }
   | { id: number; kind: "field"; label: string; value: string }
@@ -43,7 +49,13 @@ export type Item =
    * answer's `› <answer so far>` (`answer`), without the cursor; a yes-or-no question's `(y/N)`; the hidden
    * prompt's `(hidden)   esc skips it`, which never shows anything of a value.
    */
-  | { id: number; kind: "left"; question: string; form: "list" | "typed" | "yes-or-no" | "hidden"; answer?: string }
+  | {
+      id: number
+      kind: "left"
+      question: string
+      form: "list" | "typed" | "yes-or-no" | "hidden"
+      answer?: string
+    }
   | { id: number; kind: "answered"; question: string; yes: boolean }
   | { id: number; kind: "hidden"; question: string; skipped: boolean }
   | { id: number; kind: "code"; label: string; value: string; about: string }
@@ -60,17 +72,31 @@ const SENTENCE_END = /\.(?=\s)/
  * below, in line with that sentence. Commands are drawn as the board draws
  * them, without the backticks plain output keeps around them.
  */
-export function ErrorLine({ text, columns }: { text: string; columns?: number }) {
+export function ErrorLine({
+  text,
+  columns,
+}: {
+  text: string
+  columns?: number
+}) {
   const shown = withoutBackticks(text)
   const end = shown.search(SENTENCE_END)
   const first = end === -1 ? shown : shown.slice(0, end + 1)
   const rest = end === -1 ? "" : shown.slice(end + 1).trim()
   return (
     <Box flexDirection="column">
-      <MarkedLine mark={MARK.error} color={COLOR.error} pieces={[{ text: first, bold: true }]} columns={columns} />
+      <MarkedLine
+        mark={MARK.error}
+        color={COLOR.error}
+        pieces={[{ text: first, bold: true }]}
+        columns={columns}
+      />
       {rest ? (
         <Box paddingLeft={2}>
-          <Wrapped pieces={[{ text: rest, dim: true }]} columns={inside(columns, 2)} />
+          <Wrapped
+            pieces={[{ text: rest, dim: true }]}
+            columns={inside(columns, 2)}
+          />
         </Box>
       ) : null}
     </Box>
@@ -84,7 +110,15 @@ export function ErrorLine({ text, columns }: { text: string; columns?: number })
  * cannot pass for a line with a time and a service of its own. `columns`
  * bounds it, as for a server's line (`RemoteLine`).
  */
-export function LogItem({ line, serviceWidth, columns }: { line: LogOutput; serviceWidth: number; columns?: number }) {
+export function LogItem({
+  line,
+  serviceWidth,
+  columns,
+}: {
+  line: LogOutput
+  serviceWidth: number
+  columns?: number
+}) {
   return (
     <Box width={columns}>
       <Box flexShrink={0} width={10}>
@@ -110,36 +144,99 @@ export function Line({ item, columns }: { item: Item; columns: number }) {
     )
   }
   if (item.kind === "table") {
-    const widths = item.rows[0]?.map((_, column) => Math.max(...item.rows.map((row) => drawnCell(row[column]).length))) ?? []
+    const widths =
+      item.rows[0]?.map((_, column) =>
+        Math.max(...item.rows.map((row) => drawnCell(row[column]).length))
+      ) ?? []
     // At the left edge, as the board's lists: a bare first column in the text colour, the others faint.
     return (
       <Box flexDirection="column">
         {item.rows.map((row, index) => (
           <Text key={index}>
             {row.map((cell, column) => (
-              <CellText key={column} cell={cell} text={drawnCell(cell).padEnd((widths[column] ?? 0) + 2)} bare={column > 0 ? "quiet" : "plain"} />
+              <CellText
+                key={column}
+                cell={cell}
+                text={drawnCell(cell).padEnd((widths[column] ?? 0) + 2)}
+                bare={column > 0 ? "quiet" : "plain"}
+              />
             ))}
           </Text>
         ))}
       </Box>
     )
   }
-  if (item.kind === "line") return <Wrapped pieces={linePieces(item.cells)} columns={columns} />
-  if (item.kind === "log") return <LogItem line={item.line} serviceWidth={item.serviceWidth} columns={columns} />
+  if (item.kind === "line")
+    return <Wrapped pieces={linePieces(item.cells)} columns={columns} />
+  if (item.kind === "log")
+    return (
+      <LogItem
+        line={item.line}
+        serviceWidth={item.serviceWidth}
+        columns={columns}
+      />
+    )
   if (item.kind === "chosen") {
-    return <MarkedLine mark={MARK.success} color={COLOR.success} pieces={[{ text: item.collapsed, dim: true }, { text: `  ${item.label}` }]} columns={columns} />
+    return (
+      <MarkedLine
+        mark={MARK.success}
+        color={COLOR.success}
+        pieces={[
+          { text: item.collapsed, dim: true },
+          { text: `  ${item.label}` },
+        ]}
+        columns={columns}
+      />
+    )
   }
-  if (item.kind === "asked") return <QuestionLine pieces={[...questionPieces(item.question), ...answerPieces(item.answer)]} columns={columns} />
+  if (item.kind === "asked")
+    return (
+      <QuestionLine
+        pieces={[
+          ...questionPieces(item.question),
+          ...answerPieces(item.answer),
+        ]}
+        columns={columns}
+      />
+    )
   if (item.kind === "left") {
     const end: Piece[] =
-      item.form === "typed" ? answerPieces(item.answer ?? "") : item.form === "yes-or-no" ? yesOrNoPieces : item.form === "hidden" ? hiddenPieces : []
-    return <QuestionLine pieces={[...questionPieces(item.question), ...end]} columns={columns} />
+      item.form === "typed"
+        ? answerPieces(item.answer ?? "")
+        : item.form === "yes-or-no"
+          ? yesOrNoPieces
+          : item.form === "hidden"
+            ? hiddenPieces
+            : []
+    return (
+      <QuestionLine
+        pieces={[...questionPieces(item.question), ...end]}
+        columns={columns}
+      />
+    )
   }
   if (item.kind === "answered") {
-    return <QuestionLine pieces={[...questionPieces(item.question), ...yesOrNoPieces, { text: ` ${item.yes ? "yes" : "no"}` }]} columns={columns} />
+    return (
+      <QuestionLine
+        pieces={[
+          ...questionPieces(item.question),
+          ...yesOrNoPieces,
+          { text: ` ${item.yes ? "yes" : "no"}` },
+        ]}
+        columns={columns}
+      />
+    )
   }
   if (item.kind === "hidden") {
-    return <QuestionLine pieces={[...questionPieces(item.question), { text: item.skipped ? "skipped" : "(hidden)", dim: true }]} columns={columns} />
+    return (
+      <QuestionLine
+        pieces={[
+          ...questionPieces(item.question),
+          { text: item.skipped ? "skipped" : "(hidden)", dim: true },
+        ]}
+        columns={columns}
+      />
+    )
   }
   if (item.kind === "code") {
     // The code at column 15, as mock-up 3 draws the team code and the server code; what it is for on the line under it.
@@ -152,7 +249,10 @@ export function Line({ item, columns }: { item: Item; columns: number }) {
           <Text bold>{item.value}</Text>
         </Text>
         <Box paddingLeft={2}>
-          <Wrapped pieces={[{ text: item.about, dim: true }]} columns={columns - 2} />
+          <Wrapped
+            pieces={[{ text: item.about, dim: true }]}
+            columns={columns - 2}
+          />
         </Box>
       </Box>
     )
@@ -167,22 +267,32 @@ export function Line({ item, columns }: { item: Item; columns: number }) {
               <Text dimColor>{label}</Text>
             </Box>
             {/* A reason in brackets, such as "(zekno keeps this name)", is dim (board "zekno secret import"). */}
-            <Wrapped pieces={text.split(/(\([^()]*\))/).map((part, at) => ({ text: part, dim: at % 2 === 1 }))} columns={columns - 2 - GROUP_LABEL} />
+            <Wrapped
+              pieces={text
+                .split(/(\([^()]*\))/)
+                .map((part, at) => ({ text: part, dim: at % 2 === 1 }))}
+              columns={columns - 2 - GROUP_LABEL}
+            />
           </Box>
         ))}
       </Box>
     )
   }
   if (item.kind === "gap") return <Text> </Text>
-  if (item.kind === "doctor") return <DoctorBlock report={item.report} columns={columns} />
+  if (item.kind === "doctor")
+    return <DoctorBlock report={item.report} columns={columns} />
   if (item.kind === "note") {
     return (
       <Box paddingLeft={2} width={columns}>
-        <Wrapped pieces={[{ text: item.text, dim: true }]} columns={columns - 2} />
+        <Wrapped
+          pieces={[{ text: item.text, dim: true }]}
+          columns={columns - 2}
+        />
       </Box>
     )
   }
-  if (item.kind === "deploy") return <DeployBlock shown={item.shown} columns={columns} />
+  if (item.kind === "deploy")
+    return <DeployBlock shown={item.shown} columns={columns} />
 
   if (item.kind === "info") {
     // Indented as a block, so text of several lines stays aligned with the marked lines.
@@ -192,15 +302,24 @@ export function Line({ item, columns }: { item: Item; columns: number }) {
       </Box>
     )
   }
-  if (item.kind === "remote") return <RemoteLine text={item.text} columns={columns} />
-  if (item.kind === "error") return <ErrorLine text={item.text} columns={columns} />
+  if (item.kind === "remote")
+    return <RemoteLine text={item.text} columns={columns} />
+  if (item.kind === "error")
+    return <ErrorLine text={item.text} columns={columns} />
   const pieces: Piece[] =
     (item.kind === "success" || item.kind === "warn") && item.firstBold === true
       ? questionPieces(item.text)
       : item.kind === "success" && item.detail !== undefined
         ? [{ text: `${item.text}  ` }, { text: item.detail, dim: true }]
         : [{ text: item.text }]
-  return <MarkedLine mark={MARK[item.kind]} color={COLOR[item.kind]} pieces={pieces} columns={columns} />
+  return (
+    <MarkedLine
+      mark={MARK[item.kind]}
+      color={COLOR[item.kind]}
+      pieces={pieces}
+      columns={columns}
+    />
+  )
 }
 
 /**
@@ -211,7 +330,13 @@ export function Line({ item, columns }: { item: Item; columns: number }) {
  * bounds its width: `columns` does, so a word longer than the room left,
  * such as a path, is broken here and not by the terminal.
  */
-export function RemoteLine({ text, columns }: { text: string; columns?: number }) {
+export function RemoteLine({
+  text,
+  columns,
+}: {
+  text: string
+  columns?: number
+}) {
   return (
     <Box width={columns}>
       <Box flexShrink={0} marginRight={1}>

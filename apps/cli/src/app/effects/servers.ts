@@ -8,12 +8,32 @@
 import type { RunnerStatus, RunnerVersion } from "@workspace/core"
 
 import { openTeam, reach, type Team } from "../../cli/context"
-import { runnerRelation, runnerWarning, type RunnerRelation } from "../../ops/server"
-import { locateServer, readOver, stateOf, type AppStates, type StatusResult } from "../../ops/status"
+import {
+  runnerRelation,
+  runnerWarning,
+  type RunnerRelation,
+} from "../../ops/server"
+import {
+  locateServer,
+  readOver,
+  stateOf,
+  type AppStates,
+  type StatusResult,
+} from "../../ops/status"
 import type { Server } from "../../profile/profile"
-import { batchOnly, READ_LIMIT_MS, recording, wouldHaveAsked } from "../../server/batch"
+import {
+  batchOnly,
+  READ_LIMIT_MS,
+  recording,
+  wouldHaveAsked,
+} from "../../server/batch"
 import { sanitize } from "../../server/sanitize"
-import { openSession, SshUnreachable, type Session, type SessionMode } from "../../server/session"
+import {
+  openSession,
+  SshUnreachable,
+  type Session,
+  type SessionMode,
+} from "../../server/session"
 import type { Target } from "../../server/transport"
 import { appNames, type RunState } from "../../shared/views"
 import type { RunnerRow } from "../state/types"
@@ -39,33 +59,62 @@ export const needsAnswer = (destination: string, server: string): string =>
   `SSH needs an answer to reach ${sanitize(destination)}. Press enter on ${sanitize(server)} to connect. zekno never asks in the background.`
 
 /** Said for a server whose read in the background got no answer within `ms`. */
-export const noAnswer = (server: string, ms = READ_LIMIT_MS): string => `${server} did not answer within ${ms / 1000} seconds.`
+export const noAnswer = (server: string, ms = READ_LIMIT_MS): string =>
+  `${server} did not answer within ${ms / 1000} seconds.`
 
 /**
  * Each app's state from a runner's answer, for `app-states`. With no answer,
  * none is known. With `names`, only those apps are kept: the ones this
  * machine has a history for, which are the only ones Home shows.
  */
-export function statesFor(states: AppStates | undefined, names?: readonly string[]): Record<string, RunState> {
+export function statesFor(
+  states: AppStates | undefined,
+  names?: readonly string[]
+): Record<string, RunState> {
   if (states === undefined) return {}
   const apps = names ?? Object.keys(states)
-  return Object.fromEntries(apps.filter((app) => Object.hasOwn(states, app)).map((app) => [app, stateOf(states, app)]))
+  return Object.fromEntries(
+    apps
+      .filter((app) => Object.hasOwn(states, app))
+      .map((app) => [app, stateOf(states, app)])
+  )
 }
 
 /** The last deploy the runner accepted of each of `names`, as its status says, for `app-states`. */
-export function acceptedFor(status: RunnerStatus, names: readonly string[]): Record<string, number> {
+export function acceptedFor(
+  status: RunnerStatus,
+  names: readonly string[]
+): Record<string, number> {
   const last = status.lastSequence
-  return Object.fromEntries(names.filter((app) => Object.hasOwn(last, app) && last[app]! >= 1).map((app) => [app, last[app]!]))
+  return Object.fromEntries(
+    names
+      .filter((app) => Object.hasOwn(last, app) && last[app]! >= 1)
+      .map((app) => [app, last[app]!])
+  )
 }
 
 /** How a server's runner stands to the one this zekno carries. Undefined for a runner on this machine, which is never compared. */
-export function relationOf(target: Target, mode: SessionMode, runner: RunnerVersion | undefined, carried: string): RunnerRelation | undefined {
-  return target.kind === "ssh" ? runnerRelation(mode, runner, carried) : undefined
+export function relationOf(
+  target: Target,
+  mode: SessionMode,
+  runner: RunnerVersion | undefined,
+  carried: string
+): RunnerRelation | undefined {
+  return target.kind === "ssh"
+    ? runnerRelation(mode, runner, carried)
+    : undefined
 }
 
 /** The runner as Home shows it: its version, older, the same or newer, and what needs it updated. */
-export const runnerRow = (runner: RunnerVersion | undefined, relation: RunnerRelation | undefined): RunnerRow | undefined =>
-  relation && { version: runner?.version, relation: relation.relation, missing: relation.missing }
+export const runnerRow = (
+  runner: RunnerVersion | undefined,
+  relation: RunnerRelation | undefined
+): RunnerRow | undefined =>
+  relation && {
+    version: runner?.version,
+    relation: relation.relation,
+    missing: relation.missing,
+  }
 
 /** The times the reads in the background keep to. Tests pass their own. */
 export type Timing = {
@@ -92,7 +141,18 @@ type Watch = {
 
 /** The servers' kept sessions and the reads over them. */
 export function createServers(context: Context, timing: Timing = {}) {
-  const { deps, dispatch, fail, asking, purposeful, ops, remember, carried, notice, perform } = context
+  const {
+    deps,
+    dispatch,
+    fail,
+    asking,
+    purposeful,
+    ops,
+    remember,
+    carried,
+    notice,
+    perform,
+  } = context
   const now = timing.now ?? Date.now
   const readLimitMs = timing.readLimitMs ?? READ_LIMIT_MS
   const retryMs = timing.retryMs ?? RETRY_MS
@@ -119,7 +179,11 @@ export function createServers(context: Context, timing: Timing = {}) {
    * notice: the line under its name and `u` say it.
    */
   const toldNewer = new Set<string>()
-  const tellNewer = (name: string, runner: RunnerVersion | undefined, relation: RunnerRelation | undefined) => {
+  const tellNewer = (
+    name: string,
+    runner: RunnerVersion | undefined,
+    relation: RunnerRelation | undefined
+  ) => {
     if (relation?.relation !== "newer" || toldNewer.has(name)) return
     toldNewer.add(name)
     const text = runnerWarning(name, runner?.version, relation, carried)
@@ -132,7 +196,12 @@ export function createServers(context: Context, timing: Timing = {}) {
    * at once. The read checks, as `connect` does, that it is the server that
    * was connected and on this team. `stop` stops it at once.
    */
-  async function adopt(team: Pick<Team, "trust">, server: Server, session: Session, stop: AbortController): Promise<void> {
+  async function adopt(
+    team: Pick<Team, "trust">,
+    server: Server,
+    session: Session,
+    stop: AbortController
+  ): Promise<void> {
     if (context.closed) {
       stop.abort()
       return void session.close()
@@ -151,18 +220,35 @@ export function createServers(context: Context, timing: Timing = {}) {
 
   /** What a server answered, for the reducer: reached, its runner's version, and its apps' state and last deploy numbers. */
   function report(server: Server, result: StatusResult): void {
-    const relation = relationOf(server.target, result.mode, result.runner, carried)
-    dispatch({ type: "server-reached", server: server.name, reachable: true, runner: runnerRow(result.runner, relation) })
+    const relation = relationOf(
+      server.target,
+      result.mode,
+      result.runner,
+      carried
+    )
+    dispatch({
+      type: "server-reached",
+      server: server.name,
+      reachable: true,
+      runner: runnerRow(result.runner, relation),
+    })
     tellNewer(server.name, result.runner, relation)
     // Only the apps this machine has a history for: Home shows no other, so no other is kept.
     const names = appNames(deps.home, server)
-    dispatch({ type: "app-states", server: server.name, states: statesFor(result.states, names), accepted: acceptedFor(result.status, names) })
+    dispatch({
+      type: "app-states",
+      server: server.name,
+      states: statesFor(result.states, names),
+      accepted: acceptedFor(result.status, names),
+    })
   }
 
   /** Closes a kept session that is no longer the server's, and keeps track of it until its process has exited. */
   function letGo(entry: Watch): void {
     lettingGo.add(entry)
-    const exited = entry.session ? entry.session.close() : (entry.stop.abort(), Promise.resolve(undefined))
+    const exited = entry.session
+      ? entry.session.close()
+      : (entry.stop.abort(), Promise.resolve(undefined))
     void exited.finally(() => lettingGo.delete(entry))
   }
 
@@ -214,9 +300,14 @@ export function createServers(context: Context, timing: Timing = {}) {
    * failure counts: its status, before the runner said a word, and its own
    * closing line last on standard error (server/batch.ts `wouldHaveAsked`).
    */
-  async function connect(team: Pick<Team, "trust">, server: Server, deliberately: boolean): Promise<void> {
+  async function connect(
+    team: Pick<Team, "trust">,
+    server: Server,
+    deliberately: boolean
+  ): Promise<void> {
     const name = server.name
-    const destination = server.target.kind === "ssh" ? server.target.destination : undefined
+    const destination =
+      server.target.kind === "ssh" ? server.target.destination : undefined
     const before = watches.get(name)
     if (before) {
       watches.delete(name)
@@ -228,11 +319,16 @@ export function createServers(context: Context, timing: Timing = {}) {
     // What SSH writes on standard error is looked at only to tell whether it stopped at a question; on purpose, it is also kept for showing.
     const lines: string[] = []
     const via = deliberately
-      ? routeErrorLines(purposeful, recording(lines, (line) => dispatch({ type: "runner-line", line })))
+      ? routeErrorLines(
+          purposeful,
+          recording(lines, (line) => dispatch({ type: "runner-line", line }))
+        )
       : { ...deps, connect: batchOnly(deps.connect, lines) }
     let limit = deliberately ? undefined : timeLimit(entry)
     try {
-      const session = await openSession(reach(via, server.target), { signal: entry.stop.signal })
+      const session = await openSession(reach(via, server.target), {
+        signal: entry.stop.signal,
+      })
       if (session.mode === "session") entry.session = session
       if (!current()) return letGo(entry)
       // The connection is up. A runner from before sessions connects again for each read, where SSH may ask again.
@@ -253,13 +349,29 @@ export function createServers(context: Context, timing: Timing = {}) {
       if (reason === undefined) throw error
       if (!current()) return letGo(entry)
       lose(name, entry)
-      const asks = destination !== undefined && error instanceof SshUnreachable && wouldHaveAsked(lines)
+      const asks =
+        destination !== undefined &&
+        error instanceof SshUnreachable &&
+        wouldHaveAsked(lines)
       if (asks) {
         asking.add(destination)
-        return dispatch({ type: "server-reached", server: name, reachable: false, problem: needsAnswer(destination, name), asks: true })
+        return dispatch({
+          type: "server-reached",
+          server: name,
+          reachable: false,
+          problem: needsAnswer(destination, name),
+          asks: true,
+        })
       }
-      const problem = limit?.late ? noAnswer(name, readLimitMs) : sanitize(reason)
-      dispatch({ type: "server-reached", server: name, reachable: false, problem })
+      const problem = limit?.late
+        ? noAnswer(name, readLimitMs)
+        : sanitize(reason)
+      dispatch({
+        type: "server-reached",
+        server: name,
+        reachable: false,
+        problem,
+      })
     } finally {
       limit?.clear()
       entry.busy = false
@@ -280,7 +392,12 @@ export function createServers(context: Context, timing: Timing = {}) {
   }
 
   /** Reads what a server holds and runs over its kept session, within `readLimitMs`. A read that fails or takes too long loses the session. */
-  async function readKept(team: Pick<Team, "trust">, server: Server, entry: Watch, session: Session): Promise<void> {
+  async function readKept(
+    team: Pick<Team, "trust">,
+    server: Server,
+    entry: Watch,
+    session: Session
+  ): Promise<void> {
     const name = server.name
     entry.busy = true
     const limit = timeLimit(entry)
@@ -293,7 +410,12 @@ export function createServers(context: Context, timing: Timing = {}) {
       if (reason === undefined) throw error
       if (context.closed || watches.get(name) !== entry) return
       lose(name, entry)
-      dispatch({ type: "server-reached", server: name, reachable: false, problem: limit.late ? noAnswer(name, readLimitMs) : sanitize(reason) })
+      dispatch({
+        type: "server-reached",
+        server: name,
+        reachable: false,
+        problem: limit.late ? noAnswer(name, readLimitMs) : sanitize(reason),
+      })
     } finally {
       limit.clear()
       entry.busy = false
@@ -306,13 +428,17 @@ export function createServers(context: Context, timing: Timing = {}) {
    * again in batch mode, at most once every `retryMs`, and never when SSH
    * would have to ask. One read per server at a time, however slow it is.
    */
-  async function readInBackground(team: Pick<Team, "trust">, server: Server): Promise<void> {
+  async function readInBackground(
+    team: Pick<Team, "trust">,
+    server: Server
+  ): Promise<void> {
     const name = server.name
     const entry = watches.get(name)
     if (entry?.busy) return
     if (entry?.session) return readKept(team, server, entry, entry.session)
     if (oneShot.has(name)) return
-    const destination = server.target.kind === "ssh" ? server.target.destination : undefined
+    const destination =
+      server.target.kind === "ssh" ? server.target.destination : undefined
     if (destination !== undefined && asking.has(destination)) return
     if (now() < (retryAt.get(name) ?? 0)) return
     return connect(team, server, false)
@@ -323,7 +449,8 @@ export function createServers(context: Context, timing: Timing = {}) {
     if (!context.known || context.closed) return
     const { team } = context.known
     for (const entry of context.known.servers) {
-      if (server === undefined || entry.name === server) void readInBackground(team, entry).catch(fail)
+      if (server === undefined || entry.name === server)
+        void readInBackground(team, entry).catch(fail)
     }
   }
 
@@ -341,7 +468,9 @@ export function createServers(context: Context, timing: Timing = {}) {
         const team = await openTeam(ops)
         remember(team)
         if (context.closed) return
-        await Promise.all(team.profile.servers.map((server) => connect(team, server, true)))
+        await Promise.all(
+          team.profile.servers.map((server) => connect(team, server, true))
+        )
       }),
     /** Closes every kept session: given a moment to end, then stopped; at once with `now`. */
     close(options: { now?: boolean }): Promise<void> {
@@ -353,7 +482,9 @@ export function createServers(context: Context, timing: Timing = {}) {
       watches.clear()
       // On a signal nothing can be waited for: every process is stopped now.
       if (options.now) for (const entry of lettingGo) entry.stop.abort()
-      closing ??= Promise.all([...lettingGo].map((entry) => entry.session?.close())).then(() => {})
+      closing ??= Promise.all(
+        [...lettingGo].map((entry) => entry.session?.close())
+      ).then(() => {})
       return closing
     },
   }

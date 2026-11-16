@@ -12,9 +12,20 @@ import type { Settled } from "./questions"
 import type { Question } from "./yes-or-no"
 
 /** A list open on the screen. `id` makes each question a new one on the screen, never the one before it reused. */
-export type ListOpen = { id: number; question: string; rows: readonly ListRow<unknown>[]; settle(result: Settled<number>): void }
+export type ListOpen = {
+  id: number
+  question: string
+  rows: readonly ListRow<unknown>[]
+  settle(result: Settled<number>): void
+}
 /** A one-line answer being typed. */
-export type TypedOpen = { id: number; question: string; fill?: string; check(answer: string): string | undefined; settle(result: Settled<string>): void }
+export type TypedOpen = {
+  id: number
+  question: string
+  fill?: string
+  check(answer: string): string | undefined
+  settle(result: Settled<string>): void
+}
 /**
  * `generation` changes when lines already drawn are let go; Static then
  * starts afresh with what is left. `deploy` is a deploy still running, drawn
@@ -64,7 +75,10 @@ export function createStore() {
       const added = { ...item, id: nextId++ } as Item
       if (drawn < DRAWN_KEPT) return set({ items: [...state.items, added] })
       // Only lines not yet drawn go on to the next Static, so none is lost and none drawn twice.
-      set({ items: [...state.items.slice(drawn), added], generation: state.generation + 1 })
+      set({
+        items: [...state.items.slice(drawn), added],
+        generation: state.generation + 1,
+      })
       drawn = 0
     },
     /** Called once a commit has written the first `count` items of `generation` to the terminal. */

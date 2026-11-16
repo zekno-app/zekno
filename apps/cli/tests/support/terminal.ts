@@ -31,7 +31,10 @@ const RAW_LIMIT = 8 * 1024 * 1024
  * even when a question is cut between two reads: `carry` is the end of what
  * was read before, and the result's `carry` is the end of this read.
  */
-export function terminalAnswers(carry: string, text: string): { replies: string[]; carry: string } {
+export function terminalAnswers(
+  carry: string,
+  text: string
+): { replies: string[]; carry: string } {
   const scanned = carry + text
   const replies: string[] = []
   for (const match of scanned.matchAll(QUESTIONS)) {
@@ -119,7 +122,11 @@ export function startTerminal(launch: Launch) {
      * written for `quietMs`. A screen that never holds still (a spinner) is
      * taken as it is after `maxMs`, between two frames.
      */
-    async settle({ quietMs = 60, maxMs = 1500, minMs = 0 }: { quietMs?: number; maxMs?: number; minMs?: number } = {}) {
+    async settle({
+      quietMs = 60,
+      maxMs = 1500,
+      minMs = 0,
+    }: { quietMs?: number; maxMs?: number; minMs?: number } = {}) {
       const start = performance.now()
       for (;;) {
         const now = performance.now()
@@ -135,8 +142,10 @@ export function startTerminal(launch: Launch) {
     async until(ready: () => boolean, what: string, timeoutMs = 10_000) {
       const start = performance.now()
       while (!ready()) {
-        if (performance.now() - start > timeoutMs) throw new Error(`timed out waiting for ${what}`)
-        if (ended && !ready()) throw new Error(`the program exited before ${what}`)
+        if (performance.now() - start > timeoutMs)
+          throw new Error(`timed out waiting for ${what}`)
+        if (ended && !ready())
+          throw new Error(`the program exited before ${what}`)
         await nextChange(100)
       }
     },

@@ -12,7 +12,13 @@ import {
 } from "../crypto/envelope"
 import { LIMITS } from "../protocol/limits"
 import type { Signer } from "../crypto/keys"
-import { CoreError, ok, refuse, type Result, type SecretRefusal } from "../protocol/result"
+import {
+  CoreError,
+  ok,
+  refuse,
+  type Result,
+  type SecretRefusal,
+} from "../protocol/result"
 import {
   assertTrust,
   isoTime,
@@ -32,7 +38,11 @@ import {
   type SealedSecret,
 } from "./secrets"
 
-export const secretVersion = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
+export const secretVersion = z
+  .number()
+  .int()
+  .min(1)
+  .max(Number.MAX_SAFE_INTEGER)
 
 const SecretStatementSchema = z.strictObject({
   v: z.literal(1),
@@ -88,17 +98,35 @@ export async function createSecret(input: {
   now?: Date
 }): Promise<SecretRecord> {
   assertTrust(input.trust)
-  if (!input.trust.members.some((member) => member.publicKey === input.signer.publicKey)) {
-    throw new CoreError("not_member", "The signer is not a member of this team.")
+  if (
+    !input.trust.members.some(
+      (member) => member.publicKey === input.signer.publicKey
+    )
+  ) {
+    throw new CoreError(
+      "not_member",
+      "The signer is not a member of this team."
+    )
   }
   const serverPublicKey = serverKeyOf(input.trust, input.serverId)
   if (!serverPublicKey) {
-    throw new CoreError("unknown_server", "This server is not in the team list. An admin adds it after confirming its code.")
+    throw new CoreError(
+      "unknown_server",
+      "This server is not in the team list. An admin adds it after confirming its code."
+    )
   }
   if (!secretVersion.safeParse(input.version).success) {
-    throw new CoreError("invalid_argument", "A secret version is a whole number of 1 or more.")
+    throw new CoreError(
+      "invalid_argument",
+      "A secret version is a whole number of 1 or more."
+    )
   }
-  const sealed = sealSecret({ serverPublicKey, app: input.app, name: input.name, value: input.value })
+  const sealed = sealSecret({
+    serverPublicKey,
+    app: input.app,
+    name: input.name,
+    value: input.value,
+  })
   const statement = {
     v: 1 as const,
     teamId: input.trust.teamId,
@@ -109,7 +137,11 @@ export async function createSecret(input: {
     hash: sealedSecretHash(sealed)!,
     createdAt: (input.now ?? new Date()).toISOString(),
   }
-  const envelope = await signEnvelope(PAYLOAD_TYPES.secret, utf8(JSON.stringify(statement)), input.signer)
+  const envelope = await signEnvelope(
+    PAYLOAD_TYPES.secret,
+    utf8(JSON.stringify(statement)),
+    input.signer
+  )
   return { envelope, sealed }
 }
 
@@ -132,7 +164,12 @@ export function verifySecret(input: {
       () => undefined
     )
     // Keep the more specific reason when the envelope alone explains the failure.
-    if (!read.ok && (read.error.code === "too_large" || read.error.code === "wrong_payload_type")) return read
+    if (
+      !read.ok &&
+      (read.error.code === "too_large" ||
+        read.error.code === "wrong_payload_type")
+    )
+      return read
     return refuse("malformed", "Not a secret record.")
   }
   const opened = openEnvelope(
@@ -141,15 +178,25 @@ export function verifySecret(input: {
     (keyId) => memberByKeyId(input.trust.members, keyId)?.publicKey
   )
   if (!opened.ok) return opened
-  const signer = input.trust.members.find((member) => member.publicKey === opened.value.signerKey)!
+  const signer = input.trust.members.find(
+    (member) => member.publicKey === opened.value.signerKey
+  )!
 
   const json = parseJson(opened.value.payload)
-  if (json === undefined) return refuse("malformed", "The secret statement is not valid JSON.")
+  if (json === undefined)
+    return refuse("malformed", "The secret statement is not valid JSON.")
   if (hasOtherVersion(json)) {
-    return refuse("unsupported_version", "This secret uses a format version this library does not know.")
+    return refuse(
+      "unsupported_version",
+      "This secret uses a format version this library does not know."
+    )
   }
   const statement = SecretStatementSchema.safeParse(json)
-  if (!statement.success) return refuse("malformed", "The secret statement does not match its definition.")
+  if (!statement.success)
+    return refuse(
+      "malformed",
+      "The secret statement does not match its definition."
+    )
 
   if (statement.data.teamId !== input.trust.teamId) {
     return refuse("wrong_team", "This secret belongs to another team.")
@@ -164,7 +211,10 @@ export function verifySecret(input: {
     statement.data.name !== record.data.sealed.name ||
     statement.data.hash !== sealedSecretHash(record.data.sealed)
   ) {
-    return refuse("secrets_mismatch", "The encrypted value is not the one the statement describes.")
+    return refuse(
+      "secrets_mismatch",
+      "The encrypted value is not the one the statement describes."
+    )
   }
   return ok(
     Object.freeze({
@@ -214,11 +264,21 @@ export async function createSecretRemoval(input: {
   now?: Date
 }): Promise<Envelope> {
   assertTrust(input.trust)
-  if (!input.trust.members.some((member) => member.publicKey === input.signer.publicKey)) {
-    throw new CoreError("not_member", "The signer is not a member of this team.")
+  if (
+    !input.trust.members.some(
+      (member) => member.publicKey === input.signer.publicKey
+    )
+  ) {
+    throw new CoreError(
+      "not_member",
+      "The signer is not a member of this team."
+    )
   }
   if (!serverKeyOf(input.trust, input.serverId)) {
-    throw new CoreError("unknown_server", "This server is not in the team list.")
+    throw new CoreError(
+      "unknown_server",
+      "This server is not in the team list."
+    )
   }
   const statement = {
     v: 1 as const,
@@ -230,9 +290,16 @@ export async function createSecretRemoval(input: {
     createdAt: (input.now ?? new Date()).toISOString(),
   }
   if (!RemovalStatementSchema.safeParse(statement).success) {
-    throw new CoreError("invalid_argument", "The app, secret name or version is not valid.")
+    throw new CoreError(
+      "invalid_argument",
+      "The app, secret name or version is not valid."
+    )
   }
-  return signEnvelope(PAYLOAD_TYPES.secretRemoval, utf8(JSON.stringify(statement)), input.signer)
+  return signEnvelope(
+    PAYLOAD_TYPES.secretRemoval,
+    utf8(JSON.stringify(statement)),
+    input.signer
+  )
 }
 
 /** Checks a removal that came from outside: signed by a current member, for this team, server and app. */
@@ -248,18 +315,28 @@ export function verifySecretRemoval(input: {
     (keyId) => memberByKeyId(input.trust.members, keyId)?.publicKey
   )
   if (!opened.ok) return opened
-  const signer = input.trust.members.find((member) => member.publicKey === opened.value.signerKey)!
+  const signer = input.trust.members.find(
+    (member) => member.publicKey === opened.value.signerKey
+  )!
 
   const json = parseJson(opened.value.payload)
-  if (json === undefined) return refuse("malformed", "The removal is not valid JSON.")
+  if (json === undefined)
+    return refuse("malformed", "The removal is not valid JSON.")
   if (hasOtherVersion(json)) {
-    return refuse("unsupported_version", "This removal uses a format version this library does not know.")
+    return refuse(
+      "unsupported_version",
+      "This removal uses a format version this library does not know."
+    )
   }
   const statement = RemovalStatementSchema.safeParse(json)
-  if (!statement.success) return refuse("malformed", "The removal does not match its definition.")
-  if (statement.data.teamId !== input.trust.teamId) return refuse("wrong_team", "This removal belongs to another team.")
-  if (statement.data.serverId !== input.serverId) return refuse("wrong_server", "This removal is for another server.")
-  if (statement.data.app !== input.app) return refuse("wrong_app", "This removal is for another app.")
+  if (!statement.success)
+    return refuse("malformed", "The removal does not match its definition.")
+  if (statement.data.teamId !== input.trust.teamId)
+    return refuse("wrong_team", "This removal belongs to another team.")
+  if (statement.data.serverId !== input.serverId)
+    return refuse("wrong_server", "This removal is for another server.")
+  if (statement.data.app !== input.app)
+    return refuse("wrong_app", "This removal is for another app.")
   return ok(
     Object.freeze({
       name: statement.data.name,
@@ -294,14 +371,21 @@ export function currentSecrets(input: {
   app: string
   records: readonly unknown[]
   removals: readonly unknown[]
-}): { secrets: SecretRecord[]; removals: Envelope[]; ignored: IgnoredSecret[] } {
+}): {
+  secrets: SecretRecord[]
+  removals: Envelope[]
+  ignored: IgnoredSecret[]
+} {
   assertTrust(input.trust)
   if (
     !Array.isArray(input.records) ||
     !Array.isArray(input.removals) ||
     input.records.length + input.removals.length > LIMITS.secretHistory
   ) {
-    throw new CoreError("too_large", "There are more secret records and removals than the limit.")
+    throw new CoreError(
+      "too_large",
+      "There are more secret records and removals than the limit."
+    )
   }
   const { trust, serverId, app } = input
   const ignored: IgnoredSecret[] = []
@@ -334,17 +418,26 @@ export function currentSecrets(input: {
       ignored.push({ kind: "removal", reason: checked.error.code })
       continue
     }
-    add(checked.value.name, { kind: "removal", version: checked.value.version, hash: null, envelope: checked.value.envelope })
+    add(checked.value.name, {
+      kind: "removal",
+      version: checked.value.version,
+      hash: null,
+      envelope: checked.value.envelope,
+    })
   }
 
   const secrets: SecretRecord[] = []
   const removals: Envelope[] = []
   for (const name of [...byName.keys()].sort()) {
     const candidates = byName.get(name)!
-    const highest = Math.max(...candidates.map((candidate) => candidate.version))
+    const highest = Math.max(
+      ...candidates.map((candidate) => candidate.version)
+    )
     const top = candidates.filter((candidate) => candidate.version === highest)
     // The same item delivered twice is fine. Two different items at one version are not.
-    const distinct = new Set(top.map((candidate) => `${candidate.kind}:${candidate.hash ?? ""}`))
+    const distinct = new Set(
+      top.map((candidate) => `${candidate.kind}:${candidate.hash ?? ""}`)
+    )
     if (distinct.size > 1) {
       ignored.push({ kind: top[0]!.kind, name, reason: "conflict" })
       continue

@@ -37,7 +37,10 @@ export function toBase64Url(bytes: Uint8Array): string {
 export function fromBase64Url(text: string): Uint8Array | undefined {
   if (!BASE64URL.test(text)) return undefined
   try {
-    const bytes = sodium.from_base64(text, sodium.base64_variants.URLSAFE_NO_PADDING)
+    const bytes = sodium.from_base64(
+      text,
+      sodium.base64_variants.URLSAFE_NO_PADDING
+    )
     return toBase64Url(bytes) === text ? bytes : undefined
   } catch {
     return undefined
@@ -59,7 +62,9 @@ export function fromHex(text: string): Uint8Array | undefined {
 }
 
 export function concat(...parts: Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(parts.reduce((total, part) => total + part.length, 0))
+  const out = new Uint8Array(
+    parts.reduce((total, part) => total + part.length, 0)
+  )
   let offset = 0
   for (const part of parts) {
     out.set(part, offset)

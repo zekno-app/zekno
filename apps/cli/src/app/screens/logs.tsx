@@ -13,9 +13,11 @@ import { HINTS } from "./placeholder"
 type LogsScreenState = Extract<Screen, { name: "logs" }>
 
 /** The board's line under the logs: where they come from. */
-export const STRAIGHT = "Read straight from your server over SSH. Nothing passes through Zekno."
+export const STRAIGHT =
+  "Read straight from your server over SSH. Nothing passes through Zekno."
 /** The same for a runner on this machine, which is not reached over SSH. */
-export const STRAIGHT_HERE = "Read straight from the runner on this machine. Nothing passes through Zekno."
+export const STRAIGHT_HERE =
+  "Read straight from the runner on this machine. Nothing passes through Zekno."
 
 /** The time column: `21:52:03` and the gap after it. */
 const TIME_WIDTH = 10
@@ -37,7 +39,11 @@ export function logsHints(screen: LogsScreenState): readonly KeyHint[] {
       ["esc", "clear"],
     ]
   }
-  const hints = screen.following ? HINTS.logs : HINTS.logs.map(([key, does]): KeyHint => (key === "f" ? ["f", "resume following"] : [key, does]))
+  const hints = screen.following
+    ? HINTS.logs
+    : HINTS.logs.map(([key, does]): KeyHint =>
+        key === "f" ? ["f", "resume following"] : [key, does]
+      )
   return screen.dropped ? [["enter", "reconnect"], ...hints] : hints
 }
 
@@ -46,8 +52,16 @@ export function logsHints(screen: LogsScreenState): readonly KeyHint[] {
  * `hintRows`, the filter its line and a gap, and the line above the hints,
  * with its gap, `statusRows`.
  */
-export function logRows(rows: number, hintRows: number, filterLine: boolean, statusRows: number): number {
-  return Math.max(1, rows - FIXED_ROWS - hintRows - (filterLine ? 2 : 0) - statusRows)
+export function logRows(
+  rows: number,
+  hintRows: number,
+  filterLine: boolean,
+  statusRows: number
+): number {
+  return Math.max(
+    1,
+    rows - FIXED_ROWS - hintRows - (filterLine ? 2 : 0) - statusRows
+  )
 }
 
 /** Lines the hints take at `columns` columns: each hint, two columns apart, wrapping as a whole. */
@@ -68,16 +82,37 @@ function hintRows(hints: readonly KeyHint[], columns: number): number {
 }
 
 /** Cuts text to at most `width` characters before it is drawn: a line can be 4096 characters, and only its start fits. */
-const cut = (text: string, width: number): string => (text.length <= width ? text : [...text].slice(0, width + 1).join(""))
+const cut = (text: string, width: number): string =>
+  text.length <= width ? text : [...text].slice(0, width + 1).join("")
 
 /** Whether the state is following, paused, or no longer connected: a word and a symbol as well as a colour. */
-function Following({ screen, theme }: { screen: LogsScreenState; theme: Theme }) {
+function Following({
+  screen,
+  theme,
+}: {
+  screen: LogsScreenState
+  theme: Theme
+}) {
   if (screen.dropped) return <Text color={theme.danger}>✖ disconnected</Text>
-  return screen.following ? <Text color={theme.success}>● following</Text> : <Text color={theme.warning}>● paused</Text>
+  return screen.following ? (
+    <Text color={theme.success}>● following</Text>
+  ) : (
+    <Text color={theme.warning}>● paused</Text>
+  )
 }
 
 /** One log line: the time, faint; the service, in its colour; the text, cut at the edge of the box. */
-function Row({ line, color, serviceWidth, textWidth }: { line: LogLine; color: string; serviceWidth: number; textWidth: number }) {
+function Row({
+  line,
+  color,
+  serviceWidth,
+  textWidth,
+}: {
+  line: LogLine
+  color: string
+  serviceWidth: number
+  textWidth: number
+}) {
   return (
     <Box>
       <Box width={TIME_WIDTH} flexShrink={0}>
@@ -121,20 +156,41 @@ export function LogsScreen({
   const visible = visibleLines(screen)
   const filterLine = screen.filtering || screen.filter !== ""
   const problem = screen.dropped && screen.problem !== undefined
-  const shownStatus = problem ? <NoticeLine notice={{ tone: "error", text: screen.problem! }} /> : status
+  const shownStatus = problem ? (
+    <NoticeLine notice={{ tone: "error", text: screen.problem! }} />
+  ) : (
+    status
+  )
   // The line above the hints is there when it says something; its gap is there whenever the frame has one.
-  const statusRows = shownStatus === undefined ? 0 : problem || state.notice !== undefined || state.quitting ? 2 : 1
+  const statusRows =
+    shownStatus === undefined
+      ? 0
+      : problem || state.notice !== undefined || state.quitting
+        ? 2
+        : 1
   const page = logRows(rows, hintRows(hints, columns), filterLine, statusRows)
   // `scroll` lines, the newest, are below the view. Near the top of more lines than fit, the view is the first full page.
   const end = visible.length - Math.min(screen.scroll, visible.length)
-  const shown = visible.length > page && end < page ? visible.slice(0, page) : visible.slice(Math.max(0, end - page), end)
+  const shown =
+    visible.length > page && end < page
+      ? visible.slice(0, page)
+      : visible.slice(Math.max(0, end - page), end)
   const services = servicesOf(screen.lines)
   const colors = [theme.brand, "magenta", "cyan"]
-  const colorOf = (service: string) => colors[Math.max(services.indexOf(service), 0) % colors.length]!
-  const serviceWidth = Math.min(Math.max(0, ...shown.map((line) => [...line.service].length)), SERVICE_WIDTH)
+  const colorOf = (service: string) =>
+    colors[Math.max(services.indexOf(service), 0) % colors.length]!
+  const serviceWidth = Math.min(
+    Math.max(0, ...shown.map((line) => [...line.service].length)),
+    SERVICE_WIDTH
+  )
   // The app's margins, the box's border and padding, and the two columns before the text.
-  const textWidth = Math.max(columns - 2 - 4 - TIME_WIDTH - (serviceWidth + 2), 1)
-  const local = state.team?.servers.find((server) => server.name === screen.server)?.destination === undefined
+  const textWidth = Math.max(
+    columns - 2 - 4 - TIME_WIDTH - (serviceWidth + 2),
+    1
+  )
+  const local =
+    state.team?.servers.find((server) => server.name === screen.server)
+      ?.destination === undefined
   // Below 100 columns "all services" is left out, so the screen's place still fits beside the wordmark.
   const which = screen.service ?? (columns >= 100 ? "all services" : undefined)
   const right = (
@@ -143,9 +199,21 @@ export function LogsScreen({
       <Following screen={screen} theme={theme} />
     </Box>
   )
-  const filter = screen.filter.length > FILTER_SHOWN ? `${[...screen.filter].slice(0, FILTER_SHOWN).join("")}…` : screen.filter
+  const filter =
+    screen.filter.length > FILTER_SHOWN
+      ? `${[...screen.filter].slice(0, FILTER_SHOWN).join("")}…`
+      : screen.filter
   return (
-    <Frame header={<Header place={<Trail parts={[screen.server, screen.app, "logs"]} />} right={right} />} hints={hints} status={shownStatus}>
+    <Frame
+      header={
+        <Header
+          place={<Trail parts={[screen.server, screen.app, "logs"]} />}
+          right={right}
+        />
+      }
+      hints={hints}
+      status={shownStatus}
+    >
       <Box flexDirection="column" flexGrow={1} rowGap={1}>
         <Box
           flexDirection="column"
@@ -159,13 +227,23 @@ export function LogsScreen({
         >
           {shown.length > 0 ? (
             shown.map((line, index) => (
-              <Row key={index} line={line} color={colorOf(line.service)} serviceWidth={serviceWidth} textWidth={textWidth} />
+              <Row
+                key={index}
+                line={line}
+                color={colorOf(line.service)}
+                serviceWidth={serviceWidth}
+                textWidth={textWidth}
+              />
             ))
           ) : (
-            <Text dimColor>{screen.lines.length === 0 ? "No lines yet." : "No line matches."}</Text>
+            <Text dimColor>
+              {screen.lines.length === 0 ? "No lines yet." : "No line matches."}
+            </Text>
           )}
         </Box>
-        {screen.filtering ? <TextQuestion label="Filter" value={screen.filter} /> : null}
+        {screen.filtering ? (
+          <TextQuestion label="Filter" value={screen.filter} />
+        ) : null}
         {!screen.filtering && screen.filter !== "" ? (
           <Text wrap="truncate-end">
             <Text dimColor>filter ›</Text> {filter}

@@ -39,11 +39,28 @@ const VERSION_WIDTH = 11
  * colour alone. The deploy the runner runs now, while every service of the
  * app is running, is `● running now`, as on the board (`runningNow`).
  */
-function Result({ deploy, runningNow, narrow }: { deploy: DeployRow; runningNow: boolean; narrow: boolean }) {
+function Result({
+  deploy,
+  runningNow,
+  narrow,
+}: {
+  deploy: DeployRow
+  runningNow: boolean
+  narrow: boolean
+}) {
   const theme = useTheme()
   // Below 100 columns, as on the board "One app at 80 columns": a rollback that started is `✔ rollback to 1`, and the others say their result alone.
-  const rollback = deploy.rollbackTo === undefined || narrow ? "" : `, a rollback to ${deploy.rollbackTo}`
-  if (narrow && !runningNow && deploy.outcome === "started" && deploy.rollbackTo !== undefined) return <Text>✔ rollback to {deploy.rollbackTo}</Text>
+  const rollback =
+    deploy.rollbackTo === undefined || narrow
+      ? ""
+      : `, a rollback to ${deploy.rollbackTo}`
+  if (
+    narrow &&
+    !runningNow &&
+    deploy.outcome === "started" &&
+    deploy.rollbackTo !== undefined
+  )
+    return <Text>✔ rollback to {deploy.rollbackTo}</Text>
   if (runningNow) {
     return (
       <Text>
@@ -76,8 +93,15 @@ function Result({ deploy, runningNow, narrow }: { deploy: DeployRow; runningNow:
  * secret`, faint.
  */
 function NarrowDeployDetails({ deploy }: { deploy: DeployRow }) {
-  const first = [`deploy ${deploy.sequence}`, deploy.signer ? `signed by ${deploy.signer}` : undefined, deploy.teamVersion ? `team list v${deploy.teamVersion}` : undefined]
-  const second = [...(deploy.services ?? []), secretsWords(deploy.secrets?.length ?? 0)]
+  const first = [
+    `deploy ${deploy.sequence}`,
+    deploy.signer ? `signed by ${deploy.signer}` : undefined,
+    deploy.teamVersion ? `team list v${deploy.teamVersion}` : undefined,
+  ]
+  const second = [
+    ...(deploy.services ?? []),
+    secretsWords(deploy.secrets?.length ?? 0),
+  ]
   return (
     <Box flexDirection="column">
       <Text dimColor wrap="truncate-end">
@@ -93,12 +117,20 @@ function NarrowDeployDetails({ deploy }: { deploy: DeployRow }) {
 /** The selected deploy: who signed it and from which team list, its services and its secrets. */
 function DeployDetails({ deploy }: { deploy: DeployRow }) {
   const label = `deploy ${deploy.sequence}`
-  const signed = [deploy.signer ? `signed by ${deploy.signer}` : undefined, deploy.teamVersion ? `from team list v${deploy.teamVersion}` : undefined]
+  const signed = [
+    deploy.signer ? `signed by ${deploy.signer}` : undefined,
+    deploy.teamVersion ? `from team list v${deploy.teamVersion}` : undefined,
+  ]
     .filter(Boolean)
     .join(", ")
-  const secrets = deploy.secrets?.length ? deploy.secrets.map((secret) => `${secret.name} v${secret.version}`).join(", ") : "none"
+  const secrets = deploy.secrets?.length
+    ? deploy.secrets
+        .map((secret) => `${secret.name} v${secret.version}`)
+        .join(", ")
+    : "none"
   const rows: [string, ReactNode][] = [[label, signed]]
-  if (deploy.services?.length) rows.push(["services", deploy.services.join(", ")])
+  if (deploy.services?.length)
+    rows.push(["services", deploy.services.join(", ")])
   rows.push(["secrets", secrets])
   return <Fields rows={rows} labelWidth={Math.max(10, label.length + 2)} />
 }
@@ -124,11 +156,23 @@ function DeploysPane({
   const chosen = deploys?.[at]
   const when = (deploys ?? []).map((deploy) => clockTime(deploy.at, now))
   // Wide enough for every number and time shown, and never narrower than the board's.
-  const numberWidth = Math.max(narrow ? NUMBER_WIDTH.narrow : NUMBER_WIDTH.wide, ...(deploys ?? []).map((deploy) => String(deploy.sequence).length + 1))
-  const whenWidth = Math.max(narrow ? WHEN_WIDTH.narrow : WHEN_WIDTH.wide, ...when.map((text) => text.length + 1))
+  const numberWidth = Math.max(
+    narrow ? NUMBER_WIDTH.narrow : NUMBER_WIDTH.wide,
+    ...(deploys ?? []).map((deploy) => String(deploy.sequence).length + 1)
+  )
+  const whenWidth = Math.max(
+    narrow ? WHEN_WIDTH.narrow : WHEN_WIDTH.wide,
+    ...when.map((text) => text.length + 1)
+  )
   return (
-    <Pane title="Deploys" right={narrow ? undefined : <Text dimColor>last 50 are kept</Text>} focused={focused}>
-      {deploys && deploys.length === 0 ? <Text dimColor>No deploys from this machine yet.</Text> : null}
+    <Pane
+      title="Deploys"
+      right={narrow ? undefined : <Text dimColor>last 50 are kept</Text>}
+      focused={focused}
+    >
+      {deploys && deploys.length === 0 ? (
+        <Text dimColor>No deploys from this machine yet.</Text>
+      ) : null}
       {deploys && deploys.length > 0 ? (
         <Box flexDirection="column" flexShrink={1} overflow="hidden">
           {narrow ? null : (
@@ -152,7 +196,11 @@ function DeploysPane({
                 <Text bold={index === at}>{deploy.sequence}</Text>
               </Cell>
               <Cell>
-                <Result deploy={deploy} runningNow={deploy.sequence === running} narrow={narrow} />
+                <Result
+                  deploy={deploy}
+                  runningNow={deploy.sequence === running}
+                  narrow={narrow}
+                />
               </Cell>
               <Cell width={whenWidth}>
                 <Text dimColor>{when[index]}</Text>
@@ -165,7 +213,11 @@ function DeploysPane({
       {chosen ? (
         <Box flexDirection="column" flexShrink={0}>
           <Rule />
-          {narrow ? <NarrowDeployDetails deploy={chosen} /> : <DeployDetails deploy={chosen} />}
+          {narrow ? (
+            <NarrowDeployDetails deploy={chosen} />
+          ) : (
+            <DeployDetails deploy={chosen} />
+          )}
         </Box>
       ) : null}
     </Pane>
@@ -177,7 +229,10 @@ function DeploysPane({
  * accepted (FR-025), worded as on the board for one, and naming each when
  * there are several.
  */
-export function changedNote(secrets: readonly SecretRow[], deploy: number | undefined): string | undefined {
+export function changedNote(
+  secrets: readonly SecretRow[],
+  deploy: number | undefined
+): string | undefined {
   const changed = secrets.filter((secret) => secret.afterDeploy)
   if (deploy === undefined || changed.length === 0) return undefined
   if (changed.length === 1) {
@@ -199,7 +254,10 @@ function ShortVersion({ secret }: { secret: SecretRow }) {
   const words = `${secret.removed ? "removed" : `v${secret.version}`}${secret.afterDeploy ? " !" : ""}`
   return (
     <Box flexShrink={0}>
-      <Text color={secret.afterDeploy ? theme.warning : undefined} dimColor={!secret.afterDeploy}>
+      <Text
+        color={secret.afterDeploy ? theme.warning : undefined}
+        dimColor={!secret.afterDeploy}
+      >
         {words}
       </Text>
     </Box>
@@ -233,7 +291,11 @@ function SecretsPane({
           <Box key={secret.name}>
             <Marker selected={focused && index === at} />
             <Cell>
-              <Text bold={focused && index === at} dimColor={secret.removed} strikethrough={secret.removed}>
+              <Text
+                bold={focused && index === at}
+                dimColor={secret.removed}
+                strikethrough={secret.removed}
+              >
                 {secret.name}
               </Text>
             </Cell>
@@ -241,7 +303,9 @@ function SecretsPane({
               <ShortVersion secret={secret} />
             ) : (
               <Cell width={VERSION_WIDTH}>
-                <Text dimColor>{secret.removed ? "removed" : `version ${secret.version}`}</Text>
+                <Text dimColor>
+                  {secret.removed ? "removed" : `version ${secret.version}`}
+                </Text>
               </Cell>
             )}
           </Box>
@@ -259,7 +323,9 @@ function SecretsPane({
         </Box>
       ) : (
         <Box flexDirection="column" flexShrink={0}>
-          <Text dimColor>Values are never shown. To change one, set it again.</Text>
+          <Text dimColor>
+            Values are never shown. To change one, set it again.
+          </Text>
           {note ? <Text color={theme.warning}>! {note}</Text> : null}
         </Box>
       )}
@@ -274,13 +340,23 @@ function SecretsPane({
  * runs nothing, so then none is marked, and neither is any deploy before
  * the one the runner holds now. Undefined before the runner has answered.
  */
-export function runningNow(deploys: readonly DeployRow[] | undefined, state: RunState, accepted: number | undefined): number | undefined {
+export function runningNow(
+  deploys: readonly DeployRow[] | undefined,
+  state: RunState,
+  accepted: number | undefined
+): number | undefined {
   if (state !== "running" || accepted === undefined) return undefined
-  return deploys?.some((deploy) => deploy.sequence === accepted && deploy.outcome === "started") ? accepted : undefined
+  return deploys?.some(
+    (deploy) => deploy.sequence === accepted && deploy.outcome === "started"
+  )
+    ? accepted
+    : undefined
 }
 
 /** The answers to "remove this secret?", the reducer's own (state/questions.ts `CHOICES`). */
-const REMOVE_HINTS: readonly KeyHint[] = CHOICES["remove-secret"].map((choice) => [choice.key, choice.does] as const)
+const REMOVE_HINTS: readonly KeyHint[] = CHOICES["remove-secret"].map(
+  (choice) => [choice.key, choice.does] as const
+)
 
 /**
  * Board "One app: deploys and secrets": the deploy history from this
@@ -300,10 +376,14 @@ export function AppScreen({
   status?: ReactNode
 }) {
   const view = appViewOf(state, screen)
-  const row = state.team?.servers.find((server) => server.name === screen.server)?.apps.find((app) => app.name === screen.app)
+  const row = state.team?.servers
+    .find((server) => server.name === screen.server)
+    ?.apps.find((app) => app.name === screen.app)
   const runState: RunState = row?.state ?? "unknown"
   // The latest deploy the runner accepted, from this machine's history: what a secret changed after is measured against.
-  const latest = view?.deploys.find((deploy) => deploy.outcome !== "sent")?.sequence
+  const latest = view?.deploys.find(
+    (deploy) => deploy.outcome !== "sent"
+  )?.sequence
   // The header names the deploy the runner holds, once it has said; until then, or when it cannot be reached, this machine's.
   const shown = row?.accepted ?? latest
   const narrow = columns < APP_WIDE
@@ -311,18 +391,31 @@ export function AppScreen({
   const right = (
     <Box columnGap={1}>
       <StateCell state={runState} />
-      {shown !== undefined && !narrow ? <Text dimColor>deploy {shown}</Text> : null}
+      {shown !== undefined && !narrow ? (
+        <Text dimColor>deploy {shown}</Text>
+      ) : null}
     </Box>
   )
-  const header = <Header place={<Trail parts={[screen.server, screen.app]} />} right={right} />
-  const question = state.question?.kind === "remove-secret" ? state.question : undefined
+  const header = (
+    <Header
+      place={<Trail parts={[screen.server, screen.app]} />}
+      right={right}
+    />
+  )
+  const question =
+    state.question?.kind === "remove-secret" ? state.question : undefined
   if (question) {
     return (
       <Frame header={header} hints={REMOVE_HINTS} status={status}>
         <Box width={Math.min(columns - 2, 64)}>
-          <Confirm title={`Remove ${question.name}?`} tone="warning" choices={CHOICES["remove-secret"]}>
+          <Confirm
+            title={`Remove ${question.name}?`}
+            tone="warning"
+            choices={CHOICES["remove-secret"]}
+          >
             <Text>
-              {question.app} on {question.server} keeps it until the next deploy. The removal is signed now.
+              {question.app} on {question.server} keeps it until the next
+              deploy. The removal is signed now.
             </Text>
           </Confirm>
         </Box>

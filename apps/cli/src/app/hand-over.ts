@@ -38,8 +38,16 @@ const ERRORS_GRACE_MS = 1000
  * would have had to ask something: it ended with SSH's own status, 255,
  * before any answer, and SSH said why.
  */
-export function needsAnswers(attempt: { exitCode: number; answered: boolean; lines: readonly string[] }): boolean {
-  return !attempt.answered && attempt.exitCode === 255 && wouldHaveAsked(attempt.lines)
+export function needsAnswers(attempt: {
+  exitCode: number
+  answered: boolean
+  lines: readonly string[]
+}): boolean {
+  return (
+    !attempt.answered &&
+    attempt.exitCode === 255 &&
+    wouldHaveAsked(attempt.lines)
+  )
 }
 
 /** What SSH's question is about, shown on the normal screen before SSH asks. */
@@ -85,7 +93,11 @@ export function oneAtATime(terminal: Terminal): Terminal {
  * have asked, once more with the terminal handed over. What was written to
  * it before the first answer is written again to the second attempt.
  */
-function askingProcess(start: (batch: boolean, lines: string[]) => RunnerProcess, terminal: Terminal, note: string): RunnerProcess {
+function askingProcess(
+  start: (batch: boolean, lines: string[]) => RunnerProcess,
+  terminal: Terminal,
+  note: string
+): RunnerProcess {
   const lines: string[] = []
   let child = start(true, lines)
   let reader = child.output.getReader()
@@ -192,11 +204,18 @@ function askingProcess(start: (batch: boolean, lines: string[]) => RunnerProcess
  * as before. SSH's option for batch mode is a fixed string placed before
  * `--` (transport.ts).
  */
-export function askingConnect(connect: Deps["connect"], terminal: Terminal): Deps["connect"] {
+export function askingConnect(
+  connect: Deps["connect"],
+  terminal: Terminal
+): Deps["connect"] {
   return (target, localRunner, options = {}) => {
     if (target.kind !== "ssh") return connect(target, localRunner, options)
     const attempt = (batch: boolean, lines: string[]): Transport =>
-      connect(target, localRunner, { ...options, batch, errorLines: recording(lines, options.errorLines) })
+      connect(target, localRunner, {
+        ...options,
+        batch,
+        errorLines: recording(lines, options.errorLines),
+      })
     // Made now so that a stored destination or path that is not valid fails here, as it would without the app.
     const first = attempt(true, [])
     const note = handOverNote(target.destination)
@@ -207,7 +226,14 @@ export function askingConnect(connect: Deps["connect"], terminal: Terminal): Dep
       async run(command, input) {
         const lines: string[] = []
         const answer = await attempt(true, lines).run(command, input)
-        if (!needsAnswers({ exitCode: answer.exitCode, answered: answer.stdout !== "", lines })) return answer
+        if (
+          !needsAnswers({
+            exitCode: answer.exitCode,
+            answered: answer.stdout !== "",
+            lines,
+          })
+        )
+          return answer
         const takeBack = await terminal.suspend(note)
         try {
           return await attempt(false, []).run(command, input)
@@ -215,12 +241,18 @@ export function askingConnect(connect: Deps["connect"], terminal: Terminal): Dep
           await takeBack()
         }
       },
-      open: () => askingProcess((batch, lines) => attempt(batch, lines).open(), terminal, note),
+      open: () =>
+        askingProcess(
+          (batch, lines) => attempt(batch, lines).open(),
+          terminal,
+          note
+        ),
       script: (words) =>
         askingProcess(
           (batch, lines) => {
             const reached = attempt(batch, lines)
-            if (!reached.script) throw new Error("A connection over SSH can start the installer.")
+            if (!reached.script)
+              throw new Error("A connection over SSH can start the installer.")
             return reached.script(words)
           },
           terminal,

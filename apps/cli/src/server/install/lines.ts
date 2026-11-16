@@ -97,7 +97,11 @@ export function parseInstallLine(line: string): InstallEvent | undefined {
   match = RUNNER_FOUND.exec(line)
   if (match) {
     const version = match[2] === "unknown" ? undefined : match[2]
-    return { kind: "runner", place: match[1] as RunnerPlace, ...(version ? { version } : {}) }
+    return {
+      kind: "runner",
+      place: match[1] as RunnerPlace,
+      ...(version ? { version } : {}),
+    }
   }
   match = /^platform ok (x64|arm64)$/.exec(line)
   if (match) return { kind: "platform", arch: match[1] as RunnerArch }
@@ -106,7 +110,8 @@ export function parseInstallLine(line: string): InstallEvent | undefined {
   match = /^done (system|user|path|target)$/.exec(line)
   if (match) return { kind: "done", place: match[1] as RunnerPlace }
   match = /^fail ([a-z]+)$/.exec(line)
-  if (match && FAILURES.includes(match[1]!)) return { kind: "fail", reason: match[1] as InstallFailure }
+  if (match && FAILURES.includes(match[1]!))
+    return { kind: "fail", reason: match[1] as InstallFailure }
   return undefined
 }
 
@@ -133,19 +138,29 @@ const ORDER: readonly InstallEvent["kind"][] = [
  * list without doing anything; what it says here only decides what is shown.
  * What it does is checked by the session that follows.
  */
-export function followsOrder(seen: readonly InstallEvent[], event: InstallEvent, request: InstallRequest): boolean {
+export function followsOrder(
+  seen: readonly InstallEvent[],
+  event: InstallEvent,
+  request: InstallRequest
+): boolean {
   if (event.kind === "fail") return seen.length > 0
   const at = ORDER.indexOf(event.kind)
   const last = seen.at(-1)
   if (last === undefined) return event.kind === "connected"
   if (at <= ORDER.indexOf(last.kind)) return false
-  const has = (kind: InstallEvent["kind"]) => seen.some((item) => item.kind === kind)
+  const has = (kind: InstallEvent["kind"]) =>
+    seen.some((item) => item.kind === kind)
   const runnerSeen = has("runner") || has("no-runner")
   switch (event.kind) {
     case "docker":
       return last.kind === "connected"
     case "runner":
-      return last.kind === "docker" && (request.mode === "update" ? event.place === "target" : event.place !== "target")
+      return (
+        last.kind === "docker" &&
+        (request.mode === "update"
+          ? event.place === "target"
+          : event.place !== "target")
+      )
     case "no-runner":
       return last.kind === "docker" && request.mode === "add"
     case "platform":
@@ -153,7 +168,9 @@ export function followsOrder(seen: readonly InstallEvent[], event: InstallEvent,
     case "ready":
       return last.kind === "platform" && request.source.kind === "file"
     case "download":
-      return request.source.kind === "file" ? last.kind === "ready" : last.kind === "platform"
+      return request.source.kind === "file"
+        ? last.kind === "ready"
+        : last.kind === "platform"
     case "checksum":
       return last.kind === "download"
     case "install":
@@ -161,15 +178,24 @@ export function followsOrder(seen: readonly InstallEvent[], event: InstallEvent,
     case "version":
       return runnerSeen && (last.kind === "install" || last.kind === "runner")
     case "folder":
-      return runnerSeen && (has("platform") || has("no-runner") ? has("version") : true)
+      return (
+        runnerSeen &&
+        (has("platform") || has("no-runner") ? has("version") : true)
+      )
     case "done":
-      return last.kind === "folder" && (request.mode === "update" ? event.place === "target" : event.place !== "target")
+      return (
+        last.kind === "folder" &&
+        (request.mode === "update"
+          ? event.place === "target"
+          : event.place !== "target")
+      )
     default:
       return false
   }
 }
 
-type Line = { kind: "line"; text: string } | { kind: "too_long" } | { kind: "end" }
+type Line =
+  { kind: "line"; text: string } | { kind: "too_long" } | { kind: "end" }
 
 /**
  * Reads the script's lines one at a time, never holding more than one line

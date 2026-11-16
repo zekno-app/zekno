@@ -9,7 +9,9 @@ type Options = Where & { tail?: string; "no-follow"?: boolean }
 export function parseTail(value: string | undefined): number {
   if (value === undefined) return LOG_TAIL
   if (!/^\d{1,4}$/.test(value) || Number(value) > MAX_TAIL) {
-    throw new UsageError(`\`--tail\` takes a whole number from 0 to ${MAX_TAIL}.`)
+    throw new UsageError(
+      `\`--tail\` takes a whole number from 0 to ${MAX_TAIL}.`
+    )
   }
   return Number(value)
 }
@@ -26,7 +28,11 @@ export function parseTail(value: string | undefined): number {
  */
 export async function logs(deps: Deps, options: Options): Promise<void> {
   const tail = parseTail(options.tail)
-  const plan = await prepareLogs(deps, { app: options.app, server: options.server, serverFrom: options.serverFrom })
+  const plan = await prepareLogs(deps, {
+    app: options.app,
+    server: options.server,
+    serverFrom: options.serverFrom,
+  })
   const stop = new AbortController()
   const interrupt = () => stop.abort()
   process.once("SIGINT", interrupt)
@@ -35,7 +41,12 @@ export async function logs(deps: Deps, options: Options): Promise<void> {
   if (closed?.aborted) interrupt()
   closed?.addEventListener("abort", interrupt, { once: true })
   try {
-    await followLogs(remoteThroughUi(deps), plan, { tail, follow: !options["no-follow"], stop: stop.signal }, (line) => deps.ui.logLine(line))
+    await followLogs(
+      remoteThroughUi(deps),
+      plan,
+      { tail, follow: !options["no-follow"], stop: stop.signal },
+      (line) => deps.ui.logLine(line)
+    )
   } finally {
     process.off("SIGINT", interrupt)
     process.off("SIGTERM", interrupt)

@@ -33,8 +33,15 @@ const LABEL_COLUMN = 11
  * with a detail count: a row with no detail, such as `+ a new app`, ends after
  * its label, and lines nothing up (mock-up 2).
  */
-export function labelWidth(rows: readonly Pick<ListRow<unknown>, "label" | "detail">[]): number {
-  const longest = Math.max(0, ...rows.filter((row) => row.detail !== undefined).map((row) => [...row.label].length))
+export function labelWidth(
+  rows: readonly Pick<ListRow<unknown>, "label" | "detail">[]
+): number {
+  const longest = Math.max(
+    0,
+    ...rows
+      .filter((row) => row.detail !== undefined)
+      .map((row) => [...row.label].length)
+  )
   return Math.max(LABEL_COLUMN, longest + 2)
 }
 
@@ -42,18 +49,30 @@ export function labelWidth(rows: readonly Pick<ListRow<unknown>, "label" | "deta
 const FEWEST_ROWS = 3
 
 /** Which rows of a list are drawn, and how many are hidden above and below them. */
-export type ListWindow = { from: number; to: number; above: number; below: number }
+export type ListWindow = {
+  from: number
+  to: number
+  above: number
+  below: number
+}
 
 /**
  * The rows drawn when a list of `count` rows has `height` lines for its rows
  * and its `↑ <n> more` and `↓ <n> more` lines (A13): all of them when they
  * fit, else a window around the selected row, of at least three rows.
  */
-export function listWindow(count: number, selected: number, height: number): ListWindow {
+export function listWindow(
+  count: number,
+  selected: number,
+  height: number
+): ListWindow {
   if (count <= height) return { from: 0, to: count, above: 0, below: 0 }
   const fit = (shown: number): ListWindow => {
     const rows = Math.min(count, Math.max(FEWEST_ROWS, shown))
-    const from = Math.max(0, Math.min(selected - Math.floor((rows - 1) / 2), count - rows))
+    const from = Math.max(
+      0,
+      Math.min(selected - Math.floor((rows - 1) / 2), count - rows)
+    )
     return { from, to: from + rows, above: from, below: count - from - rows }
   }
   // Room for one "more" line first; when rows are hidden on both sides, for two.
@@ -62,7 +81,8 @@ export function listWindow(count: number, selected: number, height: number): Lis
 }
 
 /** A13: the line that says how many rows are hidden above or below. Needs approval (research Q4). */
-export const moreLine = (direction: "↑" | "↓", count: number): string => `  ${direction} ${count} more`
+export const moreLine = (direction: "↑" | "↓", count: number): string =>
+  `  ${direction} ${count} more`
 
 /**
  * The lines of the window a list may not use: its question, its hint, and two
@@ -80,7 +100,9 @@ const FIRST_SENTENCE = /[.?](?=\s)/
  */
 export function firstSentence(text: string): { first: string; rest: string } {
   const end = text.search(FIRST_SENTENCE)
-  return end === -1 ? { first: text, rest: "" } : { first: text.slice(0, end + 1), rest: text.slice(end + 1) }
+  return end === -1
+    ? { first: text, rest: "" }
+    : { first: text.slice(0, end + 1), rest: text.slice(end + 1) }
 }
 
 /**
@@ -92,7 +114,9 @@ export function firstSentence(text: string): { first: string; rest: string } {
  */
 export function questionPieces(text: string): Piece[] {
   const { first, rest } = firstSentence(text)
-  return rest === "" ? [{ text: first, bold: true }] : [{ text: first, bold: true }, { text: rest }]
+  return rest === ""
+    ? [{ text: first, bold: true }]
+    : [{ text: first, bold: true }, { text: rest }]
 }
 
 /**
@@ -100,13 +124,22 @@ export function questionPieces(text: string): Piece[] {
  * under themselves, from column 2, when the window is narrower than the line
  * (`Wrapped`). `columns` is the window's width.
  */
-export function QuestionLine({ pieces, columns }: { pieces: readonly Piece[]; columns: number | undefined }) {
+export function QuestionLine({
+  pieces,
+  columns,
+}: {
+  pieces: readonly Piece[]
+  columns: number | undefined
+}) {
   return (
     <Box>
       <Box flexShrink={0} marginRight={1}>
         <Text color={BRAND}>?</Text>
       </Box>
-      <Wrapped pieces={pieces} columns={columns === undefined ? undefined : columns - 2} />
+      <Wrapped
+        pieces={pieces}
+        columns={columns === undefined ? undefined : columns - 2}
+      />
     </Box>
   )
 }
@@ -127,7 +160,11 @@ export function Reason({ text, columns }: { text: string; columns: number }) {
 }
 
 /** The pieces of a typed answer's line after its question: the dim `›`, then the answer. */
-export const answerPieces = (answer: string): Piece[] => [{ text: " " }, { text: "›", dim: true }, { text: ` ${answer}` }]
+export const answerPieces = (answer: string): Piece[] => [
+  { text: " " },
+  { text: "›", dim: true },
+  { text: ` ${answer}` },
+]
 
 /**
  * How a question ends: with an answer, or left (Esc, Ctrl-C). `typed` is the
@@ -136,10 +173,20 @@ export const answerPieces = (answer: string): Piece[] => [{ text: " " }, { text:
 export type Settled<T> = { answer: T } | { left: true; typed?: string }
 
 /** A key, as Ink reports it, of the kinds a question reads. */
-type QuestionKey = { upArrow?: boolean; downArrow?: boolean; return?: boolean; escape?: boolean; ctrl?: boolean; meta?: boolean; backspace?: boolean; delete?: boolean }
+type QuestionKey = {
+  upArrow?: boolean
+  downArrow?: boolean
+  return?: boolean
+  escape?: boolean
+  ctrl?: boolean
+  meta?: boolean
+  backspace?: boolean
+  delete?: boolean
+}
 
 /** Whether a key is Ctrl-C, which leaves every question. Ink does not act on it here (`exitOnCtrlC: false`). */
-export const isCtrlC = (input: string, key: QuestionKey): boolean => key.ctrl === true && input === "c"
+export const isCtrlC = (input: string, key: QuestionKey): boolean =>
+  key.ctrl === true && input === "c"
 
 /**
  * A list to pick one row from (mock-ups 1 and 2): the question, a row per
@@ -148,7 +195,15 @@ export const isCtrlC = (input: string, key: QuestionKey): boolean => key.ctrl ==
  * label is bold; a row with no detail, such as `+ a new app`, is dim until it
  * is selected (board "Questions in single commands").
  */
-export function ListPrompt<T>({ question, rows, settle }: { question: string; rows: readonly ListRow<T>[]; settle(result: Settled<number>): void }) {
+export function ListPrompt<T>({
+  question,
+  rows,
+  settle,
+}: {
+  question: string
+  rows: readonly ListRow<T>[]
+  settle(result: Settled<number>): void
+}) {
   const [selected, setSelected] = useState(0)
   // Several keys read at once reach here before React draws again, so the selection is kept here too.
   const current = useRef(0)
@@ -170,11 +225,17 @@ export function ListPrompt<T>({ question, rows, settle }: { question: string; ro
     else if (result.kind === "cancelled") end({ left: true })
   })
   const width = labelWidth(rows)
-  const shown = listWindow(rows.length, selected, Math.max(FEWEST_ROWS, height - LIST_SPARE_LINES))
+  const shown = listWindow(
+    rows.length,
+    selected,
+    Math.max(FEWEST_ROWS, height - LIST_SPARE_LINES)
+  )
   return (
     <Box flexDirection="column">
       <QuestionLine pieces={questionPieces(question)} columns={columns} />
-      {shown.above > 0 ? <Text dimColor>{moreLine("↑", shown.above)}</Text> : null}
+      {shown.above > 0 ? (
+        <Text dimColor>{moreLine("↑", shown.above)}</Text>
+      ) : null}
       {rows.slice(shown.from, shown.to).map((row, offset) => {
         const at = shown.from + offset === selected
         return (
@@ -185,12 +246,16 @@ export function ListPrompt<T>({ question, rows, settle }: { question: string; ro
               <Text bold={at} dimColor={!at && row.detail === undefined}>
                 {row.detail === undefined ? row.label : row.label.padEnd(width)}
               </Text>
-              {row.detail === undefined ? null : <Text dimColor>{row.detail}</Text>}
+              {row.detail === undefined ? null : (
+                <Text dimColor>{row.detail}</Text>
+              )}
             </Text>
           </Box>
         )
       })}
-      {shown.below > 0 ? <Text dimColor>{moreLine("↓", shown.below)}</Text> : null}
+      {shown.below > 0 ? (
+        <Text dimColor>{moreLine("↓", shown.below)}</Text>
+      ) : null}
       <Text>
         {"  "}↑↓ <Text dimColor>move</Text>
         {"   "}enter <Text dimColor>choose</Text>
@@ -234,7 +299,8 @@ export function TypedPrompt({
     if (settled.current) return
     if (isCtrlC(input, key)) return end({ left: true, typed: current.current })
     const next = applyTextInput(current.current, input, key)
-    if (next.kind === "cancelled") return end({ left: true, typed: current.current })
+    if (next.kind === "cancelled")
+      return end({ left: true, typed: current.current })
     current.current = next.value
     setAnswer(next.value)
     if (next.kind !== "done") return
@@ -244,7 +310,14 @@ export function TypedPrompt({
   })
   return (
     <Box flexDirection="column">
-      <QuestionLine pieces={[...questionPieces(question), ...answerPieces(answer), { text: " ", inverse: true, keep: true }]} columns={columns} />
+      <QuestionLine
+        pieces={[
+          ...questionPieces(question),
+          ...answerPieces(answer),
+          { text: " ", inverse: true, keep: true },
+        ]}
+        columns={columns}
+      />
       {reason === undefined ? null : <Reason text={reason} columns={columns} />}
     </Box>
   )

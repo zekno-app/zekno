@@ -34,7 +34,10 @@ function encodeKey<K extends KeyKind>(kind: K, bytes: Uint8Array): KeyOf<K> {
 }
 
 /** The bytes of a key, or undefined when the text is not a key of that kind. */
-export function tryDecodeKey(kind: KeyKind, text: unknown): Uint8Array | undefined {
+export function tryDecodeKey(
+  kind: KeyKind,
+  text: unknown
+): Uint8Array | undefined {
   const { prefix, bytes } = KINDS[kind]
   if (typeof text !== "string" || !text.startsWith(prefix)) return undefined
   const decoded = fromBase64Url(text.slice(prefix.length))
@@ -44,11 +47,15 @@ export function tryDecodeKey(kind: KeyKind, text: unknown): Uint8Array | undefin
 /** The bytes of a key. Throws without echoing the text, which may be a secret key. */
 export function decodeKey(kind: KeyKind, text: unknown): Uint8Array {
   const decoded = tryDecodeKey(kind, text)
-  if (!decoded) throw new CoreError("invalid_key", `Expected a ${KINDS[kind].label}.`)
+  if (!decoded)
+    throw new CoreError("invalid_key", `Expected a ${KINDS[kind].label}.`)
   return decoded
 }
 
-export function isKey<K extends KeyKind>(kind: K, text: unknown): text is KeyOf<K> {
+export function isKey<K extends KeyKind>(
+  kind: K,
+  text: unknown
+): text is KeyOf<K> {
   return tryDecodeKey(kind, text) !== undefined
 }
 
@@ -87,7 +94,9 @@ export function generateServerKeyPair(): {
 
 /** Names the signer of an envelope. Derived from the public key, so it cannot be chosen. */
 export function keyIdOf(publicKey: MemberPublicKey): string {
-  return toHex(hash("zekno/v1/key-id", decodeKey("memberPublic", publicKey), 16))
+  return toHex(
+    hash("zekno/v1/key-id", decodeKey("memberPublic", publicKey), 16)
+  )
 }
 
 /** A server's identifier is derived from its public key: one cannot change without the other. */
@@ -97,7 +106,10 @@ export function serverIdOf(publicKey: ServerPublicKey): string {
 
 /** The public key that belongs to a server secret key. */
 export function serverPublicKeyOf(secretKeyBytes: Uint8Array): ServerPublicKey {
-  return encodeKey("serverPublic", sodium.crypto_scalarmult_base(secretKeyBytes))
+  return encodeKey(
+    "serverPublic",
+    sodium.crypto_scalarmult_base(secretKeyBytes)
+  )
 }
 
 /**
@@ -111,7 +123,9 @@ export interface Signer {
 }
 
 /** A signer that holds the secret key in memory until `destroy` is called. */
-export function createSigner(secretKey: MemberSecretKey): Signer & { destroy(): void } {
+export function createSigner(
+  secretKey: MemberSecretKey
+): Signer & { destroy(): void } {
   const secret = decodeKey("memberSecret", secretKey)
   // An Ed25519 secret key is its 32-byte seed followed by the public key.
   // Derive the public key from the seed again instead of trusting the copy.
@@ -128,7 +142,8 @@ export function createSigner(secretKey: MemberSecretKey): Signer & { destroy(): 
   return {
     publicKey,
     sign(message) {
-      if (destroyed) throw new CoreError("signer_failed", "This signer has been destroyed.")
+      if (destroyed)
+        throw new CoreError("signer_failed", "This signer has been destroyed.")
       return sodium.crypto_sign_detached(message, secret)
     },
     destroy() {

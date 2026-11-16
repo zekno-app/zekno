@@ -24,7 +24,8 @@ export const LOGO_HEIGHT = 3
 /** Where ".app" begins. Columns before it are "zekno" and the space after it. */
 export const APP_COLUMN = 25
 
-const filled = (row: number, column: number): boolean => LOGO_BITMAP[row]?.[column] === "#"
+const filled = (row: number, column: number): boolean =>
+  LOGO_BITMAP[row]?.[column] === "#"
 
 /** The character for one cell of a line: its upper row, its lower row, both, or neither. */
 function halfBlock(top: boolean, bottom: boolean): string {
@@ -52,7 +53,10 @@ export type LogoLine = { name: string; app: string }
 
 /** The three lines, each split into "zekno" (text colour) and ".app" (brand blue). */
 export function logoParts(): LogoLine[] {
-  return logoLines().map((line) => ({ name: line.slice(0, APP_COLUMN), app: line.slice(APP_COLUMN) }))
+  return logoLines().map((line) => ({
+    name: line.slice(0, APP_COLUMN),
+    app: line.slice(APP_COLUMN),
+  }))
 }
 
 /** The wordmark, three lines tall and 41 columns wide. It never wraps or shrinks. */
@@ -62,7 +66,12 @@ export function Logo(): ReactElement {
     Box,
     { flexDirection: "column", flexShrink: 0, width: LOGO_WIDTH },
     ...logoParts().map((part, line) =>
-      createElement(Text, { key: line, wrap: "truncate-end" }, part.name, createElement(Text, { color: theme.brand }, part.app))
+      createElement(
+        Text,
+        { key: line, wrap: "truncate-end" },
+        part.name,
+        createElement(Text, { color: theme.brand }, part.app)
+      )
     )
   )
 }

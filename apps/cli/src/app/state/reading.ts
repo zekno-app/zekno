@@ -7,7 +7,8 @@ import { MIN_COLUMNS, MIN_ROWS, type Screen, type State } from "./types"
 export const top = (state: State): Screen => state.stack.at(-1)!
 
 /** Below 80 by 24 the app asks for a larger window instead of drawing (FR-007). */
-export const tooSmall = (state: State): boolean => state.size.columns < MIN_COLUMNS || state.size.rows < MIN_ROWS
+export const tooSmall = (state: State): boolean =>
+  state.size.columns < MIN_COLUMNS || state.size.rows < MIN_ROWS
 
 /** A visible one-line question is open, so letters type into it. */
 export function textQuestionOpen(state: State): boolean {
@@ -35,8 +36,11 @@ export function hiddenPromptOpen(state: State): boolean {
 /** The secret the hidden prompt is asking for. */
 export function promptedName(state: State): string | undefined {
   const screen = top(state)
-  if (screen.name !== "set-secret" || screen.question !== "value") return undefined
-  return screen.missing.length > 0 ? screen.missing[screen.at] : screen.secretName
+  if (screen.name !== "set-secret" || screen.question !== "value")
+    return undefined
+  return screen.missing.length > 0
+    ? screen.missing[screen.at]
+    : screen.secretName
 }
 
 /**
@@ -48,5 +52,9 @@ export function refreshAllowed(state: State): boolean {
   const screen = top(state)
   if (screen.name !== "home" && screen.name !== "app") return false
   if (state.exiting || state.quitting || tooSmall(state)) return false
-  return state.question === undefined && !textQuestionOpen(state) && !hiddenPromptOpen(state)
+  return (
+    state.question === undefined &&
+    !textQuestionOpen(state) &&
+    !hiddenPromptOpen(state)
+  )
 }

@@ -19,7 +19,12 @@ import { basename } from "node:path"
 import { appTaken } from "../shared/app-names"
 import { appsOf, latestFirst, type RunState } from "../shared/views"
 import { reach, type Deps, type Team } from "../cli/context"
-import { CliError, MISSING_APP, MISSING_SERVER, UsageError } from "../cli/errors"
+import {
+  CliError,
+  MISSING_APP,
+  MISSING_SERVER,
+  UsageError,
+} from "../cli/errors"
 import { readOver, stateOf } from "../ops/status"
 import { findServer, NAME, type Profile, type Server } from "../profile/profile"
 import { batchOnly, READ_LIMIT_MS } from "../server/batch"
@@ -28,19 +33,24 @@ import { withSession } from "../server/session"
 import type { ListRow } from "../ui/types"
 
 /** A1: the one server, used without asking (mock-up 1). */
-export const onlyServer = (server: string): string => `Using ${server}, your only server.`
+export const onlyServer = (server: string): string =>
+  `Using ${server}, your only server.`
 
 /** A3: a command other than `deploy`, `init`, `doctor` and `version`, at a terminal, with no team. Needs approval (research Q4). */
-export const NO_TEAM_AT_TERMINAL = "No team on this machine yet. Run `zekno deploy` in a project folder, or `zekno init --name <you>`."
+export const NO_TEAM_AT_TERMINAL =
+  "No team on this machine yet. Run `zekno deploy` in a project folder, or `zekno init --name <you>`."
 
 /** A4: a command that needs a server, other than `deploy`, at a terminal, with no server connected. Needs approval (research Q4). */
-export const NO_SERVER_YET = "No server is connected yet. Run `zekno deploy` in a project folder, or `zekno server add`."
+export const NO_SERVER_YET =
+  "No server is connected yet. Run `zekno deploy` in a project folder, or `zekno server add`."
 
 /** A5: a command that needs an app, other than `deploy`, when the server has none to choose from. Needs approval (research Q4). */
-export const noApps = (server: string): string => `${server} has no apps yet, so there is nothing to choose from. Name one with \`--app <name>\`.`
+export const noApps = (server: string): string =>
+  `${server} has no apps yet, so there is nothing to choose from. Name one with \`--app <name>\`.`
 
 /** A11: why a typed app name is refused. It is the rule `--app` is held to (`NAME`). Needs approval (research Q4). */
-export const APP_NAME_RULE = "Use lowercase letters, digits and hyphens, starting with a letter or a digit."
+export const APP_NAME_RULE =
+  "Use lowercase letters, digits and hyphens, starting with a letter or a digit."
 
 /** The row deploy adds to the list of apps, last (mock-up 2). */
 export const NEW_APP = "+ a new app"
@@ -64,25 +74,46 @@ export function folderName(cwd: string): string | undefined {
 }
 
 /** One row per server of the verified profile, in its order: the name, and where it is. */
-export function serverRows(profile: Pick<Profile, "servers">): ListRow<Server>[] {
+export function serverRows(
+  profile: Pick<Profile, "servers">
+): ListRow<Server>[] {
   return profile.servers.map((server) => ({
     value: server,
     label: sanitize(server.name),
-    detail: server.target.kind === "ssh" ? sanitize(server.target.destination) : "this machine",
+    detail:
+      server.target.kind === "ssh"
+        ? sanitize(server.target.destination)
+        : "this machine",
   }))
 }
 
 /** What a server's runner said of each app it holds with a deploy, or undefined when it could not be read. */
-async function readApps(deps: Deps, team: Team, server: Server, limitMs: number): Promise<{ name: string; deploy: number; state: RunState }[] | undefined> {
+async function readApps(
+  deps: Deps,
+  team: Team,
+  server: Server,
+  limitMs: number
+): Promise<{ name: string; deploy: number; state: RunState }[] | undefined> {
   // What SSH writes is kept here and never shown: batch mode never asks, so there is nothing for the person to answer.
   const lines: string[] = []
   try {
-    const read = await withSession(reach({ ...deps, connect: batchOnly(deps.connect, lines) }, server.target), (session) => readOver(session, { team, server }), {
-      signal: AbortSignal.timeout(limitMs),
-    })
+    const read = await withSession(
+      reach(
+        { ...deps, connect: batchOnly(deps.connect, lines) },
+        server.target
+      ),
+      (session) => readOver(session, { team, server }),
+      {
+        signal: AbortSignal.timeout(limitMs),
+      }
+    )
     return Object.entries(read.status.lastSequence)
       .filter(([, deploy]) => deploy >= 1)
-      .map(([name, deploy]) => ({ name, deploy, state: stateOf(read.states, name) }))
+      .map(([name, deploy]) => ({
+        name,
+        deploy,
+        state: stateOf(read.states, name),
+      }))
   } catch {
     // Unreachable, SSH would have asked, a runner too old for `state`, the limit, an answer that does not fit: the history instead.
     return undefined
@@ -95,15 +126,35 @@ async function readApps(deps: Deps, team: Team, server: Server, limitMs: number)
  * unknown); when it cannot be read, this machine's verified history for that
  * server, as `deploy <n>`. This machine's latest deploy first, then by name.
  */
-export async function appRows(deps: Deps, team: Team, server: Server, options: { limitMs?: number } = {}): Promise<ListRow<string>[]> {
+export async function appRows(
+  deps: Deps,
+  team: Team,
+  server: Server,
+  options: { limitMs?: number } = {}
+): Promise<ListRow<string>[]> {
   const known = appsOf(team, server, deps.home)
   const at = new Map(known.map((row) => [row.name, row.at]))
-  const read = await deps.ui.step(`Asking ${server.name}`, () => readApps(deps, team, server, options.limitMs ?? READ_LIMIT_MS))
-  const apps = read ?? known.map((row) => ({ name: row.name, deploy: row.deploy, state: "unknown" as RunState }))
+  const read = await deps.ui.step(`Asking ${server.name}`, () =>
+    readApps(deps, team, server, options.limitMs ?? READ_LIMIT_MS)
+  )
+  const apps =
+    read ??
+    known.map((row) => ({
+      name: row.name,
+      deploy: row.deploy,
+      state: "unknown" as RunState,
+    }))
   return apps
     .map((app) => ({ ...app, at: at.get(app.name) }))
     .sort(latestFirst)
-    .map((app) => ({ value: app.name, label: sanitize(app.name), detail: app.state === "unknown" ? `deploy ${app.deploy}` : `deploy ${app.deploy}, ${app.state}` }))
+    .map((app) => ({
+      value: app.name,
+      label: sanitize(app.name),
+      detail:
+        app.state === "unknown"
+          ? `deploy ${app.deploy}`
+          : `deploy ${app.deploy}, ${app.state}`,
+    }))
 }
 
 /**
@@ -111,9 +162,16 @@ export async function appRows(deps: Deps, team: Team, server: Server, options: {
  * (`serverFrom` says where it was read), is used as typed. Otherwise the one
  * server is used and said (A1), several are asked about, and none is A4.
  */
-export async function whichServer(deps: Deps, team: Team, given: { server?: string; serverFrom?: string }): Promise<{ server: Server; how: How }> {
+export async function whichServer(
+  deps: Deps,
+  team: Team,
+  given: { server?: string; serverFrom?: string }
+): Promise<{ server: Server; how: How }> {
   if (given.server !== undefined) {
-    return { server: findServer(team.profile, given.server, given.serverFrom), how: given.serverFrom === undefined ? "given" : "linked" }
+    return {
+      server: findServer(team.profile, given.server, given.serverFrom),
+      how: given.serverFrom === undefined ? "given" : "linked",
+    }
   }
   const servers = team.profile.servers
   if (servers.length === 0) throw new CliError(NO_SERVER_YET)
@@ -121,7 +179,12 @@ export async function whichServer(deps: Deps, team: Team, given: { server?: stri
     deps.ui.note(onlyServer(servers[0]!.name))
     return { server: servers[0]!, how: "only" }
   }
-  const server = await deps.ui.choose({ question: "Which server?", rows: serverRows(team.profile), collapsed: "Server", missing: new UsageError(MISSING_SERVER) })
+  const server = await deps.ui.choose({
+    question: "Which server?",
+    rows: serverRows(team.profile),
+    collapsed: "Server",
+    missing: new UsageError(MISSING_SERVER),
+  })
   return { server, how: "asked" }
 }
 
@@ -140,22 +203,43 @@ export async function whichApp(
   given: { app?: string; linked?: boolean },
   options: { offerNew: boolean; folder: string; limitMs?: number }
 ): Promise<{ app: string; how: How; fresh: boolean }> {
-  if (given.app !== undefined) return { app: given.app, how: given.linked ? "linked" : "given", fresh: false }
+  if (given.app !== undefined)
+    return {
+      app: given.app,
+      how: given.linked ? "linked" : "given",
+      fresh: false,
+    }
   const rows = await appRows(deps, team, server, options)
   const fill = folderName(options.folder)
   const named = (question: string, taken: readonly string[]) =>
     deps.ui.ask({
       question,
       ...(fill === undefined ? {} : { fill }),
-      check: (answer) => (!NAME.test(answer) ? APP_NAME_RULE : taken.includes(answer) ? appTaken(server.name, answer) : undefined),
+      check: (answer) =>
+        !NAME.test(answer)
+          ? APP_NAME_RULE
+          : taken.includes(answer)
+            ? appTaken(server.name, answer)
+            : undefined,
       missing: new UsageError(MISSING_APP),
     })
   if (rows.length === 0) {
     if (!options.offerNew) throw new CliError(noApps(server.name))
-    return { app: await named("Name for this app", []), how: "asked", fresh: true }
+    return {
+      app: await named("Name for this app", []),
+      how: "asked",
+      fresh: true,
+    }
   }
-  const offered: ListRow<string | null>[] = options.offerNew ? [...rows, { value: null, label: NEW_APP, asksNext: true }] : rows
-  const chosen = await deps.ui.choose({ question: `Which app on ${server.name}?`, rows: offered, collapsed: "App", missing: new UsageError(MISSING_APP) })
+  const offered: ListRow<string | null>[] = options.offerNew
+    ? [...rows, { value: null, label: NEW_APP, asksNext: true }]
+    : rows
+  const chosen = await deps.ui.choose({
+    question: `Which app on ${server.name}?`,
+    rows: offered,
+    collapsed: "App",
+    missing: new UsageError(MISSING_APP),
+  })
   if (chosen !== null) return { app: chosen, how: "asked", fresh: false }
   return {
     app: await named(

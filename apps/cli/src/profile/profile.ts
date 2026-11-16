@@ -10,7 +10,15 @@
  */
 import { EnvelopeSchema, LIMITS, SecretRecordSchema } from "@workspace/core"
 import { randomBytes } from "node:crypto"
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { dirname, join } from "node:path"
 import { z } from "zod"
 
@@ -28,7 +36,11 @@ export const HISTORY_LENGTH = 50
  * escape sequence or an option makes the profile damaged, not something drawn.
  */
 const TargetSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("ssh"), destination: z.string().regex(SSH_DESTINATION), runnerPath: z.string().regex(RUNNER_PATH) }),
+  z.strictObject({
+    kind: z.literal("ssh"),
+    destination: z.string().regex(SSH_DESTINATION),
+    runnerPath: z.string().regex(RUNNER_PATH),
+  }),
   z.strictObject({ kind: z.literal("local"), home: z.string().min(1) }),
 ])
 
@@ -46,7 +58,8 @@ const MemberNameSchema = z
   .refine((name) => !/[\p{C}\u2028\u2029]/u.test(name) && name === name.trim())
 
 /** Whether `name` may be a member's name: the rule `--name` is held to, for the name a first deploy asks for. */
-export const isMemberName = (name: string): boolean => MemberNameSchema.safeParse(name).success
+export const isMemberName = (name: string): boolean =>
+  MemberNameSchema.safeParse(name).success
 
 const ServerSchema = z.strictObject({
   name: z.string().regex(NAME),
@@ -85,7 +98,11 @@ const HistorySchema = z.array(
 )
 export type History = z.infer<typeof HistorySchema>
 
-function read<Schema extends z.ZodType>(path: string, schema: Schema, what: string): z.infer<Schema> | undefined {
+function read<Schema extends z.ZodType>(
+  path: string,
+  schema: Schema,
+  what: string
+): z.infer<Schema> | undefined {
   if (!existsSync(path)) return undefined
   let json: unknown
   try {
@@ -100,8 +117,10 @@ function read<Schema extends z.ZodType>(path: string, schema: Schema, what: stri
 
 export function profileStore(home: string) {
   const profilePath = join(home, "profile.json")
-  const secretsPath = (serverId: string, app: string) => join(home, "secrets", serverId, `${app}.json`)
-  const historyPath = (serverId: string, app: string) => join(home, "history", serverId, `${app}.json`)
+  const secretsPath = (serverId: string, app: string) =>
+    join(home, "secrets", serverId, `${app}.json`)
+  const historyPath = (serverId: string, app: string) =>
+    join(home, "history", serverId, `${app}.json`)
 
   /** Writes a whole file or nothing: a new file under a name nobody can predict, then a rename. */
   function write(path: string, value: unknown): void {
@@ -111,7 +130,10 @@ export function profileStore(home: string) {
     const temporary = `${path}.${randomBytes(8).toString("hex")}.tmp`
     try {
       // `wx` refuses to write through a file or link that is already there.
-      writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" })
+      writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, {
+        mode: 0o600,
+        flag: "wx",
+      })
       renameSync(temporary, path)
     } catch {
       rmSync(temporary, { force: true })
@@ -123,15 +145,24 @@ export function profileStore(home: string) {
     exists: () => existsSync(profilePath),
     load(): Profile {
       const profile = read(profilePath, ProfileSchema, "The profile")
-      if (!profile) throw new CliError("No team on this machine yet. Run `zekno init --name <you>` first.")
+      if (!profile)
+        throw new CliError(
+          "No team on this machine yet. Run `zekno init --name <you>` first."
+        )
       return profile
     },
     save: (profile: Profile) => write(profilePath, profile),
     secrets: (serverId: string, app: string): SecretStore =>
-      read(secretsPath(serverId, app), SecretStoreSchema, "The secret store") ?? { records: [], removals: [] },
-    saveSecrets: (serverId: string, app: string, store: SecretStore) => write(secretsPath(serverId, app), store),
+      read(
+        secretsPath(serverId, app),
+        SecretStoreSchema,
+        "The secret store"
+      ) ?? { records: [], removals: [] },
+    saveSecrets: (serverId: string, app: string, store: SecretStore) =>
+      write(secretsPath(serverId, app), store),
     history: (serverId: string, app: string): History =>
-      read(historyPath(serverId, app), HistorySchema, "The deploy history") ?? [],
+      read(historyPath(serverId, app), HistorySchema, "The deploy history") ??
+      [],
     saveHistory: (serverId: string, app: string, history: History) =>
       write(historyPath(serverId, app), history.slice(-HISTORY_LENGTH)),
   }
@@ -143,14 +174,24 @@ export type ProfileStore = ReturnType<typeof profileStore>
  * was not typed, the project file as a sentence shows it, so the sentence
  * for an unknown name says where it came from.
  */
-export function findServer(profile: Profile, name: string | undefined, from?: string): Server {
+export function findServer(
+  profile: Profile,
+  name: string | undefined,
+  from?: string
+): Server {
   if (!name) throw new UsageError(MISSING_SERVER)
   const server = profile.servers.find((entry) => entry.name === name)
   if (!server) {
-    const known = profile.servers.map((entry) => entry.name).join(", ") || "none yet"
+    const known =
+      profile.servers.map((entry) => entry.name).join(", ") || "none yet"
     // A name read from a file is held to the server-name pattern before it gets here.
-    if (from !== undefined) throw new CliError(`${from} names a server "${name}" that is not connected to this machine. Connected servers: ${known}.`)
-    throw new CliError(`No server named "${name}". Connected servers: ${known}.`)
+    if (from !== undefined)
+      throw new CliError(
+        `${from} names a server "${name}" that is not connected to this machine. Connected servers: ${known}.`
+      )
+    throw new CliError(
+      `No server named "${name}". Connected servers: ${known}.`
+    )
   }
   return server
 }

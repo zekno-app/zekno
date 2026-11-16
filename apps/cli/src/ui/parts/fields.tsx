@@ -3,7 +3,13 @@ import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
 /** Faint labels and their values, one pair to a line, as the boards' details lists. */
-export function Fields({ rows, labelWidth }: { rows: readonly (readonly [label: string, value: ReactNode])[]; labelWidth: number }) {
+export function Fields({
+  rows,
+  labelWidth,
+}: {
+  rows: readonly (readonly [label: string, value: ReactNode])[]
+  labelWidth: number
+}) {
   return (
     <Box flexDirection="column">
       {rows.map(([label, value]) => (

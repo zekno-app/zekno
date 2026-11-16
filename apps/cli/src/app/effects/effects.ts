@@ -52,7 +52,10 @@ export type Effects = {
    * `secret-saved`, or why not with `secret-refused`. The value goes to the
    * secret operation and nowhere else: not into an event, a line or the state.
    */
-  saveSecret(where: { server: string; app: string; name: string }, value: string): Promise<void>
+  saveSecret(
+    where: { server: string; app: string; name: string },
+    value: string
+  ): Promise<void>
   /**
    * The app is closing: the logs being followed are let go, nothing more is
    * read in the background, and every kept session is closed. Resolves once
@@ -99,7 +102,12 @@ export function createEffects(
           void perform(async () => {
             const { team, server } = await locateServer(ops, effect.server)
             remember(team)
-            dispatch({ type: "app-view", server: server.name, app: effect.app, ...appDetails(team, server, effect.app) })
+            dispatch({
+              type: "app-view",
+              server: server.name,
+              app: effect.app,
+              ...appDetails(team, server, effect.app),
+            })
             // A screen that opens reads what is running (contracts/app.md, "Refresh"), in the background.
             if (!context.closed) await servers.readInBackground(team, server)
           })
@@ -127,7 +135,12 @@ export function createEffects(
           void adding.add(effect).catch((error: unknown) => {
             const reason = reasonOf(error)
             if (reason === undefined) fail(error)
-            else dispatch({ type: "failed", notice: { tone: "error", text: reason }, from: "add-server" })
+            else
+              dispatch({
+                type: "failed",
+                notice: { tone: "error", text: reason },
+                from: "add-server",
+              })
           })
           return
         case "update-runner":

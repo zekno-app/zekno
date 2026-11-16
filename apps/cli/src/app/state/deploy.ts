@@ -12,10 +12,19 @@ import type { DeployProgress } from "../../shared/deploy"
 import { DEPLOY_LINES, type Screen, type State } from "./types"
 
 /** The deploy screen's one key of its own: `o` shows or hides Docker's output. */
-export const onDeploy = (state: State, screen: Extract<Screen, { name: "deploy" }>, key: AppKey): Step | undefined =>
-  isText(key, "o") ? stay(replaceTop(state, { ...screen, output: !screen.output })) : undefined
+export const onDeploy = (
+  state: State,
+  screen: Extract<Screen, { name: "deploy" }>,
+  key: AppKey
+): Step | undefined =>
+  isText(key, "o")
+    ? stay(replaceTop(state, { ...screen, output: !screen.output }))
+    : undefined
 
-export function deployStarted(state: State, event: EventOf<"deploy-started">): Step {
+export function deployStarted(
+  state: State,
+  event: EventOf<"deploy-started">
+): Step {
   const deploy: DeployProgress = {
     server: event.server,
     app: event.app,
@@ -29,25 +38,59 @@ export function deployStarted(state: State, event: EventOf<"deploy-started">): S
   return push({ ...state, deploy }, { name: "deploy", output: false })
 }
 
-export function deployStage(state: State, event: EventOf<"deploy-stage">): Step {
+export function deployStage(
+  state: State,
+  event: EventOf<"deploy-stage">
+): Step {
   if (!state.deploy) return stay(state)
-  return stay({ ...state, deploy: { ...state.deploy, stage: event.stage, sequence: event.sequence, secrets: event.secrets } })
+  return stay({
+    ...state,
+    deploy: {
+      ...state.deploy,
+      stage: event.stage,
+      sequence: event.sequence,
+      secrets: event.secrets,
+    },
+  })
 }
 
-export function deployProgress(state: State, event: EventOf<"deploy-progress">): Step {
+export function deployProgress(
+  state: State,
+  event: EventOf<"deploy-progress">
+): Step {
   if (!state.deploy) return stay(state)
-  return stay({ ...state, deploy: { ...state.deploy, lines: keep(state.deploy.lines, event.lines, DEPLOY_LINES) } })
+  return stay({
+    ...state,
+    deploy: {
+      ...state.deploy,
+      lines: keep(state.deploy.lines, event.lines, DEPLOY_LINES),
+    },
+  })
 }
 
-export function deployEnded(state: State, event: EventOf<"deploy-ended">): Step {
+export function deployEnded(
+  state: State,
+  event: EventOf<"deploy-ended">
+): Step {
   if (!state.deploy) return stay(state)
   const { server, app, sequence } = state.deploy
-  const deploy = { ...state.deploy, running: false, outcome: event.outcome, endedAt: event.at, result: event.notice }
+  const deploy = {
+    ...state.deploy,
+    running: false,
+    outcome: event.outcome,
+    endedAt: event.at,
+    result: event.notice,
+  }
   // The runner just said it accepted this deploy, whether or not the app started.
   const accepted =
-    sequence !== undefined && (event.outcome === "started" || event.outcome === "start_failed")
-      ? withAppRows(state, server, (row) => (row.name === app ? { ...row, accepted: sequence } : row))
+    sequence !== undefined &&
+    (event.outcome === "started" || event.outcome === "start_failed")
+      ? withAppRows(state, server, (row) =>
+          row.name === app ? { ...row, accepted: sequence } : row
+        )
       : state
   const ended = { ...accepted, deploy, notice: event.notice }
-  return ended.quitting ? go({ ...ended, exiting: true }, { kind: "exit" }) : stay(ended)
+  return ended.quitting
+    ? go({ ...ended, exiting: true }, { kind: "exit" })
+    : stay(ended)
 }

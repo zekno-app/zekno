@@ -4,7 +4,15 @@
  * it when the app closes, and restores the terminal on every way out: `q`,
  * Ctrl-C, an error inside the app, and a signal.
  */
-import { Box, render, Text, useApp, useInput, useWindowSize, type Instance } from "ink"
+import {
+  Box,
+  render,
+  Text,
+  useApp,
+  useInput,
+  useWindowSize,
+  type Instance,
+} from "ink"
 import { constants } from "node:os"
 import { useEffect, useRef, useSyncExternalStore } from "react"
 
@@ -17,7 +25,12 @@ import { emptyHiddenValue, hiddenPromptKey } from "./hidden-prompt"
 import { toAppKey } from "./keys"
 import { AddServerScreen } from "./screens/add-server"
 import { AppScreen } from "./screens/app"
-import { DeployElsewhereScreen, DeployScreen, RememberFolderScreen, UseLinkScreen } from "./screens/deploy"
+import {
+  DeployElsewhereScreen,
+  DeployScreen,
+  RememberFolderScreen,
+  UseLinkScreen,
+} from "./screens/deploy"
 import { HelpScreen } from "./screens/help"
 import { HomeScreen } from "./screens/home/home"
 import { LogsScreen } from "./screens/logs"
@@ -54,7 +67,10 @@ export type Store = ReturnType<typeof createStore>
 /** The line above the key hints: waiting for a deploy before closing, or a line about something done elsewhere. */
 function Status({ state }: { state: State }) {
   if (state.quitting) {
-    const which = state.deploy?.sequence === undefined ? "the deploy" : `deploy ${state.deploy.sequence}`
+    const which =
+      state.deploy?.sequence === undefined
+        ? "the deploy"
+        : `deploy ${state.deploy.sequence}`
     return (
       <Text>
         <Spinner /> waiting for {which} to finish
@@ -65,48 +81,139 @@ function Status({ state }: { state: State }) {
 }
 
 /** The screen on top of the stack, or the "too small" message in its place. */
-export function Screen({ state, columns, rows }: { state: State; columns: number; rows: number }) {
-  if (columns < MIN_COLUMNS || rows < MIN_ROWS) return <TooSmall columns={columns} rows={rows} />
+export function Screen({
+  state,
+  columns,
+  rows,
+}: {
+  state: State
+  columns: number
+  rows: number
+}) {
+  if (columns < MIN_COLUMNS || rows < MIN_ROWS)
+    return <TooSmall columns={columns} rows={rows} />
   const screen = top(state)
   const status = <Status state={state} />
   // Asked when a deploy's plan reaches it, which is a moment after `d`: shown over whatever screen is open by then.
   if (state.question?.kind === "remember-folder" && !hiddenPromptOpen(state)) {
-    return <RememberFolderScreen question={state.question} columns={columns} status={status} />
+    return (
+      <RememberFolderScreen
+        question={state.question}
+        columns={columns}
+        status={status}
+      />
+    )
   }
   // Asked the same way, over Home or the app screen, where `d` was pressed.
   if (state.question?.kind === "deploy-elsewhere" && !hiddenPromptOpen(state)) {
-    return <DeployElsewhereScreen question={state.question} columns={columns} status={status} />
+    return (
+      <DeployElsewhereScreen
+        question={state.question}
+        columns={columns}
+        status={status}
+      />
+    )
   }
   // Asked over Home as the app opens in a folder whose zekno.json, signed by the team, was not used here before.
   if (state.question?.kind === "use-link" && !hiddenPromptOpen(state)) {
-    return <UseLinkScreen question={state.question} columns={columns} status={status} />
+    return (
+      <UseLinkScreen
+        question={state.question}
+        columns={columns}
+        status={status}
+      />
+    )
   }
   switch (screen.name) {
     case "home":
-      return <HomeScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
+      return (
+        <HomeScreen
+          state={state}
+          screen={screen}
+          columns={columns}
+          rows={rows}
+          status={status}
+        />
+      )
     case "app":
-      return <AppScreen state={state} screen={screen} columns={columns} status={status} />
+      return (
+        <AppScreen
+          state={state}
+          screen={screen}
+          columns={columns}
+          status={status}
+        />
+      )
     case "deploy":
-      return <DeployScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
+      return (
+        <DeployScreen
+          state={state}
+          screen={screen}
+          columns={columns}
+          rows={rows}
+          status={status}
+        />
+      )
     case "set-secret":
-      return <SetSecretScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
+      return (
+        <SetSecretScreen
+          state={state}
+          screen={screen}
+          columns={columns}
+          rows={rows}
+          status={status}
+        />
+      )
     case "welcome":
-      return <WelcomeScreen screen={screen} columns={columns} rows={rows} status={status} />
+      return (
+        <WelcomeScreen
+          screen={screen}
+          columns={columns}
+          rows={rows}
+          status={status}
+        />
+      )
     case "add-server":
-      return <AddServerScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
+      return (
+        <AddServerScreen
+          state={state}
+          screen={screen}
+          columns={columns}
+          rows={rows}
+          status={status}
+        />
+      )
     case "logs":
-      return <LogsScreen state={state} screen={screen} columns={columns} rows={rows} status={status} />
+      return (
+        <LogsScreen
+          state={state}
+          screen={screen}
+          columns={columns}
+          rows={rows}
+          status={status}
+        />
+      )
     case "help":
       return <HelpScreen columns={columns} status={status} />
     case "profile-error":
-      return <ProfileErrorScreen reason={screen.reason} folder={screen.folder} />
+      return (
+        <ProfileErrorScreen reason={screen.reason} folder={screen.folder} />
+      )
     default:
       return <Placeholder state={state} screen={screen} status={status} />
   }
 }
 
 /** The whole window: one column of margin each side, and the screen. */
-export function AppView({ state, columns, rows }: { state: State; columns: number; rows: number }) {
+export function AppView({
+  state,
+  columns,
+  rows,
+}: {
+  state: State
+  columns: number
+  rows: number
+}) {
   return (
     <Box flexDirection="column" width={columns} height={rows} paddingX={1}>
       <Screen state={state} columns={columns} rows={rows} />
@@ -117,7 +224,8 @@ export function AppView({ state, columns, rows }: { state: State; columns: numbe
 type Suspend = ReturnType<typeof useApp>["suspendTerminal"]
 
 /** Said on the normal screen when a line typed for SSH reached zekno instead. */
-export const RETYPE = "That line reached zekno instead of SSH, and zekno threw it away. Type it again."
+export const RETYPE =
+  "That line reached zekno instead of SSH, and zekno threw it away. Type it again."
 
 /**
  * The terminal as the effects hand it to SSH (hand-over.ts): Ink's own
@@ -166,12 +274,23 @@ function discardInput(stdin: NodeJS.ReadStream): void {
   }
 }
 
-function App({ store, effects, register }: { store: Store; effects: Effects; register: (suspend: Suspend) => void }) {
+function App({
+  store,
+  effects,
+  register,
+}: {
+  store: Store
+  effects: Effects
+  register: (suspend: Suspend) => void
+}) {
   const state = useSyncExternalStore(store.subscribe, store.get)
   const { suspendTerminal } = useApp()
   useEffect(() => register(suspendTerminal), [register, suspendTerminal])
   const { columns, rows } = useWindowSize()
-  useEffect(() => store.dispatch({ type: "resize", columns, rows }), [store, columns, rows])
+  useEffect(
+    () => store.dispatch({ type: "resize", columns, rows }),
+    [store, columns, rows]
+  )
   // The value being typed at the hidden prompt: in this ref only, never in the state (hidden-prompt.ts).
   const hidden = useRef(emptyHiddenValue())
   const prompting = hiddenPromptOpen(state)
@@ -184,7 +303,14 @@ function App({ store, effects, register }: { store: Store; effects: Effects; reg
     // off when the prompt is drawn. Below 80 by 24 the prompt cannot be seen and
     // takes nothing; only quitting works then.
     if (hiddenPromptOpen(current) && !tooSmall(current)) {
-      hiddenPromptKey(hidden.current, input, key, current, store.dispatch, effects.saveSecret)
+      hiddenPromptKey(
+        hidden.current,
+        input,
+        key,
+        current,
+        store.dispatch,
+        effects.saveSecret
+      )
       return
     }
     const appKey = toAppKey(input, key)
@@ -246,11 +372,26 @@ export function openApp(deps: AppDeps, options: AppOptions): Promise<number> {
 
   // Connections over SSH are made in batch mode first; the terminal goes to SSH only when it has to ask.
   const handOver = inkTerminal(stdin, stdout)
-  const effects = createEffects(deps, (event) => store.dispatch(event), fail, handOver.terminal, {}, options.start)
-  const size = { columns: stdout.columns || MIN_COLUMNS, rows: stdout.rows || MIN_ROWS }
-  const store = createStore(initialState(options.start, size), (effect) => (effect.kind === "exit" ? close() : effects.run(effect)))
+  const effects = createEffects(
+    deps,
+    (event) => store.dispatch(event),
+    fail,
+    handOver.terminal,
+    {},
+    options.start
+  )
+  const size = {
+    columns: stdout.columns || MIN_COLUMNS,
+    rows: stdout.rows || MIN_ROWS,
+  }
+  const store = createStore(initialState(options.start, size), (effect) =>
+    effect.kind === "exit" ? close() : effects.run(effect)
+  )
   // Every few seconds the reducer decides whether what is running is read again: only on Home or the app screen, with no question open.
-  const refresher = setInterval(() => store.dispatch({ type: "tick" }), options.refreshMs ?? REFRESH_MS)
+  const refresher = setInterval(
+    () => store.dispatch({ type: "tick" }),
+    options.refreshMs ?? REFRESH_MS
+  )
 
   for (const signal of SIGNALS) process.on(signal, onSignal)
   process.on("uncaughtException", onCrash)

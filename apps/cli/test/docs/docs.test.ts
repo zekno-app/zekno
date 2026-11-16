@@ -37,7 +37,8 @@ function commandsOf(help: string): Map<string, Set<string>> {
       words.push(token)
     }
     const flags = commands.get(words.join(" ")) ?? new Set<string>()
-    for (const match of usage.matchAll(/(?<=^|[\s[])(--?[a-z][a-z-]*)/g)) flags.add(match[1]!)
+    for (const match of usage.matchAll(/(?<=^|[\s[])(--?[a-z][a-z-]*)/g))
+      flags.add(match[1]!)
     commands.set(words.join(" "), flags)
   }
   return commands
@@ -52,7 +53,8 @@ function keyColumn(markdown: string): string[] {
   // The row after the header is the line under it.
   for (const line of lines.slice(header + 2)) {
     if (!line.startsWith("|")) break
-    for (const match of (line.split("|")[1] ?? "").matchAll(/`([^`]+)`/g)) keys.push(match[1]!)
+    for (const match of (line.split("|")[1] ?? "").matchAll(/`([^`]+)`/g))
+      keys.push(match[1]!)
   }
   return keys
 }
@@ -70,7 +72,8 @@ function codeOf(markdown: string): string[] {
       continue
     }
     if (fenced) pieces.push(line.replace(/(^|\s)#.*$/, ""))
-    else for (const match of line.matchAll(/`([^`\n]+)`/g)) pieces.push(match[1]!)
+    else
+      for (const match of line.matchAll(/`([^`\n]+)`/g)) pieces.push(match[1]!)
   }
   return pieces.map((piece) => piece.replace(/\\\|/g, "|"))
 }
@@ -94,19 +97,30 @@ type Invocation = { text: string; words: string[]; flags: string[] }
  */
 function invocationsIn(code: string): Invocation[] {
   const plain = code.replace(/<[^<>\n]*>/g, "VALUE").replace(/[[\]]/g, " ")
-  return [...plain.matchAll(/(?:^\s*\(?|[|;]\s*\(?|&&\s*\(?|\$\(?)\s*zekno(?=\s|$)([^|;&<>]*)/g)].map((match) => {
+  return [
+    ...plain.matchAll(
+      /(?:^\s*\(?|[|;]\s*\(?|&&\s*\(?|\$\(?)\s*zekno(?=\s|$)([^|;&<>]*)/g
+    ),
+  ].map((match) => {
     const tokens = match[1]!.trim() === "" ? [] : match[1]!.trim().split(/\s+/)
     const words: string[] = []
     for (const token of tokens) {
       if (!/^[a-z]+$/.test(token)) break
       words.push(token)
     }
-    return { text: `zekno ${tokens.join(" ")}`.trim(), words, flags: tokens.filter((token) => /^--?[a-z][a-z-]*$/.test(token)) }
+    return {
+      text: `zekno ${tokens.join(" ")}`.trim(),
+      words,
+      flags: tokens.filter((token) => /^--?[a-z][a-z-]*$/.test(token)),
+    }
   })
 }
 
 /** The command an invocation runs: the longest run of its first words that is a command of the help. */
-function commandOf(invocation: Invocation, commands: Map<string, Set<string>>): string | undefined {
+function commandOf(
+  invocation: Invocation,
+  commands: Map<string, Set<string>>
+): string | undefined {
   for (let count = invocation.words.length; count > 0; count--) {
     const words = invocation.words.slice(0, count).join(" ")
     if (commands.has(words)) return words
@@ -116,7 +130,9 @@ function commandOf(invocation: Invocation, commands: Map<string, Set<string>>): 
 
 /** A flag as a whole token: `-f` is not the start of `--force`. */
 const names = (text: string, flag: string): boolean =>
-  new RegExp(`(?<![\\w-])${flag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`).test(text)
+  new RegExp(
+    `(?<![\\w-])${flag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`
+  ).test(text)
 
 /**
  * The ways of asking for the help that the help does not list itself. The
@@ -126,7 +142,9 @@ const HELP_FLAGS = ["--help", "-h"]
 const HELP_WORD = "help"
 
 /** Runs one command with nothing behind it: no profile, no keychain entry, no connection. */
-async function runAlone(argv: string[]): Promise<{ code: number; out: string[] }> {
+async function runAlone(
+  argv: string[]
+): Promise<{ code: number; out: string[] }> {
   const out: string[] = []
   const deps: Deps = {
     home: join(import.meta.dir, "no-profile-here"),
@@ -145,7 +163,9 @@ async function runAlone(argv: string[]): Promise<{ code: number; out: string[] }
 }
 
 const COMMANDS = commandsOf(HELP)
-const FLAGS = [...new Set([...COMMANDS.values()].flatMap((flags) => [...flags]))]
+const FLAGS = [
+  ...new Set([...COMMANDS.values()].flatMap((flags) => [...flags])),
+]
 const KEYS = keyColumn(read(CONTRACT))
 /** The flags `zekno` alone may take: the help's own, and those of a usage line with no command words, such as `zekno --version [--json]`. */
 const ALONE_FLAGS = [...HELP_FLAGS, ...(COMMANDS.get("") ?? [])]
@@ -173,7 +193,9 @@ describe.each(DOCS)("%s", (file) => {
 
   test("names every command and every flag of the help", () => {
     const missing = [
-      ...[...COMMANDS.keys()].filter((command) => !text.includes(`zekno ${command}`)).map((command) => `zekno ${command}`),
+      ...[...COMMANDS.keys()]
+        .filter((command) => !text.includes(`zekno ${command}`))
+        .map((command) => `zekno ${command}`),
       ...FLAGS.filter((flag) => !names(text, flag)),
     ]
     expect(missing.map((name) => `${file} does not name ${name}`)).toEqual([])
@@ -181,25 +203,43 @@ describe.each(DOCS)("%s", (file) => {
 
   test(`names every key of ${CONTRACT}`, () => {
     const missing = KEYS.filter((key) => !text.includes(`\`${key}\``))
-    expect(missing.map((key) => `${file} does not name the key ${key}`)).toEqual([])
+    expect(
+      missing.map((key) => `${file} does not name the key ${key}`)
+    ).toEqual([])
   })
 
   test("every zekno command it names is a command of the CLI, with flags that command takes", () => {
     const wrong: string[] = []
     for (const invocation of codeOf(text).flatMap(invocationsIn)) {
-      if (invocation.words.length === 0 || (invocation.words.length === 1 && invocation.words[0] === HELP_WORD)) {
+      if (
+        invocation.words.length === 0 ||
+        (invocation.words.length === 1 && invocation.words[0] === HELP_WORD)
+      ) {
         // `zekno` alone opens the app; with only a help flag, or as `zekno help`, it prints the help; `zekno --version` prints the versions.
-        const extra = invocation.flags.filter((flag) => !ALONE_FLAGS.includes(flag))
-        if (extra.length > 0) wrong.push(`${file} names \`${invocation.text}\`, but ${extra.join(", ")} is not a flag of \`zekno\` alone`)
+        const extra = invocation.flags.filter(
+          (flag) => !ALONE_FLAGS.includes(flag)
+        )
+        if (extra.length > 0)
+          wrong.push(
+            `${file} names \`${invocation.text}\`, but ${extra.join(", ")} is not a flag of \`zekno\` alone`
+          )
         continue
       }
       const command = commandOf(invocation, COMMANDS)
       if (command === undefined) {
-        wrong.push(`${file} names \`${invocation.text}\`, which is not a command of the CLI`)
+        wrong.push(
+          `${file} names \`${invocation.text}\`, which is not a command of the CLI`
+        )
         continue
       }
-      const extra = invocation.flags.filter((flag) => !COMMANDS.get(command)!.has(flag) && !HELP_FLAGS.includes(flag))
-      if (extra.length > 0) wrong.push(`${file} names \`${invocation.text}\`, but \`zekno ${command}\` does not take ${extra.join(", ")}`)
+      const extra = invocation.flags.filter(
+        (flag) =>
+          !COMMANDS.get(command)!.has(flag) && !HELP_FLAGS.includes(flag)
+      )
+      if (extra.length > 0)
+        wrong.push(
+          `${file} names \`${invocation.text}\`, but \`zekno ${command}\` does not take ${extra.join(", ")}`
+        )
     }
     expect(wrong).toEqual([])
   })
@@ -207,6 +247,12 @@ describe.each(DOCS)("%s", (file) => {
   test(`every key in its key table is a key of ${CONTRACT}`, () => {
     const listed = keyColumn(text)
     expect(listed.length).toBeGreaterThan(0)
-    expect(listed.filter((key) => !KEYS.includes(key)).map((key) => `${file} lists the key ${key}, which the app does not have`)).toEqual([])
+    expect(
+      listed
+        .filter((key) => !KEYS.includes(key))
+        .map(
+          (key) => `${file} lists the key ${key}, which the app does not have`
+        )
+    ).toEqual([])
   })
 })

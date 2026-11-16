@@ -14,7 +14,10 @@ import { RUNNER_VERSION_PATTERN } from "@workspace/core"
 import cli from "../../package.json"
 import { plainCell, quiet, type Cell } from "../ui/types"
 
-if (typeof cli.version !== "string" || !RUNNER_VERSION_PATTERN.test(cli.version)) {
+if (
+  typeof cli.version !== "string" ||
+  !RUNNER_VERSION_PATTERN.test(cli.version)
+) {
   throw new Error("apps/cli/package.json has a version zekno does not read.")
 }
 
@@ -23,7 +26,10 @@ export const CLI_VERSION: string = cli.version
 
 /** The two lines of `zekno --version` (mock-up 6): this zekno, and the runner release it installs. */
 export function versionLines(runner: string): [string, string] {
-  return [`zekno ${CLI_VERSION}`, `runner ${runner}, the runner release this zekno installs`]
+  return [
+    `zekno ${CLI_VERSION}`,
+    `runner ${runner}, the runner release this zekno installs`,
+  ]
 }
 
 /**
@@ -32,10 +38,19 @@ export function versionLines(runner: string): [string, string] {
  * after the runner's version on, that comma included.
  */
 export function versionCells(runner: string): [Cell[], Cell[]] {
-  return [[plainCell(`zekno ${CLI_VERSION}`)], [plainCell(`runner ${runner}`), { ...quiet(", the runner release this zekno installs"), tight: true }]]
+  return [
+    [plainCell(`zekno ${CLI_VERSION}`)],
+    [
+      plainCell(`runner ${runner}`),
+      { ...quiet(", the runner release this zekno installs"), tight: true },
+    ],
+  ]
 }
 
 /** The same, as one object for `--json`. */
-export function versionObject(runner: string): { zekno: string; runner: string } {
+export function versionObject(runner: string): {
+  zekno: string
+  runner: string
+} {
   return { zekno: CLI_VERSION, runner }
 }

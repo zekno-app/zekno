@@ -65,7 +65,8 @@ async function main(): Promise<number> {
     result = status(dir)
   } else {
     const input = await readInput()
-    if (input === undefined) result = { outcome: "refused", reason: "invalid_request" }
+    if (input === undefined)
+      result = { outcome: "refused", reason: "invalid_request" }
     else if (command === "setup") result = setup(dir, input)
     else if (command === "sync") result = await sync(dir, input)
     else result = await apply(dir, input)

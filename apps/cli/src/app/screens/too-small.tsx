@@ -32,7 +32,9 @@ export function TooSmall({ columns, rows }: { columns: number; rows: number }) {
           </Text>
         </Box>
       </Box>
-      <Text dimColor>Make the window larger and the app comes back where you were.</Text>
+      <Text dimColor>
+        Make the window larger and the app comes back where you were.
+      </Text>
       <KeyHints hints={[["q", "quit"]]} />
     </Box>
   )

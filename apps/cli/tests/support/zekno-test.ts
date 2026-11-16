@@ -23,18 +23,34 @@ import { RUNNER_MAIN } from "../../../runner/test/support/helpers"
 import { run } from "../../src/cli/cli"
 import type { OpDeps } from "../../src/cli/context"
 import { CliError } from "../../src/cli/errors"
-import { RUNNER_RELEASE, type RunnerRelease } from "../../src/version/runner-release"
+import {
+  RUNNER_RELEASE,
+  type RunnerRelease,
+} from "../../src/version/runner-release"
 import { connect, type Target } from "../../src/server/transport"
 import { processPlainUi, wantsPlain } from "../../src/ui/plain/plain"
 import { fileKeyStore } from "./file-keystore"
 
 /** Names of programs that reach the network. Only the stand-in `ssh` is ever started. */
-const NETWORK_TOOLS = new Set(["ssh", "scp", "sftp", "slogin", "rsh", "telnet", "nc", "ncat", "curl", "wget"])
+const NETWORK_TOOLS = new Set([
+  "ssh",
+  "scp",
+  "sftp",
+  "slogin",
+  "rsh",
+  "telnet",
+  "nc",
+  "ncat",
+  "curl",
+  "wget",
+])
 
 function required(name: string): string {
   const value = process.env[name]
   if (!value) {
-    console.error(`zekno-test: ${name} is not set. This build runs only inside the end-to-end tests.`)
+    console.error(
+      `zekno-test: ${name} is not set. This build runs only inside the end-to-end tests.`
+    )
     process.exit(70)
   }
   return value
@@ -50,12 +66,15 @@ const releaseSha = process.env.ZEKNO_E2E_RELEASE_SHA
 
 // Never a real home or profile: both must be inside a test's temporary folder.
 if (!testHome.includes("/zekno-e2e-") || !home.startsWith(`${testHome}/`)) {
-  console.error("zekno-test: HOME and ZEKNO_HOME must be a test's temporary folders.")
+  console.error(
+    "zekno-test: HOME and ZEKNO_HOME must be a test's temporary folders."
+  )
   process.exit(70)
 }
 
 /** Notes each process this build starts, by program name only, for the tests to count. */
-const note = (entry: Record<string, string>) => appendFileSync(spawns, `${JSON.stringify(entry)}\n`)
+const note = (entry: Record<string, string>) =>
+  appendFileSync(spawns, `${JSON.stringify(entry)}\n`)
 
 /**
  * Every process this build starts passes through here. `ssh` becomes the
@@ -66,7 +85,9 @@ const note = (entry: Record<string, string>) => appendFileSync(spawns, `${JSON.s
 function guardSpawn(): void {
   const spawn = Bun.spawn.bind(Bun) as (...args: unknown[]) => unknown
   const guarded = (...args: unknown[]) => {
-    const argv = Array.isArray(args[0]) ? (args[0] as string[]) : ((args[0] as { cmd: string[] }).cmd ?? [])
+    const argv = Array.isArray(args[0])
+      ? (args[0] as string[])
+      : ((args[0] as { cmd: string[] }).cmd ?? [])
     const program = argv[0] ?? ""
     const name = basename(program)
     if (standInSsh && program === standInSsh) {
@@ -100,17 +121,29 @@ guardSpawn()
  * does, over SSH only through the stand-in (guardSpawn), and with no stand-in
  * not at all.
  */
-function testConnect(target: Target, localRunner: string[], options?: Parameters<typeof connect>[2]) {
+function testConnect(
+  target: Target,
+  localRunner: string[],
+  options?: Parameters<typeof connect>[2]
+) {
   if (target.kind === "ssh" && !standInSsh) {
     note({ program: "ssh", ran: "refused" })
-    throw new CliError(`This test has no SSH stand-in, so ${target.destination} cannot be reached.`)
+    throw new CliError(
+      `This test has no SSH stand-in, so ${target.destination} cannot be reached.`
+    )
   }
   return connect(target, localRunner, options)
 }
 
 /** The stand-in server's runner: the version this zekno carries, with the checksum of the file the stand-in serves. */
 const release: RunnerRelease | undefined = releaseSha
-  ? { version: RUNNER_RELEASE.version, files: { "linux-x64": { sha256: releaseSha }, "linux-arm64": { sha256: null } } }
+  ? {
+      version: RUNNER_RELEASE.version,
+      files: {
+        "linux-x64": { sha256: releaseSha },
+        "linux-arm64": { sha256: null },
+      },
+    }
   : undefined
 
 const deps: OpDeps = {
@@ -127,7 +160,9 @@ const argv = process.argv.slice(2)
 /** One command, as main.ts runs it: Ink at a terminal, plain lines when piped. */
 async function command(): Promise<number> {
   const plain = wantsPlain(argv, process.stdout, process.stdin)
-  const ui = plain ? processPlainUi() : (await import("../../src/ui/ink/ink")).inkUi()
+  const ui = plain
+    ? processPlainUi()
+    : (await import("../../src/ui/ink/ink")).inkUi()
   try {
     return await run(argv, { ...deps, ui })
   } finally {
@@ -138,7 +173,10 @@ async function command(): Promise<number> {
 /** The full-screen app, as main.ts opens it: the profile verified, then the terminal asked, then the first frame. */
 async function app(): Promise<number> {
   const { detectBackground } = await import("../../src/ui/terminal/background")
-  const [{ loadStart }, { openApp }] = await Promise.all([import("../../src/app/effects/profile"), import("../../src/app/app")])
+  const [{ loadStart }, { openApp }] = await Promise.all([
+    import("../../src/app/effects/profile"),
+    import("../../src/app/app"),
+  ])
   const start = await loadStart(deps)
   const background = await detectBackground()
   try {
@@ -150,5 +188,8 @@ async function app(): Promise<number> {
   }
 }
 
-const opensApp = argv.length === 0 && Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY)
+const opensApp =
+  argv.length === 0 &&
+  Boolean(process.stdin.isTTY) &&
+  Boolean(process.stdout.isTTY)
 process.exit(opensApp ? await app() : await command())

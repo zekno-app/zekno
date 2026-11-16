@@ -5,7 +5,17 @@
  * whether it is used is project.ts's.
  */
 import { EnvelopeSchema, type Envelope } from "@workspace/core"
-import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync, type Stats } from "node:fs"
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readdirSync,
+  readSync,
+  realpathSync,
+  type Stats,
+} from "node:fs"
 import { homedir } from "node:os"
 import { dirname, isAbsolute, join, resolve, sep } from "node:path"
 import { z } from "zod"
@@ -63,16 +73,26 @@ export type ProjectLink = {
 
 /** The sentence for what is wrong with a project file's content. It quotes field names only, cleaned. */
 function problemOf(issues: readonly z.core.$ZodIssue[]): string {
-  const unknown = issues.flatMap((issue) => (issue.code === "unrecognized_keys" && issue.path.length === 0 ? issue.keys : []))
+  const unknown = issues.flatMap((issue) =>
+    issue.code === "unrecognized_keys" && issue.path.length === 0
+      ? issue.keys
+      : []
+  )
   if (unknown.length > 0) {
-    const names = unknown.map((key) => `"${[...sanitize(key)].slice(0, 40).join("")}"`).join(", ")
+    const names = unknown
+      .map((key) => `"${[...sanitize(key)].slice(0, 40).join("")}"`)
+      .join(", ")
     return `has a field zekno does not read: ${names}. It holds only "app", "server", "compose" and "signed".`
   }
   const field = issues[0]?.path[0]
-  if (field === "app") return `needs "app": an app name of lowercase letters, digits and hyphens.`
-  if (field === "server") return `needs "server": a server name of lowercase letters, digits and hyphens.`
-  if (field === "compose") return `has a "compose" that is not a relative path inside its folder.`
-  if (field === "signed") return `has a "signed" that is not a signature zekno reads. Run \`zekno link --app <name> --server <name> --force\` to sign it again.`
+  if (field === "app")
+    return `needs "app": an app name of lowercase letters, digits and hyphens.`
+  if (field === "server")
+    return `needs "server": a server name of lowercase letters, digits and hyphens.`
+  if (field === "compose")
+    return `has a "compose" that is not a relative path inside its folder.`
+  if (field === "signed")
+    return `has a "signed" that is not a signature zekno reads. Run \`zekno link --app <name> --server <name> --force\` to sign it again.`
   return `is not a JSON object with an "app", a "server" and a "compose".`
 }
 
@@ -82,7 +102,8 @@ function ownedByMe(stat: Stats): boolean {
   return uid === undefined || stat.uid === uid
 }
 
-const linkSentence = (shown: string) => `${shown} is a symbolic link. zekno reads zekno.json only as a file of its own, never through a link.`
+const linkSentence = (shown: string) =>
+  `${shown} is a symbolic link. zekno reads zekno.json only as a file of its own, never through a link.`
 
 /**
  * Checks what is at a project file's path before anything is opened: a
@@ -94,7 +115,10 @@ const linkSentence = (shown: string) => `${shown} is a symbolic link. zekno read
 function checkEntry(stat: Stats, shown: string): void {
   if (stat.isSymbolicLink()) throw new CliError(linkSentence(shown))
   if (!stat.isFile()) throw new CliError(`${shown} is not a file.`)
-  if (!ownedByMe(stat)) throw new CliError(`${shown} belongs to another user, so zekno does not use it.`)
+  if (!ownedByMe(stat))
+    throw new CliError(
+      `${shown} belongs to another user, so zekno does not use it.`
+    )
 }
 
 /**
@@ -103,14 +127,21 @@ function checkEntry(stat: Stats, shown: string): void {
  * `PROJECT_BYTES`. What is parsed and what is compared with the accepted
  * list come from this one read.
  */
-function readText(path: string, shown: string): { text: string; sha256: string } {
+function readText(
+  path: string,
+  shown: string
+): { text: string; sha256: string } {
   let fd: number
   try {
     // No link is followed, and a pipe swapped in after the check cannot hold the read up.
-    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    fd = openSync(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+    )
   } catch (error) {
     // The file was replaced by a link after it was looked at.
-    if ((error as NodeJS.ErrnoException).code === "ELOOP") throw new CliError(linkSentence(shown))
+    if ((error as NodeJS.ErrnoException).code === "ELOOP")
+      throw new CliError(linkSentence(shown))
     throw new CliError(`${shown} could not be read.`)
   }
   try {
@@ -123,10 +154,16 @@ function readText(path: string, shown: string): { text: string; sha256: string }
       if (read === 0) break
       length += read
     }
-    if (length > PROJECT_BYTES) throw new CliError(`${shown} is larger than the ${PROJECT_BYTES} bytes a project file may have.`)
+    if (length > PROJECT_BYTES)
+      throw new CliError(
+        `${shown} is larger than the ${PROJECT_BYTES} bytes a project file may have.`
+      )
     const bytes = buffer.subarray(0, length)
     try {
-      return { text: new TextDecoder("utf-8", { fatal: true }).decode(bytes), sha256: sha256Of(bytes) }
+      return {
+        text: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+        sha256: sha256Of(bytes),
+      }
     } catch {
       throw new CliError(`${shown} is not valid JSON.`)
     }
@@ -182,7 +219,8 @@ export function objectKeys(text: string): string[] | undefined {
       space()
       if (text[at] === "{") {
         const inner = object(depth + 1)
-        if (inner === undefined || new Set(inner).size !== inner.length) return undefined
+        if (inner === undefined || new Set(inner).size !== inner.length)
+          return undefined
       } else if (string() === undefined) return undefined
       space()
       const next = text[at++]
@@ -208,12 +246,22 @@ function readProject(path: string, folder: string, entry: Stats): ProjectLink {
     throw new CliError(`${shown} is not valid JSON.`)
   }
   const parsed = ProjectSchema.safeParse(json)
-  if (!parsed.success) throw new CliError(`${shown} ${problemOf(parsed.error.issues)}`)
+  if (!parsed.success)
+    throw new CliError(`${shown} ${problemOf(parsed.error.issues)}`)
   // A field written twice is read as its last value, which someone reading the file from the top may not notice.
   const keys = objectKeys(text)
-  if (keys === undefined || new Set(keys).size !== keys.length) throw new CliError(`${shown} has the same field more than once.`)
+  if (keys === undefined || new Set(keys).size !== keys.length)
+    throw new CliError(`${shown} has the same field more than once.`)
   const { app, server, compose = DEFAULT_COMPOSE, signed } = parsed.data
-  return { app, server, compose, ...(signed === undefined ? {} : { signed }), folder, path, sha256 }
+  return {
+    app,
+    server,
+    compose,
+    ...(signed === undefined ? {} : { signed }),
+    folder,
+    path,
+    sha256,
+  }
 }
 
 /** A folder as it really is, with no link in its path; as given when that cannot be found out. */
@@ -233,7 +281,8 @@ function homesOf(home: string): string[] {
 }
 
 /** Whether `dir` holds `path` somewhere below it. */
-export const isAbove = (dir: string, path: string): boolean => dir !== path && path.startsWith(dir.endsWith(sep) ? dir : `${dir}${sep}`)
+export const isAbove = (dir: string, path: string): boolean =>
+  dir !== path && path.startsWith(dir.endsWith(sep) ? dir : `${dir}${sep}`)
 
 /**
  * Whether a folder's listing has a file named exactly zekno.json. On a file
@@ -258,9 +307,12 @@ function listedExactly(dir: string, shown: string): boolean {
  * malformed) is an error that names it. Whether this machine accepted it is
  * not decided here (`isAccepted`).
  */
-export function findProject(start: string, home = homedir()): ProjectLink | undefined {
+export function findProject(
+  start: string,
+  home = homedir()
+): ProjectLink | undefined {
   const homes = homesOf(home)
-  for (let dir = real(resolve(start)); ; ) {
+  for (let dir = real(resolve(start)); ;) {
     if (homes.some((folder) => isAbove(dir, folder))) return undefined
     const path = join(dir, PROJECT_FILE)
     let entry: Stats | undefined
@@ -270,7 +322,8 @@ export function findProject(start: string, home = homedir()): ProjectLink | unde
       // Not there, or a folder that cannot be looked into: nothing applies from it.
       entry = undefined
     }
-    if (entry && listedExactly(dir, shownPath(path))) return readProject(path, dir, entry)
+    if (entry && listedExactly(dir, shownPath(path)))
+      return readProject(path, dir, entry)
     const parent = dirname(dir)
     if (homes.includes(dir) || parent === dir) return undefined
     dir = parent
@@ -278,7 +331,11 @@ export function findProject(start: string, home = homedir()): ProjectLink | unde
 }
 
 /** Where zekno.json in `folder` is, as `findProject` and `links.json` name it: by its real path. */
-export const projectFileIn = (folder: string): string => join(real(resolve(folder)), PROJECT_FILE)
+export const projectFileIn = (folder: string): string =>
+  join(real(resolve(folder)), PROJECT_FILE)
 
 /** Whether a project file is in the folder a command runs in, `cwd`, rather than in one above it. */
-export const isHere = (link: Pick<ProjectLink, "folder">, cwd: string): boolean => link.folder === real(resolve(cwd))
+export const isHere = (
+  link: Pick<ProjectLink, "folder">,
+  cwd: string
+): boolean => link.folder === real(resolve(cwd))

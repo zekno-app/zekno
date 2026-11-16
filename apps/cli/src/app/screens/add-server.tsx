@@ -6,7 +6,14 @@ import { Panel } from "../../ui/parts/panel"
 import { StageMark, type StageState } from "../../ui/parts/stages"
 import { useTheme } from "../../ui/terminal/theme"
 import { Frame, Header, Trail } from "../frame"
-import { ADD_STEPS, LOCAL_ADD_STEPS, type AddProgress, type AddStepName, type Screen, type State } from "../state/types"
+import {
+  ADD_STEPS,
+  LOCAL_ADD_STEPS,
+  type AddProgress,
+  type AddStepName,
+  type Screen,
+  type State,
+} from "../state/types"
 import { lastLines } from "./deploy"
 import { HINTS } from "./placeholder"
 import { FirstRunSteps } from "./welcome"
@@ -22,38 +29,83 @@ const WIDE = 100
 const DONE_HINTS: readonly KeyHint[] = [["enter", "done"]]
 
 /** What each step is called before it starts, while it runs, and once done; the board shows one of each. */
-function wordsOf(step: AddStepName, name: string, local: boolean): { todo: string; doing: string; done: string; found?: string } {
+function wordsOf(
+  step: AddStepName,
+  name: string,
+  local: boolean
+): { todo: string; doing: string; done: string; found?: string } {
   switch (step) {
     case "connect":
       return local
-        ? { todo: "Start the runner on this machine", doing: "Starting the runner on this machine", done: "Runner started on this machine" }
-        : { todo: "Connect over SSH", doing: "Connecting over SSH", done: "Connected over SSH" }
+        ? {
+            todo: "Start the runner on this machine",
+            doing: "Starting the runner on this machine",
+            done: "Runner started on this machine",
+          }
+        : {
+            todo: "Connect over SSH",
+            doing: "Connecting over SSH",
+            done: "Connected over SSH",
+          }
     case "docker":
-      return { todo: "Find Docker with Compose", doing: "Looking for Docker with Compose", done: "Docker with Compose found" }
+      return {
+        todo: "Find Docker with Compose",
+        doing: "Looking for Docker with Compose",
+        done: "Docker with Compose found",
+      }
     case "runner":
-      return { todo: "Install the runner", doing: "Installing the runner", done: "Runner installed", found: "Runner found" }
+      return {
+        todo: "Install the runner",
+        doing: "Installing the runner",
+        done: "Runner installed",
+        found: "Runner found",
+      }
     case "set_up":
-      return { todo: "Set the runner up for your team", doing: "Setting the runner up for your team", done: "Runner set up for your team" }
+      return {
+        todo: "Set the runner up for your team",
+        doing: "Setting the runner up for your team",
+        done: "Runner set up for your team",
+      }
     case "added":
-      return { todo: `Add ${name} to the signed team list`, doing: `Adding ${name} to the signed team list`, done: `Added ${name} to the signed team list` }
+      return {
+        todo: `Add ${name} to the signed team list`,
+        doing: `Adding ${name} to the signed team list`,
+        done: `Added ${name} to the signed team list`,
+      }
   }
 }
 
 /** One row of the steps: its mark and words, and what was found on the right. */
-export type AddRow = { step: AddStepName; label: string; state: StageState; detail?: string }
+export type AddRow = {
+  step: AddStepName
+  label: string
+  state: StageState
+  detail?: string
+}
 
 /**
  * The steps as the board shows them: done with ✔ and what was found, the one
  * in progress with the spinner, the one it stopped at with ✖, the rest ○.
  */
-export function addRows(adding: AddProgress | undefined, name: string, local: boolean): AddRow[] {
+export function addRows(
+  adding: AddProgress | undefined,
+  name: string,
+  local: boolean
+): AddRow[] {
   const steps = local ? LOCAL_ADD_STEPS : ADD_STEPS
   let current = adding?.running === true
   return steps.map((step) => {
     const words = wordsOf(step, name || "the server", local)
     const ended = adding?.steps[step]
-    if (ended?.state === "done") return { step, label: ended.found && words.found ? words.found : words.done, state: "done", detail: ended.detail }
-    if (ended?.state === "failed") return { step, label: words.todo, state: "failed" }
+    if (ended?.state === "done")
+      return {
+        step,
+        label: ended.found && words.found ? words.found : words.done,
+        state: "done",
+        detail: ended.detail,
+      }
+    if (ended?.state === "failed")
+      return { step, label: words.todo, state: "failed" }
     if (current) {
       current = false
       return { step, label: words.doing, state: "active" }
@@ -65,10 +117,20 @@ export function addRows(adding: AddProgress | undefined, name: string, local: bo
 /** The destination and the name: answered with ✔, being asked with ? and the cursor, not asked yet ○. */
 function Answers({ screen }: { screen: AddServerState }) {
   const theme = useTheme()
-  const row = (label: string, value: string, state: "answered" | "asking" | "later") => (
+  const row = (
+    label: string,
+    value: string,
+    state: "answered" | "asking" | "later"
+  ) => (
     <Box key={label}>
       <Box width={2} flexShrink={0}>
-        {state === "answered" ? <Text color={theme.success}>✔</Text> : state === "asking" ? <Text color={theme.brand}>?</Text> : <Text dimColor>○</Text>}
+        {state === "answered" ? (
+          <Text color={theme.success}>✔</Text>
+        ) : state === "asking" ? (
+          <Text color={theme.brand}>?</Text>
+        ) : (
+          <Text dimColor>○</Text>
+        )}
       </Box>
       <Box width={LABEL_WIDTH} flexShrink={0}>
         <Text dimColor>{label}</Text>
@@ -80,7 +142,12 @@ function Answers({ screen }: { screen: AddServerState }) {
     </Box>
   )
   const destination = screen.step === "destination" ? "asking" : "answered"
-  const name = screen.step === "destination" ? "later" : screen.step === "name" ? "asking" : "answered"
+  const name =
+    screen.step === "destination"
+      ? "later"
+      : screen.step === "name"
+        ? "asking"
+        : "answered"
   return (
     <Box flexDirection="column" flexShrink={0}>
       {row("SSH destination", screen.destination, destination)}
@@ -97,7 +164,9 @@ function Steps({ rows, wide }: { rows: readonly AddRow[]; wide: boolean }) {
   return (
     <Box flexDirection="column" flexShrink={0}>
       {rows.map((row) => {
-        const stage = <StageMark stage={{ label: row.label, state: row.state }} />
+        const stage = (
+          <StageMark stage={{ label: row.label, state: row.state }} />
+        )
         if (!wide) {
           return (
             <Text key={row.step} wrap="truncate-end">
@@ -124,7 +193,19 @@ function Steps({ rows, wide }: { rows: readonly AddRow[]; wide: boolean }) {
 }
 
 /** A code in its own faint box: the code, or why it is not there yet, and what it identifies. */
-function CodePanel({ title, code, waiting, about, roomy }: { title: string; code?: string; waiting: string; about: string; roomy: boolean }) {
+function CodePanel({
+  title,
+  code,
+  waiting,
+  about,
+  roomy,
+}: {
+  title: string
+  code?: string
+  waiting: string
+  about: string
+  roomy: boolean
+}) {
   return (
     <Panel title={title} tone="quiet">
       <Box flexDirection="column" rowGap={roomy ? 1 : 0}>
@@ -136,7 +217,15 @@ function CodePanel({ title, code, waiting, about, roomy }: { title: string; code
 }
 
 /** The lines the server printed while it was added, the last that fit, cleaned when they arrived. */
-function Details({ lines, rows, width }: { lines: readonly string[]; rows: number; width: number }) {
+function Details({
+  lines,
+  rows,
+  width,
+}: {
+  lines: readonly string[]
+  rows: number
+  width: number
+}) {
   return (
     <Panel title="Details" tone="quiet">
       {lines.length === 0 ? (
@@ -194,31 +283,59 @@ export function AddServerScreen({
           : HINTS["add-server"]
   // As step 2 of first run the three steps are on the header's right, as on the board; narrower, they open the body.
   const steps = screen.firstRun ? <FirstRunSteps current={2} /> : null
-  const header = <Header place={<Trail parts={["add a server"]} />} {...(steps && wide ? { right: steps } : {})} />
+  const header = (
+    <Header
+      place={<Trail parts={["add a server"]} />}
+      {...(steps && wide ? { right: steps } : {})}
+    />
+  )
   // The app's margins, the body's padding and gap, the right-hand column, and a panel's border and padding.
   const detailWidth = columns - 2 - 2 - 3 - right - 4
-  const detailRows = Math.max(2, rows - 22 - (status ? 2 : 0) - (steps && !wide ? 2 : 0))
+  const detailRows = Math.max(
+    2,
+    rows - 22 - (status ? 2 : 0) - (steps && !wide ? 2 : 0)
+  )
   return (
     <Frame header={header} hints={hints} status={status}>
       <Box flexGrow={1} columnGap={3} paddingX={1}>
-        <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} rowGap={1}>
+        <Box
+          flexDirection="column"
+          flexGrow={1}
+          flexShrink={1}
+          flexBasis={0}
+          rowGap={1}
+        >
           {steps && !wide ? steps : null}
           <Answers screen={screen} />
-          <Steps rows={addRows(adding, screen.serverName.trim(), local)} wide={wide} />
+          <Steps
+            rows={addRows(adding, screen.serverName.trim(), local)}
+            wide={wide}
+          />
           {working && screen.output ? (
-            <Details lines={adding?.lines ?? []} rows={detailRows} width={detailWidth} />
+            <Details
+              lines={adding?.lines ?? []}
+              rows={detailRows}
+              width={detailWidth}
+            />
           ) : (
             <>
               <Box flexGrow={1} />
               {local ? null : (
                 <Text dimColor>
-                  You do not need to log in to the server. The runner is downloaded by the server itself and checked before it is installed.
+                  You do not need to log in to the server. The runner is
+                  downloaded by the server itself and checked before it is
+                  installed.
                 </Text>
               )}
             </>
           )}
         </Box>
-        <Box flexDirection="column" width={right} flexShrink={0} rowGap={wide ? 1 : 0}>
+        <Box
+          flexDirection="column"
+          width={right}
+          flexShrink={0}
+          rowGap={wide ? 1 : 0}
+        >
           <CodePanel
             title="Team code"
             code={state.team?.code}

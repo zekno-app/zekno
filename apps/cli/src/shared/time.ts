@@ -8,7 +8,20 @@ const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+]
 
 /** The moment `at` names, or undefined when it is not a time. */
 function parse(at: string): Date | undefined {
@@ -18,23 +31,29 @@ function parse(at: string): Date | undefined {
 
 /** Whole calendar days from `then` to `now`, in local time. Rounded, so a day of 23 or 25 hours still counts as one. */
 function calendarDays(then: Date, now: Date): number {
-  const start = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const start = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
   return Math.round((start(now) - start(then)) / DAY)
 }
 
 const two = (value: number) => String(value).padStart(2, "0")
-const clock = (date: Date) => `${two(date.getHours())}:${two(date.getMinutes())}`
+const clock = (date: Date) =>
+  `${two(date.getHours())}:${two(date.getMinutes())}`
 
 /** "3 Oct", or "3 Oct 2025" in another year. The month is spelled, so the order of day and month cannot be misread. */
 function day(date: Date, now: Date): string {
   const base = `${date.getDate()} ${MONTHS[date.getMonth()]}`
-  return date.getFullYear() === now.getFullYear() ? base : `${base} ${date.getFullYear()}`
+  return date.getFullYear() === now.getFullYear()
+    ? base
+    : `${base} ${date.getFullYear()}`
 }
 
-const plural = (count: number, unit: string) => `${count} ${unit}${count === 1 ? "" : "s"} ago`
+const plural = (count: number, unit: string) =>
+  `${count} ${unit}${count === 1 ? "" : "s"} ago`
 
 /** A time as Docker writes it in a log line: RFC 3339, with up to nine digits of fractions (LogEvent's pattern). */
-const LOG_TIME = /^(\d{4}-\d{2}-\d{2}T(\d{2}:\d{2}:\d{2}))(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/
+const LOG_TIME =
+  /^(\d{4}-\d{2}-\d{2}T(\d{2}:\d{2}:\d{2}))(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/
 
 /**
  * The time of a log line as the logs screen shows it: `21:52:03`, in this
@@ -52,7 +71,8 @@ export function logClock(time: string): string {
 }
 
 /** A length of time in seconds, to one decimal place: `6.1s`. */
-export const seconds = (ms: number): string => `${(Math.max(ms, 0) / 1000).toFixed(1)}s`
+export const seconds = (ms: number): string =>
+  `${(Math.max(ms, 0) / 1000).toFixed(1)}s`
 
 /**
  * How long ago, for the "when" column on Home: "just now", "2 min ago",
@@ -86,5 +106,7 @@ export function clockTime(at: string, now: Date): string {
   const days = calendarDays(then, now)
   if (days === 0) return `today ${clock(then)}`
   if (days === 1) return `yesterday ${clock(then)}`
-  return then.getFullYear() === now.getFullYear() ? `${day(then, now)} ${clock(then)}` : day(then, now)
+  return then.getFullYear() === now.getFullYear()
+    ? `${day(then, now)} ${clock(then)}`
+    : day(then, now)
 }

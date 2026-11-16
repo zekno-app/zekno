@@ -5,34 +5,65 @@ import { sanitize } from "../../src/server/sanitize"
 const ESC = "\x1b"
 
 /** True when nothing a terminal acts on is left: no control character and no invisible formatting. */
-const isSafe = (text: string) => !/[\x00-\x1f\x7f-\x9f\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/u.test(text)
+const isSafe = (text: string) =>
+  !/[\x00-\x1f\x7f-\x9f\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/u.test(text)
 
 describe("text from a server is drawn as text, never acted on", () => {
   test("colour and style codes are removed", () => {
-    expect(sanitize(`${ESC}[31mred${ESC}[0m and ${ESC}[1;38;2;255;0;0mbold${ESC}[m`)).toBe("red and bold")
+    expect(
+      sanitize(`${ESC}[31mred${ESC}[0m and ${ESC}[1;38;2;255;0;0mbold${ESC}[m`)
+    ).toBe("red and bold")
     expect(sanitize(`${ESC}[38;5;196mx${ESC}[39;49m`)).toBe("x")
   })
 
   test("cursor movement, clearing and scrolling are removed", () => {
-    for (const sequence of ["[2J", "[H", "[10A", "[3;7H", "[K", "[?25l", "[?1049h", "[>c", "[6n", "7", "8", "M", "c", "#8", "(0", "=", ">"]) {
+    for (const sequence of [
+      "[2J",
+      "[H",
+      "[10A",
+      "[3;7H",
+      "[K",
+      "[?25l",
+      "[?1049h",
+      "[>c",
+      "[6n",
+      "7",
+      "8",
+      "M",
+      "c",
+      "#8",
+      "(0",
+      "=",
+      ">",
+    ]) {
       expect(sanitize(`before${ESC}${sequence}after`)).toBe("beforeafter")
     }
   })
 
   test("an OSC 52 clipboard write is removed, with either terminator", () => {
     expect(sanitize(`ok${ESC}]52;c;ZXZpbCBjb21tYW5k\x07done`)).toBe("okdone")
-    expect(sanitize(`ok${ESC}]52;c;ZXZpbCBjb21tYW5k${ESC}\\done`)).toBe("okdone")
+    expect(sanitize(`ok${ESC}]52;c;ZXZpbCBjb21tYW5k${ESC}\\done`)).toBe(
+      "okdone"
+    )
   })
 
   test("a hyperlink keeps its visible text and loses where it points", () => {
-    expect(sanitize(`see ${ESC}]8;;https://evil.example/${ESC}\\the docs${ESC}]8;;${ESC}\\ now`)).toBe("see the docs now")
-    expect(sanitize(`${ESC}]8;;https://evil.example/\x07click${ESC}]8;;\x07`)).toBe("click")
+    expect(
+      sanitize(
+        `see ${ESC}]8;;https://evil.example/${ESC}\\the docs${ESC}]8;;${ESC}\\ now`
+      )
+    ).toBe("see the docs now")
+    expect(
+      sanitize(`${ESC}]8;;https://evil.example/\x07click${ESC}]8;;\x07`)
+    ).toBe("click")
   })
 
   test("a window title change and device control strings are removed", () => {
     expect(sanitize(`${ESC}]0;pwned\x07text`)).toBe("text")
     expect(sanitize(`${ESC}P1$r0m${ESC}\\text`)).toBe("text")
-    expect(sanitize(`${ESC}_app${ESC}\\${ESC}^pm${ESC}\\${ESC}Xsos${ESC}\\text`)).toBe("text")
+    expect(
+      sanitize(`${ESC}_app${ESC}\\${ESC}^pm${ESC}\\${ESC}Xsos${ESC}\\text`)
+    ).toBe("text")
   })
 
   test("a lone escape byte is removed", () => {
@@ -44,7 +75,20 @@ describe("text from a server is drawn as text, never acted on", () => {
   })
 
   test("half a sequence at the end of the text is removed, and nothing after it is invented", () => {
-    for (const cut of ["[", "[31", "[1;", "[?25", "]", "]8;;https://evil", "]52;c;Zm9v", "P", "P1$r", "(", "#", " "]) {
+    for (const cut of [
+      "[",
+      "[31",
+      "[1;",
+      "[?25",
+      "]",
+      "]8;;https://evil",
+      "]52;c;Zm9v",
+      "P",
+      "P1$r",
+      "(",
+      "#",
+      " ",
+    ]) {
       expect(sanitize(`kept${ESC}${cut}`)).toBe("kept")
     }
     expect(sanitize("kept\x9b")).toBe("kept")
@@ -77,10 +121,34 @@ describe("text from a server is drawn as text, never acted on", () => {
 
   test("bidirectional overrides and zero-width characters that could disguise text are removed", () => {
     expect(sanitize("access‮⁦level⁩‬")).toBe("accesslevel")
-    for (const hidden of ["‪", "‫", "‬", "‭", "‮", "⁦", "⁧", "⁨", "⁩", "‎", "‏", "؜"]) {
+    for (const hidden of [
+      "‪",
+      "‫",
+      "‬",
+      "‭",
+      "‮",
+      "⁦",
+      "⁧",
+      "⁨",
+      "⁩",
+      "‎",
+      "‏",
+      "؜",
+    ]) {
       expect(sanitize(`a${hidden}b`)).toBe("ab")
     }
-    for (const hidden of ["​", "‌", "‍", "⁠", "﻿", "­", " ", " ", "\u{e0041}", "\ud800"]) {
+    for (const hidden of [
+      "​",
+      "‌",
+      "‍",
+      "⁠",
+      "﻿",
+      "­",
+      " ",
+      " ",
+      "\u{e0041}",
+      "\ud800",
+    ]) {
       expect(sanitize(`a${hidden}b`)).toBe("ab")
     }
   })
@@ -116,11 +184,38 @@ describe("text from a server is drawn as text, never acted on", () => {
       seed = (seed * 1103515245 + 12345) % 2 ** 31
       return seed / 2 ** 31
     }
-    const pieces = [ESC, "[", "]", "\\", "\x07", "\x9b", "\x9c", "\x9d", "\x90", "P", "8", ";", "m", "0", "\t", "\r", "\n", "‮", "‍", "a", "é", "日", "🚀", "\ud800", " "]
+    const pieces = [
+      ESC,
+      "[",
+      "]",
+      "\\",
+      "\x07",
+      "\x9b",
+      "\x9c",
+      "\x9d",
+      "\x90",
+      "P",
+      "8",
+      ";",
+      "m",
+      "0",
+      "\t",
+      "\r",
+      "\n",
+      "‮",
+      "‍",
+      "a",
+      "é",
+      "日",
+      "🚀",
+      "\ud800",
+      " ",
+    ]
     for (let round = 0; round < 2000; round++) {
       let text = ""
       const length = Math.floor(random() * 40)
-      for (let index = 0; index < length; index++) text += pieces[Math.floor(random() * pieces.length)]
+      for (let index = 0; index < length; index++)
+        text += pieces[Math.floor(random() * pieces.length)]
       const cleaned = sanitize(text)
       expect(isSafe(cleaned)).toBe(true)
       expect(sanitize(cleaned)).toBe(cleaned)

@@ -27,7 +27,11 @@ export const SAMPLE_SECRETS = {
   PUBLIC_URL: "https://app.example",
 } as const
 
-export type Person = { name: string; signer: Signer; publicKey: Signer["publicKey"] }
+export type Person = {
+  name: string
+  signer: Signer
+  publicKey: Signer["publicKey"]
+}
 
 export function person(name: string): Person {
   const pair = generateMemberKeyPair()
@@ -36,7 +40,10 @@ export function person(name: string): Person {
 }
 
 /** A server as its runner sees it: its keys and the state it persists. */
-export type Server = ReturnType<typeof generateServerKeyPair> & { name: string; state: RunnerState }
+export type Server = ReturnType<typeof generateServerKeyPair> & {
+  name: string
+  state: RunnerState
+}
 
 /** Everything an attacker who controls the relay holds. Team lists are in version order. */
 export type Relay = {
@@ -50,7 +57,12 @@ export async function setup(founderName = "Ada") {
   const founder = person(founderName)
   const team = await createTeam({ founderName, signer: founder.signer })
   const relay: Relay = { deploys: [], records: [], rosters: [team.envelope] }
-  const { server, trust } = await addServer({ relay, trust: team.trust, admin: founder.signer, name: "prod-1" })
+  const { server, trust } = await addServer({
+    relay,
+    trust: team.trust,
+    admin: founder.signer,
+    name: "prod-1",
+  })
   return { founder, team, relay, server, trust }
 }
 
@@ -59,23 +71,40 @@ export async function setup(founderName = "Ada") {
  * (typed by a person), the admin adds the server's key to the team list
  * (after comparing the server's code), and the server catches up.
  */
-export async function addServer(input: { relay: Relay; trust: TeamTrust; admin: Signer; name: string }) {
+export async function addServer(input: {
+  relay: Relay
+  trust: TeamTrust
+  admin: Signer
+  name: string
+}) {
   const keys = generateServerKeyPair()
-  const pinned = trustFoundingRoster(input.relay.rosters[0], teamConfirmationCode(input.trust))
+  const pinned = trustFoundingRoster(
+    input.relay.rosters[0],
+    teamConfirmationCode(input.trust)
+  )
   if (!pinned.ok) throw new Error(`pairing failed: ${pinned.error.code}`)
-  const server: Server = { ...keys, name: input.name, state: initialRunnerState({ serverId: keys.serverId, team: pinned.value }) }
+  const server: Server = {
+    ...keys,
+    name: input.name,
+    state: initialRunnerState({ serverId: keys.serverId, team: pinned.value }),
+  }
   const trust = await changeTeam({
     relay: input.relay,
     trust: input.trust,
     signer: input.admin,
-    servers: [...input.trust.servers, { name: input.name, publicKey: keys.publicKey }],
+    servers: [
+      ...input.trust.servers,
+      { name: input.name, publicKey: keys.publicKey },
+    ],
   })
   catchUp(server, input.relay)
   return { server, trust }
 }
 
 /** An admin signs the next team list and hands it to the relay. Returns the admin's new trust. */
-export async function changeTeam(input: Parameters<typeof proposeRoster>[0] & { relay: Relay }): Promise<TeamTrust> {
+export async function changeTeam(
+  input: Parameters<typeof proposeRoster>[0] & { relay: Relay }
+): Promise<TeamTrust> {
   const { relay, ...change } = input
   const next = await proposeRoster(change)
   relay.rosters.push(next.envelope)
@@ -92,7 +121,9 @@ export function catchUp(server: Server, relay: Relay): void {
 }
 
 /** Only the envelope of a proposed team list, for tests that deliver it by hand. */
-export async function propose(input: Parameters<typeof proposeRoster>[0]): Promise<Envelope> {
+export async function propose(
+  input: Parameters<typeof proposeRoster>[0]
+): Promise<Envelope> {
   return (await proposeRoster(input)).envelope
 }
 
@@ -136,7 +167,15 @@ export async function publish(input: {
   const app = input.app ?? "web"
   const secrets: SecretRecord[] = []
   for (const [name, value] of Object.entries(input.values ?? SAMPLE_SECRETS)) {
-    secrets.push(await setSecret({ ...input, app, name, value, version: input.secretVersion ?? input.sequence }))
+    secrets.push(
+      await setSecret({
+        ...input,
+        app,
+        name,
+        value,
+        version: input.secretVersion ?? input.sequence,
+      })
+    )
   }
   const deploy = await createDeploy({
     trust: input.trust,

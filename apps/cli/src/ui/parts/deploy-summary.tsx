@@ -14,7 +14,14 @@ import type { Stage, StageState } from "./stages"
 
 const LABELS = ["Checked", "Signed", "Sent", "Starting"] as const
 /** How many stages are done once each stage has been reached. */
-const DONE: Record<DeployStage, number> = { checked: 1, signed: 2, sent: 3, starting: 3, started: 4, failed: 3 }
+const DONE: Record<DeployStage, number> = {
+  checked: 1,
+  signed: 2,
+  sent: 3,
+  starting: 3,
+  started: 4,
+  failed: 3,
+}
 
 /**
  * The stage row: done, the one in progress, and those not reached yet. A
@@ -27,14 +34,28 @@ export function stagesOf(deploy: DeployProgress): Stage[] {
   return LABELS.map((label, index): Stage => {
     let state: StageState = "pending"
     if (index < done) state = "done"
-    else if (index === done) state = deploy.running ? "active" : deploy.outcome === "started" ? "done" : "failed"
-    return { label: index === 3 && deploy.outcome === "started" ? "Started" : label, state }
+    else if (index === done)
+      state = deploy.running
+        ? "active"
+        : deploy.outcome === "started"
+          ? "done"
+          : "failed"
+    return {
+      label: index === 3 && deploy.outcome === "started" ? "Started" : label,
+      state,
+    }
   })
 }
 
 /** The number is used once the deploy was signed, whatever happened after. */
 export function numberUsed(deploy: DeployProgress): boolean {
-  return !deploy.running && deploy.outcome !== "started" && deploy.sequence !== undefined && deploy.stage !== undefined && deploy.stage !== "checked"
+  return (
+    !deploy.running &&
+    deploy.outcome !== "started" &&
+    deploy.sequence !== undefined &&
+    deploy.stage !== undefined &&
+    deploy.stage !== "checked"
+  )
 }
 
 /**
@@ -43,13 +64,23 @@ export function numberUsed(deploy: DeployProgress): boolean {
  * (ui/ink/deploy-view.tsx), with a faint border, as on the board "zekno deploy:
  * success and failure".
  */
-export function Summary({ deploy, width, tone = "focus" }: { deploy: DeployProgress; width: number; tone?: PanelTone }) {
+export function Summary({
+  deploy,
+  width,
+  tone = "focus",
+}: {
+  deploy: DeployProgress
+  width: number
+  tone?: PanelTone
+}) {
   const names = deploy.secretNames ?? []
   const count = deploy.secrets ?? names.length
   const secrets = (
     <Text>
       {count === 0 ? "none" : count}
-      {count > 0 && names.length > 0 ? <Text dimColor> ({names.join(", ")})</Text> : null}
+      {count > 0 && names.length > 0 ? (
+        <Text dimColor> ({names.join(", ")})</Text>
+      ) : null}
     </Text>
   )
   const rows: [string, ReactNode][] = [
@@ -58,10 +89,17 @@ export function Summary({ deploy, width, tone = "focus" }: { deploy: DeployProgr
   ]
   if (deploy.from) rows.push(["from", deploy.from])
   rows.push(["secrets", secrets])
-  if (deploy.replaces !== undefined) rows.push(["replaces", `deploy ${deploy.replaces}`])
+  if (deploy.replaces !== undefined)
+    rows.push(["replaces", `deploy ${deploy.replaces}`])
   return (
     <Box width={width}>
-      <Panel title={deploy.sequence === undefined ? "Deploy" : `Deploy ${deploy.sequence}`} tone={tone} flexGrow={1}>
+      <Panel
+        title={
+          deploy.sequence === undefined ? "Deploy" : `Deploy ${deploy.sequence}`
+        }
+        tone={tone}
+        flexGrow={1}
+      >
         <Fields rows={rows} labelWidth={10} />
       </Panel>
     </Box>

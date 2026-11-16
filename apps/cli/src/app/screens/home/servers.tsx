@@ -16,12 +16,18 @@ import { SERVERS_WIDTH } from "./widths"
  * the servers pane leaves under a name at 80 columns, which a version such as
  * `0.1.0-dev.1` beside "runner" would not.
  */
-export const RUNNER_MARKS = { older: "! older runner", newer: "! newer runner" } as const
+export const RUNNER_MARKS = {
+  older: "! older runner",
+  newer: "! newer runner",
+} as const
 
 /** The runner line to show under a server, if any: none while it cannot be reached, and none when its runner is this zekno's version. */
 const runnerLineOf = (server: ServerRow): string | undefined => {
-  const relation = server.reachable === false ? undefined : server.runner?.relation
-  return relation === "older" || relation === "newer" ? RUNNER_MARKS[relation] : undefined
+  const relation =
+    server.reachable === false ? undefined : server.runner?.relation
+  return relation === "older" || relation === "newer"
+    ? RUNNER_MARKS[relation]
+    : undefined
 }
 
 /** The line under a server's name while SSH needs an answer to reach it (`ServerRow.asks`). */
@@ -29,7 +35,8 @@ const runnerLineOf = (server: ServerRow): string | undefined => {
 export const ASKS_LINE = "needs an answer"
 
 /** SSH needs an answer to reach it: not reached, and read again only once the person connects to it on purpose. */
-export const needsAnswerHere = (server: ServerRow | undefined): boolean => server?.reachable === false && server.asks === true
+export const needsAnswerHere = (server: ServerRow | undefined): boolean =>
+  server?.reachable === false && server.asks === true
 
 /**
  * One server: the marker, its name, ● once it answered, ✖ when it could not
@@ -42,7 +49,15 @@ export const needsAnswerHere = (server: ServerRow | undefined): boolean => serve
  * Below 100 columns the address is left out, as on the board "Home at 80
  * columns".
  */
-function ServerItem({ server, selected, narrow }: { server: ServerRow; selected: boolean; narrow: boolean }) {
+function ServerItem({
+  server,
+  selected,
+  narrow,
+}: {
+  server: ServerRow
+  selected: boolean
+  narrow: boolean
+}) {
   const theme = useTheme()
   const asks = needsAnswerHere(server)
   const runnerLine = runnerLineOf(server)
@@ -55,8 +70,12 @@ function ServerItem({ server, selected, narrow }: { server: ServerRow; selected:
         <Cell>
           <Text bold={selected}>{server.name}</Text>
         </Cell>
-        {server.reachable === true && runnerLine === undefined ? <Text color={theme.success}> ●</Text> : null}
-        {server.reachable === false && !asks ? <Text color={theme.danger}> ✖</Text> : null}
+        {server.reachable === true && runnerLine === undefined ? (
+          <Text color={theme.success}> ●</Text>
+        ) : null}
+        {server.reachable === false && !asks ? (
+          <Text color={theme.danger}> ✖</Text>
+        ) : null}
         {asks ? <Text color={theme.warning}> !</Text> : null}
       </Box>
       {asks ? (
@@ -84,12 +103,31 @@ function ServerItem({ server, selected, narrow }: { server: ServerRow; selected:
   )
 }
 
-export function ServersPane({ servers, selected, focused, narrow }: { servers: readonly ServerRow[]; selected: number; focused: boolean; narrow: boolean }) {
+export function ServersPane({
+  servers,
+  selected,
+  focused,
+  narrow,
+}: {
+  servers: readonly ServerRow[]
+  selected: number
+  focused: boolean
+  narrow: boolean
+}) {
   return (
-    <Pane title="Servers" focused={focused} width={narrow ? SERVERS_WIDTH.narrow : SERVERS_WIDTH.wide}>
+    <Pane
+      title="Servers"
+      focused={focused}
+      width={narrow ? SERVERS_WIDTH.narrow : SERVERS_WIDTH.wide}
+    >
       <Box flexDirection="column">
         {servers.map((server, index) => (
-          <ServerItem key={server.name} server={server} selected={index === selected} narrow={narrow} />
+          <ServerItem
+            key={server.name}
+            server={server}
+            selected={index === selected}
+            narrow={narrow}
+          />
         ))}
         <Box>
           <Marker selected={selected === servers.length} />

@@ -26,13 +26,21 @@ const ADDED_TO_HELP = [
 
 describe("with no terminal, every command does what it did before feature 006 (FR-028)", () => {
   test("the help is the help of 5264e8a with only the new commands' lines added", () => {
-    expect(HELP.split("\n").filter((line) => !ADDED_TO_HELP.includes(line))).toEqual(HELP_AT_HEAD.split("\n"))
+    expect(
+      HELP.split("\n").filter((line) => !ADDED_TO_HELP.includes(line))
+    ).toEqual(HELP_AT_HEAD.split("\n"))
   })
 
   for (const [name, scene] of Object.entries(SCENES)) {
     test(`${name}: the same calls, lines and exit status, command by command`, async () => {
       const done = await scene()
-      expect(done.map((record): [string, number, string[]] => [record.argv.join(" "), record.code, record.calls])).toEqual(AT_HEAD[name]!)
+      expect(
+        done.map((record): [string, number, string[]] => [
+          record.argv.join(" "),
+          record.code,
+          record.calls,
+        ])
+      ).toEqual(AT_HEAD[name]!)
     }, 60_000)
   }
 })

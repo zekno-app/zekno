@@ -31,30 +31,51 @@ async function post(path: string, body: unknown) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   })
-  if (!response.ok) throw new Error(`relay answered ${response.status} to ${path}`)
+  if (!response.ok)
+    throw new Error(`relay answered ${response.status} to ${path}`)
 }
 
 // The server's key pair is created here and the secret half never leaves this process.
 const server = generateServerKeyPair()
-await post("/servers", { serverPublicKey: server.publicKey, serverId: server.serverId })
-say({ type: "registered", serverId: server.serverId, code: serverConfirmationCode(server.publicKey) })
+await post("/servers", {
+  serverPublicKey: server.publicKey,
+  serverId: server.serverId,
+})
+say({
+  type: "registered",
+  serverId: server.serverId,
+  code: serverConfirmationCode(server.publicKey),
+})
 
 // The founding team list comes through the relay; the code comes from a person.
-const chain = parseMessage(RosterChainResponseSchema, await (await fetch(`${relay}/rosters`)).text())
-if (!chain.ok || chain.value.rosters.length === 0) throw new Error("no team list from the relay")
-const trusted = trustFoundingRoster(chain.value.rosters[0], process.env.CONFIRMED_CODE ?? "")
+const chain = parseMessage(
+  RosterChainResponseSchema,
+  await (await fetch(`${relay}/rosters`)).text()
+)
+if (!chain.ok || chain.value.rosters.length === 0)
+  throw new Error("no team list from the relay")
+const trusted = trustFoundingRoster(
+  chain.value.rosters[0],
+  process.env.CONFIRMED_CODE ?? ""
+)
 if (!trusted.ok) {
   say({ type: "pairing-refused", reason: trusted.error.code })
   process.exit(2)
 }
 say({ type: "paired", team: trusted.value.teamId })
 
-let state: RunnerState = initialRunnerState({ serverId: server.serverId, team: trusted.value })
+let state: RunnerState = initialRunnerState({
+  serverId: server.serverId,
+  team: trusted.value,
+})
 let processed = 0
 
 /** Applies any newer team lists the relay holds. A refused list changes nothing. */
 async function followTeam() {
-  const latest = parseMessage(RosterChainResponseSchema, await (await fetch(`${relay}/rosters`)).text())
+  const latest = parseMessage(
+    RosterChainResponseSchema,
+    await (await fetch(`${relay}/rosters`)).text()
+  )
   if (!latest.ok) return
   for (const envelope of latest.value.rosters.slice(state.team.version)) {
     const applied = applyRosterUpdate(state.team, envelope)
@@ -65,11 +86,19 @@ async function followTeam() {
 
 while (processed < expected) {
   await followTeam()
-  const pending = parseMessage(PendingDeploysResponseSchema, await (await fetch(`${relay}/deploys`)).text())
-  if (!pending.ok) throw new Error(`relay sent a ${pending.error.code} response`)
+  const pending = parseMessage(
+    PendingDeploysResponseSchema,
+    await (await fetch(`${relay}/deploys`)).text()
+  )
+  if (!pending.ok)
+    throw new Error(`relay sent a ${pending.error.code} response`)
 
   for (const delivered of pending.value.deploys) {
-    const verified = verifyDeploy({ envelope: delivered.envelope, secrets: delivered.secrets, state })
+    const verified = verifyDeploy({
+      envelope: delivered.envelope,
+      secrets: delivered.secrets,
+      state,
+    })
     const at = new Date().toISOString()
     if (!verified.ok) {
       // Enough to report without trusting the content: the relay knows which deploy it sent.
@@ -81,7 +110,15 @@ while (processed < expected) {
     state = verified.value.nextState // persisted before anything runs
     const opened = openSecrets(verified.value, server.secretKey)
     const { teamId, serverId, app, sequence } = verified.value.deploy
-    const report: StatusReport = { v: 1, teamId, serverId, app, sequence, outcome: "accepted", at }
+    const report: StatusReport = {
+      v: 1,
+      teamId,
+      serverId,
+      app,
+      sequence,
+      outcome: "accepted",
+      at,
+    }
     await post("/status", report)
     say({
       type: "deploy",
@@ -93,5 +130,6 @@ while (processed < expected) {
     })
     processed += 1
   }
-  if (processed < expected) await new Promise((resolve) => setTimeout(resolve, 25))
+  if (processed < expected)
+    await new Promise((resolve) => setTimeout(resolve, 25))
 }

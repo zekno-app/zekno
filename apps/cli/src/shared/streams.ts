@@ -12,7 +12,10 @@
  * text up in memory: Bun keeps every write it cannot pass on yet, with no
  * limit, and `writableLength` does not show it.
  */
-function writeWaiting(stream: NodeJS.WriteStream, text: string): Promise<void> | undefined {
+function writeWaiting(
+  stream: NodeJS.WriteStream,
+  text: string
+): Promise<void> | undefined {
   if (stream.write(text)) return undefined
   return new Promise((resolve) => {
     const done = () => {
@@ -28,7 +31,8 @@ function writeWaiting(stream: NodeJS.WriteStream, text: string): Promise<void> |
 }
 
 /** Writes to this process's standard error, as `writeWaiting` does. */
-export const writeStandardError = (text: string): Promise<void> | undefined => writeWaiting(process.stderr, text)
+export const writeStandardError = (text: string): Promise<void> | undefined =>
+  writeWaiting(process.stderr, text)
 
 /**
  * This process's standard output, for lines that come without end, such as
@@ -37,14 +41,18 @@ export const writeStandardError = (text: string): Promise<void> | undefined => w
  * `closed` is signalled and nothing more is written: `console.log` would go
  * on writing into the closed pipe for as long as lines came.
  */
-export function standardOutput(stream: NodeJS.WriteStream = process.stdout): { write(text: string): Promise<void> | undefined; closed: AbortSignal } {
+export function standardOutput(stream: NodeJS.WriteStream = process.stdout): {
+  write(text: string): Promise<void> | undefined
+  closed: AbortSignal
+} {
   const closed = new AbortController()
   const gone = () => closed.abort()
   // Kept for the life of the process: a write that fails later must not end it with an error.
   stream.on("error", gone)
   stream.once("close", gone)
   return {
-    write: (text) => (closed.signal.aborted ? undefined : writeWaiting(stream, text)),
+    write: (text) =>
+      closed.signal.aborted ? undefined : writeWaiting(stream, text),
     closed: closed.signal,
   }
 }

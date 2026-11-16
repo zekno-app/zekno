@@ -11,11 +11,28 @@ import {
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { isAlive, RUNNER_MAIN, runner, tempDir, waitFor } from "../../../runner/test/support/helpers"
+import {
+  isAlive,
+  RUNNER_MAIN,
+  runner,
+  tempDir,
+  waitFor,
+} from "../../../runner/test/support/helpers"
 import { RunnerRefused } from "../../src/cli/errors"
 import { prepareDeploy, sendDeploy } from "../../src/ops/deploy"
-import { ENDED, openSession, TOO_LARGE, TOO_OLD, UNEXPECTED } from "../../src/server/session"
-import { connect, LOCAL_FIRST_ANSWER_MS, type Target, type Transport } from "../../src/server/transport"
+import {
+  ENDED,
+  openSession,
+  TOO_LARGE,
+  TOO_OLD,
+  UNEXPECTED,
+} from "../../src/server/session"
+import {
+  connect,
+  LOCAL_FIRST_ANSWER_MS,
+  type Target,
+  type Transport,
+} from "../../src/server/transport"
 import runnerPackage from "../../../runner/package.json"
 import { COMPOSE_V1, COMPOSE_V2, machine, ready } from "../support/helpers"
 
@@ -29,7 +46,16 @@ const VERSION = { version: runnerPackage.version, protocol: 2 }
  * Docker. `before` runs first, for a runner that is slow to start.
  */
 function counted(log: string, docker: string, before = ""): string[] {
-  return ["sh", "-c", `for word; do :; done; echo "$$ $word" >> "$0"; ${before} exec "$@"`, log, "env", `ZEKNO_DOCKER=${docker}`, process.execPath, RUNNER_MAIN]
+  return [
+    "sh",
+    "-c",
+    `for word; do :; done; echo "$$ $word" >> "$0"; ${before} exec "$@"`,
+    log,
+    "env",
+    `ZEKNO_DOCKER=${docker}`,
+    process.execPath,
+    RUNNER_MAIN,
+  ]
 }
 
 /** Each start noted by `counted`, in order. */
@@ -46,28 +72,43 @@ function starts(log: string): { pid: number; word: string }[] {
 const words = (log: string) => starts(log).map((start) => start.word)
 
 /** A shell step that prints one line. */
-const say = (line: unknown) => `printf '%s\\n' '${typeof line === "string" ? line : JSON.stringify(line)}'`
+const say = (line: unknown) =>
+  `printf '%s\\n' '${typeof line === "string" ? line : JSON.stringify(line)}'`
 
 /** A stand-in that speaks sessions: before each step it reads one request; at the end it waits for its input to close. */
-const scripted = (...steps: string[]) => ["sh", "-c", `${steps.map((step) => `read -r line; ${step}`).join("; ")}; cat >/dev/null`]
+const scripted = (...steps: string[]) => [
+  "sh",
+  "-c",
+  `${steps.map((step) => `read -r line; ${step}`).join("; ")}; cat >/dev/null`,
+]
 
 const local = (home = tempDir("runner")): Target => ({ kind: "local", home })
 
 /** What the profile says this machine's server is. */
-const serverIdOf = (home: string): string => JSON.parse(readFileSync(join(home, "profile.json"), "utf8")).servers[0].serverId
+const serverIdOf = (home: string): string =>
+  JSON.parse(readFileSync(join(home, "profile.json"), "utf8")).servers[0]
+    .serverId
 
 describe("a session carries several requests over one runner process", () => {
   test("requests are answered in order on one process, which exits cleanly when the session closes", async () => {
     const m = await ready()
     const log = join(m.project, "starts.log")
-    const s = await openSession(connect(local(m.runnerHome), counted(log, m.docker.path)))
+    const s = await openSession(
+      connect(local(m.runnerHome), counted(log, m.docker.path))
+    )
     expect(s.mode).toBe("session")
     expect(s.runner).toEqual(VERSION)
 
-    expect((await s.request("status", RunnerStatusSchema)).serverId).toBe(serverIdOf(m.home))
-    expect(await s.request("state", RunnerAppStatesSchema)).toEqual({ apps: {} })
+    expect((await s.request("status", RunnerStatusSchema)).serverId).toBe(
+      serverIdOf(m.home)
+    )
+    expect(await s.request("state", RunnerAppStatesSchema)).toEqual({
+      apps: {},
+    })
     expect(await s.request("version", RunnerVersionSchema)).toEqual(VERSION)
-    expect((await s.request("status", RunnerStatusSchema)).serverId).toBe(serverIdOf(m.home))
+    expect((await s.request("status", RunnerStatusSchema)).serverId).toBe(
+      serverIdOf(m.home)
+    )
     expect(await s.close()).toBe(0)
     expect(await s.close()).toBe(0)
     expect(words(log)).toEqual(["session"])
@@ -77,7 +118,9 @@ describe("a session carries several requests over one runner process", () => {
   test("a refusal is an answer: it becomes RunnerRefused and the session goes on", async () => {
     const m = machine()
     const s = await openSession(connect(local(), m.deps.localRunner))
-    const refusal = await s.request("status", RunnerStatusSchema).catch((error: unknown) => error)
+    const refusal = await s
+      .request("status", RunnerStatusSchema)
+      .catch((error: unknown) => error)
     expect(refusal).toBeInstanceOf(RunnerRefused)
     expect((refusal as RunnerRefused).reason).toBe("not_set_up")
     expect(await s.request("version", RunnerVersionSchema)).toEqual(VERSION)
@@ -88,7 +131,8 @@ describe("a session carries several requests over one runner process", () => {
     const m = await ready()
     m.docker.upPrints({
       stdout: "\x1b[2J\x1b[H\x1b[31mPulling web\x1b[0m\n",
-      stderr: " Container zekno-web-web-1  \x1b]52;c;ZXZpbA==\x07Started\n\x1b]8;;https://evil.example/\x1b\\details\x1b]8;;\x1b\\\n",
+      stderr:
+        " Container zekno-web-web-1  \x1b]52;c;ZXZpbA==\x07Started\n\x1b]8;;https://evil.example/\x1b\\details\x1b]8;;\x1b\\\n",
     })
     const timeline: string[] = []
     const plan = await prepareDeploy(m.deps, { app: "web", server: "dev" })
@@ -96,34 +140,77 @@ describe("a session carries several requests over one runner process", () => {
       stage: (stage, deploy) => timeline.push(`${stage} ${deploy.sequence}`),
       progress: (line) => void timeline.push(`line ${line}`),
     })
-    expect(result).toMatchObject({ outcome: "started", app: "web", sequence: 1, server: "dev", secrets: 0, mode: "session" })
-    expect(timeline.slice(0, 4)).toEqual(["checked 1", "signed 1", "sent 1", "starting 1"])
+    expect(result).toMatchObject({
+      outcome: "started",
+      app: "web",
+      sequence: 1,
+      server: "dev",
+      secrets: 0,
+      mode: "session",
+    })
+    expect(timeline.slice(0, 4)).toEqual([
+      "checked 1",
+      "signed 1",
+      "sent 1",
+      "starting 1",
+    ])
     expect(timeline.at(-1)).toBe("started 1")
-    expect(timeline.slice(4, -1).sort()).toEqual(["line  Container zekno-web-web-1  Started", "line Pulling web", "line details"])
+    expect(timeline.slice(4, -1).sort()).toEqual([
+      "line  Container zekno-web-web-1  Started",
+      "line Pulling web",
+      "line details",
+    ])
   })
 
   test("log events arrive cleaned", async () => {
     const m = await ready()
     expect(await m.zekno("deploy", ...where)).toBe(0) // the runner gives logs only for an app it accepted
-    m.docker.logs("web", "web-1     | 2026-11-13T16:56:04.136118801Z \x1b[31mstarted\x1b[0m \x1b]52;c;ZXZpbA==\x07on\t8080\n")
-    const s = await openSession(connect(local(m.runnerHome), m.deps.localRunner))
+    m.docker.logs(
+      "web",
+      "web-1     | 2026-11-13T16:56:04.136118801Z \x1b[31mstarted\x1b[0m \x1b]52;c;ZXZpbA==\x07on\t8080\n"
+    )
+    const s = await openSession(
+      connect(local(m.runnerHome), m.deps.localRunner)
+    )
     const events: SessionEvent[] = []
-    const done = await s.request("logs", RunnerReportSchema, { input: { app: "web", tail: 10 }, onEvent: (event) => events.push(event) })
+    const done = await s.request("logs", RunnerReportSchema, {
+      input: { app: "web", tail: 10 },
+      onEvent: (event) => events.push(event),
+    })
     expect(done).toEqual({ outcome: "ok" })
-    expect(events).toEqual([{ event: "log", service: "web", time: "2026-11-13T16:56:04.136118801Z", line: "started on      8080" }])
+    expect(events).toEqual([
+      {
+        event: "log",
+        service: "web",
+        time: "2026-11-13T16:56:04.136118801Z",
+        line: "started on      8080",
+      },
+    ])
     expect(await s.close()).toBe(0)
   })
 
   test("closing a session while it follows logs lets the runner stop Docker's log command and exit", async () => {
     const m = await ready()
     expect(await m.zekno("deploy", ...where)).toBe(0)
-    m.docker.logs("web", "web-1     | 2026-11-13T16:56:04.136118801Z started\n", { follow: true })
-    const s = await openSession(connect(local(m.runnerHome), m.deps.localRunner))
+    m.docker.logs(
+      "web",
+      "web-1     | 2026-11-13T16:56:04.136118801Z started\n",
+      { follow: true }
+    )
+    const s = await openSession(
+      connect(local(m.runnerHome), m.deps.localRunner)
+    )
     const events: SessionEvent[] = []
     const following = s
-      .request("logs", RunnerReportSchema, { input: { app: "web", tail: 10 }, onEvent: (event) => events.push(event) })
+      .request("logs", RunnerReportSchema, {
+        input: { app: "web", tail: 10 },
+        onEvent: (event) => events.push(event),
+      })
       .catch((error: unknown) => error)
-    await waitFor(() => events.length === 1 && m.docker.logsPid() !== undefined, "the first log line")
+    await waitFor(
+      () => events.length === 1 && m.docker.logsPid() !== undefined,
+      "the first log line"
+    )
     const docker = m.docker.logsPid()!
     expect(await s.close()).toBe(0)
     expect(String(await following)).toContain(ENDED)
@@ -132,32 +219,49 @@ describe("a session carries several requests over one runner process", () => {
 })
 
 describe("what the runner sends is checked", () => {
-  test("a line that is not a frame ends the session with \"the runner did not answer as expected\"", async () => {
+  test('a line that is not a frame ends the session with "the runner did not answer as expected"', async () => {
     for (const answer of [
       say("not json"),
       say({ result: { outcome: "ok" }, extra: true }),
       say({ outcome: "ok" }),
       // An event that does not belong to this request.
-      say({ event: "log", service: "web", time: "2026-11-13T16:56:04Z", line: "x" }),
+      say({
+        event: "log",
+        service: "web",
+        time: "2026-11-13T16:56:04Z",
+        line: "x",
+      }),
       // A result that is not the message asked for.
       say({ result: { version: "0.1.0" } }),
     ]) {
-      const s = await openSession(connect(local(), scripted(say({ result: VERSION }), answer)))
+      const s = await openSession(
+        connect(local(), scripted(say({ result: VERSION }), answer))
+      )
       expect(s.mode).toBe("session")
-      await expect(s.request("status", RunnerStatusSchema)).rejects.toThrow(UNEXPECTED)
-      await expect(s.request("version", RunnerVersionSchema)).rejects.toThrow(ENDED)
+      await expect(s.request("status", RunnerStatusSchema)).rejects.toThrow(
+        UNEXPECTED
+      )
+      await expect(s.request("version", RunnerVersionSchema)).rejects.toThrow(
+        ENDED
+      )
       await s.close()
     }
   })
 
   test("a line is read up to the message size limit and no further", async () => {
     const huge = `head -c ${LIMITS.messageBytes + 1} /dev/zero`
-    const s = await openSession(connect(local(), scripted(say({ result: VERSION }), huge)))
-    await expect(s.request("status", RunnerStatusSchema)).rejects.toThrow(TOO_LARGE)
+    const s = await openSession(
+      connect(local(), scripted(say({ result: VERSION }), huge))
+    )
+    await expect(s.request("status", RunnerStatusSchema)).rejects.toThrow(
+      TOO_LARGE
+    )
     await expect(s.request("status", RunnerStatusSchema)).rejects.toThrow(ENDED)
     await s.close()
     // Also when it is the very first thing the runner sends.
-    await expect(openSession(connect(local(), scripted(huge)))).rejects.toThrow(TOO_LARGE)
+    await expect(openSession(connect(local(), scripted(huge)))).rejects.toThrow(
+      TOO_LARGE
+    )
   })
 
   test("a runner that dies in the middle of a request is reported, and the deploy stays recorded as sent", async () => {
@@ -165,33 +269,58 @@ describe("what the runner sends is checked", () => {
     const log = join(m.project, "starts.log")
     m.deps.localRunner = counted(log, m.docker.path)
     m.docker.holdUp()
-    const pending = sendDeploy(m.deps, await prepareDeploy(m.deps, { app: "web", server: "dev" }))
+    const pending = sendDeploy(
+      m.deps,
+      await prepareDeploy(m.deps, { app: "web", server: "dev" })
+    )
     await waitFor(() => m.docker.upStarted(), "Docker to start")
     process.kill(starts(log)[0]!.pid, "SIGKILL")
     await expect(pending).rejects.toThrow(ENDED)
     m.docker.releaseUp()
-    const history = JSON.parse(readFileSync(join(m.home, `history/${serverIdOf(m.home)}/web.json`), "utf8"))
-    expect(history.map((entry: { outcome: string }) => entry.outcome)).toEqual(["sent"])
+    const history = JSON.parse(
+      readFileSync(
+        join(m.home, `history/${serverIdOf(m.home)}/web.json`),
+        "utf8"
+      )
+    )
+    expect(history.map((entry: { outcome: string }) => entry.outcome)).toEqual([
+      "sent",
+    ])
   })
 
   test("nothing, or no runner at all, is an error rather than a hang", async () => {
-    await expect(openSession(connect(local(), ["/nonexistent/zekno-runner"]))).rejects.toThrow("Could not start")
-    await expect(openSession(connect(local(), ["sh", "-c", "exit 0"]))).rejects.toThrow(UNEXPECTED)
+    await expect(
+      openSession(connect(local(), ["/nonexistent/zekno-runner"]))
+    ).rejects.toThrow("Could not start")
+    await expect(
+      openSession(connect(local(), ["sh", "-c", "exit 0"]))
+    ).rejects.toThrow(UNEXPECTED)
     // Only status 2 means "a runner without sessions"; anything else, such as SSH failing, is not tried again.
-    await expect(openSession(connect(local(), ["sh", "-c", "exit 255"]))).rejects.toThrow(UNEXPECTED)
+    await expect(
+      openSession(connect(local(), ["sh", "-c", "exit 255"]))
+    ).rejects.toThrow(UNEXPECTED)
   })
 
   test("what the runner writes on standard error is passed on cleaned", async () => {
     const written: string[] = []
-    const spy = spyOn(process.stderr, "write").mockImplementation(((chunk: string) => {
+    const spy = spyOn(process.stderr, "write").mockImplementation(((
+      chunk: string
+    ) => {
       written.push(String(chunk))
       return true
     }) as never)
     try {
-      const noisy = ["sh", "-c", `printf 'one \\033]52;c;ZXZpbA==\\007two\\033[2J\\n\\033]8;;https://evil\\033\\\\three' >&2; exit 2`]
+      const noisy = [
+        "sh",
+        "-c",
+        `printf 'one \\033]52;c;ZXZpbA==\\007two\\033[2J\\n\\033]8;;https://evil\\033\\\\three' >&2; exit 2`,
+      ]
       const s = await openSession(connect(local(), noisy))
       expect(s.mode).toBe("one-shot")
-      await waitFor(() => written.join("").includes("three"), "standard error to be passed on")
+      await waitFor(
+        () => written.join("").includes("three"),
+        "standard error to be passed on"
+      )
     } finally {
       spy.mockRestore()
     }
@@ -201,7 +330,13 @@ describe("what the runner sends is checked", () => {
 
 describe("a runner that sends too much, too fast, or nothing (security-review.md L1, L3, L4)", () => {
   /** A log event of `width` characters, as one line. */
-  const logLine = (width: number) => JSON.stringify({ event: "log", service: "web", time: "2026-11-14T00:00:00Z", line: "x".repeat(width) })
+  const logLine = (width: number) =>
+    JSON.stringify({
+      event: "log",
+      service: "web",
+      time: "2026-11-14T00:00:00Z",
+      line: "x".repeat(width),
+    })
 
   /** A stand-in that notes its process id in `pidFile`, answers its version, and then sends `line` without pause for the next request. */
   const flooding = (pidFile: string, line: string) => [
@@ -214,9 +349,16 @@ describe("a runner that sends too much, too fast, or nothing (security-review.md
 
   test("events as fast as a runner can send them: timers still fire every few milliseconds, and closing stops the runner", async () => {
     const pidFile = join(tempDir("flood"), "pid")
-    const s = await openSession(connect(local(), flooding(pidFile, logLine(1000))))
+    const s = await openSession(
+      connect(local(), flooding(pidFile, logLine(1000)))
+    )
     let events = 0
-    const reading = s.request("logs", RunnerReportSchema, { input: { app: "web", tail: 0 }, onEvent: () => void events++ }).catch((error: unknown) => error)
+    const reading = s
+      .request("logs", RunnerReportSchema, {
+        input: { app: "web", tail: 0 },
+        onEvent: () => void events++,
+      })
+      .catch((error: unknown) => error)
     let last = performance.now()
     let late = 0
     const timer = setInterval(() => {
@@ -237,8 +379,16 @@ describe("a runner that sends too much, too fast, or nothing (security-review.md
   test("a runner that writes on standard error without pause, over a session kept open: timers still fire every few milliseconds", async () => {
     let lines = 0
     const pidFile = join(tempDir("flood"), "pid")
-    const noisy = ["sh", "-c", `echo $$ > "$0"; read -r request; printf '%s\\n' '${JSON.stringify({ result: VERSION })}'; exec yes "$1" >&2`, pidFile, "x".repeat(200)]
-    const s = await openSession(connect(local(), noisy, { errorLines: () => void lines++ }))
+    const noisy = [
+      "sh",
+      "-c",
+      `echo $$ > "$0"; read -r request; printf '%s\\n' '${JSON.stringify({ result: VERSION })}'; exec yes "$1" >&2`,
+      pidFile,
+      "x".repeat(200),
+    ]
+    const s = await openSession(
+      connect(local(), noisy, { errorLines: () => void lines++ })
+    )
     let last = performance.now()
     let late = 0
     const timer = setInterval(() => {
@@ -251,56 +401,103 @@ describe("a runner that sends too much, too fast, or nothing (security-review.md
     expect(late).toBeLessThan(100)
     expect(lines).toBeGreaterThan(10_000)
     await s.close(500)
-    await waitFor(() => !isAlive(Number(readFileSync(pidFile, "utf8"))), "the runner to stop", 1000)
+    await waitFor(
+      () => !isAlive(Number(readFileSync(pidFile, "utf8"))),
+      "the runner to stop",
+      1000
+    )
   })
 
   test("while what a request's events go to is busy, nothing more is read: the runner is held back in the connection", async () => {
     const pidFile = join(tempDir("flood"), "pid")
-    const s = await openSession(connect(local(), flooding(pidFile, logLine(1000))))
+    const s = await openSession(
+      connect(local(), flooding(pidFile, logLine(1000)))
+    )
     let events = 0
     const reading = s
-      .request("logs", RunnerReportSchema, { input: { app: "web", tail: 0 }, onEvent: () => (events++, Bun.sleep(50)) })
+      .request("logs", RunnerReportSchema, {
+        input: { app: "web", tail: 0 },
+        onEvent: () => (events++, Bun.sleep(50)),
+      })
       .catch((error: unknown) => error)
     await Bun.sleep(500)
     expect(events).toBeGreaterThan(3)
     expect(events).toBeLessThan(15)
     await s.close(1000)
     expect(String(await reading)).toContain(ENDED)
-    await waitFor(() => !isAlive(Number(readFileSync(pidFile, "utf8"))), "the runner to stop", 1000)
+    await waitFor(
+      () => !isAlive(Number(readFileSync(pidFile, "utf8"))),
+      "the runner to stop",
+      1000
+    )
   })
 
   test("each answer is read up to the longest its request can bring, far below a message's limit; past it the session ends", async () => {
-    const past = (bytes: number) => `head -c ${bytes + 1} /dev/zero | tr '\\0' x; echo`
+    const past = (bytes: number) =>
+      `head -c ${bytes + 1} /dev/zero | tr '\\0' x; echo`
     for (const [command, schema] of [
       ["status", RunnerStatusSchema],
       ["state", RunnerAppStatesSchema],
     ] as const) {
-      expect(SESSION_FRAME_BYTES[command]).toBeLessThanOrEqual(LIMITS.messageBytes / 8)
-      const s = await openSession(connect(local(), scripted(say({ result: VERSION }), past(SESSION_FRAME_BYTES[command]))))
+      expect(SESSION_FRAME_BYTES[command]).toBeLessThanOrEqual(
+        LIMITS.messageBytes / 8
+      )
+      const s = await openSession(
+        connect(
+          local(),
+          scripted(say({ result: VERSION }), past(SESSION_FRAME_BYTES[command]))
+        )
+      )
       await expect(s.request(command, schema)).rejects.toThrow(TOO_LARGE)
-      await expect(s.request("version", RunnerVersionSchema)).rejects.toThrow(ENDED)
+      await expect(s.request("version", RunnerVersionSchema)).rejects.toThrow(
+        ENDED
+      )
       await s.close()
     }
     // One log event longer than the longest a log line can make.
     const pidFile = join(tempDir("flood"), "pid")
-    const s = await openSession(connect(local(), flooding(pidFile, logLine(SESSION_FRAME_BYTES.logs))))
-    await expect(s.request("logs", RunnerReportSchema, { input: { app: "web", tail: 0 } })).rejects.toThrow(TOO_LARGE)
-    await waitFor(() => !isAlive(Number(readFileSync(pidFile, "utf8"))), "the runner to be stopped", 1000)
+    const s = await openSession(
+      connect(local(), flooding(pidFile, logLine(SESSION_FRAME_BYTES.logs)))
+    )
+    await expect(
+      s.request("logs", RunnerReportSchema, { input: { app: "web", tail: 0 } })
+    ).rejects.toThrow(TOO_LARGE)
+    await waitFor(
+      () => !isAlive(Number(readFileSync(pidFile, "utf8"))),
+      "the runner to be stopped",
+      1000
+    )
     // A version longer than a version can be.
-    await expect(openSession(connect(local(), scripted(past(SESSION_FRAME_BYTES.version))))).rejects.toThrow(TOO_LARGE)
+    await expect(
+      openSession(connect(local(), scripted(past(SESSION_FRAME_BYTES.version))))
+    ).rejects.toThrow(TOO_LARGE)
   })
 
   test("opening a session can be stopped before the runner has answered: its process is stopped at once", async () => {
     const pidFile = join(tempDir("silent"), "pid")
     const stop = new AbortController()
-    const opening = openSession(connect(local(), ["sh", "-c", 'echo $$ > "$0"; exec sleep 30', pidFile]), { signal: stop.signal }).catch((error: unknown) => error)
-    await waitFor(() => existsSync(pidFile) && readFileSync(pidFile, "utf8").trim() !== "", "the runner to start")
+    const opening = openSession(
+      connect(local(), ["sh", "-c", 'echo $$ > "$0"; exec sleep 30', pidFile]),
+      { signal: stop.signal }
+    ).catch((error: unknown) => error)
+    await waitFor(
+      () => existsSync(pidFile) && readFileSync(pidFile, "utf8").trim() !== "",
+      "the runner to start"
+    )
     stop.abort()
     expect(await opening).toBeInstanceOf(Error)
-    await waitFor(() => !isAlive(Number(readFileSync(pidFile, "utf8"))), "the runner to be stopped", 1000)
+    await waitFor(
+      () => !isAlive(Number(readFileSync(pidFile, "utf8"))),
+      "the runner to be stopped",
+      1000
+    )
     // Signalled before it starts, nothing is started at all.
     const started = join(tempDir("silent"), "pid")
-    await expect(openSession(connect(local(), ["sh", "-c", 'echo $$ > "$0"', started]), { signal: AbortSignal.abort() })).rejects.toThrow(ENDED)
+    await expect(
+      openSession(connect(local(), ["sh", "-c", 'echo $$ > "$0"', started]), {
+        signal: AbortSignal.abort(),
+      })
+    ).rejects.toThrow(ENDED)
     expect(existsSync(started)).toBe(false)
   })
 })
@@ -321,48 +518,100 @@ describe("a runner that does not speak sessions gets the one-shot commands", () 
   test("a runner that exits with status 2 for `session` is used one command at a time, and the session says so", async () => {
     const m = await ready()
     const log = join(m.project, "starts.log")
-    const s = await openSession(connect(local(m.runnerHome), older(log, m.docker.path)))
+    const s = await openSession(
+      connect(local(m.runnerHome), older(log, m.docker.path))
+    )
     expect(s.mode).toBe("one-shot")
     expect(s.runner).toBeUndefined()
-    expect((await s.request("status", RunnerStatusSchema)).serverId).toBe(serverIdOf(m.home))
+    expect((await s.request("status", RunnerStatusSchema)).serverId).toBe(
+      serverIdOf(m.home)
+    )
     // State and logs exist only in a session.
-    await expect(s.request("state", RunnerAppStatesSchema)).rejects.toThrow(TOO_OLD)
-    await expect(s.request("logs", RunnerReportSchema, { input: { app: "web", tail: 1 } })).rejects.toThrow(TOO_OLD)
-    await expect(s.request("version", RunnerVersionSchema)).rejects.toThrow(TOO_OLD)
+    await expect(s.request("state", RunnerAppStatesSchema)).rejects.toThrow(
+      TOO_OLD
+    )
+    await expect(
+      s.request("logs", RunnerReportSchema, { input: { app: "web", tail: 1 } })
+    ).rejects.toThrow(TOO_OLD)
+    await expect(s.request("version", RunnerVersionSchema)).rejects.toThrow(
+      TOO_OLD
+    )
     expect(await s.close()).toBeUndefined()
     expect(words(log)).toEqual(["session", "status"])
 
     // Deploys work exactly as they did with that runner, and the operation reports how it got there.
     m.deps.localRunner = older(log, m.docker.path)
     expect(await m.zekno("deploy", ...where)).toBe(0)
-    expect(m.lastOut()).toBe("Deploy 1 of web is running on dev with no secrets.")
-    const result = await sendDeploy(m.deps, await prepareDeploy(m.deps, { app: "web", server: "dev" }))
-    expect(result).toMatchObject({ outcome: "started", sequence: 2, mode: "one-shot" })
-    expect(words(log).slice(2)).toEqual(["session", "status", "apply", "session", "status", "apply"])
+    expect(m.lastOut()).toBe(
+      "Deploy 1 of web is running on dev with no secrets."
+    )
+    const result = await sendDeploy(
+      m.deps,
+      await prepareDeploy(m.deps, { app: "web", server: "dev" })
+    )
+    expect(result).toMatchObject({
+      outcome: "started",
+      sequence: 2,
+      mode: "one-shot",
+    })
+    expect(words(log).slice(2)).toEqual([
+      "session",
+      "status",
+      "apply",
+      "session",
+      "status",
+      "apply",
+    ])
   })
 
   test("something that answers only once its input closes is given the one-shot commands", async () => {
     const m = await ready()
     const real = await runner(m.runnerHome, m.docker.path, "status")
-    const answering = ["sh", "-c", `cat >/dev/null; printf '%s\\n' '${JSON.stringify(real.json)}'`]
-    const s = await openSession({ ...connect(local(m.runnerHome), answering), firstAnswerMs: 50 })
+    const answering = [
+      "sh",
+      "-c",
+      `cat >/dev/null; printf '%s\\n' '${JSON.stringify(real.json)}'`,
+    ]
+    const s = await openSession({
+      ...connect(local(m.runnerHome), answering),
+      firstAnswerMs: 50,
+    })
     expect(s.mode).toBe("one-shot")
-    expect(await s.request("status", RunnerStatusSchema)).toEqual(real.json as never)
+    expect(await s.request("status", RunnerStatusSchema)).toEqual(
+      real.json as never
+    )
   })
 
   test("a runner that speaks sessions but is slow to start is started once more and given as long as it needs", async () => {
     const m = await ready()
     const log = join(m.project, "starts.log")
-    const s = await openSession({ ...connect(local(m.runnerHome), counted(log, m.docker.path, "sleep 0.3;")), firstAnswerMs: 100 })
+    const s = await openSession({
+      ...connect(
+        local(m.runnerHome),
+        counted(log, m.docker.path, "sleep 0.3;")
+      ),
+      firstAnswerMs: 100,
+    })
     expect(s.mode).toBe("session")
-    expect((await s.request("status", RunnerStatusSchema)).serverId).toBe(serverIdOf(m.home))
+    expect((await s.request("status", RunnerStatusSchema)).serverId).toBe(
+      serverIdOf(m.home)
+    )
     expect(await s.close()).toBe(0)
     expect(words(log)).toEqual(["session", "session"])
   })
 
   test("only a runner on this machine has a limit on its first answer", () => {
     expect(connect(local(), []).firstAnswerMs).toBe(LOCAL_FIRST_ANSWER_MS)
-    expect(connect({ kind: "ssh", destination: "me@example.test", runnerPath: "zekno-runner" }, []).firstAnswerMs).toBeUndefined()
+    expect(
+      connect(
+        {
+          kind: "ssh",
+          destination: "me@example.test",
+          runnerPath: "zekno-runner",
+        },
+        []
+      ).firstAnswerMs
+    ).toBeUndefined()
   })
 })
 
@@ -374,16 +623,27 @@ describe("one command, one runner process (FR-034)", () => {
     // This test is about requests sharing a process. A first answer that is
     // late on a busy machine costs one more process and nothing else, so the
     // runner is given as long as it needs here.
-    m.deps.connect = (target, localRunner): Transport => ({ ...connect(target, localRunner), firstAnswerMs: undefined })
+    m.deps.connect = (target, localRunner): Transport => ({
+      ...connect(target, localRunner),
+      firstAnswerMs: undefined,
+    })
     expect(await m.zekno("init", "--name", "Ada")).toBe(0)
     m.compose(COMPOSE_V1)
-    const commands = [["server", "add", "dev", "--local"], ["deploy", ...where], ["status", "--server", "dev"], ["deploy", ...where], ["rollback", ...where]]
+    const commands = [
+      ["server", "add", "dev", "--local"],
+      ["deploy", ...where],
+      ["status", "--server", "dev"],
+      ["deploy", ...where],
+      ["rollback", ...where],
+    ]
     for (const command of commands) {
       const before = words(log).length
       expect(await m.zekno(...command)).toBe(0)
       expect(words(log).slice(before)).toEqual(["session"])
     }
-    expect(m.lastOut()).toBe("Deploy 3 of web is running on dev with no secrets.")
+    expect(m.lastOut()).toBe(
+      "Deploy 3 of web is running on dev with no secrets."
+    )
   })
 
   test("over SSH, each command opens one connection: the destination after `--`, and only the runner path and a fixed word as the remote command", async () => {
@@ -399,21 +659,47 @@ describe("one command, one runner process (FR-034)", () => {
     chmodSync(wrapper, 0o755)
     // A stand-in for ssh: notes how it was called, then runs the remote command with a shell, as the server would.
     const fakeSsh = join(dir, "ssh")
-    writeFileSync(fakeSsh, `#!/bin/sh\nprintf '%s\\n' "$*" >> "${sshLog}"\n[ "$1" = "--" ] || exit 255\nexec sh -c "$3"\n`)
+    writeFileSync(
+      fakeSsh,
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> "${sshLog}"\n[ "$1" = "--" ] || exit 255\nexec sh -c "$3"\n`
+    )
     chmodSync(fakeSsh, 0o755)
-    const calls = () => (existsSync(sshLog) ? readFileSync(sshLog, "utf8").trim().split("\n") : [])
+    const calls = () =>
+      existsSync(sshLog) ? readFileSync(sshLog, "utf8").trim().split("\n") : []
 
     const spawn = Bun.spawn
-    const spy = spyOn(Bun, "spawn").mockImplementation(((argv: string[], options: never) =>
-      spawn(argv[0] === "ssh" ? [fakeSsh, ...argv.slice(1)] : argv, options)) as never)
+    const spy = spyOn(Bun, "spawn").mockImplementation(((
+      argv: string[],
+      options: never
+    ) =>
+      spawn(
+        argv[0] === "ssh" ? [fakeSsh, ...argv.slice(1)] : argv,
+        options
+      )) as never)
     try {
-      expect(await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test", "--runner-path", wrapper)).toBe(0)
+      expect(
+        await m.zekno(
+          "server",
+          "add",
+          "prod",
+          "--ssh",
+          "deploy@example.test",
+          "--runner-path",
+          wrapper
+        )
+      ).toBe(0)
       expect(calls()).toEqual([`-- deploy@example.test ${wrapper} session`])
       m.compose(COMPOSE_V2)
-      expect(await m.zekno("deploy", "--app", "web", "--server", "prod")).toBe(0)
-      expect(m.lastOut()).toBe("Deploy 1 of web is running on prod with no secrets.")
+      expect(await m.zekno("deploy", "--app", "web", "--server", "prod")).toBe(
+        0
+      )
+      expect(m.lastOut()).toBe(
+        "Deploy 1 of web is running on prod with no secrets."
+      )
       expect(await m.zekno("status", "--server", "prod")).toBe(0)
-      expect(calls()).toEqual(Array(3).fill(`-- deploy@example.test ${wrapper} session`))
+      expect(calls()).toEqual(
+        Array(3).fill(`-- deploy@example.test ${wrapper} session`)
+      )
     } finally {
       spy.mockRestore()
     }

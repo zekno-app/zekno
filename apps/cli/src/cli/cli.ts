@@ -8,7 +8,14 @@ import { doctor } from "../commands/doctor"
 import { init } from "../commands/init"
 import { link } from "../commands/link"
 import { logs, parseTail } from "../commands/logs"
-import { readImport, secretImport, secretList, secretRemove, secretSet, type ImportRead } from "../commands/secret"
+import {
+  readImport,
+  secretImport,
+  secretList,
+  secretRemove,
+  secretSet,
+  type ImportRead,
+} from "../commands/secret"
 import { serverAdd, serverList, serverUpdate } from "../commands/server"
 import { status } from "../commands/status"
 import { teamOnce, type Deps } from "./context"
@@ -21,7 +28,12 @@ import { withProject } from "../project/project"
 import { notSignedHere, standingOf } from "../project/signed"
 import { alreadyLinked } from "../project/write"
 import { RUNNER_RELEASE } from "../version/runner-release"
-import { checkNewest, NEWEST, newerExists, NOT_CHECKED } from "../version/newest"
+import {
+  checkNewest,
+  NEWEST,
+  newerExists,
+  NOT_CHECKED,
+} from "../version/newest"
 import { versionCells, versionLines, versionObject } from "../version/version"
 
 export const HELP = `zekno: deploy to your own servers. Secrets are encrypted and deploys are signed on this machine.
@@ -73,7 +85,12 @@ const WORDS: Record<string, number> = {
  * is one: it is put in front of a person as a command to type.
  */
 export function valueAsArgument(name: string | undefined): string {
-  const shown = name !== undefined && SECRET_NAME.test(name) && name.length <= LIMITS.secretNameLength ? name : "<NAME>"
+  const shown =
+    name !== undefined &&
+    SECRET_NAME.test(name) &&
+    name.length <= LIMITS.secretNameLength
+      ? name
+      : "<NAME>"
   return `A secret value is never given as an argument. It would stay in your shell history. Run \`zekno secret set ${shown}\` and type it when asked.`
 }
 
@@ -135,23 +152,35 @@ export async function run(argv: string[], given: Deps): Promise<number> {
     // Nothing may trail a command. In particular a secret value is never an argument:
     // it would stay in the shell's history and show in the list of processes.
     if (positionals.length > (WORDS[name] ?? Infinity)) {
-      throw new UsageError(name === "secret set" ? valueAsArgument(third) : `Unexpected "${positionals[WORDS[name]!]}" after \`zekno ${name}\`.`)
+      throw new UsageError(
+        name === "secret set"
+          ? valueAsArgument(third)
+          : `Unexpected "${positionals[WORDS[name]!]}" after \`zekno ${name}\`.`
+      )
     }
 
     // The two versions built into the program, before anything opens the team: no keychain, no profile, no connection, no file.
     // Only the command `version` then asks GitHub whether a newer release exists; `--version` never uses the network (FR-036).
     if (values.version || command === "version") {
       const runner = (deps.release ?? RUNNER_RELEASE).version
-      const latest = command === "version" ? await checkNewest(deps, runner) : undefined
+      const latest =
+        command === "version" ? await checkNewest(deps, runner) : undefined
       if (values.json) {
-        deps.ui.json(latest === undefined ? versionObject(runner) : { ...versionObject(runner), latest })
+        deps.ui.json(
+          latest === undefined
+            ? versionObject(runner)
+            : { ...versionObject(runner), latest }
+        )
         return 0
       }
       const cells = versionCells(runner)
-      versionLines(runner).forEach((line, index) => deps.ui.line(line, cells[index]))
+      versionLines(runner).forEach((line, index) =>
+        deps.ui.line(line, cells[index])
+      )
       if (latest?.state === "newest") deps.ui.success(NEWEST)
       // At a terminal its first sentence is bold, as the board "The version, and a newer release" draws it; plain output is unchanged.
-      else if (latest?.state === "newer") deps.ui.warn(newerExists(latest.version), { firstBold: true })
+      else if (latest?.state === "newer")
+        deps.ui.warn(newerExists(latest.version), { firstBold: true })
       else if (latest?.state === "not_checked") deps.ui.note(NOT_CHECKED)
       return 0
     }
@@ -167,7 +196,9 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         profile: deps.home,
         trust: team.trust,
         confirm: (question, refusal) => deps.ui.confirm(question, refusal),
-        ...(atTerminal ? { leaveAside: (sentence: string) => deps.ui.warn(sentence) } : {}),
+        ...(atTerminal
+          ? { leaveAside: (sentence: string) => deps.ui.warn(sentence) }
+          : {}),
       })
 
     /**
@@ -179,12 +210,19 @@ export async function run(argv: string[], given: Deps): Promise<number> {
      */
     const details = async (wanted: readonly ("app" | "server")[]) => {
       const given = await project(wanted)
-      if (!atTerminal || wanted.every((detail) => given[detail] !== undefined)) return given
+      if (!atTerminal || wanted.every((detail) => given[detail] !== undefined))
+        return given
       const opened = await team.peek()
       const { server } = await whichServer(deps, opened, given)
       if (!wanted.includes("app")) return { ...given, server: server.name }
       const linked = given.app !== undefined && values.app === undefined
-      const { app } = await whichApp(deps, opened, server, { app: given.app, linked }, { offerNew: false, folder: deps.cwd })
+      const { app } = await whichApp(
+        deps,
+        opened,
+        server,
+        { app: given.app, linked },
+        { offerNew: false, folder: deps.cwd }
+      )
       return { ...given, server: server.name, app }
     }
 
@@ -197,11 +235,23 @@ export async function run(argv: string[], given: Deps): Promise<number> {
     const linkDetails = async () => {
       if (values.app !== undefined && values.server !== undefined) return values
       const found = findProject(deps.cwd)
-      if (found && standingOf(found, await team.trust(), deps.home).kind !== "unsigned") return values
+      if (
+        found &&
+        standingOf(found, await team.trust(), deps.home).kind !== "unsigned"
+      )
+        return values
       if (found) deps.ui.warn(notSignedHere(found, deps.cwd))
       const opened = await team.peek()
-      const { server } = await whichServer(deps, opened, { server: values.server })
-      const { app } = await whichApp(deps, opened, server, { app: values.app }, { offerNew: false, folder: deps.cwd })
+      const { server } = await whichServer(deps, opened, {
+        server: values.server,
+      })
+      const { app } = await whichApp(
+        deps,
+        opened,
+        server,
+        { app: values.app },
+        { offerNew: false, folder: deps.cwd }
+      )
       return { ...values, server: server.name, app }
     }
 
@@ -209,17 +259,24 @@ export async function run(argv: string[], given: Deps): Promise<number> {
     let imported: ImportRead | undefined
     if (atTerminal && Object.hasOwn(WORDS, name) && !WITHOUT_TEAM.has(name)) {
       // With no team, the way to make one: `zekno deploy` makes it from nothing (A3).
-      if (!profileStore(deps.home).exists()) throw new CliError(NO_TEAM_AT_TERMINAL)
+      if (!profileStore(deps.home).exists())
+        throw new CliError(NO_TEAM_AT_TERMINAL)
       // What needs no answer is checked before any question (research R1). Only the order of failures at a terminal changes.
       if (name === "secret import") imported = readImport(deps.cwd, third)
       if (name === "secret set") checkSecretName(third)
-      if (name === "secret rm" && !third) throw new UsageError(sayWhichSecret("rm"))
+      if (name === "secret rm" && !third)
+        throw new UsageError(sayWhichSecret("rm"))
       if (name === "rollback") checkTo(values.to)
       if (name === "logs") parseTail(values.tail)
       if (name === "link" && !values.force) {
         // Linking would have to replace a file here that is not the team's, which only `--force` does: said before anything is asked.
         const here = readableProject(deps.cwd)
-        if (here && isHere(here, deps.cwd) && standingOf(here, await team.trust(), deps.home).kind === "unsigned") throw new CliError(alreadyLinked(deps.cwd))
+        if (
+          here &&
+          isHere(here, deps.cwd) &&
+          standingOf(here, await team.trust(), deps.home).kind === "unsigned"
+        )
+          throw new CliError(alreadyLinked(deps.cwd))
       }
     }
 
@@ -232,7 +289,13 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         return 0
       case "server update":
         // The positional name is the server: at a terminal it is asked for when missing, the one server used and said.
-        await serverUpdate(deps, atTerminal && third === undefined ? (await whichServer(deps, await team.peek(), {})).server.name : third, values)
+        await serverUpdate(
+          deps,
+          atTerminal && third === undefined
+            ? (await whichServer(deps, await team.peek(), {})).server.name
+            : third,
+          values
+        )
         return 0
       case "server ls":
         await serverList(deps)
@@ -242,7 +305,9 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         return 0
       case "secret import": {
         const read = imported ?? readImport(deps.cwd, third)
-        await secretImport(deps, read, await details(["app", "server"]), { yes: values.yes === true })
+        await secretImport(deps, read, await details(["app", "server"]), {
+          yes: values.yes === true,
+        })
         return 0
       }
       case "secret rm":
@@ -253,10 +318,21 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         return 0
       case "deploy":
         // At a terminal it sets up what is missing and asks for what was not given (contracts/first-deploy.md); in a script it is as it always was.
-        if (deps.ui.asks) return await deployAtTerminal(deps, team, { app: values.app, server: values.server, file: values.file })
-        return await deploy(deps, { ...(await project(["app", "server", "file"])), typed: { app: values.app, server: values.server } })
+        if (deps.ui.asks)
+          return await deployAtTerminal(deps, team, {
+            app: values.app,
+            server: values.server,
+            file: values.file,
+          })
+        return await deploy(deps, {
+          ...(await project(["app", "server", "file"])),
+          typed: { app: values.app, server: values.server },
+        })
       case "rollback":
-        return await rollback(deps, { ...(await details(["app", "server"])), typed: { app: values.app, server: values.server } })
+        return await rollback(deps, {
+          ...(await details(["app", "server"])),
+          typed: { app: values.app, server: values.server },
+        })
       case "status":
         await status(deps, await details(["server"]))
         return 0
@@ -281,8 +357,13 @@ export async function run(argv: string[], given: Deps): Promise<number> {
       deps.ui.error(`That could not be done (${error.code}).`)
       return 1
     }
-    if (error instanceof UsageError || (error as { code?: string }).code?.startsWith("ERR_PARSE_ARGS")) {
-      deps.ui.error(`${(error as Error).message}\nRun \`zekno --help\` for the list of commands.`)
+    if (
+      error instanceof UsageError ||
+      (error as { code?: string }).code?.startsWith("ERR_PARSE_ARGS")
+    ) {
+      deps.ui.error(
+        `${(error as Error).message}\nRun \`zekno --help\` for the list of commands.`
+      )
       return 2
     }
     throw error

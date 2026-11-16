@@ -16,7 +16,12 @@ export function Trail({ parts }: { parts: readonly string[] }) {
       {parts.map((part, index) => (
         <Text key={index}>
           {index > 0 ? " " : ""}
-          <Text dimColor>›</Text> {index === parts.length - 1 ? <Text bold>{part}</Text> : <Text dimColor>{part}</Text>}
+          <Text dimColor>›</Text>{" "}
+          {index === parts.length - 1 ? (
+            <Text bold>{part}</Text>
+          ) : (
+            <Text dimColor>{part}</Text>
+          )}
         </Text>
       ))}
     </Text>
@@ -38,7 +43,12 @@ export function Header({
   logo?: boolean
 }) {
   return (
-    <Box justifyContent="space-between" alignItems="flex-end" columnGap={2} flexShrink={0}>
+    <Box
+      justifyContent="space-between"
+      alignItems="flex-end"
+      columnGap={2}
+      flexShrink={0}
+    >
       <Box alignItems="flex-end" columnGap={1} flexShrink={1}>
         {logo ? <Logo /> : null}
         {place}
@@ -52,7 +62,11 @@ export function Header({
 export function NoticeLine({ notice }: { notice: Notice }) {
   const theme = useTheme()
   if (notice.tone === "info") return <Text dimColor>{notice.text}</Text>
-  const mark = { success: ["✔", theme.success], error: ["✖", theme.danger], warning: ["!", theme.warning] }[notice.tone]
+  const mark = {
+    success: ["✔", theme.success],
+    error: ["✖", theme.danger],
+    warning: ["!", theme.warning],
+  }[notice.tone]
   return (
     <Text>
       <Text color={mark[1]}>{mark[0]}</Text> {notice.text}

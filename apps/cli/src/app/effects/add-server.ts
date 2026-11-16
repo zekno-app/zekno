@@ -22,7 +22,8 @@ export const THIS_MACHINE = "this machine"
 
 /** Adding servers, one at a time. */
 export function createAdding(context: Context, servers: Servers) {
-  const { deps, dispatch, fail, purposeful, ops, remember, carried, notice } = context
+  const { deps, dispatch, fail, purposeful, ops, remember, carried, notice } =
+    context
 
   /** One server added at a time, so two never take the same name or race on the team list. */
   let adding = false
@@ -38,26 +39,52 @@ export function createAdding(context: Context, servers: Servers) {
    * where SSH asked for a password to add it, it does not ask again, and a
    * read in the background, which never asks, finds the session open.
    */
-  async function add(effect: Extract<Effect, { kind: "add-server" }>): Promise<void> {
+  async function add(
+    effect: Extract<Effect, { kind: "add-server" }>
+  ): Promise<void> {
     // The reducer reopens a running one rather than starting another; this holds even if it did not.
-    if (adding) return notice("info", "A server is already being added. Wait for it to finish.")
+    if (adding)
+      return notice(
+        "info",
+        "A server is already being added. Wait for it to finish."
+      )
     adding = true
     try {
       const local = effect.destination === THIS_MACHINE
       // Once the server is added, what its kept session's runner writes is shown as any other runner's.
       let added = false
-      const lines = routeErrorLines(purposeful, (line) => dispatch(added ? { type: "runner-line", line } : { type: "add-line", line }))
-      const plan = await prepareServerAdd(lines, effect.name, local ? { local: true } : { ssh: effect.destination })
+      const lines = routeErrorLines(purposeful, (line) =>
+        dispatch(
+          added ? { type: "runner-line", line } : { type: "add-line", line }
+        )
+      )
+      const plan = await prepareServerAdd(
+        lines,
+        effect.name,
+        local ? { local: true } : { ssh: effect.destination }
+      )
       const started = Date.now()
-      dispatch({ type: "add-started", destination: local ? THIS_MACHINE : effect.destination, name: plan.name, local })
-      const step = (name: AddStepName, detail?: string, found?: boolean) => dispatch({ type: "add-step", step: name, detail, found })
+      dispatch({
+        type: "add-started",
+        destination: local ? THIS_MACHINE : effect.destination,
+        name: plan.name,
+        local,
+      })
+      const step = (name: AddStepName, detail?: string, found?: boolean) =>
+        dispatch({ type: "add-step", step: name, detail, found })
       let bytes: number | undefined
       let resumed = false
       const installed = (event: InstallEvent) => {
-        if (event.kind === "docker") step("docker", event.version ? `v${event.version}` : undefined)
-        else if (event.kind === "runner") step("runner", foundDetail(event.version, carried), true)
+        if (event.kind === "docker")
+          step("docker", event.version ? `v${event.version}` : undefined)
+        else if (event.kind === "runner")
+          step("runner", foundDetail(event.version, carried), true)
         else if (event.kind === "download") bytes = event.bytes
-        else if (event.kind === "install") step("runner", `${bytes === undefined ? "" : `${megabytes(bytes)}, `}checksum verified`)
+        else if (event.kind === "install")
+          step(
+            "runner",
+            `${bytes === undefined ? "" : `${megabytes(bytes)}, `}checksum verified`
+          )
       }
       // Stops the session at once when the app closes on a signal, also once it is kept.
       const stop = new AbortController()
@@ -66,8 +93,13 @@ export function createAdding(context: Context, servers: Servers) {
         plan,
         {
           stage(stage) {
-            if (stage === "connected") step("connect", local ? undefined : seconds(Date.now() - started))
-            else if (stage === "set_up") step("set_up", resumed ? "carried on from an earlier attempt" : undefined)
+            if (stage === "connected")
+              step("connect", local ? undefined : seconds(Date.now() - started))
+            else if (stage === "set_up")
+              step(
+                "set_up",
+                resumed ? "carried on from an earlier attempt" : undefined
+              )
             else step("added")
           },
           install: installed,
@@ -86,7 +118,12 @@ export function createAdding(context: Context, servers: Servers) {
         throw error
       }
       remember(team)
-      const relation = relationOf(result.target, result.mode, result.runner, carried)
+      const relation = relationOf(
+        result.target,
+        result.mode,
+        result.runner,
+        carried
+      )
       const runner = runnerRow(result.runner, relation)
       // This line says a newer runner, so its first read does not say it again.
       if (relation?.relation === "newer") servers.toldNewer.add(result.name)
@@ -100,13 +137,27 @@ export function createAdding(context: Context, servers: Servers) {
       dispatch({
         type: "server-added",
         team: teamView(team, deps.home),
-        notice: { tone: relation === undefined || relation.relation === "same" ? "success" : "warning", text },
+        notice: {
+          tone:
+            relation === undefined || relation.relation === "same"
+              ? "success"
+              : "warning",
+          text,
+        },
         code: result.code,
       })
-      dispatch({ type: "server-reached", server: result.name, reachable: true, runner })
+      dispatch({
+        type: "server-reached",
+        server: result.name,
+        reachable: true,
+        runner,
+      })
       // Read over in the background: another server can be added meanwhile.
-      const server = team.profile.servers.find((entry) => entry.name === result.name)
-      if (result.session && server) void servers.adopt(team, server, result.session, stop).catch(fail)
+      const server = team.profile.servers.find(
+        (entry) => entry.name === result.name
+      )
+      if (result.session && server)
+        void servers.adopt(team, server, result.session, stop).catch(fail)
       else void result.session?.close()
     } finally {
       adding = false

@@ -51,16 +51,27 @@ function saysWouldAsk(lines: readonly string[]): boolean {
  * where SSH would have asked can be told from others (`wouldHaveAsked`).
  * A runner on this machine is reached as usual.
  */
-export function batchOnly(connect: Deps["connect"], lines: string[]): Deps["connect"] {
+export function batchOnly(
+  connect: Deps["connect"],
+  lines: string[]
+): Deps["connect"] {
   return (target, localRunner, options = {}) =>
-    connect(target, localRunner, { ...options, batch: true, errorLines: recording(lines, undefined) })
+    connect(target, localRunner, {
+      ...options,
+      batch: true,
+      errorLines: recording(lines, undefined),
+    })
 }
 
 /** Whether SSH said it stopped where it would have asked for a password, a passphrase or a host key. */
-export const wouldHaveAsked = (lines: readonly string[]): boolean => saysWouldAsk(lines)
+export const wouldHaveAsked = (lines: readonly string[]): boolean =>
+  saysWouldAsk(lines)
 
 /** Keeps the last lines an attempt wrote, and passes every line on. */
-export function recording(lines: string[], out: ErrorLines | undefined): ErrorLines {
+export function recording(
+  lines: string[],
+  out: ErrorLines | undefined
+): ErrorLines {
   return (line) => {
     lines.push(line)
     if (lines.length > KEPT_LINES) lines.shift()

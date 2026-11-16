@@ -91,7 +91,8 @@ exit 0
 `
 
 /** Said when the runner path from the profile cannot be a word of the check, before anything is sent. */
-export const CHECK_PATH_INVALID = "The runner path for the check is not valid, so nothing was sent to the server."
+export const CHECK_PATH_INVALID =
+  "The runner path for the check is not valid, so nothing was sent to the server."
 
 /**
  * The words after `sh -s --`: `check` and the runner's path from the
@@ -99,7 +100,8 @@ export const CHECK_PATH_INVALID = "The runner path for the check is not valid, s
  * (`isInstallPath`). One that does not fit throws, and nothing is sent.
  */
 export function checkWords(runnerPath: string): string[] {
-  if (typeof runnerPath !== "string" || !isInstallPath(runnerPath)) throw new CliError(CHECK_PATH_INVALID)
+  if (typeof runnerPath !== "string" || !isInstallPath(runnerPath))
+    throw new CliError(CHECK_PATH_INVALID)
   return ["check", runnerPath]
 }
 
@@ -131,7 +133,9 @@ const ERRORS_GRACE_MS = 1000
 /** Resolves with what `promise` gives, or with undefined after `ms` milliseconds. */
 function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
   let timer: ReturnType<typeof setTimeout> | undefined
-  const late = new Promise<undefined>((resolve) => (timer = setTimeout(() => resolve(undefined), ms)))
+  const late = new Promise<undefined>(
+    (resolve) => (timer = setTimeout(() => resolve(undefined), ms))
+  )
   return Promise.race([promise, late]).finally(() => clearTimeout(timer))
 }
 
@@ -144,7 +148,11 @@ const VERSION_SHAPE = /^v?([0-9]+(\.[0-9]+){1,3})$/
  * the connection is ended and what was read so far is returned. Nothing a
  * line says is used but the result above.
  */
-export async function runCheck(transport: Transport, runnerPath: string, signal: AbortSignal): Promise<CheckRead> {
+export async function runCheck(
+  transport: Transport,
+  runnerPath: string,
+  signal: AbortSignal
+): Promise<CheckRead> {
   if (!transport.script) throw new CliError("The check runs only over SSH.")
   const words = checkWords(runnerPath)
   const child = transport.script(words)
@@ -201,7 +209,8 @@ export async function runCheck(transport: Transport, runnerPath: string, signal:
         else fits = false
       } else if (step === 3) {
         const space = /^space ([0-9]{1,15}|unknown)$/.exec(text)
-        if (space) read.space = space[1] === "unknown" ? "unknown" : Number(space[1])
+        if (space)
+          read.space = space[1] === "unknown" ? "unknown" : Number(space[1])
         else fits = false
       } else if (text === "done") {
         finished = true

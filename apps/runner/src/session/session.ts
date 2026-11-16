@@ -17,7 +17,10 @@ import { version as runnerVersion } from "../../package.json"
 import { apply, refused, setup, status, sync } from "../commands/commands"
 import { appStates, followLogs } from "../docker/inspect"
 
-export const version = (): RunnerVersion => ({ version: runnerVersion, protocol: RUNNER_PROTOCOL })
+export const version = (): RunnerVersion => ({
+  version: runnerVersion,
+  protocol: RUNNER_PROTOCOL,
+})
 
 /** Lines that are not requests, in a row, before the runner gives up on the session. */
 const MAX_BAD_LINES = 3
@@ -78,7 +81,12 @@ export function stdoutSink(): FrameSink {
     write(frame) {
       if (gone.signal.aborted) return
       const line = `${JSON.stringify(frame)}\n`
-      if (backedUp && !("result" in frame) && unsent + Buffer.byteLength(line) > UNSENT_BYTES) return
+      if (
+        backedUp &&
+        !("result" in frame) &&
+        unsent + Buffer.byteLength(line) > UNSENT_BYTES
+      )
+        return
       try {
         if (!process.stdout.write(line)) backedUp = true
         if (backedUp) unsent += Buffer.byteLength(line)
@@ -86,7 +94,10 @@ export function stdoutSink(): FrameSink {
         lost()
       }
     },
-    drained: () => (backedUp && !gone.signal.aborted ? new Promise<void>((resolve) => waiting.push(resolve)) : Promise.resolve()),
+    drained: () =>
+      backedUp && !gone.signal.aborted
+        ? new Promise<void>((resolve) => waiting.push(resolve))
+        : Promise.resolve(),
     gone: gone.signal,
   }
 }
@@ -95,7 +106,10 @@ export function stdoutSink(): FrameSink {
  * Splits a byte stream into lines. A line longer than `limit` bytes is let go
  * of as it arrives, never held whole, and given as `null` so it can be refused.
  */
-export async function* requestLines(stream: ReadableStream<Uint8Array>, limit: number): AsyncGenerator<Uint8Array | null> {
+export async function* requestLines(
+  stream: ReadableStream<Uint8Array>,
+  limit: number
+): AsyncGenerator<Uint8Array | null> {
   let held: Uint8Array[] = []
   let size = 0
   const take = (): Uint8Array | null => {
@@ -130,7 +144,12 @@ const whenAborted = (signal: AbortSignal) =>
 const cost = (line: Uint8Array | null) => (line?.length ?? 0) + LINE_COST
 
 /** Runs one request through the code of its one-shot command and returns its answer. */
-async function handle(dir: string, request: SessionRequest, sink: FrameSink, closed: AbortSignal): Promise<unknown> {
+async function handle(
+  dir: string,
+  request: SessionRequest,
+  sink: FrameSink,
+  closed: AbortSignal
+): Promise<unknown> {
   const { command, input } = request
   let text: string
   try {
@@ -152,16 +171,23 @@ async function handle(dir: string, request: SessionRequest, sink: FrameSink, clo
         return await sync(dir, text)
       case "apply":
         // Docker's own output, line by line. The deploy does not wait for anyone to read it.
-        return await apply(dir, text, (line) => sink.write({ event: "progress", line }))
+        return await apply(dir, text, (line) =>
+          sink.write({ event: "progress", line })
+        )
       case "state":
         return await appStates(dir, closed)
       case "logs": {
         const gone = whenAborted(closed)
         // A slow reader slows Docker's log command down, until the reader goes away.
-        return await followLogs(dir, text, (event) => {
-          sink.write(event)
-          return Promise.race([sink.drained(), gone])
-        }, closed)
+        return await followLogs(
+          dir,
+          text,
+          (event) => {
+            sink.write(event)
+            return Promise.race([sink.drained(), gone])
+          },
+          closed
+        )
       }
     }
   } catch {
@@ -189,7 +215,11 @@ async function handle(dir: string, request: SessionRequest, sink: FrameSink, clo
  * ends at once, as if the input had closed, and the requests still waiting
  * are dropped too, since nobody could read their answers.
  */
-export async function runSession(dir: string, input: ReadableStream<Uint8Array>, sink: FrameSink): Promise<number> {
+export async function runSession(
+  dir: string,
+  input: ReadableStream<Uint8Array>,
+  sink: FrameSink
+): Promise<number> {
   const queue: (Uint8Array | null)[] = []
   let queued = 0
   let overrun = false
@@ -219,7 +249,10 @@ export async function runSession(dir: string, input: ReadableStream<Uint8Array>,
       for await (const line of requestLines(input, LIMITS.messageBytes)) {
         // Holding lines back would also stop the reading, and with it the
         // noticing of a closed input. A client this far ahead ends its session.
-        if (queue.length >= QUEUE_LINES || (queue.length > 0 && queued + cost(line) > QUEUE_BYTES)) {
+        if (
+          queue.length >= QUEUE_LINES ||
+          (queue.length > 0 && queued + cost(line) > QUEUE_BYTES)
+        ) {
           overrun = true
           queue.length = 0
           queued = 0
@@ -262,7 +295,8 @@ export async function runSession(dir: string, input: ReadableStream<Uint8Array>,
   for (;;) {
     const line = await next()
     if (line === undefined) return overrun ? 1 : 0
-    const request = line === null ? undefined : parseMessage(SessionRequestSchema, line)
+    const request =
+      line === null ? undefined : parseMessage(SessionRequestSchema, line)
     if (!request?.ok) {
       sink.write({ result: refused("invalid_request") })
       if (++bad >= MAX_BAD_LINES) return 1
@@ -270,7 +304,9 @@ export async function runSession(dir: string, input: ReadableStream<Uint8Array>,
       continue
     }
     bad = 0
-    sink.write({ result: await handle(dir, request.value, sink, closed.signal) })
+    sink.write({
+      result: await handle(dir, request.value, sink, closed.signal),
+    })
     await delivered()
   }
 }

@@ -80,9 +80,15 @@ export const noTerminalToUse = (member: string, link: ProjectLink): string =>
  * that Compose file, not the one beside the person, so the question says
  * which. Undefined for a file in the folder the command runs in.
  */
-export function aboveOf(link: ProjectLink, cwd: string): { folder: string; compose: string } | undefined {
+export function aboveOf(
+  link: ProjectLink,
+  cwd: string
+): { folder: string; compose: string } | undefined {
   if (isHere(link, cwd)) return undefined
-  return { folder: shownPath(link.folder), compose: shownPath(join(link.folder, link.compose)) }
+  return {
+    folder: shownPath(link.folder),
+    compose: shownPath(join(link.folder, link.compose)),
+  }
 }
 
 /**
@@ -92,12 +98,20 @@ export function aboveOf(link: ProjectLink, cwd: string): { folder: string; compo
  * sends the command to another app or server than the file names (`uses`),
  * where it goes instead.
  */
-export function useQuestion(member: string, link: ProjectLink, cwd: string, uses?: { app: string; server: string }): string {
+export function useQuestion(
+  member: string,
+  link: ProjectLink,
+  cwd: string,
+  uses?: { app: string; server: string }
+): string {
   const above = aboveOf(link, cwd)
   const linked = above
     ? `${member} linked ${above.folder} to ${link.app} on ${link.server}, with ${above.compose}.`
     : `${member} linked this folder to ${link.app} on ${link.server}.`
-  const elsewhere = uses && (uses.app !== link.app || uses.server !== link.server) ? ` This command uses ${uses.app} on ${uses.server}.` : ""
+  const elsewhere =
+    uses && (uses.app !== link.app || uses.server !== link.server)
+      ? ` This command uses ${uses.app} on ${uses.server}.`
+      : ""
   return `${linked}${elsewhere} Use it here?`
 }
 
@@ -192,8 +206,16 @@ export async function withProject<T extends Details>(
   if (!link) return given
   if (named) {
     // Only its Compose file could come from it, for its own app, and only from a file in use here.
-    if (!missing.includes("file") || given.app !== link.app || !isAccepted(places.profile, link)) return given
-    return standingOf(link, await places.trust(), places.profile).kind === "used" ? { ...given, project: link } : given
+    if (
+      !missing.includes("file") ||
+      given.app !== link.app ||
+      !isAccepted(places.profile, link)
+    )
+      return given
+    return standingOf(link, await places.trust(), places.profile).kind ===
+      "used"
+      ? { ...given, project: link }
+      : given
   }
   const standing = standingOf(link, await places.trust(), places.profile)
   if (standing.kind === "unsigned") {
@@ -206,9 +228,16 @@ export async function withProject<T extends Details>(
   }
   if (standing.kind === "new") {
     // Where the command goes: a typed name wins, and is cleaned for the sentence. One the command does not take changes nothing.
-    const uses = { app: wanted.includes("app") ? sanitize(given.app ?? link.app) : link.app, server: sanitize(given.server ?? link.server) }
+    const uses = {
+      app: wanted.includes("app") ? sanitize(given.app ?? link.app) : link.app,
+      server: sanitize(given.server ?? link.server),
+    }
     const question = useQuestion(standing.member, link, cwd, uses)
-    await useOnce(link, { question, refusal: notUsedHere(standing.member, link) }, places)
+    await useOnce(
+      link,
+      { question, refusal: notUsedHere(standing.member, link) },
+      places
+    )
   }
   const filled: T & FromProject = { ...given }
   if (missing.includes("app")) filled.app = link.app

@@ -24,12 +24,28 @@ import {
 } from "@workspace/core"
 
 import { composeUp } from "../docker/compose"
-import { acquireLock, isPrivate, isSetUp, readKeys, readState, writeCompose, writeKeys, writeState } from "../home/home"
+import {
+  acquireLock,
+  isPrivate,
+  isSetUp,
+  readKeys,
+  readState,
+  writeCompose,
+  writeKeys,
+  writeState,
+} from "../home/home"
 
 type Reason = NonNullable<RunnerReport["reason"]>
-export const refused = (reason: Reason): RunnerReport => ({ outcome: "refused", reason })
+export const refused = (reason: Reason): RunnerReport => ({
+  outcome: "refused",
+  reason,
+})
 
-type Loaded = { state: RunnerState; publicKey: ServerPublicKey; secretKey: ServerSecretKey }
+type Loaded = {
+  state: RunnerState
+  publicKey: ServerPublicKey
+  secretKey: ServerSecretKey
+}
 
 /** Reads the key and the state, or says why the runner cannot act. */
 export function load(dir: string): Loaded | RunnerReport {
@@ -39,8 +55,13 @@ export function load(dir: string): Loaded | RunnerReport {
   try {
     const keys = readKeys(dir)
     const state = parseRunnerState(readState(dir))
-    if (serverIdOf(keys.publicKey as ServerPublicKey) !== state.serverId) return refused("invalid_state")
-    return { state, publicKey: keys.publicKey as ServerPublicKey, secretKey: keys.secretKey as ServerSecretKey }
+    if (serverIdOf(keys.publicKey as ServerPublicKey) !== state.serverId)
+      return refused("invalid_state")
+    return {
+      state,
+      publicKey: keys.publicKey as ServerPublicKey,
+      secretKey: keys.secretKey as ServerSecretKey,
+    }
   } catch {
     // Missing, unreadable or damaged: never treated as "nothing accepted yet".
     return refused("invalid_state")
@@ -48,7 +69,10 @@ export function load(dir: string): Loaded | RunnerReport {
 }
 
 /** Applies the team lists the runner does not have yet. `rosters` is the whole chain from version 1. */
-function follow(state: RunnerState, rosters: readonly Envelope[]): RunnerState | RunnerReport {
+function follow(
+  state: RunnerState,
+  rosters: readonly Envelope[]
+): RunnerState | RunnerReport {
   let team = state.team
   for (const envelope of rosters.slice(team.version)) {
     const applied = applyRosterUpdate(team, envelope)
@@ -58,22 +82,30 @@ function follow(state: RunnerState, rosters: readonly Envelope[]): RunnerState |
   return team === state.team ? state : { ...state, team }
 }
 
-export const isReport = (value: object): value is RunnerReport => "outcome" in value
+export const isReport = (value: object): value is RunnerReport =>
+  "outcome" in value
 
 /** Whether a state holds no more apps and secrets than a runner may report (LIMITS). */
 const withinLimits = (state: RunnerState): boolean =>
-  Object.keys(state.lastSequence).length <= LIMITS.appsPerServer && Object.keys(state.secrets).length <= LIMITS.secretsPerServer
+  Object.keys(state.lastSequence).length <= LIMITS.appsPerServer &&
+  Object.keys(state.secrets).length <= LIMITS.secretsPerServer
 
 /**
  * Sets the server up for one team. Runs once: a server that already has a key
  * is left alone. Whoever runs this first decides which team the server
  * obeys, so nobody else should be able to start the runner before then.
  */
-export function setup(dir: string, input: string): RunnerSetupResponse | RunnerReport {
+export function setup(
+  dir: string,
+  input: string
+): RunnerSetupResponse | RunnerReport {
   const request = parseMessage(RunnerSetupRequestSchema, input)
   if (!request.ok) return refused("invalid_request")
   if (isSetUp(dir)) return refused("already_set_up")
-  const team = trustFoundingRoster(request.value.founding, request.value.teamCode)
+  const team = trustFoundingRoster(
+    request.value.founding,
+    request.value.teamCode
+  )
   if (!team.ok) return refused(team.error.code)
 
   const release = acquireLock(dir)
@@ -83,7 +115,10 @@ export function setup(dir: string, input: string): RunnerSetupResponse | RunnerR
     const keys = generateServerKeyPair()
     // The key first, created exclusively: two setups can never both succeed.
     writeKeys(dir, keys)
-    writeState(dir, initialRunnerState({ serverId: keys.serverId, team: team.value }))
+    writeState(
+      dir,
+      initialRunnerState({ serverId: keys.serverId, team: team.value })
+    )
     return {
       serverPublicKey: keys.publicKey,
       serverId: keys.serverId,
@@ -101,16 +136,26 @@ export function status(dir: string): RunnerStatus | RunnerReport {
   return {
     serverId: state.serverId,
     serverPublicKey: loaded.publicKey,
-    team: { teamId: state.team.teamId, version: state.team.version, hash: state.team.hash },
+    team: {
+      teamId: state.team.teamId,
+      version: state.team.version,
+      hash: state.team.hash,
+    },
     lastSequence: { ...state.lastSequence },
     secrets: Object.fromEntries(
-      Object.entries(state.secrets).map(([key, known]) => [key, { version: known.version, removed: known.hash === null }])
+      Object.entries(state.secrets).map(([key, known]) => [
+        key,
+        { version: known.version, removed: known.hash === null },
+      ])
     ),
   }
 }
 
 /** Runs one piece of work while holding the lock, so two runs never interleave. */
-async function locked(dir: string, work: () => Promise<RunnerReport>): Promise<RunnerReport> {
+async function locked(
+  dir: string,
+  work: () => Promise<RunnerReport>
+): Promise<RunnerReport> {
   if (!isSetUp(dir)) return refused("not_set_up")
   const release = acquireLock(dir)
   if (!release) return refused("busy")
@@ -144,7 +189,11 @@ export function sync(dir: string, input: string): Promise<RunnerReport> {
  * core library has verified the deploy, and the new state is saved before
  * anything is started.
  */
-export function apply(dir: string, input: string, onProgress?: (line: string) => void): Promise<RunnerReport> {
+export function apply(
+  dir: string,
+  input: string,
+  onProgress?: (line: string) => void
+): Promise<RunnerReport> {
   const request = parseMessage(RunnerApplyRequestSchema, input)
   if (!request.ok) return Promise.resolve(refused("invalid_request"))
   return locked(dir, async () => {
@@ -170,7 +219,12 @@ export function apply(dir: string, input: string, onProgress?: (line: string) =>
     // From here the deploy is accepted and its number is used, whatever happens next.
     try {
       const file = writeCompose(dir, app, compose)
-      const exit = await composeUp({ app, file, secrets: secrets.value, onLine: onProgress })
+      const exit = await composeUp({
+        app,
+        file,
+        secrets: secrets.value,
+        onLine: onProgress,
+      })
       return { outcome: exit === 0 ? "started" : "start_failed", app, sequence }
     } catch {
       return { outcome: "start_failed", app, sequence }

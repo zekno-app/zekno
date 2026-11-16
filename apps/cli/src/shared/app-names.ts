@@ -5,4 +5,5 @@
  */
 
 /** A12: a new app's name that the list already has. Needs approval (research Q4). */
-export const appTaken = (server: string, app: string): string => `${server} already has an app named ${app}. Choose it from the list, or give another name.`
+export const appTaken = (server: string, app: string): string =>
+  `${server} already has an app named ${app}. Choose it from the list, or give another name.`

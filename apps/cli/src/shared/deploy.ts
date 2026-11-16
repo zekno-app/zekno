@@ -13,10 +13,16 @@ import type { Ui } from "../ui/types"
 import type { Notice } from "./notice"
 
 /** data-model.md, "Stages of a deploy". A refusal ends a deploy at whatever stage it had reached. */
-export type DeployStage = "checked" | "signed" | "sent" | "starting" | "started" | "failed"
+export type DeployStage =
+  "checked" | "signed" | "sent" | "starting" | "started" | "failed"
 
 /** What a deploy is, from the moment its number is known. */
-export type DeployInfo = { app: string; server: string; sequence: number; secrets: number }
+export type DeployInfo = {
+  app: string
+  server: string
+  sequence: number
+  secrets: number
+}
 
 /** What a deploy view is told before anything is sent. */
 export type DeployStart = {
@@ -39,7 +45,14 @@ export type DeployStart = {
 
 /** How a deploy ended. `error`: refused, or failed before the runner answered; the error itself is said by whoever catches it. */
 export type DeployEnding =
-  | { outcome: "started" | "start_failed"; sequence: number; app: string; server: string; secrets: number; ms: number }
+  | {
+      outcome: "started" | "start_failed"
+      sequence: number
+      app: string
+      server: string
+      secrets: number
+      ms: number
+    }
   | { outcome: "error" }
 
 /** A deploy as it happens, shown by a `Ui`. */
@@ -128,7 +141,11 @@ async function quietly(work: () => unknown): Promise<void> {
  * memory instead. `dropped` hears how many were left out before the next line
  * is drawn.
  */
-export function heldLines(draw: (line: string) => unknown, dropped: (count: number) => unknown, limit = HELD_LINES) {
+export function heldLines(
+  draw: (line: string) => unknown,
+  dropped: (count: number) => unknown,
+  limit = HELD_LINES
+) {
   const held: string[] = []
   let lost = 0
   let pumping: Promise<void> | undefined
@@ -163,7 +180,10 @@ export function heldLines(draw: (line: string) => unknown, dropped: (count: numb
     async finish(ms: number): Promise<void> {
       if (pumping) {
         let timer: ReturnType<typeof setTimeout> | undefined
-        await Promise.race([pumping, new Promise((resolve) => (timer = setTimeout(resolve, ms)))])
+        await Promise.race([
+          pumping,
+          new Promise((resolve) => (timer = setTimeout(resolve, ms))),
+        ])
         clearTimeout(timer)
       }
       lost += held.length
@@ -173,34 +193,49 @@ export function heldLines(draw: (line: string) => unknown, dropped: (count: numb
   }
 }
 
-const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? "" : "s"}`
+const plural = (count: number, one: string) =>
+  `${count} ${one}${count === 1 ? "" : "s"}`
 
 /** Said when Docker's lines could not all be written in time. */
 export const leftOut = (count: number) =>
   `Left out ${plural(count, "line")} of Docker's output that came faster than they could be shown.`
 
 /** Said when Docker wrote more lines than are kept: the first ones are not shown. */
-export const earlierLeftOut = (count: number) => `Left out Docker's first ${plural(count, "line")}. The last ${HELD_LINES} are kept.`
+export const earlierLeftOut = (count: number) =>
+  `Left out Docker's first ${plural(count, "line")}. The last ${HELD_LINES} are kept.`
 
 /** How many secrets a deploy carries, as every sentence about it says it (contracts/commands.md): `2 secrets`, `1 secret`, `no secrets`. */
-export const secretsWords = (count: number): string => (count === 0 ? "no secrets" : plural(count, "secret"))
+export const secretsWords = (count: number): string =>
+  count === 0 ? "no secrets" : plural(count, "secret")
 
 /** The plain line of a deploy that started. Stable: scripts read it (contracts/commands.md). */
-export const startedSentence = (ending: { sequence: number; app: string; server: string; secrets: number }): string =>
+export const startedSentence = (ending: {
+  sequence: number
+  app: string
+  server: string
+  secrets: number
+}): string =>
   `Deploy ${ending.sequence} of ${ending.app} is running on ${ending.server} with ${secretsWords(ending.secrets)}.`
 
 /** The plain line of a deploy the runner accepted but whose app did not start. */
-export const failedSentence = (ending: { sequence: number; app: string; server: string }): string =>
+export const failedSentence = (ending: {
+  sequence: number
+  app: string
+  server: string
+}): string =>
   `Deploy ${ending.sequence} of ${ending.app} was accepted by ${ending.server}, but the app did not start. Check Docker on the server.`
 
 /** What to run after a deploy that started, under the result line (board "zekno deploy: success and failure"). */
-export const startedNext = (flags: string): string => `zekno logs${flags} to watch it, zekno rollback${flags} to undo`
+export const startedNext = (flags: string): string =>
+  `zekno logs${flags} to watch it, zekno rollback${flags} to undo`
 
 /**
  * What to do after a deploy whose app did not start. A rollback deployed an
  * earlier definition, so there is no file of the person's to fix.
  */
-export const failedNext = (start: Pick<DeployStart, "file" | "flags">): string =>
+export const failedNext = (
+  start: Pick<DeployStart, "file" | "flags">
+): string =>
   start.file === undefined
     ? `Deploy a fixed Compose file with zekno deploy${start.flags}, or go back further with zekno rollback${start.flags} --to <number>.`
     : `Fix ${start.file} and run zekno deploy again, or go back with zekno rollback${start.flags}.`
@@ -212,7 +247,10 @@ export const failedNext = (start: Pick<DeployStart, "file" | "flags">): string =
  * the failure sentence. With `say` false the result is not said at all, for
  * `--json`, where the command prints the one JSON object itself.
  */
-export function plainDeployView(ui: Pick<Ui, "success" | "error" | "warn" | "remote">, say: boolean): DeployView {
+export function plainDeployView(
+  ui: Pick<Ui, "success" | "error" | "warn" | "remote">,
+  say: boolean
+): DeployView {
   const kept = keptLines()
   let ended = false
   return {

@@ -1,13 +1,30 @@
 import { describe, expect, test } from "bun:test"
-import { LogEventSchema, parseMessage, RunnerAppStatesSchema, SessionFrameSchema } from "@workspace/core"
+import {
+  LogEventSchema,
+  parseMessage,
+  RunnerAppStatesSchema,
+  SessionFrameSchema,
+} from "@workspace/core"
 import { chmodSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { parseLogLine, parsePs } from "../../src/docker/inspect"
-import { deployed, fakeDocker, isAlive, session, tempDir, waitFor, world } from "../support/helpers"
+import {
+  deployed,
+  fakeDocker,
+  isAlive,
+  session,
+  tempDir,
+  waitFor,
+  world,
+} from "../support/helpers"
 
 /** One row of `docker compose ps --format json` as Docker 29 prints it, with everything it carries. */
-function psRow(service: string, state: string, extra: Record<string, unknown> = {}) {
+function psRow(
+  service: string,
+  state: string,
+  extra: Record<string, unknown> = {}
+) {
   return JSON.stringify({
     Command: `"/docker-entrypoint.sh sh -c 'echo $GREETING > /srv/private/out'"`,
     CreatedAt: "2026-11-13 16:56:03 +0000 UTC",
@@ -25,7 +42,9 @@ function psRow(service: string, state: string, extra: Record<string, unknown> = 
     Networks: "zekno-web_default",
     Ports: "0.0.0.0:8080->80/tcp",
     Project: "zekno-web",
-    Publishers: [{ URL: "0.0.0.0", TargetPort: 80, PublishedPort: 8080, Protocol: "tcp" }],
+    Publishers: [
+      { URL: "0.0.0.0", TargetPort: 80, PublishedPort: 8080, Protocol: "tcp" },
+    ],
     RunningFor: "2 minutes ago",
     Service: service,
     Size: "0B",
@@ -36,13 +55,25 @@ function psRow(service: string, state: string, extra: Record<string, unknown> = 
 }
 
 /** What must never leave the server in an answer about state. */
-const PRIVATE = ["/home/deploy", "/srv/private", "docker-entrypoint", "com.docker.compose", "0.0.0.0", "4f1c0de5", "zekno-web-web-1", "Up 2 minutes"]
+const PRIVATE = [
+  "/home/deploy",
+  "/srv/private",
+  "docker-entrypoint",
+  "com.docker.compose",
+  "0.0.0.0",
+  "4f1c0de5",
+  "zekno-web-web-1",
+  "Up 2 minutes",
+]
 
 describe("parsePs", () => {
   test("keeps the service, state, exit code and health of each container, and nothing else", () => {
     const output = [
       psRow("web", "running", { Health: "healthy" }),
-      psRow("worker", "exited", { ExitCode: 137, Status: "Exited (137) 1 minute ago" }),
+      psRow("worker", "exited", {
+        ExitCode: 137,
+        Status: "Exited (137) 1 minute ago",
+      }),
     ].join("\n")
     expect(parsePs(output)).toEqual([
       { service: "web", state: "running", exitCode: 0, health: "healthy" },
@@ -91,11 +122,15 @@ describe("parsePs", () => {
       psRow("web", "running"),
       "",
     ].join("\n")
-    expect(parsePs(output)).toEqual([{ service: "web", state: "running", exitCode: 0, health: "" }])
+    expect(parsePs(output)).toEqual([
+      { service: "web", state: "running", exitCode: 0, health: "" },
+    ])
   })
 
   test("keeps at most 256 services", () => {
-    const output = Array.from({ length: 300 }, (_, i) => psRow(`s${i}`, "running")).join("\n")
+    const output = Array.from({ length: 300 }, (_, i) =>
+      psRow(`s${i}`, "running")
+    ).join("\n")
     expect(parsePs(output)).toHaveLength(256)
   })
 
@@ -108,13 +143,23 @@ describe("parseLogLine", () => {
   const now = () => new Date("2026-11-14T10:00:00.000Z")
 
   test("reads the service, the time and the text of a line", () => {
-    const event = parseLogLine("web-1     | 2026-11-13T16:56:04.136118801Z started on port 80", now)
-    expect(event).toEqual({ event: "log", service: "web", time: "2026-11-13T16:56:04.136118801Z", line: "started on port 80" })
+    const event = parseLogLine(
+      "web-1     | 2026-11-13T16:56:04.136118801Z started on port 80",
+      now
+    )
+    expect(event).toEqual({
+      event: "log",
+      service: "web",
+      time: "2026-11-13T16:56:04.136118801Z",
+      line: "started on port 80",
+    })
     expect(parseMessage(LogEventSchema, event).ok).toBe(true)
   })
 
   test("keeps a service name that ends in digits of its own, and a time with an offset", () => {
-    expect(parseLogLine("api-worker-2-1  | 2026-11-13T16:56:04+02:00 ready", now)).toEqual({
+    expect(
+      parseLogLine("api-worker-2-1  | 2026-11-13T16:56:04+02:00 ready", now)
+    ).toEqual({
       event: "log",
       service: "api-worker-2",
       time: "2026-11-13T16:56:04+02:00",
@@ -123,7 +168,12 @@ describe("parseLogLine", () => {
   })
 
   test("uses the time it was read when Docker gave none", () => {
-    expect(parseLogLine("web-1  | no time here", now)).toEqual({ event: "log", service: "web", time: "2026-11-14T10:00:00.000Z", line: "no time here" })
+    expect(parseLogLine("web-1  | no time here", now)).toEqual({
+      event: "log",
+      service: "web",
+      time: "2026-11-14T10:00:00.000Z",
+      line: "no time here",
+    })
   })
 
   test("passes the text on as Docker gave it, for the CLI to clean", () => {
@@ -134,13 +184,22 @@ describe("parseLogLine", () => {
   })
 
   test("cuts a very long line", () => {
-    const event = parseLogLine(`web-1  | 2026-11-13T16:56:04Z ${"x".repeat(20000)}`, now)
+    const event = parseLogLine(
+      `web-1  | 2026-11-13T16:56:04Z ${"x".repeat(20000)}`,
+      now
+    )
     expect(event?.line).toHaveLength(16384)
     expect(parseMessage(LogEventSchema, event).ok).toBe(true)
   })
 
   test("is nothing for a line that is not a log line", () => {
-    for (const line of ["", "Attaching to web-1", "| no service", "\u001b[31mweb-1\u001b[0m | coloured", "we b-1 | spaced"]) {
+    for (const line of [
+      "",
+      "Attaching to web-1",
+      "| no service",
+      "\u001b[31mweb-1\u001b[0m | coloured",
+      "we b-1 | spaced",
+    ]) {
       expect(parseLogLine(line, now)).toBeUndefined()
     }
   })
@@ -149,9 +208,28 @@ describe("parseLogLine", () => {
 describe("state, through a session", () => {
   test("running, stopped and partly running apps, each service by name only", async () => {
     const w = await deployed(["web", "api", "worker"])
-    w.docker.ps("web", [psRow("web", "running", { Health: "healthy" }), psRow("cache", "running")].join("\n"))
-    w.docker.ps("api", [psRow("api", "exited", { ExitCode: 0 }), psRow("migrate", "exited", { ExitCode: 137 })].join("\n"))
-    w.docker.ps("worker", [psRow("worker", "running"), psRow("cron", "exited", { ExitCode: 1 }), psRow("queue", "restarting")].join("\n"))
+    w.docker.ps(
+      "web",
+      [
+        psRow("web", "running", { Health: "healthy" }),
+        psRow("cache", "running"),
+      ].join("\n")
+    )
+    w.docker.ps(
+      "api",
+      [
+        psRow("api", "exited", { ExitCode: 0 }),
+        psRow("migrate", "exited", { ExitCode: 137 }),
+      ].join("\n")
+    )
+    w.docker.ps(
+      "worker",
+      [
+        psRow("worker", "running"),
+        psRow("cron", "exited", { ExitCode: 1 }),
+        psRow("queue", "restarting"),
+      ].join("\n")
+    )
 
     const s = session(w.home, w.docker.path)
     const { events, result } = await s.request({ command: "state" })
@@ -161,7 +239,12 @@ describe("state, through a session", () => {
       apps: {
         web: {
           services: [
-            { service: "web", state: "running", exitCode: 0, health: "healthy" },
+            {
+              service: "web",
+              state: "running",
+              exitCode: 0,
+              health: "healthy",
+            },
             { service: "cache", state: "running", exitCode: 0, health: "" },
           ],
         },
@@ -185,7 +268,9 @@ describe("state, through a session", () => {
     // Docker was asked about each app by its project name, and never given a secret.
     const calls = w.docker.inspections()
     expect(calls.map((call) => call.args).sort()).toEqual(
-      ["web", "api", "worker"].map((app) => `compose -p zekno-${app} ps --all --format json`).sort()
+      ["web", "api", "worker"]
+        .map((app) => `compose -p zekno-${app} ps --all --format json`)
+        .sort()
     )
     for (const call of calls) {
       expect(call.env.GREETING).toBeUndefined()
@@ -197,7 +282,13 @@ describe("state, through a session", () => {
 
   test("labels, commands and host paths never reach the answer", async () => {
     const w = await deployed(["web"])
-    w.docker.ps("web", [psRow("web", "running"), psRow("worker", "exited", { ExitCode: 2 })].join("\n"))
+    w.docker.ps(
+      "web",
+      [
+        psRow("web", "running"),
+        psRow("worker", "exited", { ExitCode: 2 }),
+      ].join("\n")
+    )
     const s = session(w.home, w.docker.path)
     const { result } = await s.request({ command: "state" })
     expect(result).toEqual({
@@ -219,7 +310,9 @@ describe("state, through a session", () => {
     w.docker.ps("web", "")
     w.docker.ps("api", psRow("api", "running"), 1)
     const s = session(w.home, w.docker.path)
-    expect((await s.request({ command: "state" })).result).toEqual({ apps: { web: { services: [] } } })
+    expect((await s.request({ command: "state" })).result).toEqual({
+      apps: { web: { services: [] } },
+    })
     expect((await s.close()).code).toBe(0)
   })
 
@@ -227,25 +320,41 @@ describe("state, through a session", () => {
     const w = await world()
     const s = session(w.home, w.docker.path)
     // Input given with `state` names nothing: the apps come from the runner's own state.
-    expect((await s.request({ command: "state", input: { app: "other" } })).result).toEqual({ apps: {} })
+    expect(
+      (await s.request({ command: "state", input: { app: "other" } })).result
+    ).toEqual({ apps: {} })
     expect((await s.close()).code).toBe(0)
     expect(w.docker.inspections()).toEqual([])
   })
 
   test("needs a runner that is set up with a private folder, and takes no lock", async () => {
     const fresh = session(tempDir("runner"), fakeDocker().path)
-    expect((await fresh.request({ command: "state" })).result).toEqual({ outcome: "refused", reason: "not_set_up" })
+    expect((await fresh.request({ command: "state" })).result).toEqual({
+      outcome: "refused",
+      reason: "not_set_up",
+    })
     expect((await fresh.close()).code).toBe(0)
 
     const w = await deployed(["web"])
     w.docker.ps("web", psRow("web", "running"))
     const s = session(w.home, w.docker.path)
     chmodSync(w.home, 0o755)
-    expect((await s.request({ command: "state" })).result).toEqual({ outcome: "refused", reason: "invalid_state" })
+    expect((await s.request({ command: "state" })).result).toEqual({
+      outcome: "refused",
+      reason: "invalid_state",
+    })
     chmodSync(w.home, 0o700)
     // A deploy in progress elsewhere holds the lock; reading state does not wait for it.
     writeFileSync(join(w.home, "lock"), String(process.pid))
-    expect((await s.request({ command: "state" })).result).toEqual({ apps: { web: { services: [{ service: "web", state: "running", exitCode: 0, health: "" }] } } })
+    expect((await s.request({ command: "state" })).result).toEqual({
+      apps: {
+        web: {
+          services: [
+            { service: "web", state: "running", exitCode: 0, health: "" },
+          ],
+        },
+      },
+    })
     expect((await s.close()).code).toBe(0)
   })
 })
@@ -263,20 +372,43 @@ describe("logs, through a session", () => {
     const w = await deployed(["web"])
     w.docker.logs("web", LINES)
     const s = session(w.home, w.docker.path)
-    const { events, result } = await s.request({ command: "logs", input: { app: "web", tail: 2 } })
+    const { events, result } = await s.request({
+      command: "logs",
+      input: { app: "web", tail: 2 },
+    })
     expect(events).toEqual([
-      { event: "log", service: "web", time: "2026-11-13T16:56:04.136118801Z", line: "started" },
-      { event: "log", service: "worker", time: "2026-11-13T16:56:05.000000000Z", line: "waiting for jobs" },
-      { event: "log", service: "web", time: "2026-11-13T16:56:06.500Z", line: "GET / 200" },
+      {
+        event: "log",
+        service: "web",
+        time: "2026-11-13T16:56:04.136118801Z",
+        line: "started",
+      },
+      {
+        event: "log",
+        service: "worker",
+        time: "2026-11-13T16:56:05.000000000Z",
+        line: "waiting for jobs",
+      },
+      {
+        event: "log",
+        service: "web",
+        time: "2026-11-13T16:56:06.500Z",
+        line: "GET / 200",
+      },
     ])
     expect(result).toEqual({ outcome: "ok" })
     // The session goes on after the logs.
-    expect((await s.request({ command: "state" })).result).toEqual({ apps: { web: { services: [] } } })
+    expect((await s.request({ command: "state" })).result).toEqual({
+      apps: { web: { services: [] } },
+    })
     expect((await s.close()).code).toBe(0)
-    for (const frame of s.frames) expect(parseMessage(SessionFrameSchema, frame).ok).toBe(true)
+    for (const frame of s.frames)
+      expect(parseMessage(SessionFrameSchema, frame).ok).toBe(true)
 
     const [call] = w.docker.inspections()
-    expect(call!.args).toBe("compose -p zekno-web logs --follow --timestamps --no-color --tail 2")
+    expect(call!.args).toBe(
+      "compose -p zekno-web logs --follow --timestamps --no-color --tail 2"
+    )
     expect(call!.env.GREETING).toBeUndefined()
     expect(w.docker.calls()).toHaveLength(1)
   })
@@ -285,8 +417,18 @@ describe("logs, through a session", () => {
     const w = await deployed(["web"])
     const s = session(w.home, w.docker.path)
     for (const app of ["api", "zekno-web", "constructor", "__proto__"]) {
-      expect(await s.request({ command: "logs", input: { app, tail: 10 } })).toEqual({ events: [], result: { outcome: "refused", reason: "invalid_request" } })
-      expect(await s.request({ command: "logs", input: { app, tail: 10, follow: false } })).toEqual({
+      expect(
+        await s.request({ command: "logs", input: { app, tail: 10 } })
+      ).toEqual({
+        events: [],
+        result: { outcome: "refused", reason: "invalid_request" },
+      })
+      expect(
+        await s.request({
+          command: "logs",
+          input: { app, tail: 10, follow: false },
+        })
+      ).toEqual({
         events: [],
         result: { outcome: "refused", reason: "invalid_request" },
       })
@@ -300,14 +442,25 @@ describe("logs, through a session", () => {
     // Asked to follow, the stand-in would stay alive; without `--follow` it ends, as Docker's does.
     w.docker.logs("web", LINES, { follow: true })
     const s = session(w.home, w.docker.path)
-    const { events, result } = await s.request({ command: "logs", input: { app: "web", tail: 5, follow: false } })
-    expect(events.map((event) => event.line)).toEqual(["started", "waiting for jobs", "GET / 200"])
+    const { events, result } = await s.request({
+      command: "logs",
+      input: { app: "web", tail: 5, follow: false },
+    })
+    expect(events.map((event) => event.line)).toEqual([
+      "started",
+      "waiting for jobs",
+      "GET / 200",
+    ])
     expect(result).toEqual({ outcome: "ok" })
     // The session goes on, with the input still open.
-    expect((await s.request({ command: "state" })).result).toEqual({ apps: { web: { services: [] } } })
+    expect((await s.request({ command: "state" })).result).toEqual({
+      apps: { web: { services: [] } },
+    })
     expect((await s.close()).code).toBe(0)
     const [call] = w.docker.inspections()
-    expect(call!.args).toBe("compose -p zekno-web logs --timestamps --no-color --tail 5")
+    expect(call!.args).toBe(
+      "compose -p zekno-web logs --timestamps --no-color --tail 5"
+    )
     expect(w.docker.logsPid()).toBeUndefined()
   })
 
@@ -317,8 +470,13 @@ describe("logs, through a session", () => {
     const s = session(w.home, w.docker.path)
     s.send({ command: "logs", input: { app: "web", tail: 3, follow: true } })
     expect((await s.next())?.line).toBe("started")
-    await waitFor(() => w.docker.logsPid() !== undefined, "docker compose logs to start")
-    expect(w.docker.inspections()[0]!.args).toBe("compose -p zekno-web logs --follow --timestamps --no-color --tail 3")
+    await waitFor(
+      () => w.docker.logsPid() !== undefined,
+      "docker compose logs to start"
+    )
+    expect(w.docker.inspections()[0]!.args).toBe(
+      "compose -p zekno-web logs --follow --timestamps --no-color --tail 3"
+    )
     expect((await s.close()).code).toBe(0)
     expect(isAlive(w.docker.logsPid()!)).toBe(false)
     expect(s.frames.at(-1)).toEqual({ result: { outcome: "ok" } })
@@ -328,7 +486,18 @@ describe("logs, through a session", () => {
     const w = await deployed(["web"])
     const s = session(w.home, w.docker.path)
     const inputs = [
-      ...["../web", "Web", "web;rm -rf /", "web web", "-p", "web\n", "web/../x", "", "a".repeat(64), "$(id)"].map((app) => ({ app, tail: 10 })),
+      ...[
+        "../web",
+        "Web",
+        "web;rm -rf /",
+        "web web",
+        "-p",
+        "web\n",
+        "web/../x",
+        "",
+        "a".repeat(64),
+        "$(id)",
+      ].map((app) => ({ app, tail: 10 })),
       { app: "web", tail: -1 },
       { app: "web", tail: 1001 },
       { app: "web", tail: 1.5 },
@@ -341,7 +510,10 @@ describe("logs, through a session", () => {
       { app: ["web"], tail: 10 },
     ]
     for (const input of inputs) {
-      expect(await s.request({ command: "logs", input })).toEqual({ events: [], result: { outcome: "refused", reason: "invalid_request" } })
+      expect(await s.request({ command: "logs", input })).toEqual({
+        events: [],
+        result: { outcome: "refused", reason: "invalid_request" },
+      })
     }
     expect((await s.close()).code).toBe(0)
     expect(w.docker.inspections()).toEqual([])
@@ -349,7 +521,10 @@ describe("logs, through a session", () => {
 
   test("needs a runner that is set up", async () => {
     const s = session(tempDir("runner"), fakeDocker().path)
-    expect((await s.request({ command: "logs", input: { app: "web", tail: 10 } })).result).toEqual({ outcome: "refused", reason: "not_set_up" })
+    expect(
+      (await s.request({ command: "logs", input: { app: "web", tail: 10 } }))
+        .result
+    ).toEqual({ outcome: "refused", reason: "not_set_up" })
     expect((await s.close()).code).toBe(0)
   })
 
@@ -358,9 +533,14 @@ describe("logs, through a session", () => {
     w.docker.logs("web", LINES, { follow: true })
     const s = session(w.home, w.docker.path)
     s.send({ command: "logs", input: { app: "web", tail: 200 } })
-    const lines = [await s.next(), await s.next(), await s.next()].map((frame) => frame?.line)
+    const lines = [await s.next(), await s.next(), await s.next()].map(
+      (frame) => frame?.line
+    )
     expect(lines).toEqual(["started", "waiting for jobs", "GET / 200"])
-    await waitFor(() => w.docker.logsPid() !== undefined, "docker compose logs to start")
+    await waitFor(
+      () => w.docker.logsPid() !== undefined,
+      "docker compose logs to start"
+    )
     const pid = w.docker.logsPid()!
     // Docker's log command is still following; the request has no result yet.
     await Bun.sleep(200)
@@ -381,7 +561,12 @@ describe("logs, through a session", () => {
     const s = session(w.home, w.docker.path)
     s.send({ command: "logs", input: { app: "web", tail: 200 } })
     expect((await s.next())?.line).toBe("started")
-    await waitFor(() => w.docker.logsPid() !== undefined && w.docker.leftChildPid() !== undefined, "docker compose logs to start")
+    await waitFor(
+      () =>
+        w.docker.logsPid() !== undefined &&
+        w.docker.leftChildPid() !== undefined,
+      "docker compose logs to start"
+    )
     const pid = w.docker.logsPid()!
     const left = w.docker.leftChildPid()!
     try {

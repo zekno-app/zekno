@@ -32,20 +32,47 @@ export function Panel({
   children?: ReactNode
 }) {
   const theme = useTheme()
-  const border = { focus: theme.brand, plain: undefined, quiet: undefined, danger: theme.danger, warning: theme.warning }[tone]
+  const border = {
+    focus: theme.brand,
+    plain: undefined,
+    quiet: undefined,
+    danger: theme.danger,
+    warning: theme.warning,
+  }[tone]
   const faint = border === undefined
-  const titleColor = tone === "danger" ? theme.danger : tone === "warning" ? theme.warning : undefined
+  const titleColor =
+    tone === "danger"
+      ? theme.danger
+      : tone === "warning"
+        ? theme.warning
+        : undefined
   return (
-    <Box flexDirection="column" width={width} flexGrow={flexGrow} flexShrink={0}>
+    <Box
+      flexDirection="column"
+      width={width}
+      flexGrow={flexGrow}
+      flexShrink={0}
+    >
       <Box>
         <Text color={border} dimColor={faint}>
           {"╭─ "}
         </Text>
-        <Text bold color={titleColor} dimColor={tone === "quiet"} wrap="truncate-end">
+        <Text
+          bold
+          color={titleColor}
+          dimColor={tone === "quiet"}
+          wrap="truncate-end"
+        >
           {title}
         </Text>
         <Text> </Text>
-        <Box flexGrow={1} flexShrink={1} flexBasis={0} height={1} overflow="hidden">
+        <Box
+          flexGrow={1}
+          flexShrink={1}
+          flexBasis={0}
+          height={1}
+          overflow="hidden"
+        >
           <Text color={border} dimColor={faint}>
             {RULE}
           </Text>

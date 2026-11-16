@@ -10,12 +10,21 @@ import {
   type Signer,
   type TeamTrust,
 } from "@workspace/core"
-import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 export const RUNNER_MAIN = join(import.meta.dir, "../../src/main.ts")
-export const COMPOSE = "services:\n  web:\n    image: example/web:1\n    environment:\n      - GREETING\n"
+export const COMPOSE =
+  "services:\n  web:\n    image: example/web:1\n    environment:\n      - GREETING\n"
 
 export function tempDir(label: string): string {
   return mkdtempSync(join(tmpdir(), `zekno-${label}-`))
@@ -36,8 +45,13 @@ function readCalls(log: string): DockerCall[] {
         const [name, ...rest] = line.slice(4).split("=")
         env[name!] = rest.join("=")
       }
-      const cwd = lines.find((entry) => entry.startsWith("CWD "))?.slice(4) ?? ""
-      return { args: lines.find((entry) => entry.startsWith("ARGS "))!.slice(5), env, cwd }
+      const cwd =
+        lines.find((entry) => entry.startsWith("CWD "))?.slice(4) ?? ""
+      return {
+        args: lines.find((entry) => entry.startsWith("ARGS "))!.slice(5),
+        env,
+        cwd,
+      }
     })
 }
 
@@ -45,11 +59,17 @@ function readCalls(log: string): DockerCall[] {
 export function residentMiB(pid: number): number | undefined {
   const result = Bun.spawnSync(["ps", "-o", "rss=", "-p", String(pid)])
   const kib = Number(result.stdout.toString().trim())
-  return result.exitCode === 0 && Number.isFinite(kib) && kib > 0 ? kib / 1024 : undefined
+  return result.exitCode === 0 && Number.isFinite(kib) && kib > 0
+    ? kib / 1024
+    : undefined
 }
 
 /** Waits until `ready` is true, checking every few milliseconds. */
-export async function waitFor(ready: () => boolean, what: string, timeoutMs = 10_000): Promise<void> {
+export async function waitFor(
+  ready: () => boolean,
+  what: string,
+  timeoutMs = 10_000
+): Promise<void> {
   const until = Date.now() + timeoutMs
   while (!ready()) {
     if (Date.now() > until) throw new Error(`timed out waiting for ${what}`)
@@ -140,8 +160,10 @@ exit 0
     inspections: (): DockerCall[] => readCalls(inspectLog),
     /** What `up` prints on standard output and standard error. */
     upPrints(output: { stdout?: string; stderr?: string }) {
-      if (output.stdout !== undefined) writeFileSync(at("up-stdout"), output.stdout)
-      if (output.stderr !== undefined) writeFileSync(at("up-stderr"), output.stderr)
+      if (output.stdout !== undefined)
+        writeFileSync(at("up-stdout"), output.stdout)
+      if (output.stderr !== undefined)
+        writeFileSync(at("up-stderr"), output.stderr)
     },
     /** Makes `up` stop after its first lines until `releaseUp`, then print `after` on standard error. */
     holdUp: (after = "") => {
@@ -167,7 +189,11 @@ exit 0
      * With `leaveChild`, a following call starts a process that keeps the
      * output open even after `logs` itself is stopped.
      */
-    logs: (app: string, output: string, options: { follow?: boolean; leaveChild?: boolean } = {}) => {
+    logs: (
+      app: string,
+      output: string,
+      options: { follow?: boolean; leaveChild?: boolean } = {}
+    ) => {
       writeFileSync(at(`logs-zekno-${app}`), output)
       if (options.follow) writeFileSync(at("logs-follow"), "")
       if (options.leaveChild) writeFileSync(at("logs-leave-child"), "")
@@ -180,20 +206,35 @@ exit 0
 }
 
 /** Runs the runner as its own process, the way SSH would. */
-export async function runner(home: string, docker: string, command: string, message?: unknown, extra: string[] = []) {
+export async function runner(
+  home: string,
+  docker: string,
+  command: string,
+  message?: unknown,
+  extra: string[] = []
+) {
   const child = Bun.spawn([process.execPath, RUNNER_MAIN, command, ...extra], {
     env: { ...process.env, ZEKNO_RUNNER_HOME: home, ZEKNO_DOCKER: docker },
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
   })
-  if (message !== undefined) child.stdin.write(typeof message === "string" ? message : JSON.stringify(message))
+  if (message !== undefined)
+    child.stdin.write(
+      typeof message === "string" ? message : JSON.stringify(message)
+    )
   child.stdin.end()
-  const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
+  const [stdout, stderr] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ])
   const code = await child.exited
   let json: Record<string, unknown> | undefined
   try {
-    json = JSON.parse(stdout.trim().split("\n").at(-1) ?? "") as Record<string, unknown>
+    json = JSON.parse(stdout.trim().split("\n").at(-1) ?? "") as Record<
+      string,
+      unknown
+    >
   } catch {
     json = undefined
   }
@@ -207,9 +248,18 @@ export type Frame = Record<string, unknown>
  * reads its frames as they arrive. A line that is not JSON is kept as
  * `{ unreadable: <line> }` so a test can see it.
  */
-export function session(home: string, docker: string, env: Record<string, string> = {}) {
+export function session(
+  home: string,
+  docker: string,
+  env: Record<string, string> = {}
+) {
   const child = Bun.spawn([process.execPath, RUNNER_MAIN, "session"], {
-    env: { ...process.env, ZEKNO_RUNNER_HOME: home, ZEKNO_DOCKER: docker, ...env },
+    env: {
+      ...process.env,
+      ZEKNO_RUNNER_HOME: home,
+      ZEKNO_DOCKER: docker,
+      ...env,
+    },
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
@@ -263,7 +313,11 @@ export function session(home: string, docker: string, env: Record<string, string
 
   /** Writes one line: a value as JSON, or a string exactly as given. */
   function send(request: unknown) {
-    child.stdin.write(typeof request === "string" ? `${request}\n` : `${JSON.stringify(request)}\n`)
+    child.stdin.write(
+      typeof request === "string"
+        ? `${request}\n`
+        : `${JSON.stringify(request)}\n`
+    )
     child.stdin.flush()
   }
 
@@ -276,13 +330,17 @@ export function session(home: string, docker: string, env: Record<string, string
     send,
     next,
     /** Sends one request and reads its events and its result. */
-    async request(request: unknown): Promise<{ events: Frame[]; result: Record<string, unknown> }> {
+    async request(
+      request: unknown
+    ): Promise<{ events: Frame[]; result: Record<string, unknown> }> {
       send(request)
       const events: Frame[] = []
       for (;;) {
         const frame = await next()
-        if (frame === undefined) throw new Error("the session ended before it answered")
-        if ("result" in frame) return { events, result: frame.result as Record<string, unknown> }
+        if (frame === undefined)
+          throw new Error("the session ended before it answered")
+        if ("result" in frame)
+          return { events, result: frame.result as Record<string, unknown> }
         events.push(frame)
       }
     },
@@ -311,27 +369,54 @@ export async function world() {
   const home = tempDir("runner")
   const docker = fakeDocker()
 
-  const setup = await runner(home, docker.path, "setup", { founding: team.envelope, teamCode: team.confirmationCode })
+  const setup = await runner(home, docker.path, "setup", {
+    founding: team.envelope,
+    teamCode: team.confirmationCode,
+  })
   const serverId = String(setup.json!.serverId)
   const added = await proposeRoster({
     trust: team.trust,
-    servers: [{ name: "prod-1", publicKey: setup.json!.serverPublicKey as never }],
+    servers: [
+      { name: "prod-1", publicKey: setup.json!.serverPublicKey as never },
+    ],
     signer,
   })
   const rosters = [team.envelope, added.envelope]
   const synced = await runner(home, docker.path, "sync", { rosters })
-  if (synced.json?.outcome !== "ok") throw new Error(`sync failed: ${JSON.stringify(synced.json)}`)
+  if (synced.json?.outcome !== "ok")
+    throw new Error(`sync failed: ${JSON.stringify(synced.json)}`)
 
-  return { signer, team, trust: added.trust, rosters, home, docker, serverId, setup }
+  return {
+    signer,
+    team,
+    trust: added.trust,
+    rosters,
+    home,
+    docker,
+    serverId,
+    setup,
+  }
 }
 
 /** A world with a deploy accepted for each of `apps`. */
-export async function deployed(apps: string[]): Promise<Awaited<ReturnType<typeof world>>> {
+export async function deployed(
+  apps: string[]
+): Promise<Awaited<ReturnType<typeof world>>> {
   const w = await world()
   for (const app of apps) {
-    const deploy = await buildDeploy({ trust: w.trust, serverId: w.serverId, signer: w.signer, sequence: 1, app })
-    const result = await runner(w.home, w.docker.path, "apply", { rosters: w.rosters, deploy })
-    if (result.json?.outcome !== "started") throw new Error(`deploy of ${app} failed: ${JSON.stringify(result.json)}`)
+    const deploy = await buildDeploy({
+      trust: w.trust,
+      serverId: w.serverId,
+      signer: w.signer,
+      sequence: 1,
+      app,
+    })
+    const result = await runner(w.home, w.docker.path, "apply", {
+      rosters: w.rosters,
+      deploy,
+    })
+    if (result.json?.outcome !== "started")
+      throw new Error(`deploy of ${app} failed: ${JSON.stringify(result.json)}`)
   }
   return w
 }
@@ -348,19 +433,47 @@ export async function buildDeploy(input: {
 }) {
   const app = input.app ?? "web"
   const secrets: SecretRecord[] = []
-  for (const [name, value] of Object.entries(input.values ?? { GREETING: "hello from the test" })) {
-    secrets.push(await createSecret({ trust: input.trust, serverId: input.serverId, app, name, value, version: input.secretVersion ?? input.sequence, signer: input.signer }))
+  for (const [name, value] of Object.entries(
+    input.values ?? { GREETING: "hello from the test" }
+  )) {
+    secrets.push(
+      await createSecret({
+        trust: input.trust,
+        serverId: input.serverId,
+        app,
+        name,
+        value,
+        version: input.secretVersion ?? input.sequence,
+        signer: input.signer,
+      })
+    )
   }
-  return createDeploy({ trust: input.trust, serverId: input.serverId, app, sequence: input.sequence, compose: input.compose ?? COMPOSE, secrets, signer: input.signer })
+  return createDeploy({
+    trust: input.trust,
+    serverId: input.serverId,
+    app,
+    sequence: input.sequence,
+    compose: input.compose ?? COMPOSE,
+    secrets,
+    signer: input.signer,
+  })
 }
 
 /** Every file under a folder, with its content, for checking what was written to disk. */
-export function filesUnder(dir: string): { path: string; content: string; mode: number }[] {
+export function filesUnder(
+  dir: string
+): { path: string; content: string; mode: number }[] {
   if (!existsSync(dir)) return []
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) return filesUnder(path)
-    return [{ path, content: readFileSync(path, "utf8"), mode: statSync(path).mode & 0o777 }]
+    return [
+      {
+        path,
+        content: readFileSync(path, "utf8"),
+        mode: statSync(path).mode & 0o777,
+      },
+    ]
   })
 }
 

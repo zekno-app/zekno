@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test"
 
 import { openSecrets, verifyDeploy, type VerifiedDeploy } from "../../src/index"
-import { COMPOSE, overTheWire, person, publish, SAMPLE_SECRETS, setup } from "../support/helpers"
+import {
+  COMPOSE,
+  overTheWire,
+  person,
+  publish,
+  SAMPLE_SECRETS,
+  setup,
+} from "../support/helpers"
 
 describe("User Story 1: a deploy only the team can authorize and only the server can read", () => {
   test("the runner accepts a member's deploy and recovers every secret exactly", async () => {
@@ -28,7 +35,9 @@ describe("User Story 1: a deploy only the team can authorize and only the server
 
     const stored = JSON.stringify(relay)
     const decodedPayloads = relay.deploys
-      .map((deploy) => Buffer.from(deploy.envelope.payload, "base64url").toString("utf8"))
+      .map((deploy) =>
+        Buffer.from(deploy.envelope.payload, "base64url").toString("utf8")
+      )
       .join("\n")
     for (const value of Object.values(SAMPLE_SECRETS)) {
       expect(stored).not.toContain(value)
@@ -55,8 +64,23 @@ describe("User Story 1: a deploy only the team can authorize and only the server
     const { relay, server, trust } = await setup()
     const stranger = person("Mallory")
     // The stranger builds a deploy against a team list they invented.
-    const forgedTrust = { ...trust, members: [{ name: "Mallory", publicKey: stranger.publicKey, role: "admin" as const }] }
-    await publish({ relay, trust: forgedTrust, server, signer: stranger.signer, sequence: 1 })
+    const forgedTrust = {
+      ...trust,
+      members: [
+        {
+          name: "Mallory",
+          publicKey: stranger.publicKey,
+          role: "admin" as const,
+        },
+      ],
+    }
+    await publish({
+      relay,
+      trust: forgedTrust,
+      server,
+      signer: stranger.signer,
+      sequence: 1,
+    })
 
     const verified = verifyDeploy({ ...relay.deploys[0]!, state: server.state })
     expect(verified.ok).toBe(false)
@@ -80,7 +104,13 @@ describe("User Story 1: a deploy only the team can authorize and only the server
 
   test("there is no way to open secrets without passing verification", async () => {
     const { founder, relay, server, trust } = await setup()
-    const deploy = await publish({ relay, trust, server, signer: founder.signer, sequence: 1 })
+    const deploy = await publish({
+      relay,
+      trust,
+      server,
+      signer: founder.signer,
+      sequence: 1,
+    })
     const verified = verifyDeploy({ ...deploy, state: server.state })
     if (!verified.ok) throw new Error("expected acceptance")
 
@@ -100,7 +130,14 @@ describe("User Story 1: a deploy only the team can authorize and only the server
 
   test("a deploy with no secrets is valid", async () => {
     const { founder, relay, server, trust } = await setup()
-    const deploy = await publish({ relay, trust, server, signer: founder.signer, sequence: 1, values: {} })
+    const deploy = await publish({
+      relay,
+      trust,
+      server,
+      signer: founder.signer,
+      sequence: 1,
+      values: {},
+    })
     const verified = verifyDeploy({ ...deploy, state: server.state })
     expect(verified.ok).toBe(true)
     if (verified.ok) {

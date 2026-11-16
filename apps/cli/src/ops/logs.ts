@@ -10,7 +10,12 @@ import { RunnerReportSchema, RunnerStatusSchema } from "@workspace/core"
 import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
 import { CliError } from "../cli/errors"
 import { findServer, type Server } from "../profile/profile"
-import { ENDED, namedUnreachable, openSession, type Session } from "../server/session"
+import {
+  ENDED,
+  namedUnreachable,
+  openSession,
+  type Session,
+} from "../server/session"
 import { checkApp, type Where } from "./deploy"
 import { checkIdentity } from "./status"
 
@@ -27,10 +32,17 @@ export type LogLine = { time: string; service: string; text: string }
  * yet. Only the verified team list is kept of the team, never the means to
  * sign: reading logs can last for hours, and needs no key.
  */
-export type LogsPlan = { team: Pick<Team, "trust">; server: Server; app: string }
+export type LogsPlan = {
+  team: Pick<Team, "trust">
+  server: Server
+  app: string
+}
 
 /** Verifies the team and finds the server; the app's name is checked before anything is sent. */
-export async function prepareLogs(deps: OpDeps, where: Where): Promise<LogsPlan> {
+export async function prepareLogs(
+  deps: OpDeps,
+  where: Where
+): Promise<LogsPlan> {
   const team = await teamOf(deps)
   const server = findServer(team.profile, where.server, where.serverFrom)
   return { team: { trust: team.trust }, server, app: checkApp(where.app) }
@@ -57,7 +69,8 @@ export const logsTooOld = (server: string): string =>
   `The runner on ${server} is older than this zekno, and logs need the newer runner. Run \`zekno server update ${server}\`.`
 
 /** Said when the connection drops while reading. */
-export const logsDropped = (server: string): string => `The connection to ${server} ended.`
+export const logsDropped = (server: string): string =>
+  `The connection to ${server} ended.`
 
 /**
  * Reads an app's logs over one session and hands each line to `onLine`.
@@ -97,27 +110,41 @@ export async function followLogs(
   }
   stop?.addEventListener("abort", stopped, { once: true })
   try {
-    session = await openSession(reach(deps, server.target), { signal: now.signal })
+    session = await openSession(reach(deps, server.target), {
+      signal: now.signal,
+    })
     if (session.mode !== "session") throw new CliError(logsTooOld(server.name))
     const status = await session.request("status", RunnerStatusSchema)
     checkIdentity(team, server, status)
-    if (!Object.hasOwn(status.lastSequence, app) || status.lastSequence[app]! < 1) {
-      throw new CliError(`${server.name} has no deploy of ${app}, so there are no logs to read.`)
+    if (
+      !Object.hasOwn(status.lastSequence, app) ||
+      status.lastSequence[app]! < 1
+    ) {
+      throw new CliError(
+        `${server.name} has no deploy of ${app}, so there are no logs to read.`
+      )
     }
     reading = true
     await session.request("logs", RunnerReportSchema, {
       // Following is the runner's default, so it is said only when it is not wanted.
-      input: options.follow ? { app, tail: options.tail } : { app, tail: options.tail, follow: false },
+      input: options.follow
+        ? { app, tail: options.tail }
+        : { app, tail: options.tail, follow: false },
       async onEvent(event) {
         if (event.event !== "log" || ended) return
-        const busy = onLine({ time: event.time, service: event.service, text: event.line })
+        const busy = onLine({
+          time: event.time,
+          service: event.service,
+          text: event.line,
+        })
         if (busy instanceof Promise) await Promise.race([busy, whenStopped])
       },
     })
     return ended ?? "ended"
   } catch (error) {
     if (ended) return ended
-    if (error instanceof CliError && error.message === ENDED) throw new CliError(logsDropped(server.name))
+    if (error instanceof CliError && error.message === ENDED)
+      throw new CliError(logsDropped(server.name))
     throw namedUnreachable(error, server.name)
   } finally {
     stop?.removeEventListener("abort", stopped)
