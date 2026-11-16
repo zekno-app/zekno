@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>zekno settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1500px; height: 700px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+    <div><span style="color: #8b949e">$</span> zekno settings</div>
+    <div style="padding-left: 17px"><span style="color: #ffffff; font-weight: 600">demo</span> <span style="color: #8b949e">&nbsp;from zekno.app.json</span></div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <div style="padding-left: 17px"><span style="color: #2383e2; font-weight: 600">web</span></div>
+      <div style="display: grid; grid-template-columns: 110px 80px 1fr; column-gap: 8px; padding-left: 17px"><span><span style="color: #ffffff; font-weight: 600">Source</span></span><span style="color: #8b949e">image</span><span>ghcr.io/acme/demo-web:1.4.2</span><span><span style="color: #ffffff; font-weight: 600">Deploy</span></span><span style="color: #8b949e">start</span><span>bun run start</span><span></span><span style="color: #8b949e">restart</span><span>on failure</span><span></span><span style="color: #8b949e">memory</span><span>1g&nbsp;&nbsp;<span style="color: #d29922">! changed, not deployed</span></span><span></span><span style="color: #8b949e">cpus</span><span>1</span><span><span style="color: #ffffff; font-weight: 600">Networking</span></span><span style="color: #8b949e">port</span><span>3000, not published</span><span><span style="color: #ffffff; font-weight: 600">Variables</span></span><span style="color: #8b949e">secrets</span><span>DATABASE_URL, SESSION_KEY</span><span></span><span style="color: #8b949e">plain</span><span>NODE_ENV=production</span><span><span style="color: #ffffff; font-weight: 600">Volumes</span></span><span style="color: #8b949e">uploads</span><span>/data/uploads</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <div style="padding-left: 17px"><span style="color: #2383e2; font-weight: 600">worker</span></div>
+      <div style="display: grid; grid-template-columns: 110px 80px 1fr; column-gap: 8px; padding-left: 17px"><span><span style="color: #ffffff; font-weight: 600">Source</span></span><span style="color: #8b949e">image</span><span>ghcr.io/acme/demo-worker:1.4.2</span><span><span style="color: #ffffff; font-weight: 600">Deploy</span></span><span style="color: #8b949e">start</span><span>bun run worker</span><span></span><span style="color: #8b949e">restart</span><span>always</span><span><span style="color: #ffffff; font-weight: 600">Variables</span></span><span style="color: #8b949e">secrets</span><span>DATABASE_URL</span></div>
+    </div>
+    <div style="padding-left: 17px; color: #8b949e">A section with nothing set is left out. Values of secrets are never shown.</div>
+  </div>
+  <div style="width: 1px; background: #2a313a"></div>
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="color: #8b949e; font-weight: 600">Changing one, and what it turns into</div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div><span style="color: #8b949e">$</span> zekno settings set web.memory 1g</div>
+      <div style="padding-left: 17px"><span style="color: #8b949e">web · memory limit</span>&nbsp; 512m <span style="color: #8b949e">→</span> <span style="color: #ffffff; font-weight: 600">1g</span></div>
+      <div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Write this to zekno.app.json?</span> Nothing is deployed until you deploy. <span style="color: #8b949e">(y/N)</span> yes</div>
+      <div><span style="color: #3fb950">✔</span> Written <span style="color: #8b949e">&nbsp;Run zekno deploy to use it.</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="color: #8b949e">A value that is not allowed changes nothing. Exit status 2:</div>
+      <div><span style="color: #8b949e">$</span> zekno settings set web.memory lots</div>
+      <div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">That is not a memory limit.</span></div>
+      <div style="padding-left: 17px; color: #8b949e">Use a size such as 512m or 1g.</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="color: #8b949e">The Compose text the settings turn into. It is what a deploy signs:</div>
+      <div><span style="color: #8b949e">$</span> zekno settings compose</div>
+      <div style="color: #8b949e; white-space: pre">services:
+  web:
+    image: ghcr.io/acme/demo-web:1.4.2
+    command: bun run start
+    restart: on-failure
+    mem_limit: 1g
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+  …</div>
+    </div>
+  </div>
+  <div style="width: 1px; background: #2a313a"></div>
+  <div style="width: 270px; display: flex; flex-direction: column; gap: 14px; color: #8b949e">
+    <div style="font-weight: 600">How it behaves</div>
+    <div><span style="color: #d7dde4">zekno settings</span> reads the file in this folder. It contacts no server.</div>
+    <div><span style="color: #d7dde4">set</span> and <span style="color: #d7dde4">unset</span> change one setting. With no terminal they need <span style="color: #d7dde4">--yes</span>.</div>
+    <div><span style="color: #d7dde4">zekno settings init</span> starts a file by asking for the image.</div>
+    <div>Piped, each setting is one line, with tabs:</div>
+    <div style="color: #d7dde4; white-space: pre">web	deploy.memory	1g
+web	networking.port	3000</div>
+    <div><span style="color: #d7dde4">--json</span> gives the file's own data.</div>
+    <div>In a folder with no settings file:</div>
+    <div style="color: #d7dde4">This folder has no settings file. Run zekno settings init to start one.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1500,"height":700}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

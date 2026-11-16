@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>zekno deploy from settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1500px; height: 640px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+    <div><span style="color: #8b949e">$</span> zekno deploy</div>
+    <div style="position: relative; box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 12px 16px">
+      <div style="display: grid; grid-template-columns: 80px 1fr; row-gap: 2px">
+        <span style="color: #8b949e">app</span><span><span style="color: #ffffff; font-weight: 600">demo</span></span>
+        <span style="color: #8b949e">server</span><span>prod <span style="color: #8b949e">deploy@203.0.113.7</span></span>
+        <span style="color: #8b949e">from</span><span>zekno.app.json <span style="color: #8b949e">&nbsp;2 services: web, worker</span></span>
+        <span style="color: #8b949e">secrets</span><span>DATABASE_URL v3, SESSION_KEY v1</span>
+      </div>
+    </div>
+    <div style="display: flex; gap: 14px"><span style="color: #3fb950">✔ Signed</span><span style="color: #3fb950">✔ Sent</span><span style="color: #3fb950">✔ Verified</span><span style="color: #3fb950">✔ Started</span></div>
+    <div><span style="color: #3fb950">✔</span> <span style="color: #ffffff; font-weight: 600">Deploy 5</span> demo is running on prod <span style="color: #8b949e">&nbsp;4.1 s</span></div>
+    <div style="color: #8b949e">Only the "from" line is new. Everything else is today's deploy.</div>
+    <div style="display: flex; flex-direction: column; gap: 6px; padding-top: 6px">
+      <div style="color: #8b949e">A folder that has both files, and nothing that says which:</div>
+      <div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Deploy from which file?</span></div>
+      <div style="display: grid; grid-template-columns: 16px 150px 1fr; column-gap: 8px"><span style="color: #2383e2">❯</span><span style="color: #ffffff; font-weight: 600">zekno.app.json</span><span style="color: #8b949e">your settings</span><span></span><span>compose.yaml</span><span style="color: #8b949e">a Compose file written by hand</span></div>
+      <div style="color: #8b949e; padding-left: 17px"><span style="color: #d7dde4">↑↓</span> move&nbsp;&nbsp; <span style="color: #d7dde4">enter</span> choose&nbsp;&nbsp; <span style="color: #d7dde4">esc</span> leave</div>
+    </div>
+  </div>
+  <div style="width: 1px; background: #2a313a"></div>
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="color: #8b949e; font-weight: 600">When the file cannot be used</div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="color: #8b949e">It asks for something a later version brings. Nothing is deployed:</div>
+      <div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">zekno.app.json sets a domain for web.</span></div>
+      <div style="padding-left: 17px; color: #8b949e">Domains are not in this version of zekno yet.</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="color: #8b949e">It is not in the right form. The place is named, never the content:</div>
+      <div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">zekno.app.json could not be read as settings.</span></div>
+      <div style="padding-left: 17px; color: #8b949e">web, deploy.memory: use a size such as 512m or 1g.</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="color: #8b949e">It has a field this zekno does not know:</div>
+      <div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">zekno.app.json could not be read as settings.</span></div>
+      <div style="padding-left: 17px; color: #8b949e">web, deploy: a setting this zekno does not know (line 9).</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="color: #8b949e">With no terminal and both files, it stops. Exit status 2:</div>
+      <div style="color: #d7dde4">This folder has zekno.app.json and compose.yaml. Say which with -f &lt;file&gt;.</div>
+    </div>
+  </div>
+  <div style="width: 1px; background: #2a313a"></div>
+  <div style="width: 270px; display: flex; flex-direction: column; gap: 14px; color: #8b949e">
+    <div style="font-weight: 600">Which file a deploy uses</div>
+    <div>1. <span style="color: #d7dde4">-f &lt;file&gt;</span>, either kind.</div>
+    <div>2. The file this folder's link (<span style="color: #d7dde4">zekno.json</span>) names.</div>
+    <div>3. The one that exists, when only one does.</div>
+    <div>4. With both and nothing above: it asks at a terminal, and stops in a script.</div>
+    <div>Neither file is ever picked silently over the other.</div>
+    <div style="font-weight: 600; padding-top: 6px">What does not change</div>
+    <div>Your machine turns the settings into Compose text and signs that. The server sees what it sees today.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1500,"height":640}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

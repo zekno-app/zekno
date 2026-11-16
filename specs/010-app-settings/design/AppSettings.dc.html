@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>An app's settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 960px; height: 600px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px">
+  <div style="display: flex; justify-content: space-between; align-items: baseline">
+    <div style="display: flex; gap: 8px; align-items: baseline">
+      <svg role="img" aria-label="zekno.app" viewBox="0 0 41 5" shape-rendering="crispEdges" style="width: 344px; height: 50px; display: block; flex-shrink: 0"><path fill="#ffffff" d="M0 0h4v1h-4zM3 1h1v1h-1zM1 2h2v1h-2zM0 3h1v1h-1zM0 4h4v1h-4zM6 0h2v1h-2zM5 1h1v1h-1zM8 1h1v1h-1zM5 2h4v1h-4zM5 3h1v1h-1zM6 4h3v1h-3zM10 0h1v1h-1zM13 0h1v1h-1zM10 1h1v1h-1zM12 1h1v1h-1zM10 2h2v1h-2zM10 3h1v1h-1zM12 3h1v1h-1zM10 4h1v1h-1zM13 4h1v1h-1zM15 0h3v1h-3zM15 1h1v4h-1zM18 1h1v4h-1zM21 0h2v1h-2zM20 1h1v3h-1zM23 1h1v3h-1zM21 4h2v1h-2z"></path><path fill="#2383e2" d="M25 4h1v1h-1zM28 0h2v1h-2zM30 1h1v1h-1zM28 2h3v1h-3zM27 3h1v1h-1zM30 3h1v1h-1zM28 4h3v1h-3zM32 0h3v1h-3zM32 1h1v1h-1zM35 1h1v1h-1zM32 2h3v1h-3zM32 3h1v1h-1zM32 4h1v1h-1zM37 0h3v1h-3zM37 1h1v1h-1zM40 1h1v1h-1zM37 2h3v1h-3zM37 3h1v1h-1zM37 4h1v1h-1z"></path></svg>
+      <span style="color: #8b949e">›</span><span style="color: #8b949e">prod</span>
+      <span style="color: #8b949e">›</span><span style="color: #8b949e">demo</span>
+      <span style="color: #8b949e">›</span><span style="color: #ffffff; font-weight: 600">settings</span>
+    </div>
+    <div style="display: flex; gap: 8px"><span style="color: #3fb950">● running</span><span style="color: #8b949e">deploy 4</span></div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; gap: 12px; min-height: 0">
+    <div style="width: 190px; box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+      <div style="color: #8b949e; font-weight: 600">Services</div>
+      <div style="display: flex; flex-direction: column; gap: 4px"><div style="display: grid; grid-template-columns: 16px 1fr; column-gap: 8px"><span style="color: #2383e2">❯</span><span style="color: #ffffff; font-weight: 600">web</span></div><div style="display: grid; grid-template-columns: 16px 1fr; column-gap: 8px"><span></span><span>worker</span></div></div>
+      <div style="flex-grow: 1"></div>
+      <div style="color: #8b949e">One app, one file: zekno.app.json</div>
+    </div>
+    <div style="flex-grow: 1; box-sizing: border-box; border: 1px solid #2383e2; border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+      <div style="display: flex; justify-content: space-between"><span><span style="color: #ffffff; font-weight: 600">web</span></span><span style="color: #8b949e">zekno.app.json</span></div>
+        <div style="color: #ffffff; font-weight: 600; padding-top: 6px">Source</div>
+        <div style="display: grid; grid-template-columns: 16px 96px 1fr; column-gap: 8px"><span></span><span style="color: #8b949e">image</span><span>ghcr.io/acme/demo-web:1.4.2</span></div>
+        <div style="color: #ffffff; font-weight: 600; padding-top: 6px">Deploy</div>
+        <div style="display: grid; grid-template-columns: 16px 96px 1fr; column-gap: 8px"><span></span><span style="color: #8b949e">start</span><span>bun run start</span></div>
+        <div style="display: grid; grid-template-columns: 16px 96px 1fr; column-gap: 8px"><span></span><span style="color: #8b949e">restart</span><span>on failure</span></div>
+        <div style="display: grid; grid-template-columns: 16px 96px 1fr; column-gap: 8px"><span style="color: #2383e2">❯</span><span style="color: #ffffff; font-weight: 600">memory</span><span>1g&nbsp;&nbsp;<span style="color: #d29922">! changed, not deployed (was 512m)</span></span></div>
+        <div style="display: grid; grid-template-columns: 16px 96px 1fr; column-gap: 8px"><span></span><span style="color: #8b949e">cpus</span><span>1</span></div>
+        <div style="color: #ffffff; font-weight: 600; padding-top: 6px">Networking</div>
+        <div style="display: grid; grid-template-columns: 16px 96px 1fr; column-gap: 8px"><span></span><span style="color: #8b949e">port</span><span>3000</span></div>
+        <div style="display: grid; grid-template-columns: 16px 96px 1fr; column-gap: 8px"><span></span><span style="color: #8b949e">published</span><span><span style="color: #8b949e">not published</span></span></div>
+        <div style="color: #ffffff; font-weight: 600; padding-top: 6px">Variables</div>
+        <div style="display: grid; grid-template-columns: 16px 96px 1fr; column-gap: 8px"><span></span><span style="color: #8b949e">secrets</span><span>DATABASE_URL, SESSION_KEY</span></div>
+        <div style="display: grid; grid-template-columns: 16px 96px 1fr; column-gap: 8px"><span></span><span style="color: #8b949e">plain</span><span>NODE_ENV=production</span></div>
+        <div style="color: #ffffff; font-weight: 600; padding-top: 6px">Volumes</div>
+        <div style="display: grid; grid-template-columns: 16px 96px 1fr; column-gap: 8px"><span></span><span style="color: #8b949e">uploads</span><span>/data/uploads</span></div>
+      <div style="flex-grow: 1"></div>
+      <div style="border-top: 1px solid #2a313a; margin-bottom: 6px"></div>
+      <div style="color: #8b949e">A change is written to the file. It runs after the next deploy.</div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 18px; color: #8b949e; flex-wrap: wrap"><span><span style="color: #d7dde4">↑↓</span> move</span><span><span style="color: #d7dde4">enter</span> change</span><span><span style="color: #d7dde4">tab</span> services</span><span><span style="color: #d7dde4">c</span> Compose text</span><span><span style="color: #d7dde4">d</span> deploy</span><span><span style="color: #d7dde4">esc</span> back</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":600}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

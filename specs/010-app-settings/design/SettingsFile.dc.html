@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The settings file</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+    <div><span style="color: #ffffff; font-weight: 600">zekno.app.json</span> <span style="color: #8b949e">&nbsp;in the project folder, beside the code</span></div>
+    <div style="position: relative; box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 12px 16px; white-space: pre; color: #d7dde4">{
+  <span style="color: #ffffff">"zekno"</span>: 1,
+  <span style="color: #ffffff">"services"</span>: {
+    <span style="color: #ffffff">"web"</span>: {
+      <span style="color: #ffffff">"source"</span>: { <span style="color: #ffffff">"image"</span>: "ghcr.io/acme/demo-web:1.4.2" },
+      <span style="color: #ffffff">"deploy"</span>: {
+        <span style="color: #ffffff">"start"</span>: "bun run start",
+        <span style="color: #ffffff">"restart"</span>: "on-failure",
+        <span style="color: #ffffff">"memory"</span>: "1g",
+        <span style="color: #ffffff">"cpus"</span>: 1
+      },
+      <span style="color: #ffffff">"networking"</span>: { <span style="color: #ffffff">"port"</span>: 3000 },
+      <span style="color: #ffffff">"variables"</span>: {
+        <span style="color: #ffffff">"secrets"</span>: ["DATABASE_URL", "SESSION_KEY"],
+        <span style="color: #ffffff">"plain"</span>: { <span style="color: #ffffff">"NODE_ENV"</span>: "production" }
+      },
+      <span style="color: #ffffff">"volumes"</span>: { <span style="color: #ffffff">"uploads"</span>: "/data/uploads" }
+    },
+    <span style="color: #ffffff">"worker"</span>: {
+      <span style="color: #ffffff">"source"</span>: { <span style="color: #ffffff">"image"</span>: "ghcr.io/acme/demo-worker:1.4.2" },
+      <span style="color: #ffffff">"deploy"</span>: { <span style="color: #ffffff">"start"</span>: "bun run worker", <span style="color: #ffffff">"restart"</span>: "always" },
+      <span style="color: #ffffff">"variables"</span>: { <span style="color: #ffffff">"secrets"</span>: ["DATABASE_URL"] }
+    }
+  }
+}</div>
+  </div>
+  <div style="width: 1px; background: #2a313a"></div>
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; color: #8b949e">
+    <div style="font-weight: 600">The sections are the screen's sections</div>
+    <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 10px"><span style="color: #d7dde4">source</span><span>what runs. Now: an image.</span></div>
+    <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 10px"><span style="color: #d7dde4">deploy</span><span>how it starts, restarts, and its limits.</span></div>
+    <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 10px"><span style="color: #d7dde4">networking</span><span>the port it listens on, and one to publish.</span></div>
+    <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 10px"><span style="color: #d7dde4">variables</span><span>secrets by name, and plain values.</span></div>
+    <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 10px"><span style="color: #d7dde4">volumes</span><span>named volumes and where they are mounted.</span></div>
+    <div style="font-weight: 600; padding-top: 6px">Places kept for later versions</div>
+    <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 10px"><span style="color: #d7dde4">source.build</span><span>build from this folder (C1)</span></div>
+    <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 10px"><span style="color: #d7dde4">deploy.predeploy</span><span>a command run before the new version starts</span></div>
+    <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 10px"><span style="color: #d7dde4">deploy.healthcheck</span><span>a path that must answer (C3)</span></div>
+    <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 10px"><span style="color: #d7dde4">deploy.replicas</span><span>several copies, behind the proxy</span></div>
+    <div style="display: grid; grid-template-columns: 150px 1fr; column-gap: 10px"><span style="color: #d7dde4">networking.domains</span><span>domains with HTTPS (C3)</span></div>
+    <div>A file that uses one today is refused with a sentence. A file written today stays valid when they arrive.</div>
+    <div style="font-weight: 600; padding-top: 6px">What it can never hold</div>
+    <div>A secret's value. A path outside the project. A folder of the server. A command for your own machine. Another file to include.</div>
+    <div style="font-weight: 600; padding-top: 6px">Why this form</div>
+    <div>It is the form zekno.json already has, it is read strictly with no new tool, and the settings screen can rewrite it exactly. It has no comments: that is the cost.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
