@@ -653,3 +653,241 @@ terminals.
   carries `shown`; the app's own screen's `d` does not (the screen's `d`).
 
 **Commit of these records and the docs**: the commit that adds this part.
+
+## 7. Second pass: the fixes
+
+**Written by the same independent reviewer as parts 1 to 5**, not by the implementer. Parts 1 to 6
+are unchanged.
+
+### Scope and method
+
+**Commits.** The six commits of `git log d6dbac0..HEAD`, ending at `2272197`: `5d429d5` (S1),
+`92039f2` (S2), `a5af103` (S3), `13cc897` (S4, S5), `ab85172` (the two candidates), and `2272197`
+(docs, read only for part 6). In `apps/cli/src`: 22 files, 883 lines added and 288 removed. Part 6
+was read first. Then the code: `settings/source.ts`, `ops/settings.ts` and `commands/settings.ts`
+in full; the diffs of `server/sanitize.ts`, `settings/values.ts`, `shape.ts`, `schema.ts`,
+`rows.ts`, `file.ts`, `write.ts`, `words.ts`, `types.ts`, `project/file.ts`,
+`app/effects/settings.ts`, `app/effects/deploys.ts`, `app/state/settings.ts`, `events.ts`,
+`app/screens/settings-layout.ts`, `settings-change.tsx`; and, unchanged, `project/accepted.ts`
+(`isAccepted`), `project/signed.ts` (`standingOf`), `project/project.ts` (`useQuestion`) and
+`project/compose-file.ts` (`tooManyAliases`, `expectedValues`).
+
+**Run**:
+
+- Tests: `test/settings/` (now 15 files, `invisible.test.ts` new), `test/scenarios/settings-which-file.test.ts`,
+  `settings-exact-name.test.ts` and `settings-compose.test.ts`: 526 pass.
+  `test/app/settings-state.test.ts`, `settings-effects.test.ts`, `settings-screen.test.tsx`,
+  `test/commands/settings.test.tsx`, `test/ops/settings.test.ts`,
+  `test/ui/ink/settings-report.test.tsx`, `test/scenarios/settings-deploy.test.ts`: 162 pass.
+  `test/app/app-effects.test.ts`, the three tests of "d on the settings screen deploys only the file
+  it showed": pass.
+- The probe of part 1 for S1 (folders A, B and C), run again on the fixed code.
+- Five new throwaway probes, in a scratch folder outside the repository, with the in-memory key
+  store, the local runner and the stand-in Docker: S1's folders on a second machine of the member
+  (`twin`), where the team-signed `zekno.json` is not yet used; folder A deployed with `--app` and
+  `--server`; a `zekno.json` edited after signing and recorded in `links.json` by hand (attacker
+  B); a link above with a settings file in between; a link whose folder became a link out of the
+  project; both files and no link; the keychain reads of `zekno settings` in a sub-folder; the
+  settings commands given `--app`, `--server` and `-f`. Then the
+  reader and `holdsHidden` on 35 characters; the marks after 13 kinds of change; the rows of long
+  values; and a deployed text holding 500 asterisks.
+- Not used: the system keychain, `ssh`, the network, a real terminal, `docker compose up`.
+
+### What became of each item
+
+| Item | State | Why |
+|------|-------|-----|
+| S1 | Closed in part | Where the `zekno.json` is in use here, A, B and C are closed: my probe of part 1, run again, finds the text printed equal to the text signed in A and C, and in B every command stops with SH3, status 1. Two ways remain: the first use of that `zekno.json` on a machine (S6) and a deploy with `--app` and `--server` (S7). |
+| S2 | Closed in part | `holdsHidden` (`server/sanitize.ts:54`) refuses every `Cc`, `Cf`, `Zl`, `Zp`, `Cs` and `Default_Ignorable_Code_Point` character, and U+FE0E or U+FE0F not after a pictograph, in the start command (`values.ts:154`) and a plain value (`values.ts:296`), from the file and when typed (`readTyped`). Every other value and every name is held to an ASCII pattern. A blank at either end of a plain value still draws as nothing (S8). |
+| S3 | Closed | Removed plain variables, volumes and services have rows (`rows.ts:155`, `:285`), and settings no longer set keep theirs at a terminal. Probe: removing one secret, every secret, `publish`, the port, `start`, `restart` or `cpus`, renaming a service and renaming a volume are each marked, in `zekno settings` and on the screen. Reordering services or plain variables is not marked and changes nothing Compose does. The marks can all be turned off by S9. |
+| S4 | Closed | A row's value is cut after 3 lines with AS9, "… n more lines: c shows them in the Compose text" (`settings-layout.ts:192`), and so is the change box. Probe: 1,500 spaces before a payload do not hide it (the wrap drops the spaces and draws the payload); 1,500 NBSP draw 3 lines and AS9. |
+| S5 | Closed | `settingsFileIn` (`source.ts:67`) and the reader (`file.ts:119`, `:145`) count only an entry listed exactly as `zekno.app.json`; `init` says IN7. The folders of a link's path are still found in any letter case on such a disk, as for a Compose file a link names (read, not run; older than this feature). |
+| The screen's `d` | Closed | The rows, the Compose text and the SHA-256 come from one read (`app/effects/settings.ts`, `outcomeOf`), stored in one state change; `d` carries that SHA-256 (`app/state/settings.ts:71`), and the deploy refuses other bytes, or no settings file, before anything is signed (`app/effects/deploys.ts:266`). After a change written from the screen, the old SHA-256 stays until the file is read again, so a `d` in between is refused (DP6), never deployed unseen. The only gap is the time between a read reaching the state and its frame being drawn. Before the first read, `d` carries nothing and deploys as the app screen's `d` does, with nothing shown. |
+| `init` without hard links | Closed | `createInPlace` (`write.ts:231`) opens with `O_CREAT | O_EXCL | O_NOFOLLOW`, so no name taken at that moment, a link to nowhere included, is replaced; `write.test.ts` makes `link` fail with each of the five codes. |
+
+**The implementer's two doubts about S1.**
+
+- *A `zekno.json` in `links.json` whose signer has since left the team.* The settings commands
+  follow it (`ops/settings.ts:85`, `isAccepted`); `zekno deploy` says it is not signed by the team
+  and, with no terminal, stops (status 2), or at a terminal leaves it aside, asks for the server and
+  the app, and deploys this folder's own file. The printed and the signed text then differ, but
+  only after the deploy said so. `zekno settings` itself, which opens the team, knows the
+  standing is not `used` and still shows that file, without saying the deploy will not use it.
+  Nobody gains anything from this: removing a member is the team's own act.
+- *Attacker B writing `links.json`.* Probe: a `zekno.json` edited after it was signed, with its new
+  bytes added to `links.json` by hand. `zekno settings compose` follows it; `zekno deploy` stops with
+  status 2 and "... is not signed by your team, so zekno does not use it." B gains a disagreement
+  that the deploy itself reports. B could already mark a team-signed copy as used (feature 004,
+  "Left"), which makes both commands follow it; that is unchanged.
+
+**Other folders tried.** A link above, with a settings file in a folder between it and the folder
+the commands run in: both commands use the link's file. A link whose folder was replaced by a link
+out of the project: both stop with SR9. Both files and no link: `compose` prints the settings' text
+and IN6 on standard error, status 0; the deploy says DP2, status 2. Each as it should be.
+
+### New findings
+
+| Id | Severity | Finding | Confirmed |
+|----|----------|---------|-----------|
+| S6 | Medium | On a machine where the team-signed `zekno.json` is not used yet, the settings commands show this folder's own file, and the deploy, after a question that names no file, signs the one the `zekno.json` names | Yes, by a probe |
+| S7 | Low | The settings commands follow a deploy with no flags, and take `--app`, `--server` and `-f` without using them; `zekno deploy --app <other> --server <name>` under a used link signs this folder's own file | Yes, by a probe |
+| S8 | Low | A blank at either end of a plain value is drawn as nothing and is signed | Yes, by a probe |
+| S9 | Low | 400 asterisks in a value turn off every mark and the question for missing values | Yes, by a probe |
+
+#### S6. On first use, the settings commands show another file than the deploy signs (Medium)
+
+**Why medium**: it is S1's own scenario on a fresh clone, which is how a branch is often checked
+out for review: the command meant to show what will run prints another text, and the deploy signs
+the link's file after a question that does not say which file that is.
+
+**Where**: `ops/settings.ts:85-90` (`linkInUse`) keeps a `zekno.json` only when `links.json` holds
+it, and otherwise falls back, silently, to this folder's own files (`settingsPlace` with no link,
+`source.ts:122`). `zekno deploy` at a terminal asks the first-use question
+(`project/project.ts:101-116`, `useQuestion`): in this folder it reads
+`<member> linked this folder to <app> on <server>. Use it here?`, naming no file, and a yes uses
+the link's file (rule 2 of `chooseSource`).
+
+**Who**: whoever can change the files of a branch of the team's repository whose `zekno.json`
+names another file than this folder's `zekno.app.json`: `compose.yaml`, as every folder linked
+before this feature does (B), or `deploy/zekno.app.json` (C). No key is needed. The victim is a
+member on a machine where that `zekno.json` was never used: a fresh clone, a second computer.
+
+**Steps** (probe, `twin` of the member, same team, no `links.json`):
+
+- **C.** `zekno settings compose` prints `ghcr.io/acme/visible:1` (this folder's own), status 0.
+  `zekno deploy` at a terminal asks `Ada linked this folder to demo on dev. Use it here?`; yes; the
+  history holds the signed text of `ghcr.io/acme/hidden:1` (`deploy/zekno.app.json`).
+- **B.** `zekno settings compose` prints the settings' text and, on standard error, IN6: "This
+  folder has compose.yaml too. zekno deploy asks which to deploy, or takes -f <file>." The deploy
+  does not ask which: it asks the same `Use it here?`, then a value for `GREETING`, and signs
+  `compose.yaml`. A deploy from a Compose file has no `from` row, so nothing on the screen names it.
+
+With no terminal the deploy stops on such a `zekno.json` (feature 004, S2), so the disagreement needs
+the question at a terminal.
+
+**Smallest fix**: in `linkInUse`, when `findProject` finds a `zekno.json` that `links.json` does
+not hold and the file it names is not the one the commands would show, stop with a sentence that
+names both (no keychain is needed to say it): "zekno.json here names compose.yaml. It is not in use
+on this machine yet: zekno deploy asks about it, and a yes deploys compose.yaml. Run zekno link
+first to answer that." Also let the first-use question name the file a yes deploys, in this folder
+too, as K2 made it do for a folder above.
+
+#### S7. The settings commands follow only a deploy with no flags (Low)
+
+**Why low**: the person typed `--app` and `--server` and knows the deploy goes elsewhere; but the
+commands they would read first show, and change, another file, and say nothing of it in plain
+output.
+
+**Where**: the settings commands do not use `--app`, `--server` or `-f`, so `settingsPlace` always
+gets the link that applies. Worse, they accept them and say nothing: `cli/cli.ts` parses these
+flags for every command, and nothing refuses them for `settings`. `zekno deploy --app <other>
+--server <name>` gives the link's file only to the link's own app (feature 004, P2), so
+`chooseSource` then reads this folder's own file.
+
+**Who**: nobody needs to act; a repository with several apps does it. An author of a branch can use
+it as in S1.
+
+**Steps** (probe): folder A (root linked to `demo`, `sub/zekno.app.json` of its own). In `sub`,
+`zekno settings compose` prints the root's text (`ghcr.io/acme/root:1`);
+`zekno deploy --app billing --server dev` prints `Deploy 1 of billing is running on dev ...` and
+signs `sub/zekno.app.json` (`ghcr.io/acme/sub:1`). In the same folder,
+`zekno settings set web.memory 2g --yes` writes the root's file, and its plain output,
+`web · memory limit  no limit → 2g` and `Written  Run zekno deploy to use it.`, names no file. Before
+the fixes it wrote `sub/zekno.app.json`, the file that `billing` deploy signs.
+
+The same flags given to the settings commands change nothing, with status 0 and nothing on standard
+error: `zekno settings compose --app billing --server dev` and `zekno settings compose -f
+zekno.app.json` both print the root's text, `zekno settings --app billing` the root's lines, and
+`zekno settings set web.memory 2g --yes --app billing --server dev` writes the root's file (probe).
+A person who types the deploy's own flags to see what it signs is shown another app's text.
+Ignoring the flags is older than the fixes (part 1 missed it); the fixes made it point at the other
+file.
+
+**Smallest fix**: refuse `--app`, `--server` and `-f` on the settings commands (status 2), as words
+after a command are refused, until they are given the deploy's own meaning. And name the file in
+plain output of `compose`, `set` and `unset` (on standard error, "from <file>") and in CS11
+("Written to <file>").
+
+#### S8. A blank at either end of a plain value is drawn as nothing (Low)
+
+**Why low**: the attack of S2 still works with a blank: a value that reads as `true` is another
+value in the container.
+
+**Where**: `holdsHidden` (`server/sanitize.ts:54`) takes characters that draw as a blank, and
+`plainValueProblem` (`values.ts:296`) allows them anywhere, at either end too. The rows, the piped
+lines and the change box draw the value as it is, so a blank at its end is not seen.
+
+**Steps** (probe): `REQUIRE_AUTH` = `true` followed by one of U+0020, U+00A0, U+1680, U+2000 to
+U+200A, U+202F, U+205F, U+3000 or U+2800 (braille blank). The reader takes each; `readTyped` takes
+`true ` too. Piped `zekno settings` prints `web	variables.plain.REQUIRE_AUTH	true ` and the row
+reads `REQUIRE_AUTH=true `, with the mark `(was REQUIRE_AUTH=true)` beside it when the last deploy
+had `true`. Only the Compose text (between quotes) and `--json` show the blank.
+
+**Smallest fix**: refuse a plain value that starts or ends with a `White_Space` character or
+U+2800, or draw such a value between quotes, as an empty one is already drawn `""`.
+
+#### S9. Four hundred asterisks turn off the marks and the question for missing values (Low)
+
+**Why low**: it needs one deployed change carrying the asterisks, or a secret the person never set;
+then marks silently go, and an app can start with an empty secret without being asked for it.
+
+**Where**: `tooManyAliases` (`project/compose-file.ts:58-72`) counts every `*` followed by any
+character but a few as a YAML alias, inside quotes too. The Compose text made from settings never
+holds an alias: every `*` is inside a double-quoted scalar. Yet `deployedSettings`
+(`settings/compose.ts:185`) gives up past 200 of them, and `expectedValues` gives no names
+(`asking/first-deploy.ts:405`; the app's `d`, `app/effects/deploys.ts:311`).
+
+**Steps** (probe, the functions called directly): a last deploy whose plain `MASK` is 500
+asterisks and which had `REQUIRE_AUTH=1`; the file now without `REQUIRE_AUTH`.
+`deployedSettings` of that deploy's text gives undefined, so no row is marked or removed, and no
+service is listed as removed. `expectedValues` of a text with secret `JWT_SECRET` and the same
+`MASK` gives `[]`; without the asterisks it gives `["JWT_SECRET"]`. So a deploy at a terminal does
+not ask for a value that was never set, and the app starts with `JWT_SECRET` empty. Two asterisks
+are counted as one alias, so 402 or more are needed; a value may hold 4,096 characters.
+
+**Smallest fix**: in `deployedSettings`, read the text by the lines `composeText` writes instead of
+with a YAML parser, or count aliases outside double-quoted scalars only; for a settings deploy,
+take the names to ask for from the settings' own `secrets`, not from `expectedValues`.
+
+### What the fixes opened
+
+- **The keychain.** `zekno settings` in a sub-folder of a linked folder now opens the team, once,
+  to verify the link for its marks (probe: one read). Before, it read no keychain there, since only a
+  `zekno.json` in the folder itself counted. One read per command in a linked folder is the rule of
+  feature 004 (K10). `set`, `unset`, `--json`, `compose` and `init` still read none (probe, and the
+  implementer's tests with a key store that throws).
+- **Writes.** `set` and `unset` now write the file a link names, which can be in a folder above, or
+  in another folder below the link's (`deploy/`). That is the point of the fix; S7 is where it
+  writes a file the person did not expect, and does not name it.
+- **Servers.** None of the settings commands connects (read in the code; the implementer's tests
+  replace `connect` with one that throws).
+- **A `zekno.json` that cannot be read**, in this folder or any above up to the home folder, now
+  stops every settings command, as it stops a deploy with no flags. Before, `zekno settings` left
+  it aside and the other commands never looked. That fails closed.
+- **The screen** now takes its file from `settingsPlace`, shared with the commands. Where the link
+  in use names a Compose file in a folder above, its sentence SH2 names that file by its path from
+  the folder the app runs in, where it named the link's `compose` field before. No test draws that
+  case; it changes words only.
+
+### Missing tests
+
+- S6 and S7 as above, once fixed: a second machine (`twin`) in folders B and C, the first-use
+  question answered yes; folder A with `--app` and `--server`.
+- S8: a plain value ending in each blank of the list above.
+- S9: a settings deploy with 500 asterisks in a value: the marks against it, and the question for a
+  secret never set.
+- The removed-signer case: `zekno settings` should say that the deploy will not use the link it
+  follows (it knows the standing).
+
+### Judgement
+
+The fixes close what they set out to close, S3, S4, S5 and both candidates fully, S1 and S2 for the
+cases the first pass reported, and they open nothing that reads the keychain, connects or writes
+where it should not. No way was found, in either pass, to make the Compose text mean more than the
+settings show, or to deploy without a question at a terminal.
+
+The feature is fit to merge into `dev` once S6 is fixed. S6 is S1 again, on a fresh clone, and its
+fix needs no keychain and touches only `linkInUse` and the first-use question's words. Refusing the
+flags the settings commands ignore (the first half of S7's fix) is a few lines and is worth doing
+with it. The rest of S7, and S8 and S9, are low: they can be fixed after the merge, or recorded as
+known limits with the tests above.
