@@ -2,8 +2,9 @@
  * SC-010: the CLI's README and its docs page name every command, flag and
  * key the CLI has, and every `zekno` command they name exists. The commands
  * and flags are read from the CLI's own help text, and the keys from the key
- * table of the app's contract, so this test copies neither. Nothing here
- * starts a process.
+ * tables of the app's contracts (feature 004's app, and feature 010's
+ * settings screen), so this test copies neither. Nothing here starts a
+ * process.
  */
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
@@ -19,7 +20,12 @@ const read = (path: string): string => readFileSync(join(ROOT, path), "utf8")
 
 /** The two places a person reads about the CLI. */
 const DOCS = ["apps/cli/README.md", "apps/web/content/docs/cli.mdx"] as const
-const CONTRACT = "specs/004-cli-app/contracts/app.md"
+/** The contracts whose key tables list the app's keys: the app (feature 004) and its settings screen (feature 010). */
+const CONTRACTS = [
+  "specs/004-cli-app/contracts/app.md",
+  "specs/010-app-settings/contracts/app-screen.md",
+] as const
+const CONTRACT_NAMES = CONTRACTS.join(" and ")
 
 /**
  * Each command of the help, by its words, with every flag its usage lines
@@ -166,18 +172,26 @@ const COMMANDS = commandsOf(HELP)
 const FLAGS = [
   ...new Set([...COMMANDS.values()].flatMap((flags) => [...flags])),
 ]
-const KEYS = keyColumn(read(CONTRACT))
+/** Every key of the app: those of each contract's key table, each once. */
+const KEYS = [
+  ...new Set(CONTRACTS.flatMap((contract) => keyColumn(read(contract)))),
+]
 /** The flags `zekno` alone may take: the help's own, and those of a usage line with no command words, such as `zekno --version [--json]`. */
 const ALONE_FLAGS = [...HELP_FLAGS, ...(COMMANDS.get("") ?? [])]
 
 describe("what the docs are checked against", () => {
-  test("the help lists the commands and flags, and the contract its keys", () => {
+  test("the help lists the commands and flags, and the contracts their keys", () => {
     expect([...COMMANDS.keys()]).toContain("server add")
     expect(COMMANDS.size).toBeGreaterThanOrEqual(12)
     expect(FLAGS).toContain("--no-follow")
     expect(FLAGS.length).toBeGreaterThanOrEqual(15)
     expect(KEYS).toContain("ctrl-c")
     expect(KEYS.length).toBeGreaterThanOrEqual(20)
+    // The settings screen's keys, from feature 010's contract.
+    expect(KEYS).toContain("e")
+    expect(KEYS).toContain("c")
+    for (const contract of CONTRACTS)
+      expect(keyColumn(read(contract)).length).toBeGreaterThan(0)
   })
 
   test("`zekno --help`, `zekno -h` and `zekno help` print the help and succeed", async () => {
@@ -201,7 +215,7 @@ describe.each(DOCS)("%s", (file) => {
     expect(missing.map((name) => `${file} does not name ${name}`)).toEqual([])
   })
 
-  test(`names every key of ${CONTRACT}`, () => {
+  test(`names every key of ${CONTRACT_NAMES}`, () => {
     const missing = KEYS.filter((key) => !text.includes(`\`${key}\``))
     expect(
       missing.map((key) => `${file} does not name the key ${key}`)
@@ -244,7 +258,7 @@ describe.each(DOCS)("%s", (file) => {
     expect(wrong).toEqual([])
   })
 
-  test(`every key in its key table is a key of ${CONTRACT}`, () => {
+  test(`every key in its key table is a key of ${CONTRACT_NAMES}`, () => {
     const listed = keyColumn(text)
     expect(listed.length).toBeGreaterThan(0)
     expect(
