@@ -108,6 +108,12 @@ export type SettingsReport = {
   services: readonly { name: string; rows: readonly SettingRow[] }[]
   /** SH3, when this folder's zekno.json names a Compose file instead. */
   note?: string
+  /**
+   * What plain output prints, one line per setting that is set: the service,
+   * the setting's place in the file and its value as the file holds it
+   * (settings/piped.ts). Left out, plain output prints no setting.
+   */
+  piped?: readonly (readonly [service: string, place: string, value: string])[]
 }
 
 /** What a deploy reads, whichever kind of file it came from. */

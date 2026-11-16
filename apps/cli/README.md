@@ -213,6 +213,7 @@ zekno rollback [--app <app>] [--server <name>] [--to <number>] [--json]
 zekno status [--server <name>] [--json]
 zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
 zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
+zekno settings [--json]
 zekno doctor [--server <name>] [--json]
 zekno version [--json]
 zekno --version [--json]
@@ -499,6 +500,11 @@ See [The project file](#the-project-file-zeknojson).
 ```bash
 zekno link --app api --server prod
 ```
+
+### `zekno settings`
+
+Shows this folder's `zekno.app.json` in sections. Piped, one line per setting; with `--json`, the
+file's data.
 
 ### `zekno doctor`
 

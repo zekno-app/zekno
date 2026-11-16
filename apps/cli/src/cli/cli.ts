@@ -17,6 +17,7 @@ import {
   type ImportRead,
 } from "../commands/secret"
 import { serverAdd, serverList, serverUpdate } from "../commands/server"
+import { settingsShow } from "../commands/settings"
 import { status } from "../commands/status"
 import { teamOnce, type Deps } from "./context"
 import { CliError, UsageError, WrongInput } from "./errors"
@@ -55,6 +56,7 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno status [--server <name>] [--json]
   zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
   zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
+  zekno settings [--json]
   zekno doctor [--server <name>] [--json]
   zekno version [--json]
   zekno --version [--json]
@@ -77,6 +79,7 @@ const WORDS: Record<string, number> = {
   status: 1,
   logs: 1,
   link: 1,
+  settings: 1,
   doctor: 1,
   version: 1,
 }
@@ -97,7 +100,14 @@ export function valueAsArgument(name: string | undefined): string {
 }
 
 /** The commands that work without a team, or make one: at a terminal every other command with no team says A3. */
-const WITHOUT_TEAM = new Set(["init", "deploy", "doctor", "version"])
+const WITHOUT_TEAM = new Set([
+  "init",
+  "deploy",
+  "doctor",
+  "version",
+  // specs/010-app-settings: the settings commands need no team (contracts/commands.md).
+  "settings",
+])
 
 /** The project file that applies to `cwd`, or undefined, also when it cannot be read: for a check that may only stop a command early. */
 function readableProject(cwd: string): ProjectLink | undefined {
@@ -149,7 +159,8 @@ export async function run(argv: string[], given: Deps): Promise<number> {
       return command || values.help ? 0 : 2
     }
 
-    const grouped = command === "server" || command === "secret"
+    const grouped =
+      command === "server" || command === "secret" || command === "settings"
     const name = `${command} ${grouped ? (second ?? "") : ""}`.trim()
     // Nothing may trail a command. In particular a secret value is never an argument:
     // it would stay in the shell's history and show in the list of processes.
@@ -349,6 +360,10 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         return 0
       case "link":
         await link(deps, atTerminal ? await linkDetails() : values)
+        return 0
+      case "settings":
+        // It reads this folder's zekno.app.json and never asks; it may open the team to verify the history (ops/settings.ts).
+        await settingsShow(deps, { json: values.json })
         return 0
       case "doctor":
         // It never asks and takes nothing from zekno.json: no `withProject`, no asking step (contracts/doctor.md).

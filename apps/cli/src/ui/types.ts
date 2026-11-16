@@ -1,4 +1,5 @@
 import type { DoctorReport } from "../ops/doctor"
+import type { SettingsReport } from "../settings/types"
 import type { DeployStart, DeployView } from "../shared/deploy"
 
 /**
@@ -265,6 +266,15 @@ export interface Ui {
    * output one line per check, its cells separated by tabs, then the last line.
    */
   doctorReport(report: DoctorReport): void
+  /**
+   * `zekno settings`' report (specs/010-app-settings, contracts/commands.md):
+   * at a terminal the first line, each service and its rows in sections, the
+   * marks of what changed since this machine's last deploy, as the board
+   * `CmdSettings` draws them, and the note (SH3) as a warning after them; in
+   * plain output one line per setting that is set (`report.piped`), its
+   * cells separated by tabs, and the note on standard error.
+   */
+  settingsReport(report: SettingsReport): void
   /** Finishes drawing. Call once, before the process exits. */
   close(): Promise<void>
 }

@@ -15,13 +15,15 @@ import { HELP } from "../../src/cli/cli"
 import { AT_HEAD, HELP_AT_HEAD } from "./plain-at-head"
 import { SCENES } from "./plain-scenes"
 
-/** The lines feature 006 adds to the help, exactly as contracts/help.md writes them. Nothing else may change. */
+/** The lines feature 006 adds to the help, exactly as contracts/help.md writes them, and those of feature 010 (specs/010-app-settings, contracts/commands.md). Nothing else may change. */
 const ADDED_TO_HELP = [
   "  zekno secret import <file> [--app <app>] [--server <name>] [--yes]",
   "  zekno doctor [--server <name>] [--json]",
   "  zekno version [--json]",
   "  zekno --version [--json]",
   "At a terminal a command asks for a server or an app it was not given, and `zekno deploy` sets up what a first deploy needs. In a script it asks nothing.",
+  // feature 010
+  "  zekno settings [--json]",
 ]
 
 describe("with no terminal, every command does what it did before feature 006 (FR-028)", () => {

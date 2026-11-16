@@ -44,22 +44,28 @@ Shows the settings in sections (FR-014 to FR-016, FR-018, FR-019).
   demo  from zekno.app.json
 
   web
-  Source      image     ghcr.io/acme/demo-web:1.4.2
-  Deploy      start     bun run start
-              restart   on failure
-              memory    1g  ! changed, not deployed (was 512m)
-              cpus      1
-  Networking  port      3000, not published
-  Variables   secrets   DATABASE_URL, SESSION_KEY
-              plain     NODE_ENV=production
-  Volumes     uploads   /data/uploads
+  Source        image     ghcr.io/acme/demo-web:1.4.2
+  Deploy        start     bun run start
+                restart   on failure
+                memory    1g  ! changed, not deployed (was 512m)
+                cpus      1
+  Networking    port      3000, not published
+  Variables     secrets   DATABASE_URL, SESSION_KEY
+                plain     NODE_ENV=production
+  Volumes       uploads   /data/uploads
 
   worker
-  Source      image     ghcr.io/acme/demo-worker:1.4.2
-  Deploy      start     bun run worker
-              restart   always
-  Variables   secrets   DATABASE_URL
+  Source        image     ghcr.io/acme/demo-worker:1.4.2
+  Deploy        start     bun run worker
+                restart   always
+  Variables     secrets   DATABASE_URL
 ```
+
+As built (US2, 2026-11-16): the section column is 14 wide from column 2, so the labels start at
+column 16 and, with the label column of 10, the values at column 26, as the board draws them (its
+section column is 110 px and an 8 px gap, 14 columns of Geist Mono at 14 px). The block above
+was first written with the labels at column 14; the board is binding for spacing, so the block
+now shows column 16.
 
 - The first line, from column 2: the app's name bold and `from <file>` dim, two spaces apart,
   when the app is known (below); else `<file>` alone, bold (research R9, item 13).
@@ -81,7 +87,8 @@ Shows the settings in sections (FR-014 to FR-016, FR-018, FR-019).
   the last deploy had no such setting). A setting the last deploy had and the file no longer has
   is not shown.
 - **SH3**, when this folder's `zekno.json` is signed by the team, in use here, and names a Compose
-  file: after the services, drawn as a warning.
+  file: after the services, drawn as a warning. As built: an empty line before it, as before each
+  service.
 
 **Which app.** Only this folder's own `zekno.json` counts, when it is signed by the team, in use
 here (`standingOf` gives `used`) and its `compose` is `zekno.app.json`. Then the team is opened
@@ -94,6 +101,11 @@ With no profile, the same.
 One line per setting that is set, with tabs: the service, the setting's place in the file, the
 value as the file holds it. No first line, no section names, no marks, no empty line. Secrets are
 joined with `,` and no space. SH3 goes to standard error.
+
+As built: `publish`, when set, is a line of its own (`web	networking.publish	8080`), after the
+port. Every value is cleaned with `sanitize`, as every line from the file is: the reader already
+refuses any control character, so only an invisible character (such as a right-to-left override in
+a plain value) could ever be taken out. `--json` gives the data exactly, cleaned of nothing.
 
 ```text
 web	source.image	ghcr.io/acme/demo-web:1.4.2
@@ -121,7 +133,10 @@ nothing added. For design.md's file:
 
 - **SH1** when this folder has no `zekno.app.json` and no Compose file applies.
 - **SH2** when it has none and `compose.yaml` is here, or this folder's own `zekno.json` names a
-  Compose file. `<file>` is that file. Nothing is read from it (FR-018).
+  Compose file. `<file>` is that file. Nothing is read from it (FR-018). As built: the
+  `zekno.json` counts only when it is signed by the team and in use here (the rule of "Which app"
+  below; never asked about), and then its file is named before `compose.yaml`, since a deploy uses
+  it.
 
 Exit status 1 for both; nothing else is printed.
 

@@ -4,7 +4,7 @@
  *
  * - what is on the screen: store.ts;
  * - the lines written once: lines.tsx, with cells.tsx, marks.tsx,
- *   doctor-report.tsx and deploy-view.tsx;
+ *   doctor-report.tsx, settings-report.tsx and deploy-view.tsx;
  * - a deploy as it runs: deploy-live.ts; work in progress: spinner.tsx;
  * - the questions: questions.tsx (a list, a typed answer), yes-or-no.tsx,
  *   hidden-prompts.tsx; what each leaves behind: left-behind.ts;
@@ -150,6 +150,14 @@ export function inkUi(
     groups: (rows) => add({ kind: "groups", rows }),
     gap: () => add({ kind: "gap" }),
     doctorReport: (report) => add({ kind: "doctor", report }),
+    settingsReport(report) {
+      add({ kind: "settings", report })
+      // SH3 after the services, as a warning, an empty line apart as each service is.
+      if (report.note !== undefined) {
+        add({ kind: "gap" })
+        add({ kind: "warn", text: report.note })
+      }
+    },
     asks: Boolean(input.isTTY),
     field: (label, value) => add({ kind: "field", label, value }),
     table: (rows) => add({ kind: "table", rows }),

@@ -3,8 +3,8 @@
  * live (`Line`, drawn in Ink's Static by ink.tsx): results, warnings and
  * errors after their marks, notes, fields, tables, lines of cells, a
  * server's lines, the lines of `zekno logs`, codes, groups, a deploy that
- * ended, `zekno doctor`'s report, and what a question leaves behind
- * (left-behind.ts).
+ * ended, `zekno doctor`'s report, `zekno settings`' report, and what a
+ * question leaves behind (left-behind.ts).
  */
 import { Box, Text } from "ink"
 
@@ -16,6 +16,8 @@ import { BRAND } from "../terminal/theme"
 import { REMOTE_MARK, type Cell, type LogOutput } from "../types"
 import { CellText, drawnCell, linePieces } from "./cells"
 import { DoctorBlock } from "./doctor-report"
+import { SettingsBlock } from "./settings-report"
+import type { SettingsReport } from "../../settings/types"
 import { hiddenPieces } from "./hidden-prompts"
 import { COLOR, inside, MARK, MarkedLine, withoutBackticks } from "./marks"
 import { yesOrNoPieces } from "./yes-or-no"
@@ -62,6 +64,7 @@ export type Item =
   | { id: number; kind: "groups"; rows: readonly (readonly [string, string])[] }
   | { id: number; kind: "gap" }
   | { id: number; kind: "doctor"; report: DoctorReport }
+  | { id: number; kind: "settings"; report: SettingsReport }
 
 /** A sentence's end: a full stop before a space or a line break. */
 const SENTENCE_END = /\.(?=\s)/
@@ -281,6 +284,8 @@ export function Line({ item, columns }: { item: Item; columns: number }) {
   if (item.kind === "gap") return <Text> </Text>
   if (item.kind === "doctor")
     return <DoctorBlock report={item.report} columns={columns} />
+  if (item.kind === "settings")
+    return <SettingsBlock report={item.report} columns={columns} />
   if (item.kind === "note") {
     return (
       <Box paddingLeft={2} width={columns}>

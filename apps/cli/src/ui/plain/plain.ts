@@ -120,6 +120,11 @@ export function plainUi(
           for (const check of server.checks) out(row(server.name, check))
       out(doctorCounts(report.problems, report.warnings))
     },
+    // contracts/commands.md of specs/010-app-settings, "Piped": the service, the setting's place, its value; SH3 on standard error.
+    settingsReport(report) {
+      for (const line of report.piped ?? []) out(line.join("\t"))
+      if (report.note !== undefined) err(report.note)
+    },
     close: async () => {},
   }
   return ui
