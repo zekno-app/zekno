@@ -18,6 +18,7 @@ import {
 } from "../commands/secret"
 import { serverAdd, serverList, serverUpdate } from "../commands/server"
 import {
+  settingsCompose,
   settingsInit,
   settingsSet,
   settingsShow,
@@ -64,6 +65,7 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno settings [--json]
   zekno settings set <service>.<setting> <value> [--yes]
   zekno settings unset <service>.<setting> [--yes]
+  zekno settings compose
   zekno settings init
   zekno doctor [--server <name>] [--json]
   zekno version [--json]
@@ -90,6 +92,7 @@ const WORDS: Record<string, number> = {
   settings: 1,
   "settings set": 4,
   "settings unset": 3,
+  "settings compose": 2,
   "settings init": 2,
   doctor: 1,
   version: 1,
@@ -120,6 +123,7 @@ const WITHOUT_TEAM = new Set([
   "settings",
   "settings set",
   "settings unset",
+  "settings compose",
   "settings init",
 ])
 
@@ -386,6 +390,10 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         })
       case "settings unset":
         return await settingsUnset(deps, third, { yes: values.yes === true })
+      case "settings compose":
+        // What a deploy of this folder would sign, byte for byte; no team, no keychain, no server.
+        settingsCompose(deps)
+        return 0
       case "settings init":
         return await settingsInit(deps)
       case "doctor":

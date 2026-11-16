@@ -237,6 +237,7 @@ zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
 zekno settings [--json]
 zekno settings set <service>.<setting> <value> [--yes]
 zekno settings unset <service>.<setting> [--yes]
+zekno settings compose
 zekno settings init
 zekno doctor [--server <name>] [--json]
 zekno version [--json]
@@ -565,8 +566,10 @@ setting; with `--json`, the file's data.
 `zekno settings set <service>.<setting> <value>` changes one setting: it
 shows the old and the new value and asks once; with no terminal it needs
 `--yes`. `zekno settings unset <service>.<setting>` removes one the same way.
-`zekno settings init` starts a file by asking for the image and the service's
-name. None of them contacts a server or deploys anything.
+`zekno settings compose` prints the Compose text the settings turn into, byte
+for byte the text a deploy signs. `zekno settings init` starts a file by
+asking for the image and the service's name. None of them contacts a server or
+deploys anything.
 
 ### zekno doctor
 

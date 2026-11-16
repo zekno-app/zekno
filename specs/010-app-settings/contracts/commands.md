@@ -241,6 +241,14 @@ keychain read.
   wraps, as any line does; to copy the text, pipe it (`zekno settings compose > compose.yaml`).
 - Status 0; a fault in the file: its sentence, status 1. No Compose text holds a secret's value.
 
+As built (US4, 2026-11-16): the text is made by `composeText`, the function `readSource` uses for
+the deploy of the same file, so the bytes are the same by construction, and a test compares them
+for every good file of the test set (`test/scenarios/settings-compose.test.ts`). With no
+`zekno.app.json` it says SH2 when `compose.yaml` is here, else SH1: it opens no team, so it does
+not judge a `zekno.json`. At a terminal each line is drawn without the invisible characters a plain
+value may hold (a right-to-left override), as every line from the file is; piped, the text is
+exact, since it must be the text signed.
+
 ## `zekno settings init`
 
 Starts a settings file (research R8; design: "Starts a file by asking for the image and the

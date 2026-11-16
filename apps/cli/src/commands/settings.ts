@@ -8,12 +8,14 @@ import type { Deps } from "../cli/context"
 import { CliError, Left } from "../cli/errors"
 import {
   createFromAnswers,
+  folderCompose,
   prepareInit,
   prepareSettingChange,
   settingsData,
   showSettings,
   writeSettingChange,
 } from "../ops/settings"
+import { sanitize } from "../server/sanitize"
 import { checkImage, checkServiceName } from "../settings/values"
 import {
   CS10,
@@ -27,6 +29,7 @@ import {
   IN5,
   IN6,
 } from "../settings/words"
+import { quiet } from "../ui/types"
 
 /**
  * `zekno settings [--json]`: the settings of this folder's `zekno.app.json`
@@ -126,4 +129,19 @@ export async function settingsInit(deps: Deps): Promise<number> {
   deps.ui.success(IN3.text, IN3.detail)
   if (compose) deps.ui.note(IN6)
   return 0
+}
+
+/**
+ * `zekno settings compose`: the Compose text the settings turn into, the
+ * text a deploy of this folder signs (FR-027). Piped, each line exactly as it
+ * is, so standard output is the text, byte for byte, with its last line
+ * feed; at a terminal the same lines, dim (board `CmdSettings`), with any
+ * invisible character of a plain value taken out, as every line drawn from
+ * the file is.
+ */
+export function settingsCompose(deps: Deps): void {
+  const lines = folderCompose(deps).split("\n")
+  // The text ends with a line feed: the last part is empty, and is not a line.
+  lines.pop()
+  for (const line of lines) deps.ui.line(line, [quiet(sanitize(line))])
 }

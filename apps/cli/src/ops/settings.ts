@@ -12,7 +12,8 @@
  * deploy is marked (research R4). It never asks, never accepts a zekno.json
  * and never writes `links.json`: a file it cannot use is left as it is.
  * `set`, `unset` and `init` never open the team: they read and write the
- * settings file, through the writer of settings/write.ts only.
+ * settings file, through the writer of settings/write.ts only. `compose`
+ * never opens it either.
  */
 import { lstatSync } from "node:fs"
 import { join } from "node:path"
@@ -29,7 +30,7 @@ import {
 import { standingOf } from "../project/signed"
 import { sanitize } from "../server/sanitize"
 import { applyChange, parseSettingPath } from "../settings/change"
-import { deployedSettings } from "../settings/compose"
+import { composeText, deployedSettings } from "../settings/compose"
 import {
   isSettingsFile,
   readSettingsFile,
@@ -259,4 +260,17 @@ export function createFromAnswers(
     version: 1,
     services: [[service, { image }]],
   })
+}
+
+/**
+ * `zekno settings compose` (FR-026, FR-027): the Compose text this folder's
+ * `zekno.app.json` turns into, made by `composeText`, the one function a
+ * deploy of the same file signs the text of (settings/source.ts,
+ * `readSource`), so what is printed is what is signed, byte for byte. With
+ * no settings file, SH2 when compose.yaml is here, else SH1: no team is
+ * opened, so a zekno.json is not looked at. No keychain, no server.
+ */
+export function folderCompose(deps: Pick<OpDeps, "cwd">): string {
+  if (!present(deps.cwd, SETTINGS_FILE)) throw noSettings(deps.cwd)
+  return composeText(readHere(deps).settings)
 }

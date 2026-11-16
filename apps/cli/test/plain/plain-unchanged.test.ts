@@ -26,6 +26,7 @@ const ADDED_TO_HELP = [
   "  zekno settings [--json]",
   "  zekno settings set <service>.<setting> <value> [--yes]",
   "  zekno settings unset <service>.<setting> [--yes]",
+  "  zekno settings compose",
   "  zekno settings init",
 ]
 

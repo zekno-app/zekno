@@ -441,6 +441,7 @@ const NEVER_FETCHES: { [command: string]: string[] } = {
   settings: ["settings"],
   "settings set": ["settings", "set", "web.memory", "1g", "--yes"],
   "settings unset": ["settings", "unset", "web.memory", "--yes"],
+  "settings compose": ["settings", "compose"],
   "settings init": ["settings", "init"],
 }
 
