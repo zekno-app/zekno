@@ -68,8 +68,6 @@ const K = {
 /** Types each character as its own key press, as a person does. */
 const typing = (value: string): AppEvent[] => [...value].map(text)
 
-const press = (state: State, ...events: AppEvent[]) => play(state, ...events)
-
 const onApp = (): State =>
   play(home(), K.right, K.enter, {
     type: "app-view",

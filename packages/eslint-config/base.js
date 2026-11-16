@@ -1,35 +1,35 @@
-import { createRequire } from "node:module"
-import babelParser from "@babel/eslint-parser"
 import js from "@eslint/js"
 import eslintConfigPrettier from "eslint-config-prettier"
 import onlyWarn from "eslint-plugin-only-warn"
 import turboPlugin from "eslint-plugin-turbo"
-
-const require = createRequire(import.meta.url)
+import tseslint from "typescript-eslint"
 
 /**
  * A shared ESLint configuration for the repository.
+ *
+ * TypeScript files are read with typescript-eslint's parser and checked
+ * with its recommended rules. ESLint reads only JavaScript files unless a
+ * config names others, and those rules name `.ts` and `.tsx`.
  *
  * @type {import("eslint").Linter.Config[]}
  */
 export const config = [
   js.configs.recommended,
+  ...tseslint.configs.recommended,
   eslintConfigPrettier,
   {
-    languageOptions: {
-      parser: babelParser,
-      parserOptions: {
-        requireConfigFile: false,
-        babelOptions: {
-          presets: [require.resolve("@babel/preset-typescript")],
-        },
-      },
-    },
     plugins: {
       turbo: turboPlugin,
     },
     rules: {
       "turbo/no-undeclared-env-vars": "warn",
+      // Taking one field out of an object to keep the rest is not an unused variable.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { ignoreRestSiblings: true },
+      ],
+      // A variable a callback reads before it is given its one value cannot be a const.
+      "prefer-const": ["error", { ignoreReadBeforeAssign: true }],
     },
   },
   {

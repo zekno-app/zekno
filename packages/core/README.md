@@ -56,6 +56,8 @@ reviewed, what was fixed and what remains open is in
 bun test                  # unit tests and end-to-end scenarios
 bun test test/scenarios   # only the scenarios: client, hostile relay and runner
 bun run typecheck
+bun run lint              # ESLint with typescript-eslint; any finding fails
+bun run format            # Prettier, the repository's settings
 ```
 
 Source files are internal apart from `src/index.ts`. `src/protocol/limits.ts` holds every size limit and

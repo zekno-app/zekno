@@ -39,7 +39,7 @@ export function doctorJson(report: DoctorReport) {
  */
 function stepLabel(home: string, server: string | undefined): string {
   if (server !== undefined) return `Checking ${server}`
-  let servers: string[] = []
+  let servers: string[]
   try {
     servers = profileStore(home)
       .load()

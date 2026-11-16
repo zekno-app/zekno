@@ -56,6 +56,8 @@ describe("starting the app", () => {
 
   test("a name or address in the profile folder changed to hold escape sequences is a damaged profile, never drawn", async () => {
     // The member's name and a server's address are not signed: anything on this machine could change them.
+    // The profile file is tampered with as loose JSON, as something other than zekno would.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const changes: Record<string, (profile: any) => unknown> = {
       memberName: (profile) => ({
         ...profile,

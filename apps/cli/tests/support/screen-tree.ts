@@ -249,7 +249,10 @@ export function screenTree(rows: readonly (readonly Cell[])[]): ScreenTree {
       )
         return
       const size = (outer.bottom - outer.top) * (outer.right - outer.left)
-      if (size < area) ((parent = at), (area = size))
+      if (size < area) {
+        parent = at
+        area = size
+      }
     })
     return parent
   }

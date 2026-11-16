@@ -9,6 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "lint": "eslint --max-warnings 0",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "test": "bun test",
     "compile": "bun build.ts",
@@ -24,9 +25,11 @@
   "devDependencies": {
     "@types/bun": "^1.4.4",
     "@types/react": "19.3.0",
+    "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
     "ai": "^7",
     "e2e": "0.23.1",
+    "eslint": "^10",
     "typescript": "^5"
   }
 }

@@ -287,7 +287,7 @@ export async function deployAtTerminal(
   let wrote: WrittenLink | undefined
   let server: Server
   let app: string
-  let fresh = false
+  let fresh: boolean
   try {
     // 3. The key.
     if (current === undefined) {

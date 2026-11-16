@@ -293,6 +293,8 @@ The reviews these come from are
 ```bash
 bun test            # runs the runner as a real process against a stand-in docker
 bun run typecheck
+bun run lint        # ESLint with typescript-eslint; any finding fails
+bun run format      # Prettier, the repository's settings
 bun run compile     # dist/zekno-runner, for the machine you are on
 ```
 

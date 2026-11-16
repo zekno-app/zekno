@@ -1832,7 +1832,7 @@ describe("the app in a project folder", () => {
   })
 
   test("a folder linked to an app its server does not have yet: d deploys it as a first deploy, whichever row is marked, and replaces nothing", async () => {
-    const { m, app } = await onHome(COMPOSE_PLAIN, async (m) => {
+    const { app } = await onHome(COMPOSE_PLAIN, async (m) => {
       expect(
         await m.zekno("deploy", "--app", "billing", "--server", "dev")
       ).toBe(0)

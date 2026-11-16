@@ -914,6 +914,8 @@ On the server, see the [runner's README](../runner/README.md#its-folder).
 ```bash
 bun test            # includes a run with a real container when Docker and caddy:2.11.9 are present
 bun run typecheck
+bun run lint        # ESLint with typescript-eslint; any finding fails
+bun run format      # Prettier, the repository's settings
 bun run compile     # dist/zekno, a single file (build.ts)
 ```
 

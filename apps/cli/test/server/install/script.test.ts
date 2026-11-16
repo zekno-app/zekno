@@ -816,7 +816,7 @@ describe("the script, run with sh against stand-ins", () => {
             path: runnerAt(server, there),
           }))
         )
-        const runs = await inBatches(pairs, ({ there, carried, path }) =>
+        const runs = await inBatches(pairs, ({ carried, path }) =>
           server.run(["update", carried, path, "release"], { shell })
         )
         for (const [at, run] of runs.entries()) {

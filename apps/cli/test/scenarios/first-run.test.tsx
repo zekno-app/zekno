@@ -50,7 +50,6 @@ import { yesOrNo } from "../../src/ui/ink/yes-or-no"
 import { ORDERED_VERSIONS } from "../../../../packages/core/test/fixtures/versions"
 import { COMPOSE_V1, filesUnder, machine } from "../support/helpers"
 import {
-  fakeRunner,
   olderRunner,
   realRunner,
   releasedRunner,

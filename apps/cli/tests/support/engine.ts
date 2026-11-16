@@ -204,7 +204,8 @@ export function zeknoTerminal(): EngineHandle {
           .join("\n")
           .slice(-2000)
         throw new Error(
-          `${(error as Error).message}. The terminal showed:\n${said}`
+          `${(error as Error).message}. The terminal showed:\n${said}`,
+          { cause: error }
         )
       }
       await terminal.settle({ quietMs: 100, minMs: 150, maxMs: 3000 })

@@ -42,8 +42,10 @@ export function applySgr(pen: Pen, params: string): Pen {
     if (code === 0) ({ bold, dim, fg } = PLAIN)
     else if (code === 1) bold = true
     else if (code === 2) dim = true
-    else if (code === 22) ((bold = false), (dim = false))
-    else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97))
+    else if (code === 22) {
+      bold = false
+      dim = false
+    } else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97))
       fg = String(code)
     else if (code === 39) fg = undefined
     else if (code === 38 || code === 48) {

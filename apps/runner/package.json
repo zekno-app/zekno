@@ -9,6 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "lint": "eslint --max-warnings 0",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "test": "bun test",
     "compile": "bun build --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig src/main.ts --outfile dist/zekno-runner",
@@ -20,7 +21,9 @@
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",
+    "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
+    "eslint": "^10",
     "typescript": "^5"
   }
 }

@@ -72,6 +72,7 @@ export function machine(options: { realDocker?: boolean } = {}) {
     compose: (content: string, name = "compose.yaml") =>
       writeFileSync(join(project, name), content),
     /** Reads and rewrites one JSON file in the profile folder, as something other than zekno might. */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a JSON file of any shape
     tamper(file: string, change: (json: any) => unknown) {
       const path = join(home, file)
       writeFileSync(
