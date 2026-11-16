@@ -119,7 +119,17 @@ Added by the tasks as they complete.
 
 ### Phase results
 
-(not yet run)
+Checked by the orchestrator after each step, from the repository root (`bun run typecheck`,
+`bun run lint`, `bun run test --force`, Prettier's check); every run passed.
+
+| After | CLI tests | core | runner | web |
+|---|---|---|---|---|
+| Before this feature | 936 | 102 | 147, 1 skipped | 28 |
+| The file, its reader and writer, the Compose text (T001 to T025) | 1427 | 102 | 147, 1 skipped | 28 |
+| Deploy from settings, the commands and the screen, joined (to T064) | 1591 | 102 | 147, 1 skipped | 28 |
+| The app's `d` and the docs (T033, T034, T067 to T069) | 1598 | 102 | 147, 1 skipped | 28 |
+| The fixes after the security review's first pass | 1647 | 102 | 147, 1 skipped | 28 |
+| The fixes after its second pass and the walkthrough | 1664 | 102 | 147, 1 skipped | 28 |
 
 ### The pseudo-terminal walkthrough
 
@@ -234,8 +244,39 @@ Rough edges (commit `a7505e9`):
 
 ### The agent end-to-end tests
 
-(not yet run)
+Run twice on Bun 1.4.4 with `cd apps/cli && bun run test:e2e`: after the builds were joined, and
+on the final commit `2b4110e`.
+
+- Both times 11 of 11 tests passed, in 6 files, and all 12 recorded goals replayed from the
+  cache. The model was not called, so the runs cost nothing.
+- The app's screen gained the key `e` in its hint line; the one test that starts on that
+  screen (`tests/rollback.e2e.ts`) still replayed.
+- `bun run test:e2e:docker` (the one test with a real container) was not run.
 
 ### Checks at the end
 
-(not yet run)
+Run on 2026-11-17, at commit `2b4110e`, from the repository root, without the cache.
+
+| Command | Result |
+|---|---|
+| `bun run typecheck --force` | 5 of 5 pass |
+| `bun run lint --force` | 5 of 5 pass; `apps/cli`, `apps/runner` and `packages/core` fail on any finding |
+| `prettier --check` in the three packages | all files formatted |
+| `bun run test --force` | CLI 1664 pass; core 102 pass; runner 147 pass, 1 skipped (the real build); web 28 pass; 0 fail |
+| `bun run compile` in `apps/cli` | built; `./dist/zekno --version` prints `zekno 0.1.0` and `runner 0.1.0, the runner release this zekno installs` |
+| `bun run build` | not run: it would run `next build`, which the maintainer's rule forbids in these sessions |
+
+`git diff --stat dev HEAD -- packages/core apps/runner apps/cli/src/version/runner-release.json
+apps/cli/test/plain/plain-at-head.ts apps/cli/e2e.config.ts apps/cli/tests` prints nothing: the
+core library, the runner, the runner release this zekno carries, the recorded transcripts and the
+recorded end-to-end tests are unchanged (spec FR-028, FR-029, SC-007).
+
+Not checked in this feature: a real server (everything ran against the stand-in server and the
+stand-in Docker; `docker compose config` was run on the Compose text, never `up` on Linux); a real
+terminal emulator by hand (the walkthrough used a pseudo-terminal and a screen model); Linux; a
+case-sensitive disk for the exact-name rule; how long runs of combining marks draw.
+
+Known and left, each recorded where it belongs: the first-use question inside the full-screen
+app does not name the file a yes deploys (the single-command one does); a `zekno.json` whose
+signer was later removed from the team is still followed by the settings commands, while a deploy
+leaves it aside; four source files are longer than 500 lines since the reformat to 80 columns.
