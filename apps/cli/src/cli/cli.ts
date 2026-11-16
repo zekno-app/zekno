@@ -27,6 +27,8 @@ import { findProject, isHere, type ProjectLink } from "../project/file"
 import { withProject } from "../project/project"
 import { notSignedHere, standingOf } from "../project/signed"
 import { alreadyLinked } from "../project/write"
+import { chooseSource } from "../settings/source"
+import { DP2 } from "../settings/words"
 import { RUNNER_RELEASE } from "../version/runner-release"
 import {
   checkNewest,
@@ -241,6 +243,12 @@ export async function run(argv: string[], given: Deps): Promise<number> {
       )
         return values
       if (found) deps.ui.warn(notSignedHere(found, deps.cwd))
+      // A zekno.json is written next, naming the one file here: with both and no -f that is DP2, said before anything is asked (contracts/deploy.md, "zekno link").
+      if (
+        values.file === undefined &&
+        chooseSource(deps.cwd, {}).kind === "both"
+      )
+        throw new WrongInput(DP2)
       const opened = await team.peek()
       const { server } = await whichServer(deps, opened, {
         server: values.server,

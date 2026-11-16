@@ -7,6 +7,8 @@ import {
   type Where,
 } from "../ops/deploy"
 import { shownFile } from "../project/shown"
+import { sanitize } from "../server/sanitize"
+import { DP3 } from "../settings/words"
 import { plainDeployView, type DeployStart } from "../shared/deploy"
 
 /** Kept where earlier tests and tools look for them. */
@@ -71,16 +73,37 @@ export async function send(
   return result.outcome === "start_failed" ? 1 : 0
 }
 
+/**
+ * The summary's `from` row of a deploy from a settings file (specs/010-app-settings,
+ * contracts/deploy.md, DP3): the file as the deploy names it, and its
+ * services, `2 services: web, worker`. Nothing for a Compose file. Service
+ * names passed their rule when the file was read; they are cleaned all the
+ * same.
+ */
+export function fromRow(
+  cwd: string,
+  plan: { from: string; services?: readonly string[] }
+): Pick<DeployStart, "from"> {
+  if (plan.services === undefined) return {}
+  return {
+    from: {
+      file: shownFile(cwd, plan.from),
+      detail: sanitize(DP3.detail(plan.services)),
+    },
+  }
+}
+
 export async function deploy(
   deps: Deps,
   options: Options & { file?: string }
 ): Promise<number> {
   const plan = await prepareDeploy(deps, options)
-  const start = {
+  const start: DeployStart = {
     app: plan.app,
     server: plan.server.name,
     file: shownFile(deps.cwd, plan.from),
     flags: flagsAgain(options.typed),
+    ...fromRow(deps.cwd, plan),
   }
   return send(deps, plan, options, start)
 }

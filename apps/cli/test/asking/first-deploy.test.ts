@@ -58,6 +58,7 @@ import {
   withSsh,
   type StandInServer,
 } from "../support/stand-in-server"
+import { DESIGN_COMPOSE, DESIGN_FILE } from "../support/settings-files"
 import { shows, terminal } from "../support/terminal"
 
 type Machine = ReturnType<typeof machine>
@@ -1094,5 +1095,205 @@ describe("the drawn look of a deploy from nothing (mock-up 3, board 'zekno deplo
     expect(
       filesUnder(m.home).filter((file) => file.content.includes("9f3a"))
     ).toEqual([])
+  }, 60_000)
+})
+
+describe("zekno deploy at a terminal from zekno.app.json (specs/010-app-settings, contracts/deploy.md; T029)", () => {
+  const DB = "zk_db_first_7e21"
+  const SESSION = "zk_session_first_7e21"
+
+  /** A ready machine whose folder holds only `files`. */
+  async function folder(files: Record<string, string>) {
+    const m = await ready()
+    rmSync(join(m.project, "compose.yaml"))
+    for (const [name, text] of Object.entries(files))
+      writeFileSync(join(m.project, name), text)
+    return m
+  }
+
+  /** Runs `zekno deploy <args>` answered by `answers`, recording each list's word left behind too. */
+  async function deployed(m: Machine, answers: Answer[], ...args: string[]) {
+    const plain = m.deps.ui
+    const asking = answering(m, answers)
+    const events = journal(m)
+    const collapsed: string[] = []
+    const choose = m.deps.ui.choose
+    m.deps.ui = {
+      ...m.deps.ui,
+      choose: <T>(question: ListQuestion<T>) => (
+        collapsed.push(question.collapsed),
+        choose(question)
+      ),
+    }
+    const [out, err] = [m.out.length, m.err.length]
+    try {
+      return {
+        code: await m.zekno("deploy", ...args),
+        ...asking,
+        events,
+        collapsed,
+        questions: asking.asked.map((question) => question.question),
+        out: m.out.slice(out),
+        err: m.err.slice(err),
+      }
+    } finally {
+      m.deps.ui = plain
+    }
+  }
+
+  /** The Compose file the runner handed the stand-in Docker on its last `up`. */
+  const lastUp = (m: Machine): string => {
+    const args = m.docker.calls().at(-1)!.args.split(" ")
+    return readFileSync(args[args.indexOf("-f") + 1]!, "utf8")
+  }
+
+  const DP1_ROWS = [
+    "zekno.app.json\tyour settings",
+    "compose.yaml\ta Compose file written by hand",
+  ]
+
+  test("only zekno.app.json: the app, remember this folder, then a value for each secret it names; the Compose text of the settings deployed, and zekno.json naming zekno.app.json", async () => {
+    const m = await folder({ "zekno.app.json": DESIGN_FILE })
+    const run = await deployed(m, [
+      { type: "demo" },
+      { yes: true },
+      { value: DB },
+      { value: SESSION },
+    ])
+    expect(run.events.filter((event) => event.startsWith("✖"))).toEqual([])
+    expect(run.code).toBe(0)
+    expect(run.questions).toEqual([
+      "Name for this app",
+      rememberFolder("demo", "dev"),
+      "Value for DATABASE_URL (demo on dev): ",
+      "Value for SESSION_KEY (demo on dev): ",
+    ])
+    expect(run.events).toContain(
+      "! zekno.app.json expects 2 values that have no secret yet."
+    )
+    expect(run.out.at(-1)).toBe(
+      "Deploy 1 of demo is running on dev with 2 secrets."
+    )
+    expect(lastUp(m)).toBe(DESIGN_COMPOSE)
+    expect(m.docker.calls().at(-1)!.env.DATABASE_URL).toBe(DB)
+    const link = JSON.parse(readFileSync(join(m.project, "zekno.json"), "utf8"))
+    expect([link.app, link.server, link.compose]).toEqual([
+      "demo",
+      "dev",
+      "zekno.app.json",
+    ])
+    // The next run reads the link: no question, the settings deployed again.
+    const again = await deployed(m, [])
+    expect(again.code).toBe(0)
+    expect(again.asked).toEqual([])
+    expect(lastUp(m)).toBe(DESIGN_COMPOSE)
+    expect([...run.events, ...again.events].join("\n")).not.toContain(DB)
+  }, 60_000)
+
+  test("both files: DP1 is the first question, with its rows and the word From; each answer deploys its file, and zekno.json names it", async () => {
+    for (const [choice, text] of [
+      ["zekno.app.json", DESIGN_COMPOSE],
+      ["compose.yaml", COMPOSE_DB],
+    ] as const) {
+      const m = await folder({
+        "zekno.app.json": DESIGN_FILE,
+        "compose.yaml": COMPOSE_DB,
+      })
+      const values: Answer[] =
+        choice === "zekno.app.json"
+          ? [{ value: DB }, { value: SESSION }]
+          : [{ value: DB }]
+      const run = await deployed(m, [
+        { choose: choice },
+        { type: "demo" },
+        { yes: true },
+        ...values,
+      ])
+      expect(run.code).toBe(0)
+      expect(run.asked[0]).toEqual({
+        kind: "choose",
+        question: "Deploy from which file?",
+        rows: DP1_ROWS,
+      })
+      expect(run.collapsed[0]).toBe("From")
+      expect(lastUp(m)).toBe(text)
+      expect(
+        JSON.parse(readFileSync(join(m.project, "zekno.json"), "utf8")).compose
+      ).toBe(choice)
+    }
+  }, 60_000)
+
+  test("both files with no profile: DP1 before Your name; leaving it says Nothing was done., status 1, and nothing is made", async () => {
+    const s = fromNothing()
+    writeFileSync(join(s.project, "zekno.app.json"), DESIGN_FILE)
+    const run = await s.deploy(["leave"])
+    expect(run.code).toBe(1)
+    expect(run.questions).toEqual(["Deploy from which file?"])
+    expect(run.errors).toEqual(["Nothing was done."])
+    expect(existsSync(join(s.m.home, "profile.json"))).toBe(false)
+    expect(s.m.keyStore.size()).toBe(0)
+    expect(s.linked()).toBe(false)
+  }, 60_000)
+
+  test("both files and a zekno.json signed by the team and not used here, for another app: the first-use question first, then DP1", async () => {
+    const m = await folder({ "compose.yaml": COMPOSE_DB })
+    expect(await m.zekno("link", "--app", "web", "--server", "dev")).toBe(0)
+    writeFileSync(join(m.project, "zekno.app.json"), DESIGN_FILE)
+    const other = await twin(m)
+    other.deps.cwd = m.project
+    const run = await deployed(other, [{ yes: true }, "leave"], "--app", "demo")
+    expect(run.code).toBe(1)
+    expect(run.questions).toEqual([
+      "Ada linked this folder to web on dev. This command uses demo on dev. Use it here?",
+      "Deploy from which file?",
+    ])
+    expect(run.err).toEqual(["Nothing was done."])
+  }, 60_000)
+
+  test("-f, or a zekno.json signed and in use naming either file: no DP1", async () => {
+    const m = await folder({
+      "zekno.app.json": DESIGN_FILE,
+      "compose.yaml": COMPOSE_DB,
+    })
+    const given = await deployed(
+      m,
+      [{ type: "demo" }, { value: DB }, { value: SESSION }],
+      "-f",
+      "zekno.app.json"
+    )
+    expect(given.code).toBe(0)
+    expect(given.questions).toEqual([
+      "Name for this app",
+      "Value for DATABASE_URL (demo on dev): ",
+      "Value for SESSION_KEY (demo on dev): ",
+    ])
+    expect(lastUp(m)).toBe(DESIGN_COMPOSE)
+
+    for (const file of ["zekno.app.json", "compose.yaml"]) {
+      rmSync(join(m.project, "zekno.json"), { force: true })
+      expect(
+        await m.zekno("link", "--app", "demo", "--server", "dev", "-f", file)
+      ).toBe(0)
+      const run = await deployed(m, [])
+      expect(run.code).toBe(0)
+      expect(run.asked).toEqual([])
+      expect(lastUp(m)).toBe(
+        file === "compose.yaml" ? COMPOSE_DB : DESIGN_COMPOSE
+      )
+    }
+  }, 60_000)
+
+  test("a fault in the settings file: its sentence before any question, status 1, nothing made", async () => {
+    const m = await folder({
+      "zekno.app.json": DESIGN_FILE.replace('"1g"', '"lots"'),
+    })
+    const run = await deployed(m, [])
+    expect(run.code).toBe(1)
+    expect(run.asked).toEqual([])
+    expect(run.err).toEqual([
+      "zekno.app.json could not be read as settings. web, deploy.memory: use a size such as 512m or 1g.",
+    ])
+    expect(m.docker.calls()).toEqual([])
+    expect(existsSync(join(m.project, "zekno.json"))).toBe(false)
   }, 60_000)
 })

@@ -4,7 +4,7 @@
  * the rule, in temporary folders with a stand-in project link.
  */
 import { describe, expect, test } from "bun:test"
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs"
+import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { tempDir } from "../../../runner/test/support/helpers"
@@ -127,6 +127,113 @@ describe("chooseSource: the first rule that applies decides", () => {
     ).toThrow(
       `No Compose file at ${join(folder, "compose.yaml")}. Point to one with \`-f <file>\`.`
     )
+  })
+
+  test("a link is not followed to decide whether a file is there: a link to nowhere, a link out of the folder and a folder of that name all count, so neither name vanishes and lets the other win", () => {
+    const outside = folderWith({ "compose.yaml": COMPOSE_V1 })
+    const settingsOutside = folderWith({ "zekno.app.json": DESIGN_FILE })
+    const cases: [string, (folder: string) => void][] = [
+      [
+        "compose.yaml a link to nowhere",
+        (folder) =>
+          symlinkSync(join(folder, "gone.yaml"), join(folder, "compose.yaml")),
+      ],
+      [
+        "compose.yaml a link out of the folder",
+        (folder) =>
+          symlinkSync(
+            join(outside, "compose.yaml"),
+            join(folder, "compose.yaml")
+          ),
+      ],
+      [
+        "compose.yaml a folder",
+        (folder) => mkdirSync(join(folder, "compose.yaml")),
+      ],
+    ]
+    for (const [name, make] of cases) {
+      const folder = folderWith({ "zekno.app.json": DESIGN_FILE })
+      make(folder)
+      expect({ name, source: chooseSource(folder, {}) }).toEqual({
+        name,
+        source: { kind: "both", folder },
+      })
+    }
+    const mirrored: [string, (folder: string) => void][] = [
+      [
+        "zekno.app.json a link to nowhere",
+        (folder) =>
+          symlinkSync(
+            join(folder, "gone.json"),
+            join(folder, "zekno.app.json")
+          ),
+      ],
+      [
+        "zekno.app.json a link out of the folder",
+        (folder) =>
+          symlinkSync(
+            join(settingsOutside, "zekno.app.json"),
+            join(folder, "zekno.app.json")
+          ),
+      ],
+      [
+        "zekno.app.json a folder",
+        (folder) => mkdirSync(join(folder, "zekno.app.json")),
+      ],
+    ]
+    for (const [name, make] of mirrored) {
+      const folder = folderWith({ "compose.yaml": COMPOSE_V1 })
+      make(folder)
+      expect({ name, source: chooseSource(folder, {}) }).toEqual({
+        name,
+        source: { kind: "both", folder },
+      })
+    }
+  })
+
+  test("alone, such a name is the one chosen, and its reader says what is wrong with it: nothing is read through it", () => {
+    const read = (folder: string) => {
+      const source = chooseSource(folder, {})
+      if (source.kind === "both") throw new Error("both")
+      try {
+        readSource(source, folder)
+        return "read"
+      } catch (error) {
+        return `${source.kind}: ${(error as Error).message}`
+      }
+    }
+    const outside = folderWith({ "zekno.app.json": DESIGN_FILE })
+
+    const danglingCompose = folderWith({})
+    symlinkSync(
+      join(danglingCompose, "gone.yaml"),
+      join(danglingCompose, "compose.yaml")
+    )
+    expect(read(danglingCompose)).toBe(
+      `compose: No Compose file at ${join(danglingCompose, "compose.yaml")}. Point to one with \`-f <file>\`.`
+    )
+
+    const danglingSettings = folderWith({})
+    symlinkSync(
+      join(danglingSettings, "gone.json"),
+      join(danglingSettings, "zekno.app.json")
+    )
+    expect(read(danglingSettings)).toBe(
+      "settings: No settings file at zekno.app.json."
+    )
+
+    const leading = folderWith({})
+    symlinkSync(
+      join(outside, "zekno.app.json"),
+      join(leading, "zekno.app.json")
+    )
+    expect(read(leading)).toBe(
+      "settings: zekno.app.json leads outside the folder that holds it. zekno does not follow it there."
+    )
+
+    const folderNamed = folderWith({})
+    mkdirSync(join(folderNamed, "zekno.app.json"))
+    expect(read(folderNamed)).toBe("settings: zekno.app.json is not a file.")
   })
 
   test("a settings file elsewhere in the folder tree does not count: only this folder's", () => {

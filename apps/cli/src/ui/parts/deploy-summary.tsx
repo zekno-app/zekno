@@ -87,7 +87,22 @@ export function Summary({
     ["app", deploy.app],
     ["server", deploy.server],
   ]
-  if (deploy.from) rows.push(["from", deploy.from])
+  // A settings file's services follow its name, dim and two spaces after it (specs/010-app-settings, board `SettingsDeploy`).
+  if (deploy.from)
+    rows.push([
+      "from",
+      deploy.fromDetail === undefined ? (
+        deploy.from
+      ) : (
+        <Text>
+          {deploy.from}
+          <Text dimColor>
+            {"  "}
+            {deploy.fromDetail}
+          </Text>
+        </Text>
+      ),
+    ])
   rows.push(["secrets", secrets])
   if (deploy.replaces !== undefined)
     rows.push(["replaces", `deploy ${deploy.replaces}`])

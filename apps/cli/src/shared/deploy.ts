@@ -41,6 +41,13 @@ export type DeployStart = {
    * on the same app and server.
    */
   flags: string
+  /**
+   * A deploy from a settings file (specs/010-app-settings, contracts/deploy.md,
+   * DP3): the summary's `from` row, the file as the deploy names it and its
+   * services, `2 services: web, worker`, drawn dim. Undefined for a Compose
+   * file and a rollback, whose summary has no `from` row.
+   */
+  from?: { file: string; detail: string }
 }
 
 /** How a deploy ended. `error`: refused, or failed before the runner answered; the error itself is said by whoever catches it. */
@@ -89,6 +96,8 @@ export type DeployProgress = {
   endedAt?: number
   /** Where the service definition comes from: a file, or an earlier deploy. */
   from?: string
+  /** Drawn dim after `from`, two spaces apart: a settings file's services (DP3). The app leaves it out. */
+  fromDetail?: string
   /** The deploy it takes over from, when there was one. */
   replaces?: number
   /** The names of the secrets it carries. */

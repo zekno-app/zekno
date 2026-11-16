@@ -24,12 +24,14 @@ import {
   MISSING_APP,
   MISSING_SERVER,
   UsageError,
+  WrongInput,
 } from "../cli/errors"
 import { readOver, stateOf } from "../ops/status"
 import { findServer, NAME, type Profile, type Server } from "../profile/profile"
 import { batchOnly, READ_LIMIT_MS } from "../server/batch"
 import { sanitize } from "../server/sanitize"
 import { withSession } from "../server/session"
+import { DP1, DP2 } from "../settings/words"
 import type { ListRow } from "../ui/types"
 
 /** A1: the one server, used without asking (mock-up 1). */
@@ -186,6 +188,28 @@ export async function whichServer(
     missing: new UsageError(MISSING_SERVER),
   })
   return { server, how: "asked" }
+}
+
+/**
+ * DP1 (specs/010-app-settings, contracts/deploy.md, "The question for both
+ * files"; board `SettingsDeploy`): which of the two files a deploy uses,
+ * when the folder has both and nothing says which. The settings first, as the
+ * board draws them. Esc and Ctrl-C leave (`Left`); the plain interface never
+ * gets here, and would stop with DP2.
+ */
+export async function whichFile(
+  deps: Deps
+): Promise<"zekno.app.json" | "compose.yaml"> {
+  const [settings, compose] = DP1.rows
+  return deps.ui.choose<"zekno.app.json" | "compose.yaml">({
+    question: DP1.question,
+    rows: [
+      { value: "zekno.app.json", ...settings },
+      { value: "compose.yaml", ...compose },
+    ],
+    collapsed: DP1.collapsed,
+    missing: new WrongInput(DP2),
+  })
 }
 
 /**

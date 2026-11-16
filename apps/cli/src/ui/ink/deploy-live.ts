@@ -18,6 +18,14 @@ import type { Store } from "./store"
 /** How often, at most, the live line under a running deploy is redrawn. */
 const LIVE_LINE_MS = 100
 
+/** The summary's `from` row of a deploy from a settings file (DP3); nothing for any other deploy, whose summary is as before. */
+const fromOf = (
+  start: DeployStart
+): Pick<DeployProgress, "from" | "fromDetail"> =>
+  start.from === undefined
+    ? {}
+    : { from: start.from.file, fromDetail: start.from.detail }
+
 /**
  * The deploy `start` names, drawn on `store` as it runs. `add` writes its
  * last frame as a line; `app` is the Ink instance that line is waited on.
@@ -48,6 +56,7 @@ export function liveDeploy(
         lines: [],
         running: true,
         since: Date.now(),
+        ...fromOf(start),
       }
       show({
         ...deploy,
@@ -85,7 +94,12 @@ export function liveDeploy(
             ? "failed"
             : was?.stage
       const deploy: DeployProgress = {
-        ...(was ?? { server: start.server, app: start.app, since: Date.now() }),
+        ...(was ?? {
+          server: start.server,
+          app: start.app,
+          since: Date.now(),
+          ...fromOf(start),
+        }),
         sequence,
         secrets,
         stage,

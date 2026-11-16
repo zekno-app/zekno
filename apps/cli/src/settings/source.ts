@@ -17,8 +17,14 @@
  *
  * Nothing here asks, and nothing here judges a zekno.json: the caller has
  * already decided whether its link may be used.
+ *
+ * For rules 3 and 4 a file is there when anything has its name in the
+ * folder: a link is not followed to decide it. A link that leads nowhere, or
+ * out of the folder, and a folder of that name all count, so neither of the
+ * two names can be made to vanish and let the other win without a question.
+ * The reader then says what is wrong with the one chosen.
  */
-import { existsSync } from "node:fs"
+import { lstatSync } from "node:fs"
 import { join, resolve } from "node:path"
 
 import { DEFAULT_COMPOSE, type ProjectLink } from "../project/file"
@@ -26,6 +32,22 @@ import { readCompose } from "../project/compose-read"
 import { composeText } from "./compose"
 import { isSettingsFile, readSettingsFile, SETTINGS_FILE } from "./file"
 import type { DeploySource, DeployText } from "./types"
+
+/**
+ * Whether anything has the name `name` in `folder`, without following a
+ * link: a link to nowhere is there. Only "no such entry" is absence; any
+ * other failure to look counts as there, so a file is never left out of the
+ * choice because it could not be looked at.
+ */
+export function present(folder: string, name: string): boolean {
+  try {
+    lstatSync(join(folder, name))
+    return true
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    return code !== "ENOENT" && code !== "ENOTDIR"
+  }
+}
 
 /** The file a deploy in `cwd` uses, by the rules above. `file` is `-f` as typed; `project` a link that may be used here. */
 export function chooseSource(
@@ -45,8 +67,8 @@ export function chooseSource(
       : { kind: "compose", source }
   }
   const source = { kind: "default", folder: cwd } as const
-  const compose = existsSync(join(cwd, DEFAULT_COMPOSE))
-  const settings = existsSync(join(cwd, SETTINGS_FILE))
+  const compose = present(cwd, DEFAULT_COMPOSE)
+  const settings = present(cwd, SETTINGS_FILE)
   if (compose && settings) return { kind: "both", folder: cwd }
   return settings ? { kind: "settings", source } : { kind: "compose", source }
 }

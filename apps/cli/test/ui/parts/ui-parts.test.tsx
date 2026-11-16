@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { Box, renderToString, Text } from "ink"
+import { join } from "node:path"
+
+import type { DeployProgress } from "../../../src/shared/deploy"
 
 import { Confirm } from "../../../src/ui/parts/confirm"
+import { Summary } from "../../../src/ui/parts/deploy-summary"
 import { KeyHints } from "../../../src/ui/parts/key-hints"
 import { Panel } from "../../../src/ui/parts/panel"
 import { MARKER, Select, SelectRow } from "../../../src/ui/parts/select"
 import { SPINNER_FRAMES, Stages } from "../../../src/ui/parts/stages"
 import { TextQuestion } from "../../../src/ui/parts/text-input"
 import { BRAND, BRAND_DARKER, themeFor } from "../../../src/ui/terminal/theme"
+import { drawnInColour, plainOf, wordRuns } from "../../support/colour"
 
 const draw = (node: React.ReactNode, columns = 100) =>
   renderToString(node, { columns })
@@ -248,5 +253,70 @@ describe("a question", () => {
     expect(out).toContain(
       "enter write it and deploy  n deploy without it  esc cancel"
     )
+  })
+})
+
+describe("the deploy summary's from row (specs/010-app-settings, board `SettingsDeploy`, DP3)", () => {
+  const SUMMARY = join(
+    import.meta.dir,
+    "../../../src/ui/parts/deploy-summary.tsx"
+  )
+  const progress = (extra: Partial<DeployProgress>): DeployProgress => ({
+    server: "prod",
+    app: "demo",
+    sequence: 5,
+    secrets: 2,
+    lines: [],
+    running: true,
+    since: 0,
+    ...extra,
+  })
+
+  test("a deploy from settings: the file in the text colour, two spaces, its services dim; the rows app, server, from, secrets", () => {
+    const deploy = progress({
+      from: "zekno.app.json",
+      fromDetail: "2 services: web, worker",
+    })
+    const out = lines(
+      draw(<Summary deploy={deploy} width={64} tone="plain" />)
+    ).map((line) => line.trimEnd())
+    expect(out.slice(1, 5)).toEqual([
+      expect.stringMatching(/^│ app {7}demo +│$/),
+      expect.stringMatching(/^│ server {4}prod +│$/),
+      expect.stringMatching(
+        /^│ from {6}zekno\.app\.json {2}2 services: web, worker +│$/
+      ),
+      expect.stringMatching(/^│ secrets {3}2 +│$/),
+    ])
+    const coloured = drawnInColour(SUMMARY, "Summary", {
+      deploy,
+      width: 64,
+      tone: "plain",
+    })
+    const row = coloured
+      .split("\n")
+      .find((line) => plainOf(line).includes("from"))!
+    expect(wordRuns(row).filter((run) => run.text !== "│")).toEqual([
+      { text: "from", bold: false, dim: true },
+      { text: "zekno.app.json", bold: false, dim: false },
+      { text: "2 services: web, worker", bold: false, dim: true },
+    ])
+  })
+
+  test("with no detail, the from row is today's: the file alone; with no from, no row at all", () => {
+    expect(
+      draw(
+        <Summary
+          deploy={progress({ from: "~/demo/compose.yaml" })}
+          width={64}
+          tone="plain"
+        />
+      )
+    ).toMatch(/│ from {6}~\/demo\/compose\.yaml +│/)
+    const without = lines(
+      draw(<Summary deploy={progress({})} width={64} tone="plain" />)
+    )
+    expect(without.some((line) => line.includes("from"))).toBe(false)
+    expect(without).toHaveLength(5)
   })
 })

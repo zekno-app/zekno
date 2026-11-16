@@ -24,13 +24,10 @@
  * Like the rest of what `cli.ts` loads, this module loads neither Ink nor
  * React (main.ts loads the interface only once DEV is out of the environment).
  */
-import { resolve } from "node:path"
-
 import { acceptedLinks } from "../project/accepted"
-import { flagsAgain, send, shownFile } from "../commands/deploy"
+import { flagsAgain, fromRow, send, shownFile } from "../commands/deploy"
 import { SSH_IDENTITY } from "../commands/server"
 import { expectedValues } from "../project/compose-file"
-import { readCompose } from "../project/compose-read"
 import {
   openTeam,
   remoteThroughUi,
@@ -74,10 +71,12 @@ import { withProject, type Details, type FromProject } from "../project/project"
 import { notSignedHere } from "../project/signed"
 import { RUNNER_RELEASE } from "../version/runner-release"
 import { sanitize } from "../server/sanitize"
+import { SETTINGS_FILE } from "../settings/file"
+import { chooseSource, readSource } from "../settings/source"
 import { SSH_DESTINATION } from "../server/transport"
 import { megabytes } from "../shared/sizes"
 import type { ListQuestion, Ui } from "../ui/types"
-import { whichApp, whichServer, type How } from "./asking"
+import { whichApp, whichFile, whichServer, type How } from "./asking"
 
 /** F2: what the team code is for (mock-up 3, the app's words). */
 export const TEAM_CODE_ABOUT =
@@ -237,7 +236,8 @@ export async function deployAtTerminal(
   let current: Team | undefined
   const ops = (): Deps => ({ ...shown, team: async () => current! })
 
-  // 1. Before anything is asked (FR-014): zekno.json judged, the first-use question first; the Compose file read once.
+  // 1. Before anything is asked (FR-014): zekno.json judged, the first-use question first; the file deployed (a Compose
+  // file, or a settings file) chosen and read once.
   const hasProfile = profileStore(deps.home).exists()
   let details: DeployFlags & FromProject = { ...flags }
   if (hasProfile) {
@@ -259,13 +259,26 @@ export async function deployAtTerminal(
   }
   if (flags.app !== undefined) checkApp(flags.app)
   const fileHere = projectFileFound(deps.cwd)
-  const read = readCompose(
-    flags.file !== undefined
-      ? { kind: "given", path: resolve(deps.cwd, flags.file) }
-      : details.project
-        ? { kind: "project", link: details.project }
-        : { kind: "default", folder: deps.cwd }
-  )
+  // Which file (specs/010-app-settings, contracts/deploy.md): -f, the link, the one here; with both here and nothing
+  // above, DP1, before any other question but the first-use one. The file chosen is read as the one here would be,
+  // inside this folder (never through a link out of it), and is the file "Remember this folder?" names.
+  let source = chooseSource(deps.cwd, {
+    file: flags.file,
+    project: details.project,
+  })
+  let named: string | undefined
+  if (source.kind === "both") {
+    named = await whichFile(shown)
+    const here = { kind: "default", folder: deps.cwd } as const
+    source =
+      named === SETTINGS_FILE
+        ? { kind: "settings", source: here }
+        : { kind: "compose", source: here }
+  }
+  // Read once: a fault of a settings file is said here, before any question but those two.
+  const read = readSource(source, deps.cwd)
+  if (source.kind === "settings" && source.source.kind === "default")
+    named = SETTINGS_FILE
   if (read.text.trim() === "")
     throw new CliError(`The Compose file at ${sanitize(read.path)} is empty.`)
   if (hasProfile) current = await team.take()
@@ -373,9 +386,14 @@ export async function deployAtTerminal(
         })
       ) {
         const before = acceptedLinks(deps.home)
+        // It names the file this deploy uses: zekno.app.json, or the one chosen at DP1.
         const linked = await linkFolder(
           ops(),
-          { app, server: server.name },
+          {
+            app,
+            server: server.name,
+            ...(named === undefined ? {} : { file: named }),
+          },
           (question, refusal) => ui.confirm(question, refusal)
         )
         wrote = writtenLink(deps.home, deps.cwd, linked, before)
@@ -433,6 +451,7 @@ export async function deployAtTerminal(
         server: plan.server.name,
         file: shownFile(deps.cwd, plan.from),
         flags: flagsAgain(typed),
+        ...fromRow(deps.cwd, plan),
       }
     )
   } catch (error) {

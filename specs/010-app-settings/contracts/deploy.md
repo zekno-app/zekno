@@ -27,6 +27,13 @@ Neither file is ever picked silently over the other. A `zekno.json` not signed b
 as it is (FR-013): with no terminal it stops the command (S1); at a terminal it is named and left
 aside, and rules 3 and 4 apply.
 
+As built (US1, 2026-11-16): for rules 3 and 4 a file is there when anything has its name in the
+folder, looked at without following a link (`present` in `settings/source.ts`, `lstat`). A link
+to nowhere, a link out of the folder and a folder of that name all count, so a `compose.yaml`
+that is a dangling link beside `zekno.app.json` is "both", never a silent pick of the settings;
+the reader of the file chosen then says what is wrong with it (`No Compose file at ...`, SR1,
+SR2, SR9). Only "no such entry" is absence.
+
 Once chosen, the file is read once (`readSource`): a Compose file as today (`readCompose`); a
 settings file as contracts/settings-file.md says, then turned into the Compose text
 (contracts/compose-text.md). From there on the deploy is today's: the text that was read is the
@@ -58,6 +65,11 @@ other question or connection:
 - Esc or Ctrl-C: `✖ Nothing was done.`, status 1.
 - "Remember this folder?" (F5 of feature 006), when it is asked, writes `zekno.json` naming the
   file chosen.
+- As built: the file chosen is read as the one in this folder is (`readInside`: inside the folder
+  by its real path, never through a link out of it), not as `-f` reads a file (links followed). A
+  row of a list is not a path the person typed, and both files are content of the folder.
+- As built: with no profile, DP1 comes before the opening line (F1) as well as before
+  `Your name`, since it is asked in step 1, where the file is read.
 
 ## The summary's `from` line (board `SettingsDeploy`)
 
@@ -85,6 +97,10 @@ secrets  ...
 Writing a new `zekno.json` without `-f` (research R3): `compose.yaml` when only it is here (as
 today), `zekno.app.json` when only it is here, DP2 and status 2 when both are (at a terminal too;
 no question), and today's sentence when neither is. With `-f`, the file named, as today.
+
+As built: at a terminal, when `zekno link` would ask for the server or the app before writing a
+new `zekno.json` (no usable one applies here), DP2 is said before those questions, so nobody
+answers two questions to be refused (`linkDetails` in `cli/cli.ts`); `linkFolder` says it too.
 
 ## The app's `d`
 

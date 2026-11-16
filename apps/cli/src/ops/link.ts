@@ -27,7 +27,7 @@ import {
   type AcceptedLink,
 } from "../project/accepted"
 import { teamOf, type OpDeps, type Team } from "../cli/context"
-import { CliError, UsageError } from "../cli/errors"
+import { CliError, UsageError, WrongInput } from "../cli/errors"
 import { findServer } from "../profile/profile"
 import {
   DEFAULT_COMPOSE,
@@ -46,6 +46,9 @@ import { notSigned, signerOf, standingOf } from "../project/signed"
 import { shownPath } from "../project/shown"
 import { composeFor, projectText, writeProject } from "../project/write"
 import { sanitize } from "../server/sanitize"
+import { SETTINGS_FILE } from "../settings/file"
+import { chooseSource } from "../settings/source"
+import { DP2 } from "../settings/words"
 import { checkApp } from "./deploy"
 
 /** `yes`: the question about a teammate's zekno.json is answered yes beforehand, for a script. */
@@ -128,12 +131,26 @@ async function useAsItIs(
 }
 
 /**
+ * The file a new zekno.json names when `-f` is not given (specs/010-app-settings,
+ * contracts/deploy.md, "zekno link"; research R3): compose.yaml when only it
+ * is here, as before, zekno.app.json when only it is; with both, DP2 and exit
+ * status 2, at a terminal too, since nothing is asked here; with neither,
+ * compose.yaml, so today's sentence says there is none.
+ */
+function fileHere(cwd: string): string {
+  const source = chooseSource(cwd, {})
+  if (source.kind === "both") throw new WrongInput(DP2)
+  return source.kind === "settings" ? SETTINGS_FILE : DEFAULT_COMPOSE
+}
+
+/**
  * Checks what zekno.json would hold, signs it and writes it, never over an
  * existing one without `force`, then records it as used here. An app or
  * server not given is taken from a zekno.json that already applies here (in
  * this folder, or one above), only when it is signed by the team and in use
- * here, so one name can be changed with `--force`; the Compose file is `-f`,
- * or compose.yaml. With no names given at all, that zekno.json is recorded as
+ * here, so one name can be changed with `--force`; the file is `-f`, or the
+ * one of compose.yaml and zekno.app.json that is here (`fileHere`). With no
+ * names given at all, that zekno.json is recorded as
  * it is, once asked (`useAsItIs`); so is the one in this folder when it is
  * signed by the team and the names given are exactly its own.
  */
@@ -169,7 +186,7 @@ export async function linkFolder(
     fromFile
   )
   const app = checkApp(input.app ?? found?.app)
-  const compose = composeFor(deps.cwd, input.file ?? DEFAULT_COMPOSE)
+  const compose = composeFor(deps.cwd, input.file ?? fileHere(deps.cwd))
   const link = { app, server: server.name, compose }
   if (
     found &&

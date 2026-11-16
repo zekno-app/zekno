@@ -7,14 +7,14 @@ import {
   RunnerStatusSchema,
   type RunnerReport,
 } from "@workspace/core"
-import { resolve } from "node:path"
-
-import { readCompose, type ComposeText } from "../project/compose-read"
 import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
-import { CliError, MISSING_APP, UsageError } from "../cli/errors"
+import { CliError, MISSING_APP, UsageError, WrongInput } from "../cli/errors"
 import { findServer, NAME, type History, type Server } from "../profile/profile"
 import type { ProjectLink } from "../project/file"
 import { sanitize } from "../server/sanitize"
+import { chooseSource, readSource } from "../settings/source"
+import type { DeployText } from "../settings/types"
+import { DP2 } from "../settings/words"
 import {
   namedUnreachable,
   withSession,
@@ -151,40 +151,55 @@ function sentDeploys(
 }
 
 /**
- * What a deploy is of: `-f`, as the person typed it; else the Compose file
- * of the accepted project file (`project`, from `withProject`); else
- * compose.yaml in the current folder. `read` is a Compose file the app has
- * already read, whose text is signed as it is.
+ * What a deploy is of (specs/010-app-settings, contracts/deploy.md, "Which
+ * file a deploy uses"): `-f`, as the person typed it, either kind; else the
+ * file of the accepted project file (`project`, from `withProject`), which
+ * may be `zekno.app.json`; else the one of compose.yaml and zekno.app.json
+ * in the current folder. `read` is a file already read, whose text is signed
+ * as it is: the app's, and `zekno deploy` at a terminal, which asked which
+ * file first when both were there.
  */
 export type DeployInput = Where & {
   file?: string
   project?: ProjectLink
-  read?: ComposeText
+  read?: DeployText
 }
 
 /**
- * Checks a deploy of a Compose file. "Run init first" comes before any
- * complaint about files. The file is read once, here (compose-read.ts), and
- * the text read is the text the plan signs: never a path read again later.
+ * Checks a deploy of a Compose file, or of a settings file. "Run init first"
+ * comes before any complaint about files. The file is read once, here
+ * (`readSource`), and the text read is the text the plan signs: never a path
+ * read again later. A settings file's Compose text is made on this machine
+ * from the settings it holds, checked whole, and that text is the text
+ * signed, sent and recorded, as a Compose file's is (FR-009). With both files
+ * here and nothing to say which, nothing is read: DP2, which names `-f`.
+ * `services`: a settings file's services, for the summary's `from` row.
  */
 export async function prepareDeploy(
   deps: OpDeps,
   input: DeployInput
-): Promise<DeployPlan & { from: string }> {
+): Promise<DeployPlan & { from: string; services?: readonly string[] }> {
   const where = await locate(deps, input)
-  const read =
-    input.read ??
-    readCompose(
-      input.file !== undefined
-        ? { kind: "given", path: resolve(deps.cwd, input.file) }
-        : input.project
-          ? { kind: "project", link: input.project }
-          : { kind: "default", folder: deps.cwd }
-    )
+  let read = input.read
+  if (read === undefined) {
+    const source = chooseSource(deps.cwd, {
+      file: input.file,
+      project: input.project,
+    })
+    if (source.kind === "both") throw new WrongInput(DP2)
+    read = readSource(source, deps.cwd)
+  }
   // A folder's name can hold anything, escape sequences included, so a path is cleaned before it is shown.
   if (read.text.trim() === "")
     throw new CliError(`The Compose file at ${sanitize(read.path)} is empty.`)
-  return { ...where, compose: read.text, from: read.path }
+  return {
+    ...where,
+    compose: read.text,
+    from: read.path,
+    ...(read.settings === undefined
+      ? {}
+      : { services: read.settings.services }),
+  }
 }
 
 /**
