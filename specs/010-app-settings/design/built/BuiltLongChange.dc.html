@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>As built: changing a long value</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 891px; height: 584px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 18px; padding: 22px 24px; white-space: pre; overflow: hidden"> ▀▀▀█ ▄▀▀▄ █ ▄▀ █▀▀▄ ▄▀▀▄ <span style="color: #2383e2">   ▀▀▄ █▀▀▄ █▀▀▄</span>
+ ▄▀▀  █▀▀▀ █▀▄  █  █ █  █ <span style="color: #2383e2">  ▄▀▀█ █▀▀  █▀▀</span>
+ ▀▀▀▀  ▀▀▀ ▀  ▀ ▀  ▀  ▀▀  <span style="color: #2383e2">▀  ▀▀▀ ▀    ▀   </span> <span style="color: #8b949e">›</span> <span style="color: #8b949e">prod</span> <span style="color: #8b949e">›</span> <span style="color: #8b949e">demo</span> <span style="color: #8b949e">›</span> <span style="color: #ffffff; font-weight: 600">settings</span>              <span style="color: #3fb950">● running</span> <span style="color: #8b949e">deploy 1</span>
+
+ <span style="color: #8b949e">╭────────────────────────────────────────────────────────────────────────────────────────────────╮</span>
+ <span style="color: #8b949e">│</span> <span style="color: #ffffff; font-weight: 600">web</span>                                                                             <span style="color: #8b949e">zekno.app.json</span> <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #ffffff; font-weight: 600">Deploy</span>                                                                                         <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2">❯</span> <span style="color: #ffffff; font-weight: 600">start</span>      sh -c 'echo starting xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2"> </span>            xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2"> </span>            xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2"> </span>            <span style="color: #8b949e">… 36 more lines</span><span style="color: #d29922">  ! changed, not deployed (was bun run start)</span>                      <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2"> </span> <span style="color: #8b949e">restart</span>    <span style="color: #8b949e">no</span>                                                                                <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2"> </span> <span style="color: #8b949e">memory</span>     <span style="color: #8b949e">no limit</span>                                                                          <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2"> </span> <span style="color: #8b949e">cpus</span>       <span style="color: #8b949e">no limit</span>                                                                          <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span>                                                                                                <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span>                                                                                                <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span>                                                                                                <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span>                                                                                                <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span>                                                                                                <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span>                                                                                                <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2">╭────────────────────────────────────────────────────────────────────────────────────────────╮</span> <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #ffffff; font-weight: 600">Change a setting</span>  <span style="color: #8b949e">web · start command</span>                                                      <span style="color: #2383e2">│</span> <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">now  …</span>c bun run start'                                                                     <span style="color: #2383e2">│</span> <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">new  …</span><span style="color: #ffffff; font-weight: 600">c bun run start' x</span>                                                                   <span style="color: #2383e2">│</span> <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Write this to zekno.app.json?</span> Nothing is deployed until you deploy. <span style="color: #8b949e">(y/N)</span>                <span style="color: #2383e2">│</span> <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2">╰────────────────────────────────────────────────────────────────────────────────────────────╯</span> <span style="color: #8b949e">│</span>
+ <span style="color: #8b949e">╰────────────────────────────────────────────────────────────────────────────────────────────────╯</span>
+
+
+ y <span style="color: #8b949e">write it</span>  n <span style="color: #8b949e">keep sh -c 'echo starting xx…</span>  esc <span style="color: #8b949e">back</span></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":891,"height":584}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

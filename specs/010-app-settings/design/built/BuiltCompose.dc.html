@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>As built: the Compose text behind c</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 891px; height: 584px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 18px; padding: 22px 24px; white-space: pre; overflow: hidden"> ▀▀▀█ ▄▀▀▄ █ ▄▀ █▀▀▄ ▄▀▀▄ <span style="color: #2383e2">   ▀▀▄ █▀▀▄ █▀▀▄</span>
+ ▄▀▀  █▀▀▀ █▀▄  █  █ █  █ <span style="color: #2383e2">  ▄▀▀█ █▀▀  █▀▀</span>
+ ▀▀▀▀  ▀▀▀ ▀  ▀ ▀  ▀  ▀▀  <span style="color: #2383e2">▀  ▀▀▀ ▀    ▀   </span> <span style="color: #8b949e">›</span> <span style="color: #8b949e">prod</span> <span style="color: #8b949e">›</span> <span style="color: #8b949e">demo</span> <span style="color: #8b949e">›</span> <span style="color: #ffffff; font-weight: 600">settings</span>              <span style="color: #3fb950">● running</span> <span style="color: #8b949e">deploy 4</span>
+
+ <span style="color: #8b949e">╭────────────────────╮</span> <span style="color: #2383e2">╭─────────────────────────────────────────────────────────────────────────╮</span>
+ <span style="color: #8b949e">│</span> <span style="color: #8b949e; font-weight: 600">Services</span>           <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #ffffff; font-weight: 600">Compose text</span>                                             <span style="color: #8b949e">zekno.app.json</span> <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2">❯</span> <span style="color: #ffffff; font-weight: 600">web</span>              <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">services:</span>                                                               <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #2383e2"> </span> worker           <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">  "web":</span>                                                                <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">    image: "ghcr.io/acme/demo-web:1.4.2"</span>                                <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">    command: ["bun", "run", "start"]</span>                                    <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">    restart: "on-failure"</span>                                               <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">    mem_limit: "1g"</span>                                                     <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">    cpus: 1</span>                                                             <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">    expose: ["3000"]</span>                                                    <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">    environment:</span>                                                        <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">      "DATABASE_URL": "${DATABASE_URL}"</span>                                 <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">      "SESSION_KEY": "${SESSION_KEY}"</span>                                   <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">      "NODE_ENV": "production"</span>                                          <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">    volumes:</span>                                                            <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">      - type: "volume"</span>                                                  <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">        source: "uploads"</span>                                               <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">        target: "/data/uploads"</span>                                         <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">  "worker":</span>                                                             <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span>                    <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">    image: "ghcr.io/acme/demo-worker:1.4.2"</span>                             <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #8b949e">One app, one file:</span> <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">    command: ["bun", "run", "worker"]</span>                                   <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">│</span> <span style="color: #8b949e">zekno.app.json</span>     <span style="color: #8b949e">│</span> <span style="color: #2383e2">│</span> <span style="color: #8b949e">  ↓ 5 more</span>                                                              <span style="color: #2383e2">│</span>
+ <span style="color: #8b949e">╰────────────────────╯</span> <span style="color: #2383e2">╰─────────────────────────────────────────────────────────────────────────╯</span>
+
+
+ ↑↓ <span style="color: #8b949e">scroll</span>  c <span style="color: #8b949e">settings</span>  esc <span style="color: #8b949e">back</span></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":891,"height":584}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
