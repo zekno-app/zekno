@@ -315,3 +315,17 @@ program.
     new `dimTitle`).
 19. **A read that can no longer show settings** (the file was removed, or now has a fault) closes
     an open change; the sentence stands in the settings' place.
+
+### The Compose text (US4)
+
+20. **The pane** is titled `Compose text`, bold, the file faint on its right, its border the
+    brand's as the service pane's; it has no foot. `c` shows the text from its first line; `c`
+    or `esc` goes back to the settings on the row that was selected.
+21. **Scrolling** stops once the text's last line shows. Lines hidden above or below are said
+    with `↑ <n> more` and `↓ <n> more`, faint, as the rows' window says them (the contract did not
+    say how a person sees that the text goes on).
+22. **A line wider than the pane** goes on under itself at its own indent. Every line is cleaned
+    (`sanitize`) before it is drawn: a plain value may hold a character drawn as nothing (a
+    right-to-left override), which the signed text keeps and the screen does not draw.
+23. **Keys there**: `↑↓` scroll, `c` and `esc` back, `d` deploys as from the settings, `?` help,
+    `q` quit; `enter` and `tab` do nothing. The refresh reads the file again as on the settings.

@@ -1,8 +1,10 @@
 /**
  * The settings screen's reducer (specs/010-app-settings,
  * contracts/app-screen.md, "Keys", "Changing a value" and "Tests"; tasks
- * T041 and T055): every key in every state, with the reducer only. Nothing
- * here reads a file.
+ * T041, T055 and T063): every key in every state, with the reducer only.
+ * Nothing here reads a file. It is one file, longer than most, on purpose:
+ * the tasks name it, and every key of the contract's table is read against
+ * it in one pass.
  */
 import { describe, expect, test } from "bun:test"
 
@@ -598,5 +600,61 @@ describe("changing", () => {
       path: { service: "web", key: "secrets" },
       next: { value: "A, B", shown: "A, B" },
     })
+  })
+})
+
+describe("the Compose text (c)", () => {
+  test("c shows it from its first line; c or esc goes back to the settings, on the row that was selected", () => {
+    const state = onBoard()
+    const compose = play(state, text("c")).state
+    expect(settingsScreen(compose)).toMatchObject({
+      showing: "compose",
+      scroll: 0,
+      row: 3,
+    })
+    for (const back of [text("c"), K.esc]) {
+      const step = play(compose, back)
+      expect(settingsScreen(step.state)).toMatchObject({
+        showing: "settings",
+        row: 3,
+      })
+      expect(step.effects).toEqual([])
+    }
+  })
+
+  test("↑ ↓ scroll it, and stop once its last line shows: 24 lines in 20 at 100 by 30, in 14 at 80 by 24", () => {
+    for (const [size, last] of [
+      [{ columns: 100, rows: 30 }, 5],
+      [{ columns: 80, rows: 24 }, 11],
+    ] as const) {
+      const compose = play(
+        opened(size),
+        settingsRead(DESIGN_SETTINGS),
+        text("c")
+      ).state
+      expect(settingsScreen(play(compose, K.up).state).scroll).toBe(0)
+      const bottom = play(compose, ...downs(40)).state
+      expect(settingsScreen(bottom).scroll).toBe(last)
+      expect(settingsScreen(play(bottom, K.up).state).scroll).toBe(last - 1)
+    }
+  })
+
+  test("d deploys from it; enter and tab do nothing; ? opens help and q quits", () => {
+    const compose = play(onBoard(), text("c")).state
+    expect(effectsOf(compose, text("d"))).toEqual([
+      { kind: "deploy", server: "prod", app: "demo" },
+    ])
+    for (const event of [K.enter, K.tab])
+      expect(update(compose, event)).toEqual({ state: compose, effects: [] })
+    expect(top(play(compose, text("?")).state).name).toBe("help")
+    expect(play(compose, text("q")).state.exiting).toBe(true)
+  })
+
+  test("the tick reads the file again from it too", () => {
+    const compose = play(onBoard(), text("c")).state
+    expect(effectsOf(compose, { type: "tick" })).toEqual([
+      { kind: "refresh", server: "prod" },
+      { kind: "read-settings", server: "prod", app: "demo", deployed: false },
+    ])
   })
 })

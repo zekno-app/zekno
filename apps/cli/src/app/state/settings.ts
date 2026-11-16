@@ -1,9 +1,9 @@
 /**
  * The settings screen (specs/010-app-settings, contracts/app-screen.md;
  * board `AppSettings`): opened with `e` on an app's screen, it shows that
- * app's settings from this folder's `zekno.app.json`, service by service.
- * Its keys: `↑↓` move, `enter` change, `tab` services, `d` deploy, `esc`
- * back.
+ * app's settings from this folder's `zekno.app.json`, service by service,
+ * and the Compose text they turn into (`c`). Its keys: `↑↓` move, `enter`
+ * change, `tab` services, `c` Compose text, `d` deploy, `esc` back.
  *
  * This part of the reducer never reads or writes the file: it asks for
  * `read-settings` and `write-setting`, which effects/settings.ts runs, and
@@ -13,6 +13,13 @@
 import { applySelectKey, clampIndex } from "../../ui/parts/select"
 import type { SettingRow } from "../../settings/types"
 import { AS7 } from "../../settings/words"
+import {
+  composeHeight,
+  composeLines,
+  maxScroll,
+  serviceInner,
+  statusRows,
+} from "../screens/settings-layout"
 import type { AppKey } from "../keys"
 import type { EventOf, Effect, Step } from "./events"
 import { isText, listKey } from "./input"
@@ -62,6 +69,40 @@ const deploy = (state: State, screen: SettingsScreen): Step =>
     : go(state, { kind: "deploy", server: screen.server, app: screen.app })
 
 /**
+ * How far the Compose text can be scrolled at this window's size: until its
+ * last line shows, as the screen draws it (screens/settings-layout.ts).
+ */
+function composeLimit(state: State, read: ReadOutcome): number {
+  const { columns } = state.size
+  return maxScroll(
+    composeLines(read.compose, serviceInner(columns)).length,
+    composeHeight(state.size, statusRows(state, columns - 2))
+  )
+}
+
+/** The Compose text in the service pane's place: `↑↓` scroll it, `c` and `esc` go back to the settings, `d` deploys. */
+function onCompose(
+  state: State,
+  screen: SettingsScreen,
+  read: ReadOutcome,
+  key: AppKey
+): Step | undefined {
+  if (key.kind === "up" || key.kind === "down") {
+    const limit = composeLimit(state, read)
+    const at = Math.min(screen.scroll, limit)
+    const scroll =
+      key.kind === "up" ? Math.max(0, at - 1) : Math.min(at + 1, limit)
+    return stay(replaceTop(state, { ...screen, scroll }))
+  }
+  if (isText(key, "c") || key.kind === "escape")
+    return stay(replaceTop(state, { ...screen, showing: "settings" }))
+  if (isText(key, "d")) return deploy(state, screen)
+  // Rows and services are the settings': nothing to change or move here.
+  if (key.kind === "enter" || key.kind === "tab") return stay(state)
+  return undefined
+}
+
+/**
  * The settings screen's keys. On a sentence in place of the settings only
  * `esc`, `?`, `q` and Ctrl-C do anything; before the read comes back, `d`
  * deploys too. What this part leaves (undefined) is help, quit and back.
@@ -80,6 +121,7 @@ export function onSettings(
       return deploy(state, screen)
     return undefined
   }
+  if (screen.showing === "compose") return onCompose(state, screen, read, key)
 
   const rows = rowsOf(read, screen)
   if (key.kind === "up" || key.kind === "down") {
@@ -109,6 +151,8 @@ export function onSettings(
       })
     return openChange(state, screen, read, row.path)
   }
+  if (isText(key, "c"))
+    return stay(replaceTop(state, { ...screen, showing: "compose", scroll: 0 }))
   if (isText(key, "d")) return deploy(state, screen)
   return undefined
 }

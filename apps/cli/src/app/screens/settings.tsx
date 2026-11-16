@@ -4,7 +4,8 @@
  * service's settings in sections beside it, every setting a row, set or not,
  * with what changed since this machine's last deploy marked. In place of the
  * two panes, one pane holds a sentence when there are no settings to show;
- * while a change is open, the pane of the change (settings-change.tsx).
+ * while a change is open, the pane of the change (settings-change.tsx). `c`
+ * shows the Compose text the settings turn into in the service pane's place.
  *
  * Every line is broken before it is drawn (settings-layout.ts), so the rows
  * that do not fit are a window that keeps the selected row in view, with
@@ -33,8 +34,12 @@ import { HINTS } from "./placeholder"
 import { ChangePane, changeHints } from "./settings-change"
 import {
   bodyRows,
+  COMPOSE_HINTS,
+  composeHeight,
+  composeLines,
   cut,
   linesOf,
+  scrolled,
   SENTENCE_HINTS,
   SERVICES_INNER,
   SERVICES_WIDTH,
@@ -154,6 +159,40 @@ function ServicePane({
   )
 }
 
+/**
+ * The Compose text the settings turn into (contracts/app-screen.md, "The
+ * Compose text"), in the service pane's place: titled `Compose text`, the
+ * file on the right, every line faint, scrolled with the `more` lines.
+ */
+function ComposePane({
+  compose,
+  file,
+  scroll,
+  inner,
+  height,
+}: {
+  compose: string
+  file: string
+  scroll: number
+  inner: number
+  height: number
+}) {
+  const lines = composeLines(compose, inner)
+  const shown = scrolled(lines.length, scroll, height)
+  return (
+    <Pane
+      title="Compose text"
+      right={<Text dimColor>{file}</Text>}
+      focused
+      gap={0}
+    >
+      <More direction="↑" count={shown.above} />
+      <Lines lines={lines.slice(shown.top, shown.to)} />
+      <More direction="↓" count={shown.below} />
+    </Pane>
+  )
+}
+
 /** One pane in place of the two: the sentence's first sentence bold, the rest faint on the next line. */
 function SentencePane({ first, rest }: { first: string; rest: string }) {
   return (
@@ -219,8 +258,13 @@ export function SettingsScreen({
     )
   }
   const { change } = screen
+  const composing = outcome !== undefined && screen.showing === "compose"
   const hints: readonly KeyHint[] =
-    outcome && change ? changeHints(change) : HINTS.settings
+    outcome && change
+      ? changeHints(change)
+      : composing
+        ? COMPOSE_HINTS
+        : HINTS.settings
   const body = bodyRows(
     { columns, rows },
     statusRows(state, columns - 2),
@@ -252,7 +296,18 @@ export function SettingsScreen({
           selected={shown}
           height={body}
         />
-        {outcome && service ? (
+        {outcome && composing ? (
+          <ComposePane
+            compose={outcome.compose}
+            file={outcome.report.file}
+            scroll={screen.scroll}
+            inner={serviceInner(columns)}
+            height={composeHeight(
+              { columns, rows },
+              statusRows(state, columns - 2)
+            )}
+          />
+        ) : outcome && service ? (
           <ServicePane
             name={service.name}
             file={outcome.report.file}

@@ -1,8 +1,11 @@
 /**
  * The settings screen as drawn (specs/010-app-settings,
- * contracts/app-screen.md, "What it shows" and "States no board shows";
- * board `AppSettings`; tasks T045): through `AppView`, as the other screens
- * are drawn, at 100 by 30 and 80 by 24, on a dark and a light terminal.
+ * contracts/app-screen.md, "What it shows", "Changing a value", "The
+ * Compose text" and "States no board shows"; boards `AppSettings` and
+ * `AppSettingsEdit`; tasks T045, T059 and T063): through `AppView`, as the
+ * other screens are drawn, at 100 by 30 and 80 by 24, on a dark and a light
+ * terminal. It is one file, longer than most, on purpose: the tasks name it,
+ * and both boards are read against it line by line in one pass.
  */
 import { describe, expect, test } from "bun:test"
 import { renderToString } from "ink"
@@ -16,13 +19,14 @@ import { AS1, AS2, AS6, SH1, SH2 } from "../../src/settings/words"
 import type { Settings } from "../../src/settings/types"
 import { BRAND, BRAND_DARKER } from "../../src/ui/terminal/theme"
 import { logoLines } from "../../src/ui/terminal/logo"
-import { DESIGN_SETTINGS } from "../support/settings-files"
+import { DESIGN_COMPOSE, DESIGN_SETTINGS } from "../support/settings-files"
 import {
   K,
   onBoard,
   opened,
   play,
   settingsRead,
+  text,
   typing,
   withMemory,
 } from "../support/settings-view"
@@ -554,5 +558,82 @@ describe("changing a value (board AppSettingsEdit)", () => {
       const refused = drawnInColour(memory(undefined, "lots"), background)
       expect(refused).toContain("\x1b[33mUse a size such as 512m or 1g.")
     }
+  })
+})
+
+/** The Compose text of design.md's file, as the screen shows it after `c`. */
+const composing = (
+  size = { columns: 100, rows: 30 },
+  settings = DESIGN_SETTINGS
+) => play(opened(size), settingsRead(settings), text("c")).state
+
+describe("the Compose text (c)", () => {
+  test("in the service pane's place: titled Compose text, the file on the right, the text line by line; the Services pane stays", () => {
+    const lines = draw(composing())
+    expect(lines[5]).toBe(
+      twoPanes("Services", `Compose text${" ".repeat(45)}zekno.app.json`)
+    )
+    const text = lines.join("\n")
+    for (const line of DESIGN_COMPOSE.split("\n").slice(0, 19))
+      expect(text).toContain(twoPanes("", line).slice(24))
+    expect(text).toContain(twoPanes("❯ web", "services:"))
+    expect(text).toMatch(/│ {3}↓ 5 more +│/)
+    expect(lines.at(-1)).toBe(" ↑↓ scroll  c settings  esc back")
+    fits(lines, 100, 30)
+  })
+
+  test("scrolled to its end: its last line shows, with ↑ <n> more above", () => {
+    const end = play(
+      composing(),
+      ...Array.from({ length: 40 }, () => K.down)
+    ).state
+    const text = draw(end).join("\n")
+    expect(text).toMatch(/│ {3}↑ 5 more +│/)
+    expect(text).toContain(twoPanes("", '  "uploads": {}').slice(24))
+    expect(text).not.toMatch(/↓ \d+ more/)
+  })
+
+  test("80 by 24: it fits, scrolled from top to end", () => {
+    let state = composing({ columns: 80, rows: 24 })
+    for (let step = 0; step < 14; step++) {
+      fits(draw(state, 80, 24), 80, 24)
+      state = play(state, K.down).state
+    }
+    const text = draw(state, 80, 24).join("\n")
+    expect(text).toMatch(/↑ 11 more/)
+    expect(text).toContain('"uploads": {}')
+  })
+
+  test("a line wider than the pane goes on under itself; a character drawn as nothing is not drawn", () => {
+    const long = "x".repeat(60)
+    const settings: Settings = {
+      version: 1,
+      services: [
+        [
+          "web",
+          {
+            image: "nginx:1.27",
+            plain: [
+              ["LONG", `${long} ${long}`],
+              ["HIDDEN", "a\u202eb"],
+            ],
+          },
+        ],
+      ],
+    }
+    const text = draw(composing(undefined, settings)).join("\n")
+    expect(text).toContain(twoPanes("", `      "LONG":`).slice(24))
+    expect(text).toContain(twoPanes("", `      "${long}`).slice(24))
+    expect(text).toContain(twoPanes("", `      ${long}"`).slice(24))
+    expect(text).toContain('"HIDDEN": "ab"')
+    expect(text).not.toContain("\u202e")
+  })
+
+  test("every line of the text is faint", () => {
+    const drawn = drawnInColour(composing(), "dark").split("\n")
+    for (const words of ["services:", 'image: "ghcr.io/acme/demo-web:1.4.2"'])
+      expect(drawn.find((line) => line.includes(words))).toContain(
+        `\x1b[2m${words.startsWith("image") ? `    ${words}` : words}`
+      )
   })
 })

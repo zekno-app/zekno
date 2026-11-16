@@ -5,7 +5,9 @@
  * against this machine's last deploy; writing a change, and every way a
  * write is refused. The app is started as `zekno` starts it (the keychain
  * read once, by `loadStart`); after that a key store and a connection that
- * fail are given, so an effect that touched either would show.
+ * fail are given, so an effect that touched either would show. It is one
+ * file, longer than most, on purpose: the tasks name it, and reading and
+ * writing share the folders they are tried in.
  */
 import { describe, expect, test } from "bun:test"
 import {

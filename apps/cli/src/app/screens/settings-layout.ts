@@ -7,6 +7,7 @@
  * selected row in view; the reducer uses the same numbers to stop scrolling
  * the Compose text at its end. Nothing here draws.
  */
+import { sanitize } from "../../server/sanitize"
 import type { SettingRow } from "../../settings/types"
 import { AS3 } from "../../settings/words"
 import { wrapPieces, type Piece } from "../../ui/ink/wrap"
@@ -45,6 +46,11 @@ export const TYPING_HINTS: readonly KeyHint[] = [
 export const PICKING_HINTS: readonly KeyHint[] = [
   ["↑↓", "move"],
   ["enter", "choose"],
+  ["esc", "back"],
+]
+export const COMPOSE_HINTS: readonly KeyHint[] = [
+  ["↑↓", "scroll"],
+  ["c", "settings"],
   ["esc", "back"],
 ]
 
@@ -188,3 +194,54 @@ export const lineOfRow = (lines: readonly RowLine[], row: number): number =>
     0,
     lines.findIndex((line) => line.kind === "row" && line.row === row)
   )
+
+/**
+ * The Compose text as the lines it is drawn in, `inner` columns wide, faint:
+ * a line wider than the pane goes on under itself, at its own indent. Each
+ * line is cleaned (`sanitize`): a plain value may hold a character drawn as
+ * nothing, which the text keeps and the screen does not draw.
+ */
+export function composeLines(compose: string, inner: number): Piece[][] {
+  const text = compose.endsWith("\n") ? compose.slice(0, -1) : compose
+  return text.split("\n").flatMap((line) => {
+    const clean = sanitize(line)
+    const words = clean.trimStart()
+    // The indent of a line of Compose text is a few spaces; half the pane at most is kept.
+    const indent = " ".repeat(
+      Math.min(clean.length - words.length, Math.floor(inner / 2))
+    )
+    return linesOf([{ text: words, dim: true }], inner - indent.length).map(
+      (pieces) => [{ text: indent, dim: true }, ...pieces]
+    )
+  })
+}
+
+/** How far a text of `count` lines can be scrolled in `height` lines: until its last line shows, under the `↑ <n> more` line. */
+export const maxScroll = (count: number, height: number): number =>
+  count <= height ? 0 : count - height + 1
+
+/**
+ * Which lines of a text scrolled `scroll` lines down are drawn in `height`
+ * lines: from `top` to `to`, with a line `↑ <n> more` above them when lines
+ * are hidden above, and `↓ <n> more` below when lines are hidden below.
+ * `top` is `scroll` kept within what can be scrolled.
+ */
+export function scrolled(
+  count: number,
+  scroll: number,
+  height: number
+): { top: number; to: number; above: number; below: number } {
+  const top = Math.min(Math.max(0, scroll), maxScroll(count, height))
+  const room = Math.max(1, height - (top > 0 ? 1 : 0))
+  const to = count - top > room ? top + Math.max(1, room - 1) : count
+  return { top, to, above: top, below: count - to }
+}
+
+/** The lines the Compose text has in the service pane at this window's size, below its first line. */
+export function composeHeight(
+  size: { columns: number; rows: number },
+  status: number
+): number {
+  // The pane's border and its first line.
+  return bodyRows(size, status, COMPOSE_HINTS) - 2 - 1
+}
