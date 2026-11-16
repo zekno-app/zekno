@@ -1,0 +1,232 @@
+# App Screen Contract: the settings screen
+
+User Stories 2 and 3 in the full-screen app (FR-017 to FR-020, FR-030). design.md's decision 5 and
+the boards `AppSettings` and `AppSettingsEdit` are binding for the look; design.md for the words.
+What no board shows is built as written here and reviewed on the real program (the maintainer
+dropped the approval step for it; research R9). The screen is `app/screens/settings.tsx`, its
+keys and state `app/state/settings.ts`, its file reads and writes `app/effects/settings.ts`
+(research R6).
+
+## The way in
+
+On an app's screen, `e` opens the settings screen of that app: the hint line gains `e settings`
+after `x remove secret` (research R7, R9 item 10). Nothing else of the app screen changes. The
+help screen does not change (research R9, item 8). `esc` on the settings screen goes back to the
+app's screen.
+
+## What it shows (board `AppSettings`, 100 by 30)
+
+```text
+ ▀▀▀█ ... (the wordmark)          › prod › demo › settings                ● running  deploy 4
+
+ ╭──────────────────────╮ ╭──────────────────────────────────────────────────────────────────╮
+ │ Services             │ │ web                                               zekno.app.json │
+ │ ❯ web                │ │ Source                                                           │
+ │   worker             │ │     image      ghcr.io/acme/demo-web:1.4.2                       │
+ │                      │ │ Deploy                                                           │
+ │                      │ │     start      bun run start                                     │
+ │                      │ │     restart    on failure                                        │
+ │                      │ │ ❯   memory     1g  ! changed, not deployed (was 512m)            │
+ │                      │ │     cpus       1                                                 │
+ │                      │ │ Networking                                                       │
+ │                      │ │     port       3000                                              │
+ │                      │ │     published  not published                                     │
+ │                      │ │ Variables                                                        │
+ │                      │ │     secrets    DATABASE_URL, SESSION_KEY                         │
+ │                      │ │     plain      NODE_ENV=production                               │
+ │ One app, one file:   │ │ Volumes                                                          │
+ │ zekno.app.json       │ │     uploads    /data/uploads                                     │
+ │                      │ │ ──────────────────────────────────────────────────────────────── │
+ │                      │ │ A change is written to the file. It runs after the next deploy.  │
+ ╰──────────────────────╯ ╰──────────────────────────────────────────────────────────────────╯
+
+ ↑↓ move  enter change  tab services  c Compose text  d deploy  esc back
+```
+
+- **Header**: the wordmark, `› <server> › <app> › settings` with `settings` bold, and on the right
+  the app's state and `deploy <n>` as the app screen draws them (`StateCell`, from the same row of
+  Home). Below 100 columns, the state alone.
+- **Services pane**, 22 columns wide, dim border: `Services` (bold, dim), one row per service in
+  the file's order, the shown one with `❯` in the brand colour and its name bold; at its foot,
+  dim, AS2.
+- **Service pane**, the rest of the width, brand border: on its first line the service's name bold
+  and, on the right, dim, the file as the deploy names it; then the five sections, each heading
+  bold in the text colour; under each, its rows: a marker column of 2 (`❯` in the brand colour on
+  the selected row), the label dim (the selected one bold, in the text colour), padded to 11, then
+  the value. At its foot a rule and AS1, dim.
+- **Rows**: every setting of today is a row, set or not, so each can be changed here:
+
+  | Section | Rows |
+  |---|---|
+  | Source | `image` |
+  | Deploy | `start`, `restart`, `memory`, `cpus` |
+  | Networking | `port`, `published` |
+  | Variables | `secrets`; then one `plain` row per variable (`NAME=value`, the label `plain` on the first only), or one `plain` row `none` |
+  | Volumes | one row per volume (its name as the label, its path as the value), or one row `none` with no label |
+
+  A value not set is drawn dim with the words below ("Words"). `restart` reads `on failure` for
+  `on-failure`. Secrets by name only. A value too wide goes on under itself, never under the
+  labels.
+- **Changed, not deployed** (FR-019): after the value, two spaces and AS3 in the warning colour,
+  when it differs from this machine's last deploy of this app made from settings (research R4).
+  Nothing is marked when that is not known.
+- **No empty line between sections** (the board's 6 px are less than a line).
+
+## Keys
+
+(The first column is headed "Pressed", not "Key": `docs.test.ts` reads the first table headed
+`| Key |` in this file, which is the "Key table" below.)
+
+| Pressed | Does |
+|---|---|
+| `↑` `↓` | Move between rows (section headings are not rows). In the Compose text, scroll |
+| `enter` | Change the selected row (below). On a `none` row of `plain` or `volumes`, AS7 on the status line |
+| `tab` | The next service, from the first row; after the last, the first |
+| `c` | Show the Compose text the settings turn into in place of the service pane; `c` again, or `esc`, back to the settings |
+| `d` | Deploy, exactly as `d` on the app's screen (the same effect, the same questions) |
+| `esc` | Back to the app's screen. While a change is open: close it, nothing written |
+| `?` | Help, as on every screen |
+| `q`, `ctrl-c` | Quit, as on every screen |
+
+Hint lines, as `KeyHints` draws them:
+
+| When | Hints |
+|---|---|
+| Showing the settings | `↑↓ move  enter change  tab services  c Compose text  d deploy  esc back` (board) |
+| Typing a value | `enter next  esc back` |
+| Picking `restart` | `↑↓ move  enter choose  esc back` |
+| Asking y/N | `y write it  n keep <now>  esc back` (board) |
+| The Compose text | `↑↓ scroll  c settings  esc back` |
+| One sentence instead of settings (below) | `esc back` |
+
+## Changing a value (board `AppSettingsEdit`)
+
+While a change is open the screen is drawn as the board draws it (research R9, item 6): the
+Services pane is not drawn; one pane, its border dim, holds the service's first line, the section
+of the row being changed with its rows, and at its foot the change box, its border in the brand
+colour. The hint line is the change's.
+
+1. **Typing** (every row but `restart`): `enter` opens the box with
+   `Change a setting  <svc> · <label>` (`Change a setting` bold, the rest dim), then the typed
+   question `? <Question> › <value>` with the current value filled in and the cursor after it
+   (`?` in the brand colour, the question bold, `›` dim). Letters type, Backspace removes,
+   a paste of one line is taken, a paste of several is not.
+   - `enter` checks the value with the setting's rule (`settings/values.ts`, the same check as
+     `zekno settings set`). Refused: the rule, in the warning colour, set in by two columns under
+     the question (board: `Use a size such as 512m or 1g.`), and the question stays open.
+   - An empty value removes a setting that can be left out; for `image` it is refused with
+     `A service needs an image.`
+   - The same value as now closes the box; nothing is written.
+   - The whole file with the change is checked too; a rule across settings it breaks is shown as
+     a refusal, its place and rule (CS17's second part).
+2. **Picking** (`restart`): `? Restart rule` and the rows `no`, `on failure`, `always`, the marker
+   on the current one, as a list of single commands draws its rows.
+3. **Asking**: the box shows `now  <old>` and `new  <new>` (labels dim, the new value bold), then
+   `? Write this to zekno.app.json? Nothing is deployed until you deploy. (y/N)` (board, design
+   CS9). `y` writes; `n`, `enter` and `esc` close the box and write nothing.
+4. **Writing** (an effect): the file is read again, and must be the very bytes the screen holds
+   (its SHA-256); the change is applied and written as `zekno settings set` writes (research R5).
+   Then the screen reads the file again and shows the new value, with its mark (US3, scenario 2).
+   Refused: the box closes, the screen reads the file again, and the status line says why (CS12,
+   CS13, CS14 as an error notice). Nothing contacts a server, and nothing is deployed (FR-025).
+
+`esc` at any point closes the box and changes nothing.
+
+## The Compose text (`c`)
+
+The service pane's place shows a pane titled `Compose text` with the file's name dim on the right,
+holding the Compose text the settings turn into (`composeText`, all services), line by line, dim,
+as the board `CmdSettings` draws the command's output. `↑` `↓` scroll it when it is taller than
+the pane. The Services pane stays.
+
+## States no board shows
+
+Each draws the header and, in place of the two panes, one pane holding the sentence, and the hint
+line `esc back`:
+
+| State | Sentence |
+|---|---|
+| The folder has no settings file and no Compose file applies | SH1 |
+| The folder deploys a Compose file (`compose.yaml`, or one its link names) | SH2 |
+| The folder is linked to another app or server | AS6 |
+| The file has a fault | its two sentences: the first bold, the rest dim on the next line (`<file> could not be read as settings.` then the place and rule; or the two of SL) |
+
+Further:
+
+- **Both files, not linked**: the settings are shown and can be changed; `d` says DP5 on the
+  status line and deploys nothing (contracts/deploy.md).
+- **Edited elsewhere**: while no change is open, the file is read again on every refresh (every 5
+  seconds, as the app screen reads what is running), and the screen shows what it holds now,
+  the selection kept on the same row number within the service's rows. A change confirmed after
+  the file changed is refused (CS12). The last deploy's text is read again only when the screen
+  opens and when a deploy of this app ends.
+- **80 by 24**: the Services pane keeps its 22 columns; the service pane takes the rest. When its
+  rows do not fit, it shows a window of them that keeps the selected row in view, with
+  `↑ <n> more` above and `↓ <n> more` below, dim, as lists of single commands do. During a change
+  only one section is drawn, which fits. The header shows the state alone.
+- **Too small** (below 80 by 24): the app's "too small" message, as on every screen; the screen and
+  an open change come back as they were.
+- **A light terminal**: every colour comes from the theme (`useTheme`): brand, warning, dim, the
+  text colour. Nothing is drawn in a fixed colour.
+- **Opening it**: the file is read when the screen opens; until the read comes back the service
+  pane is empty, as the app screen's panes are before their data.
+
+## Words
+
+| Id | Words |
+|----|-------|
+| AS1 | `A change is written to the file. It runs after the next deploy.` (design) |
+| AS2 | `One app, one file: zekno.app.json` (board) |
+| AS3 | `! changed, not deployed (was <old>)` (design); `! changed, not deployed` when the last deploy had no such setting |
+| AS4 | `Change a setting` (board) |
+| AS5 | `now`, `new` (board) |
+| AS6 | `This folder is linked to <app> on <server>. Its settings are on that app's screen.` |
+| AS7 | ``Add one with `zekno settings set <svc>.plain.<NAME> <value>`.`` / ``Add one with `zekno settings set <svc>.volumes.<name> <path>`.`` (an info notice) |
+
+The words of a setting that is not set (dim; also the `<old>` and `<new>` of a change):
+
+| Row | Words |
+|---|---|
+| `start` | `the image's own` (design.md's table) |
+| `restart` | `no` |
+| `memory`, `cpus` | `no limit` |
+| `port`, `secrets`, `plain`, a volume | `none` |
+| `published` | `not published` (board) |
+
+The questions: `Image`, `Start command`, `Restart rule`, `Memory limit` (board), `Processor
+limit`, `Port`, `Published port`, `Secrets` (names separated by `,`), `<NAME>` for a plain
+variable, `Mount path for <vol>` for a volume. The labels after `<svc> · ` are those of
+contracts/commands.md, "Each setting's words".
+
+## Key table (read by `apps/cli/test/docs/docs.test.ts`)
+
+| Key | Where | Does |
+|-----|-------|------|
+| `e` | App | Open the app's settings, from this folder's `zekno.app.json` |
+| `c` | Settings | Show the Compose text the settings turn into, or the settings again |
+| `y` | Settings, a change | Write the change to `zekno.app.json` |
+| `n` | Settings, a change | Keep the value, write nothing |
+
+## Tests
+
+- **The reducer** (`test/app/settings-state.test.ts`): every key of the table in every state;
+  `e` on the app screen pushes the screen and asks for `read-settings`; typing, refusing, the
+  empty value, the same value, picking, asking, `y` asks for `write-setting` with the SHA-256 the
+  view holds, `n` and `esc` ask for nothing; `tab` wraps; the selection stays on rows; nothing in
+  the state holds a secret's value; the tick on this screen asks for `read-settings` (not the
+  last deploy) only with no change open.
+- **The screen** (`test/app/settings-screen.test.tsx`, through `AppView` as the other screens are
+  drawn): the board `AppSettings` line by line at 100 by 30 for design.md's file with the memory
+  changed since the last deploy (rows, labels, marks, foot, hints, the header); the board
+  `AppSettingsEdit` at the asking step; the typing step with a refused value; picking; each
+  state of "States no board shows"; the Compose text view; 80 by 24 with the window and its
+  `more` lines, every line at most 80 columns and at most 24 lines; too small; drawn with the
+  light theme, every colour from the theme.
+- **The effects** (`test/app/settings-effects.test.ts`): reading in a folder of each kind
+  (settings, Compose, both, none, linked elsewhere, a fault); the marks from a history with a
+  settings deploy, with a Compose deploy (none), with none (none); writing: the file is the
+  file with that one change; a file changed since it was read is not written and CS12 comes
+  back; a symbolic link, CS13; the keychain is never read (a key store that throws) and no
+  server is contacted.
+- **The app screen**: its hint line at 100 by 30 and 80 by 24 with `e settings`
+  (`test/app/app-operate.test.tsx`, research R7).
