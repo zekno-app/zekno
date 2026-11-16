@@ -1,24 +1,38 @@
-import { describe, expect, spyOn, test } from "bun:test"
-import { RunnerStatusSchema } from "@workspace/core"
-import { existsSync, writeFileSync } from "node:fs"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
+import { readSignedDeploy, RunnerStatusSchema } from "@workspace/core"
+import {
+  existsSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-import { tempDir } from "../../../runner/test/support/helpers"
+import { tempDir, waitFor } from "../../../runner/test/support/helpers"
 import { routeErrorLines } from "../../src/app/effects/context"
-import { createEffects } from "../../src/app/effects/effects"
+import { createEffects, type Effects } from "../../src/app/effects/effects"
 import { loadStart } from "../../src/app/effects/profile"
-import type { AppEvent } from "../../src/app/state/events"
+import type { AppEvent, Effect } from "../../src/app/state/events"
 import { openTeam, TAMPERED } from "../../src/cli/context"
 import { memoryKeyStore } from "../../src/profile/keystore"
-import { tilde } from "../../src/project/shown"
+import { shownPath, tilde } from "../../src/project/shown"
 import { openSession } from "../../src/server/session"
 import {
   connect,
   type ConnectOptions,
   type Target,
 } from "../../src/server/transport"
-import { machine, ready } from "../support/helpers"
+import { DP5 } from "../../src/settings/words"
+import { COMPOSE_V1, machine, ready } from "../support/helpers"
+import {
+  DESIGN_COMPOSE,
+  DESIGN_FILE,
+  SENTINEL,
+} from "../support/settings-files"
+
+type Machine = ReturnType<typeof machine>
 
 /** A runner that only writes to standard error, with a colour code and a screen clear in it, then says it does not know `session`. */
 const NOISY = [
@@ -330,4 +344,311 @@ describe("effects", () => {
     expect(events).toEqual([])
     expect(existsSync(join(m.project, "zekno.json"))).toBe(false)
   })
+})
+
+// ---------------------------------------------------------------------------
+// `d` deploys the file the rule picks (specs/010-app-settings, contracts/deploy.md, "The app's `d`"; T033)
+
+/** The effects of every app a test of `d` opened: closed after each test, so no runner a test reached is left running. */
+const opened: Effects[] = []
+afterEach(async () => {
+  await Promise.all(opened.splice(0).map((effects) => effects.close()))
+})
+
+const DB_VALUE = "zk_db_value_33d0"
+const SESSION_VALUE = "zk_session_value_33d0"
+const WHERE = ["--app", "demo", "--server", "dev"]
+/** design.md's file with a value its rule refuses, the marker in its place. */
+const FAULTY = DESIGN_FILE.replace('"1g"', `"${SENTINEL}"`)
+const FAULT =
+  "zekno.app.json could not be read as settings. web, deploy.memory: use a size such as 512m or 1g."
+
+/** A ready machine whose folder holds only `files` (compose.yaml taken away unless named). */
+async function folderWith(files: Record<string, string>): Promise<Machine> {
+  const m = await ready()
+  rmSync(join(m.project, "compose.yaml"))
+  for (const [name, text] of Object.entries(files))
+    writeFileSync(join(m.project, name), text)
+  return m
+}
+
+/**
+ * The app's effects on `m`, made as app.tsx makes them, with what the app
+ * opened on (its verified team list). Every event they send is kept in
+ * order; a failure nobody planned for is kept too, and must not happen.
+ * `d` is the effect `d` asks for, on the app's screen and on the settings
+ * screen alike (test/app/settings-state.test.ts): a deploy of demo on dev.
+ */
+async function appOn(m: Machine) {
+  const events: AppEvent[] = []
+  const failures: unknown[] = []
+  let connections = 0
+  const deps = {
+    ...m.deps,
+    connect: ((...args) => (
+      connections++,
+      m.deps.connect(...args)
+    )) as typeof m.deps.connect,
+  }
+  const effects = createEffects(
+    deps,
+    (event) => events.push(event),
+    (error) => failures.push(error),
+    undefined,
+    {},
+    await loadStart(m.deps)
+  )
+  opened.push(effects)
+  const answer = (
+    answer: Extract<Effect, { kind: "deploy-continue" }>["answer"]
+  ) =>
+    effects.run({ kind: "deploy-continue", server: "dev", app: "demo", answer })
+  return {
+    events,
+    failures,
+    connections: () => connections,
+    d: () => effects.run({ kind: "deploy", server: "dev", app: "demo" }),
+    answer,
+    /** Waits for the next event of that type after the `seen` first ones. */
+    until: (type: AppEvent["type"], seen = 0) =>
+      waitFor(
+        () => events.slice(seen).some((event) => event.type === type),
+        type
+      ),
+    of: <T extends AppEvent["type"]>(type: T) =>
+      events.filter(
+        (event): event is Extract<AppEvent, { type: T }> => event.type === type
+      ),
+  }
+}
+
+/** Sets the two secrets design.md's file names, for demo on dev. */
+async function withSecrets(m: Machine): Promise<void> {
+  for (const [name, value] of [
+    ["DATABASE_URL", DB_VALUE],
+    ["SESSION_KEY", SESSION_VALUE],
+  ] as const) {
+    m.typing(value)
+    expect(await m.zekno("secret", "set", name, ...WHERE)).toBe(0)
+  }
+}
+
+/** What `zekno settings compose` prints in `m`'s folder, as bytes on a pipe. */
+async function composePrinted(m: Machine): Promise<string> {
+  m.out.length = 0
+  expect(await m.zekno("settings", "compose")).toBe(0)
+  return m.out.map((line) => `${line}\n`).join("")
+}
+
+/** The Compose text of each deploy of demo this machine signed, oldest first, read from under its signature. */
+async function signed(m: Machine): Promise<string[]> {
+  const team = await openTeam(m.deps)
+  const server = team.profile.servers[0]!
+  return team.store.history(server.serverId, "demo").map((entry) => {
+    const read = readSignedDeploy({
+      envelope: entry.envelope,
+      trust: team.trust,
+    })
+    if (!read.ok) throw new Error("a history entry did not verify")
+    return read.value.deploy.compose
+  })
+}
+
+/** The Compose file the runner handed the stand-in Docker on its last `up`, and that call's environment. */
+function lastUp(m: Machine) {
+  const call = m.docker.calls().at(-1)!
+  const args = call.args.split(" ")
+  return {
+    env: call.env,
+    text: readFileSync(args[args.indexOf("-f") + 1]!, "utf8"),
+  }
+}
+
+describe("d deploys the file the folder's rule picks, as zekno deploy does (feature 010, T033)", () => {
+  test("only zekno.app.json, not linked: remember this folder? names it; yes links the folder to it, its values are listed, and the deploy signs the text zekno settings compose prints, byte for byte", async () => {
+    const m = await folderWith({ "zekno.app.json": DESIGN_FILE })
+    const printed = await composePrinted(m)
+    expect(printed).toBe(DESIGN_COMPOSE)
+    const app = await appOn(m)
+    app.d()
+    await app.until("ask-remember-folder")
+    expect(app.events).toEqual([
+      {
+        type: "ask-remember-folder",
+        server: "dev",
+        app: "demo",
+        compose: "zekno.app.json",
+      },
+    ])
+    // Nothing is written, connected or signed while the question is open.
+    expect(existsSync(join(m.project, "zekno.json"))).toBe(false)
+    expect(app.connections()).toBe(0)
+
+    app.answer("write-link")
+    await app.until("missing-values")
+    expect(app.events.slice(1)).toEqual([
+      {
+        type: "linked",
+        linked: { server: "dev", app: "demo", compose: "zekno.app.json" },
+      },
+      {
+        type: "missing-values",
+        server: "dev",
+        app: "demo",
+        names: ["DATABASE_URL", "SESSION_KEY"],
+        file: "zekno.app.json",
+      },
+    ])
+    expect(
+      JSON.parse(readFileSync(join(m.project, "zekno.json"), "utf8"))
+    ).toMatchObject({
+      app: "demo",
+      server: "dev",
+      compose: "zekno.app.json",
+      signed: { payloadType: "zekno.link.v1" },
+    })
+    expect(app.connections()).toBe(0)
+
+    app.answer("skip-values")
+    await app.until("deploy-ended")
+    expect(app.of("deploy-started")).toHaveLength(1)
+    expect(app.of("deploy-started")[0]!.from).toEndWith("/zekno.app.json")
+    expect(app.of("deploy-ended")[0]!.outcome).toBe("started")
+    // What was signed, sent and started is what `zekno settings compose` printed, and prints again.
+    expect(await signed(m)).toEqual([printed])
+    expect(lastUp(m).text).toBe(printed)
+    expect(await composePrinted(m)).toBe(printed)
+    expect(app.failures).toEqual([])
+
+    // The link written names zekno.app.json: `zekno deploy` with no flags deploys it too.
+    expect(await m.zekno("deploy")).toBe(0)
+    expect(await signed(m)).toEqual([printed, printed])
+  }, 60_000)
+
+  test("n deploys zekno.app.json without writing zekno.json", async () => {
+    const m = await folderWith({ "zekno.app.json": DESIGN_FILE })
+    await withSecrets(m)
+    const app = await appOn(m)
+    app.d()
+    await app.until("ask-remember-folder")
+    app.answer("skip-link")
+    await app.until("deploy-ended")
+    expect(app.of("missing-values")).toEqual([])
+    expect(app.of("deploy-ended")[0]!.outcome).toBe("started")
+    expect(existsSync(join(m.project, "zekno.json"))).toBe(false)
+    expect(await signed(m)).toEqual([DESIGN_COMPOSE])
+    expect(app.failures).toEqual([])
+  }, 60_000)
+
+  test("linked to zekno.app.json: d deploys it at once, also with compose.yaml beside it; the secrets reach Docker", async () => {
+    const m = await folderWith({ "zekno.app.json": DESIGN_FILE })
+    await withSecrets(m)
+    expect(await m.zekno("link", ...WHERE)).toBe(0)
+    writeFileSync(join(m.project, "compose.yaml"), COMPOSE_V1)
+    const app = await appOn(m)
+    app.d()
+    await app.until("deploy-ended")
+    expect(app.of("ask-remember-folder")).toEqual([])
+    expect(app.of("missing-values")).toEqual([])
+    expect(app.of("notice")).toEqual([])
+    expect(app.of("deploy-ended")[0]!.outcome).toBe("started")
+    expect(app.of("deploy-started")[0]!.secretNames).toEqual([
+      "DATABASE_URL",
+      "SESSION_KEY",
+    ])
+    expect(await signed(m)).toEqual([DESIGN_COMPOSE])
+    const up = lastUp(m)
+    expect(up.text).toBe(DESIGN_COMPOSE)
+    expect(up.env.DATABASE_URL).toBe(DB_VALUE)
+    expect(up.env.SESSION_KEY).toBe(SESSION_VALUE)
+    // No value is in anything the app was told.
+    const told = JSON.stringify(app.events)
+    expect(told).not.toContain(DB_VALUE)
+    expect(told).not.toContain(SESSION_VALUE)
+    expect(app.failures).toEqual([])
+  }, 60_000)
+
+  test("both files and no link: DP5 as an error line; nothing asked, read, connected, signed or written. A compose.yaml that is a link to nowhere counts", async () => {
+    for (const compose of ["file", "dangling link"] as const) {
+      const m = await folderWith({ "zekno.app.json": DESIGN_FILE })
+      if (compose === "file")
+        writeFileSync(join(m.project, "compose.yaml"), COMPOSE_V1)
+      else symlinkSync("nowhere.yaml", join(m.project, "compose.yaml"))
+      const app = await appOn(m)
+      app.d()
+      await app.until("notice")
+      expect({ compose, events: app.events }).toEqual({
+        compose,
+        events: [{ type: "notice", notice: { tone: "error", text: DP5 } }],
+      })
+      await Bun.sleep(50)
+      expect(app.events).toHaveLength(1)
+      expect(app.connections()).toBe(0)
+      expect(m.docker.calls()).toEqual([])
+      expect(existsSync(join(m.home, "history"))).toBe(false)
+      expect(existsSync(join(m.project, "zekno.json"))).toBe(false)
+      expect(app.failures).toEqual([])
+    }
+  }, 60_000)
+
+  test("neither file: today's line, unchanged", async () => {
+    const m = await folderWith({})
+    const app = await appOn(m)
+    app.d()
+    await app.until("notice")
+    expect(app.events).toEqual([
+      {
+        type: "notice",
+        notice: {
+          tone: "error",
+          text: `There is no compose.yaml in ${shownPath(m.project)}, and no zekno.json names another. Run zekno link -f <file> here to name one.`,
+        },
+      },
+    ])
+    expect(m.docker.calls()).toEqual([])
+  }, 60_000)
+
+  test("a fault in the settings file, linked or not: its sentence as an error line, before any question; nothing of the file said, nothing connected or signed", async () => {
+    for (const linked of [false, true]) {
+      const m = await folderWith({ "zekno.app.json": DESIGN_FILE })
+      if (linked) expect(await m.zekno("link", ...WHERE)).toBe(0)
+      writeFileSync(join(m.project, "zekno.app.json"), FAULTY)
+      const app = await appOn(m)
+      app.d()
+      await app.until("failed")
+      expect({ linked, events: app.events }).toEqual({
+        linked,
+        events: [{ type: "failed", notice: { tone: "error", text: FAULT } }],
+      })
+      expect(JSON.stringify(app.events)).not.toContain(SENTINEL)
+      expect(app.connections()).toBe(0)
+      expect(m.docker.calls()).toEqual([])
+      expect(existsSync(join(m.home, "history"))).toBe(false)
+      expect(app.failures).toEqual([])
+    }
+  }, 60_000)
+
+  test("a link that names compose.yaml beside zekno.app.json deploys compose.yaml, as before", async () => {
+    const m = await folderWith({
+      "zekno.app.json": DESIGN_FILE,
+      "compose.yaml": COMPOSE_V1,
+    })
+    expect(await m.zekno("link", ...WHERE, "-f", "compose.yaml")).toBe(0)
+    const app = await appOn(m)
+    app.d()
+    await app.until("missing-values")
+    expect(app.of("missing-values")).toEqual([
+      {
+        type: "missing-values",
+        server: "dev",
+        app: "demo",
+        names: ["GREETING"],
+        file: "compose.yaml",
+      },
+    ])
+    app.answer("skip-values")
+    await app.until("deploy-ended")
+    expect(await signed(m)).toEqual([COMPOSE_V1])
+    expect(app.failures).toEqual([])
+  }, 60_000)
 })

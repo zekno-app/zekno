@@ -94,8 +94,8 @@ export function faultOf(message: string): { first: string; rest: string } {
  * names when it is signed by the team, used here and names that app on that
  * server; AS6 when it names another; SH2 when it names a Compose file. A
  * zekno.json that cannot be used here, or none: `zekno.app.json` here (also
- * beside `compose.yaml`, where `d` asks first), SH2 with only
- * `compose.yaml`, SH1 with neither.
+ * beside `compose.yaml`, where `d` deploys nothing and says DP5), SH2 with
+ * only `compose.yaml`, SH1 with neither.
  */
 function settingsFor(
   cwd: string,

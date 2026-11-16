@@ -4,8 +4,6 @@
  * itself, with its stages and Docker's lines as events.
  */
 import type { TeamTrust } from "@workspace/core"
-import { existsSync } from "node:fs"
-import { resolve } from "node:path"
 
 import { openTeam } from "../../cli/context"
 import {
@@ -17,11 +15,14 @@ import {
 import { writeLink } from "../../ops/link"
 import { profileStore, type Server } from "../../profile/profile"
 import { expectedValues } from "../../project/compose-file"
-import { readCompose, type ComposeText } from "../../project/compose-read"
 import { DEFAULT_COMPOSE, findProject } from "../../project/file"
 import { notSignedHere, standingOf, type Standing } from "../../project/signed"
 import { shownPath } from "../../project/shown"
 import { sanitize } from "../../server/sanitize"
+import { SETTINGS_FILE } from "../../settings/file"
+import { chooseSource, present, readSource } from "../../settings/source"
+import type { DeploySource, DeployText } from "../../settings/types"
+import { DP5 } from "../../settings/words"
 import { seconds } from "../../shared/time"
 import { appNames, latestAccepted, secretNamesOf } from "../../shared/views"
 import type { Effect } from "../state/events"
@@ -30,18 +31,20 @@ import { batcher } from "./batcher"
 import { reasonOf, type Context } from "./context"
 import { linkedElsewhere, notConnected, NOT_IN_USE } from "./links"
 
-/** The Compose file a deploy from the app uses when no zekno.json names another, in the folder the app was started from. */
+/** The Compose file a deploy from the app uses when no zekno.json names another and no zekno.app.json is beside it, in the folder the app was started from. */
 export const COMPOSE_FILE = DEFAULT_COMPOSE
 
 /**
- * The Compose file a deploy from the app signs, read when `d` was pressed:
- * its text and path, how the missing-values list names it, the app it
- * deploys, and whether it comes from an accepted zekno.json (then "remember
- * this folder?" is never asked). `elsewhere`: that zekno.json names another
- * app or server than the one it would deploy to, so it is asked first.
+ * The file a deploy from the app signs, read when `d` was pressed: its
+ * Compose text and path (a settings file's Compose text is made from it
+ * here), how the missing-values list and "remember this folder?" name it,
+ * the app it deploys, and whether it comes from an accepted zekno.json (then
+ * "remember this folder?" is never asked). `elsewhere`: that zekno.json
+ * names another app or server than the one it would deploy to, so it is
+ * asked first.
  */
 type Source = {
-  read: ComposeText
+  read: DeployText
   named: string
   app: string
   linked: boolean
@@ -102,11 +105,31 @@ export function createDeploys(context: Context) {
   }
 
   /**
-   * Where a deploy from the app takes its service definition, read once
-   * (compose-read.ts): the Compose file the zekno.json that applies here
-   * names, or compose.yaml in the folder the app was started in. Either must
-   * stay inside its folder. Undefined, with a line saying why, when `d`
-   * deploys nothing:
+   * Reads, once, the file the rule of settings/source.ts chose: a Compose
+   * file as before (compose-read.ts), or `zekno.app.json` read strictly and
+   * turned into the Compose text that is signed, the very text `zekno
+   * settings compose` prints for it. A link names one file, so `both` never
+   * comes from one; were it to, DP5 is said and nothing is read, as for a
+   * folder that is not linked: neither file is ever picked silently.
+   */
+  function readChosen(chosen: DeploySource): DeployText | undefined {
+    if (chosen.kind === "both") {
+      notice("error", DP5)
+      return undefined
+    }
+    return readSource(chosen, ops.cwd)
+  }
+
+  /**
+   * Where a deploy from the app takes its service definition, read once, by
+   * the rule `zekno deploy` follows (specs/010-app-settings,
+   * contracts/deploy.md, "The app's `d`"): the file the zekno.json that
+   * applies here names, which may be `zekno.app.json`; else the one of
+   * compose.yaml and zekno.app.json in the folder the app was started in,
+   * looked at without following a link. Either must stay inside its folder.
+   * A fault in a settings file is its reader's sentence, thrown as a
+   * `CliError`, and becomes the error line. Undefined, with a line saying
+   * why, when `d` deploys nothing:
    *
    * - the zekno.json is not signed by the team: it is never used, and no
    *   other is offered in its place;
@@ -116,8 +139,8 @@ export function createDeploys(context: Context) {
    * - it names a server that is not connected: it supplies nothing;
    * - it names another server, and the selected server has no apps: there
    *   is no app to deploy it to;
-   * - there is no Compose file, or no app is selected in a folder that is
-   *   not linked.
+   * - in a folder that is not linked: both files are here (DP5), there is
+   *   neither, or no app is selected.
    *
    * A linked folder deploys to its own app on its own server at once, and on
    * its own server with no apps too. On its own server, an app the folder is
@@ -149,13 +172,11 @@ export function createDeploys(context: Context) {
       const named = sanitize(link.compose)
       const own = link.server === server
       const first = own && !appsDeployedTo(server).includes(link.app)
+      // The link names one file: `zekno.app.json` is read as settings, any other as a Compose file.
+      const linked = () => readChosen(chooseSource(ops.cwd, { project: link }))
       if (own && (selected === undefined || selected === link.app || first)) {
-        return {
-          read: readCompose({ kind: "project", link }),
-          named,
-          app: link.app,
-          linked: true,
-        }
+        const read = linked()
+        return read && { read, named, app: link.app, linked: true }
       }
       if (!serversOnRecord().some((entry) => entry.name === link.server)) {
         notice("error", notConnected(link))
@@ -165,15 +186,23 @@ export function createDeploys(context: Context) {
         notice("info", linkedElsewhere(link))
         return undefined
       }
-      return {
-        read: readCompose({ kind: "project", link }),
-        named,
-        app: selected,
-        linked: true,
-        elsewhere: { server: link.server, app: link.app },
-      }
+      const read = linked()
+      return (
+        read && {
+          read,
+          named,
+          app: selected,
+          linked: true,
+          elsewhere: { server: link.server, app: link.app },
+        }
+      )
     }
-    if (!existsSync(resolve(ops.cwd, COMPOSE_FILE))) {
+    const chosen = chooseSource(ops.cwd, {})
+    if (chosen.kind === "both") {
+      notice("error", DP5)
+      return undefined
+    }
+    if (chosen.kind === "compose" && !present(ops.cwd, COMPOSE_FILE)) {
       notice(
         "error",
         `There is no ${COMPOSE_FILE} in ${shownPath(ops.cwd)}, and no zekno.json names another. Run zekno link -f <file> here to name one.`
@@ -188,8 +217,8 @@ export function createDeploys(context: Context) {
       return undefined
     }
     return {
-      read: readCompose({ kind: "default", folder: ops.cwd }),
-      named: COMPOSE_FILE,
+      read: readSource(chosen, ops.cwd),
+      named: chosen.kind === "settings" ? SETTINGS_FILE : COMPOSE_FILE,
       app: selected,
       linked: false,
     }
@@ -235,11 +264,12 @@ export function createDeploys(context: Context) {
     const app = source.app
     if (!source.linked && after === undefined && !linkSkipped) {
       waiting = { server: effect.server, app, on: "link", source }
+      // The question names the file that will be deployed, and a "yes" links the folder to it.
       dispatch({
         type: "ask-remember-folder",
         server: effect.server,
         app,
-        compose: COMPOSE_FILE,
+        compose: source.named,
       })
       return undefined
     }
@@ -303,17 +333,18 @@ export function createDeploys(context: Context) {
     waiting = undefined
     if (effect.answer === "write-link") {
       // Written by a "yes" here: signed with this member's key, and recorded as used here (accepted.ts).
+      // It names the file this deploy uses, compose.yaml or zekno.app.json, as the question said.
       await writeLink(deps.home, await openTeam(ops), ops.cwd, {
         app: effect.app,
         server: effect.server,
-        compose: COMPOSE_FILE,
+        compose: asked.source.named,
       })
       dispatch({
         type: "linked",
         linked: {
           server: effect.server,
           app: effect.app,
-          compose: COMPOSE_FILE,
+          compose: asked.source.named,
         },
       })
     }

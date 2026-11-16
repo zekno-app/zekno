@@ -112,6 +112,21 @@ settings file with a fault: its sentence as an error notice. "Remember this fold
 `zekno.json` naming the file deployed. The deploy screen's `from` row shows the file's path, as
 today.
 
+As built (T034, 2026-11-16): `composeOf` uses `chooseSource` and `readSource`. A linked folder's
+file is read by its name (rule 2). A folder that is not linked: both names there gives DP5 as an
+error line, before "Choose an app first", with nothing read. Whether a name is there is looked at
+without following a link (`present`), as for `zekno deploy`: a `compose.yaml` that is a link to
+nowhere beside `zekno.app.json` is "both". The same link alone, with no `zekno.app.json`, is now
+read, so the app says its reader's sentence (``No Compose file at <folder>/compose.yaml. Point to
+one with `-f <file>`.``) where it said before ``There is no compose.yaml in <folder>, and no
+zekno.json names another. Run zekno link -f <file> here to name one.``; that line stays for a
+folder with neither name. A fault of the settings file is the reader's `CliError`, said as an
+error line (the app's `failed` event) when `d` is pressed, before "remember this folder?" and
+before anything connects. "Remember this folder?", its `zekno.json` and the missing-values list
+name the file as `zekno.app.json` or `compose.yaml` (a folder not linked) or as the link's
+`compose` field (a linked one). The Compose text signed is `composeText` of the file, the text
+`zekno settings compose` prints (test/app/app-effects.test.ts).
+
 ## Sentences
 
 | Id | Sentence | Status |
