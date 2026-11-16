@@ -1,14 +1,20 @@
 /**
  * The settings screen's reducer (specs/010-app-settings,
- * contracts/app-screen.md, "Keys" and "Tests"; tasks T041): every key in
- * every state, with the reducer only. Nothing here reads a file.
+ * contracts/app-screen.md, "Keys", "Changing a value" and "Tests"; tasks
+ * T041 and T055): every key in every state, with the reducer only. Nothing
+ * here reads a file.
  */
 import { describe, expect, test } from "bun:test"
 
 import type { AppEvent } from "../../src/app/state/events"
-import { refreshAllowed, top } from "../../src/app/state/reading"
+import {
+  refreshAllowed,
+  textQuestionOpen,
+  top,
+} from "../../src/app/state/reading"
 import { update } from "../../src/app/state/state"
 import type { State } from "../../src/app/state/types"
+import type { Settings } from "../../src/settings/types"
 import { AS7 } from "../../src/settings/words"
 import { DESIGN_SETTINGS } from "../support/settings-files"
 import {
@@ -21,6 +27,8 @@ import {
   play,
   settingsRead,
   text,
+  typing,
+  withMemory,
 } from "../support/settings-view"
 
 const settingsScreen = (state: State) => {
@@ -284,5 +292,311 @@ describe("browsing", () => {
     ])
     for (const event of [K.up, K.down, K.tab, K.enter])
       expect(update(state, event)).toEqual({ state, effects: [] })
+  })
+})
+
+/** The SHA-256 the file was read with, as the effect reports it. */
+const SHA = "b".repeat(64)
+
+/** Backspace `n` times. */
+const erase = (n: number): AppEvent[] =>
+  Array.from({ length: n }, () => K.backspace)
+/** Down `n` times. */
+const downs = (n: number): AppEvent[] => Array.from({ length: n }, () => K.down)
+
+/** On row `row` of web (0 is the image), design.md's file with web's memory at 512m unless other settings are given. */
+const onRow = (row: number, settings?: Settings) =>
+  play(
+    opened(),
+    settingsRead(settings ?? withMemory(DESIGN_SETTINGS, "512m"), {
+      sha256: SHA,
+    }),
+    ...downs(row)
+  ).state
+const onMemory = () => onRow(3)
+/** Typed into the memory: emptied, then `value`, then enter. */
+const memoryTyped = (value: string) =>
+  play(onMemory(), K.enter, ...erase(4), ...typing(value), K.enter)
+
+describe("changing", () => {
+  test("enter opens the value to type, filled in; restart opens the list, on the current rule", () => {
+    const open = play(onMemory(), K.enter).state
+    expect(settingsScreen(open).change).toEqual({
+      path: { service: "web", key: "memory" },
+      stage: "typing",
+      typed: "512m",
+      pick: 0,
+      now: "512m",
+      sha256: SHA,
+    })
+    expect(textQuestionOpen(open)).toBe(true)
+    const picking = play(onRow(2), K.enter).state
+    expect(settingsScreen(picking).change).toMatchObject({
+      path: { service: "web", key: "restart" },
+      stage: "picking",
+      pick: 1,
+      now: "on failure",
+    })
+    expect(textQuestionOpen(picking)).toBe(false)
+    // A setting left out opens empty; the secrets are names, separated by commas.
+    const cpus = play(onRow(0), K.tab, ...downs(4), K.enter).state
+    expect(settingsScreen(cpus).change).toMatchObject({
+      path: { service: "worker", key: "cpus" },
+      typed: "",
+      now: "no limit",
+    })
+    expect(settingsScreen(play(onRow(7), K.enter).state).change?.typed).toBe(
+      "DATABASE_URL, SESSION_KEY"
+    )
+  })
+
+  test("letters type, q and ? included; Backspace removes; a paste of one line is taken, of several not", () => {
+    const state = play(onMemory(), K.enter, ...erase(4)).state
+    expect(settingsScreen(state).change?.typed).toBe("")
+    const typed = play(state, ...typing("q?2g")).state
+    expect(settingsScreen(typed).change?.typed).toBe("q?2g")
+    expect(typed.exiting).toBe(false)
+    expect(top(typed).name).toBe("settings")
+    expect(settingsScreen(play(state, text("2g")).state).change?.typed).toBe(
+      "2g"
+    )
+    expect(
+      settingsScreen(play(state, text("2g\nsomething else")).state).change
+        ?.typed
+    ).toBe("")
+    // Ctrl-C still quits.
+    expect(play(typed, K.ctrlC).state.exiting).toBe(true)
+  })
+
+  test("enter with a value its rule refuses keeps the question open, with the rule", () => {
+    const refused = memoryTyped("lots")
+    expect(settingsScreen(refused.state).change).toMatchObject({
+      stage: "typing",
+      typed: "lots",
+      reason: "Use a size such as 512m or 1g.",
+    })
+    expect(refused.effects).toEqual([])
+    // Typing again keeps the reason until enter checks again.
+    const typed = play(refused.state, ...erase(4), ...typing("2g")).state
+    expect(settingsScreen(typed).change?.reason).toBe(
+      "Use a size such as 512m or 1g."
+    )
+    expect(settingsScreen(play(typed, K.enter).state).change).toMatchObject({
+      stage: "asking",
+      reason: undefined,
+    })
+  })
+
+  test("an empty value removes a setting that can be left out; the image cannot be", () => {
+    expect(settingsScreen(memoryTyped("").state).change).toMatchObject({
+      stage: "asking",
+      now: "512m",
+      next: { value: undefined, shown: "no limit" },
+    })
+    const image = play(onRow(0), K.enter, ...erase(40), K.enter).state
+    expect(settingsScreen(image).change).toMatchObject({
+      stage: "typing",
+      reason: "A service needs an image.",
+    })
+  })
+
+  test("the same value as now closes the change and asks for nothing; so does emptying a setting not set", () => {
+    const same = play(onMemory(), K.enter, K.enter)
+    expect(settingsScreen(same.state).change).toBeUndefined()
+    expect(same.effects).toEqual([])
+    // A start command with other spaces is the same command.
+    const spaced = play(
+      onRow(1),
+      K.enter,
+      ...erase(13),
+      ...typing("bun  run   start"),
+      K.enter
+    )
+    expect(settingsScreen(spaced.state).change).toBeUndefined()
+    expect(spaced.effects).toEqual([])
+    const notSet = play(onRow(0), K.tab, ...downs(4), K.enter, K.enter)
+    expect(settingsScreen(notSet.state).change).toBeUndefined()
+    expect(notSet.effects).toEqual([])
+  })
+
+  test("a value that breaks a rule across settings is refused with CS17's place and rule", () => {
+    const published: Settings = {
+      version: 1,
+      services: [
+        ["web", { image: "nginx:1.27", port: 3000, publish: 80 }],
+        ["worker", { image: "nginx:1.27", port: 4000 }],
+      ],
+    }
+    // Leaving the port out while it is published.
+    const port = play(onRow(5, published), K.enter, ...erase(4), K.enter).state
+    expect(settingsScreen(port).change).toMatchObject({
+      stage: "typing",
+      reason:
+        "web, networking.publish: set networking.port too, the port it reaches.",
+    })
+    // Publishing the port web publishes.
+    const both = play(
+      onRow(0, published),
+      K.tab,
+      ...downs(6),
+      K.enter,
+      ...typing("80"),
+      K.enter
+    ).state
+    expect(settingsScreen(both).change).toMatchObject({
+      stage: "typing",
+      reason: "worker, networking.publish: web publishes the same port.",
+    })
+  })
+
+  test("picking: ↑ ↓ move, enter chooses and asks, esc closes", () => {
+    const picking = play(onRow(2), K.enter).state
+    expect(
+      settingsScreen(play(picking, K.down, K.enter).state).change
+    ).toMatchObject({
+      stage: "asking",
+      typed: "always",
+      now: "on failure",
+      next: { value: "always", shown: "always" },
+    })
+    expect(
+      settingsScreen(play(picking, K.up, K.up, K.up).state).change?.pick
+    ).toBe(0)
+    // The rule it has: nothing to write.
+    expect(settingsScreen(play(picking, K.enter).state).change).toBeUndefined()
+    const left = play(picking, K.esc).state
+    expect(settingsScreen(left).change).toBeUndefined()
+  })
+
+  test("asking: y asks to write with the path, the value and the SHA-256 the change was opened on; n, enter and esc write nothing", () => {
+    const asking = memoryTyped("1g").state
+    expect(settingsScreen(asking).change).toMatchObject({
+      stage: "asking",
+      now: "512m",
+      next: { value: "1g", shown: "1g" },
+    })
+    const yes = play(asking, text("y"))
+    expect(yes.effects).toEqual([
+      {
+        kind: "write-setting",
+        server: "prod",
+        app: "demo",
+        path: { service: "web", key: "memory" },
+        value: "1g",
+        sha256: SHA,
+      },
+    ])
+    expect(settingsScreen(yes.state).change).toBeUndefined()
+    // A second y, typed ahead, finds no question and writes nothing more.
+    expect(play(yes.state, text("y")).effects).toEqual([])
+    for (const no of [text("n"), K.enter, K.esc]) {
+      const step = play(asking, no)
+      expect(step.effects).toEqual([])
+      expect(settingsScreen(step.state).change).toBeUndefined()
+    }
+    // A key that is not an answer does nothing; q does not quit; Ctrl-C does.
+    for (const other of [
+      text("Y"),
+      text("q"),
+      text("d"),
+      text("?"),
+      K.down,
+      K.tab,
+    ])
+      expect(update(asking, other)).toEqual({ state: asking, effects: [] })
+    expect(play(asking, K.ctrlC).state.exiting).toBe(true)
+  })
+
+  test("the SHA-256 written against is the one the change was opened on, even when the file was read again since", () => {
+    const asking = memoryTyped("1g").state
+    const reread = play(
+      asking,
+      settingsRead(withMemory(DESIGN_SETTINGS, "2g"), {
+        sha256: "c".repeat(64),
+      })
+    ).state
+    expect(effectsOf(reread, text("y"))).toMatchObject([
+      { kind: "write-setting", sha256: SHA },
+    ])
+  })
+
+  test("esc at any stage closes the change; while one is open the tick reads nothing", () => {
+    for (const open of [
+      play(onMemory(), K.enter).state,
+      memoryTyped("lots").state,
+      memoryTyped("1g").state,
+      play(onRow(2), K.enter).state,
+    ]) {
+      expect(refreshAllowed(open)).toBe(false)
+      expect(effectsOf(open, { type: "tick" })).toEqual([])
+      const closed = play(open, K.esc)
+      expect(settingsScreen(closed.state).change).toBeUndefined()
+      expect(closed.effects).toEqual([])
+      expect(refreshAllowed(closed.state)).toBe(true)
+    }
+  })
+
+  test("written: the file is read again; refused: the line says why and the file is read again", () => {
+    const written = play(memoryTyped("1g").state, text("y"), {
+      type: "setting-written",
+      server: "prod",
+      app: "demo",
+    })
+    expect(written.effects).toEqual([
+      expect.objectContaining({ kind: "write-setting" }),
+      { kind: "read-settings", server: "prod", app: "demo", deployed: false },
+    ])
+    expect(settingsScreen(written.state).change).toBeUndefined()
+    const notice = {
+      tone: "error" as const,
+      text: "zekno.app.json changed since zekno read it, so nothing was written. Try again.",
+    }
+    const refused = play(memoryTyped("1g").state, text("y"), {
+      type: "setting-refused",
+      server: "prod",
+      app: "demo",
+      notice,
+    })
+    expect(refused.state.notice).toEqual(notice)
+    expect(refused.effects.at(-1)).toEqual({
+      kind: "read-settings",
+      server: "prod",
+      app: "demo",
+      deployed: false,
+    })
+  })
+
+  test("a file that can no longer be shown closes the change; below 80 by 24 the change is kept for when there is room", () => {
+    const open = play(onMemory(), K.enter, ...typing("x")).state
+    const gone = play(open, {
+      type: "settings-read",
+      server: "prod",
+      app: "demo",
+      outcome: {
+        kind: "sentence",
+        sentence:
+          "This folder has no settings file. Run zekno settings init to start one.",
+      },
+    }).state
+    expect(settingsScreen(gone).change).toBeUndefined()
+    expect(textQuestionOpen(gone)).toBe(false)
+    const small = play(open, { type: "resize", columns: 70, rows: 20 }).state
+    expect(update(small, text("y"))).toEqual({ state: small, effects: [] })
+    const back = play(small, { type: "resize", columns: 100, rows: 30 }).state
+    expect(settingsScreen(back).change).toEqual(settingsScreen(open).change)
+  })
+
+  test("a secret is a name: the secrets row types names, never a value", () => {
+    const secrets = play(
+      onRow(7),
+      K.enter,
+      ...erase(40),
+      ...typing("A, B"),
+      K.enter
+    ).state
+    expect(settingsScreen(secrets).change).toMatchObject({
+      path: { service: "web", key: "secrets" },
+      next: { value: "A, B", shown: "A, B" },
+    })
   })
 })

@@ -278,3 +278,40 @@ program.
 9. **A deploy that ends** with a settings screen of that app anywhere in the stack reads the last
    deploy again (`read-settings` with `deployed: true`), so its marks are right when the person
    comes back to it from the deploy screen.
+
+### Changing a value (US3)
+
+10. **The SHA-256 a write is checked against** is kept in the change itself (`ScreenChange.sha256`,
+    not in data-model.md's type): the file's as it was when the change was opened. A read that
+    comes in while the change is open does not move it, so a change confirmed after the file was
+    edited elsewhere is refused with CS12 whatever was read meanwhile.
+11. **`next.value` is the value as typed** (a string; undefined removes the setting), not the
+    value read: the effect applies it to the file as read again with `applyChange`, exactly as
+    `zekno settings set` applies its argument.
+12. **`y` closes the box at once** and asks for the write; the result reads the file again
+    (written: the new value with its mark; refused: the reason on the status line). A second `y`
+    typed ahead finds no question and writes nothing. `n`, `enter` and `esc` close it with nothing
+    written, so a key typed ahead never writes (the app's own rule for its y/N questions).
+13. **A symbolic link is never written through.** The reader follows a link that stays inside its
+    folder, so the write effect looks at the file's own name (`lstat`) and refuses a link with
+    CS13, the file it leads to untouched. Then the bytes must be those the change was opened on
+    (CS12); the settings writer checks them once more right before the rename.
+14. **The typed question** is drawn as on the board, the question bold (`TextQuestion` draws it
+    in the text colour, so the line is built from pieces in its look). A value longer than about
+    two lines of the box shows its end after `…`, so the cursor stays in view; up to 4096
+    characters can be typed (a list of secret names, 256 × 130).
+15. **The box's title** `Change a setting  <svc> · <label>` is its first line inside the box, as
+    on the board, not in the top border as `Confirm` draws its title. The box's border is
+    `Confirm`'s round border, in the brand colour. `now` and `new` are padded to 5; a value goes
+    on under itself and takes at most 3 lines, the last ending with `…`. The board's 6 px between
+    the box's lines are no empty line.
+16. **The list of restart rules** is drawn as a list of single commands draws a row with no detail:
+    two spaces, the marker, the rule bold when chosen and faint when not.
+17. **`n keep <now>`**: a value wider than 24 columns is cut with `…` in the hint line.
+18. **While a change is open** only its own keys and Ctrl-C do anything, as with every question
+    of the app: `q` and `?` do nothing while picking or asking, and type into the value while
+    typing. The section's rows are a window as well when they do not fit (a service can have 128
+    plain variables). The pane's border is faint and its title bold in the text colour (`Pane`'s
+    new `dimTitle`).
+19. **A read that can no longer show settings** (the file was removed, or now has a fault) closes
+    an open change; the sentence stands in the settings' place.

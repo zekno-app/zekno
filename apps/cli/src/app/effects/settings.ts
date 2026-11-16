@@ -15,8 +15,8 @@
  * leaves it.
  */
 import type { TeamTrust } from "@workspace/core"
-import { existsSync } from "node:fs"
-import { join } from "node:path"
+import { existsSync, lstatSync } from "node:fs"
+import { join, resolve } from "node:path"
 
 import { CliError } from "../../cli/errors"
 import { profileStore, type Server } from "../../profile/profile"
@@ -24,12 +24,27 @@ import type { ComposeSource } from "../../project/compose-read"
 import { DEFAULT_COMPOSE, findProject } from "../../project/file"
 import { standingOf } from "../../project/signed"
 import { sanitize } from "../../server/sanitize"
+import { applyChange } from "../../settings/change"
 import { composeText, deployedSettings } from "../../settings/compose"
-import { isSettingsFile, readSettingsFile } from "../../settings/file"
+import {
+  isSettingsFile,
+  readSettingsFile,
+  SETTINGS_FILE,
+} from "../../settings/file"
 import { screenRows } from "../../settings/rows"
 import { chooseSource } from "../../settings/source"
 import type { Settings } from "../../settings/types"
-import { AS6, CS6, laterSentences, SH1, SH2 } from "../../settings/words"
+import {
+  AS6,
+  CS12,
+  CS13,
+  CS6,
+  laterSentences,
+  SH1,
+  SH2,
+} from "../../settings/words"
+import { writeSettings } from "../../settings/write"
+import type { Notice } from "../../shared/notice"
 import { lastDeployedCompose } from "../../shared/views"
 import type { Effect } from "../state/events"
 import type { SettingsView } from "../state/types"
@@ -201,5 +216,64 @@ export function createSettings(context: Context) {
     })
   }
 
-  return { read }
+  /**
+   * Writes one change from the settings screen (contracts/app-screen.md,
+   * "Changing a value", step 4), as `zekno settings set` writes it: the file
+   * `d` would deploy is read again, and must be the very bytes the change was
+   * made on (its SHA-256) and a file of its own, not a symbolic link; the
+   * change is checked whole again and written by the settings writer, which
+   * checks the bytes once more right before it puts the new file in place.
+   * Every refusal says why, and the file is then as it was. Nothing is
+   * deployed, and nothing contacts a server (FR-025).
+   */
+  function write(effect: Extract<Effect, { kind: "write-setting" }>): void {
+    const { server, app } = effect
+    const refuse = (tone: Notice["tone"], text: string) =>
+      dispatch({ type: "setting-refused", server, app, notice: { tone, text } })
+    try {
+      const found = settingsFor(ops.cwd, deps.home, server, app, trustKnown())
+      if (found.kind === "sentence") return refuse("error", found.sentence)
+      const read = readSettingsFile(found.source, ops.cwd)
+      if (isLink(namedPath(found.source)))
+        return refuse("error", CS13(read.shown))
+      if (read.sha256 !== effect.sha256)
+        return refuse("error", CS12(read.shown))
+      const change = applyChange(
+        read.settings,
+        effect.path,
+        effect.value,
+        read.shown
+      )
+      if ("refused" in change)
+        return refuse(change.status === 0 ? "info" : "error", change.refused)
+      writeSettings(read, change.settings)
+      dispatch({ type: "setting-written", server, app })
+    } catch (error) {
+      if (error instanceof CliError) return refuse("error", error.message)
+      throw error
+    }
+  }
+
+  return { read, write }
+}
+
+/** The settings file as its folder names it, before any link in its place is followed. */
+function namedPath(source: ComposeSource): string {
+  switch (source.kind) {
+    case "default":
+      return join(source.folder, SETTINGS_FILE)
+    case "project":
+      return resolve(source.link.folder, source.link.compose)
+    case "given":
+      return source.path
+  }
+}
+
+/** Whether a path is a symbolic link itself. */
+function isLink(path: string): boolean {
+  try {
+    return lstatSync(path).isSymbolicLink()
+  } catch {
+    return false
+  }
 }

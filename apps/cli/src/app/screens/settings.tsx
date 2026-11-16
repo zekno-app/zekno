@@ -3,7 +3,8 @@
  * board `AppSettings`): the Services pane, 22 columns wide, and the shown
  * service's settings in sections beside it, every setting a row, set or not,
  * with what changed since this machine's last deploy marked. In place of the
- * two panes, one pane holds a sentence when there are no settings to show.
+ * two panes, one pane holds a sentence when there are no settings to show;
+ * while a change is open, the pane of the change (settings-change.tsx).
  *
  * Every line is broken before it is drawn (settings-layout.ts), so the rows
  * that do not fit are a window that keeps the selected row in view, with
@@ -16,11 +17,9 @@ import type { ReactNode } from "react"
 import type { SettingRow } from "../../settings/types"
 import { AS1, AS2 } from "../../settings/words"
 import type { RunState } from "../../shared/views"
-import { firstSentence, listWindow, moreLine } from "../../ui/ink/questions"
-import type { Piece } from "../../ui/ink/wrap"
+import { firstSentence, listWindow } from "../../ui/ink/questions"
 import type { KeyHint } from "../../ui/parts/key-hints"
 import { clampIndex } from "../../ui/parts/select"
-import { useTheme } from "../../ui/terminal/theme"
 import { Frame, Header, Trail } from "../frame"
 import {
   settingsViewOf,
@@ -31,61 +30,25 @@ import type { State } from "../state/types"
 import { APP_WIDE } from "./app"
 import { Marker, Pane, Rule, StateCell } from "./parts"
 import { HINTS } from "./placeholder"
+import { ChangePane, changeHints } from "./settings-change"
 import {
   bodyRows,
   cut,
-  labelWidth,
-  lineOfRow,
   linesOf,
-  rowLines,
   SENTENCE_HINTS,
   SERVICES_INNER,
   SERVICES_WIDTH,
   serviceInner,
   statusRows,
-  type RowLine,
 } from "./settings-layout"
-
-/** One line of pieces, each in its look, never wrapped again. */
-export function PieceLine({ pieces }: { pieces: readonly Piece[] }) {
-  return (
-    <Text wrap="truncate-end">
-      {pieces.map((piece, index) => (
-        <Text
-          key={index}
-          bold={piece.bold === true}
-          dimColor={piece.dim === true}
-          color={piece.color}
-          inverse={piece.inverse === true}
-        >
-          {piece.text}
-        </Text>
-      ))}
-    </Text>
-  )
-}
-
-/** Lines already broken (`linesOf`), one under the other. */
-export function Lines({ lines }: { lines: readonly (readonly Piece[])[] }) {
-  return (
-    <Box flexDirection="column" flexShrink={0}>
-      {lines.map((pieces, index) => (
-        <PieceLine key={index} pieces={pieces} />
-      ))}
-    </Box>
-  )
-}
-
-/** The `↑ <n> more` or `↓ <n> more` line of a window, faint, when lines are hidden that way. */
-const More = ({ direction, count }: { direction: "↑" | "↓"; count: number }) =>
-  count > 0 ? <Text dimColor>{moreLine(direction, count)}</Text> : null
+import { Lines, More, RowWindow } from "./settings-rows"
 
 /**
  * The header's right side, as the app screen draws it: the app's state and,
  * at 100 columns and more, the deploy its runner holds (or this machine's
  * latest it accepted).
  */
-export function AppState({
+function AppState({
   state,
   server,
   app,
@@ -158,70 +121,6 @@ function ServicesPane({
   )
 }
 
-/** One line of a service's rows: a section's heading, bold, or a row's line with its marker and label. */
-export function RowLineView({
-  line,
-  selected,
-  label,
-}: {
-  line: RowLine
-  selected: number
-  label: number
-}) {
-  if (line.kind === "heading") return <Text bold>{line.text}</Text>
-  const at = line.row === selected && line.label !== undefined
-  return (
-    <Box>
-      <Marker selected={at} />
-      <Box width={label} flexShrink={0}>
-        <Text bold={at} dimColor={!at}>
-          {line.label ?? ""}
-        </Text>
-      </Box>
-      <PieceLine pieces={line.pieces} />
-    </Box>
-  )
-}
-
-/**
- * Lines of rows in `height` lines: all of them when they fit, else a window
- * that keeps the selected row's first line in view, with the `more` lines.
- */
-export function RowWindow({
-  rows,
-  selected,
-  inner,
-  height,
-}: {
-  rows: readonly SettingRow[]
-  selected: number
-  inner: number
-  height: number
-}) {
-  const theme = useTheme()
-  const lines = rowLines(rows, inner, theme.warning)
-  const label = labelWidth(rows, inner)
-  const shown = listWindow(
-    lines.length,
-    lineOfRow(lines, selected),
-    Math.max(1, height)
-  )
-  return (
-    <Box flexDirection="column" flexShrink={0}>
-      <More direction="↑" count={shown.above} />
-      {lines.slice(shown.from, shown.to).map((line, offset) => (
-        <RowLineView
-          key={shown.from + offset}
-          line={line}
-          selected={selected}
-          label={label}
-        />
-      ))}
-      <More direction="↓" count={shown.below} />
-    </Box>
-  )
-}
-
 /** The shown service: its name and the file on its first line, its rows in sections, and AS1 under a rule. */
 function ServicePane({
   name,
@@ -273,9 +172,10 @@ function SentencePane({ first, rest }: { first: string; rest: string }) {
 }
 
 /**
- * Board `AppSettings` and the states no board shows (contracts/app-screen.md):
- * the settings of the app on the screen below, as this folder's settings
- * file holds them, or one sentence in their place.
+ * Board `AppSettings`, board `AppSettingsEdit` while a change is open, and
+ * the states no board shows (contracts/app-screen.md): the settings of the
+ * app on the screen below, as this folder's settings file holds them, or one
+ * sentence in their place.
  */
 export function SettingsScreen({
   state,
@@ -318,16 +218,32 @@ export function SettingsScreen({
       </Frame>
     )
   }
-  const hints: readonly KeyHint[] = HINTS.settings
+  const { change } = screen
+  const hints: readonly KeyHint[] =
+    outcome && change ? changeHints(change) : HINTS.settings
   const body = bodyRows(
     { columns, rows },
     statusRows(state, columns - 2),
     hints
   )
-  const inner = serviceInner(columns)
   const services = outcome?.report.services ?? []
   const shown = outcome ? serviceAt(outcome, screen) : 0
   const service = services[shown]
+  const serviceRows = outcome ? rowsOf(outcome, screen) : []
+  if (outcome && service && change) {
+    return (
+      <Frame header={header} hints={hints} status={status}>
+        <ChangePane
+          read={outcome}
+          service={service.name}
+          rows={serviceRows}
+          change={change}
+          columns={columns}
+          body={body}
+        />
+      </Frame>
+    )
+  }
   return (
     <Frame header={header} hints={hints} status={status}>
       <Box flexGrow={1} columnGap={1}>
@@ -340,9 +256,9 @@ export function SettingsScreen({
           <ServicePane
             name={service.name}
             file={outcome.report.file}
-            rows={rowsOf(outcome, screen)}
-            selected={clampIndex(screen.row, rowsOf(outcome, screen).length)}
-            inner={inner}
+            rows={serviceRows}
+            selected={clampIndex(screen.row, serviceRows.length)}
+            inner={serviceInner(columns)}
             height={body}
           />
         ) : (

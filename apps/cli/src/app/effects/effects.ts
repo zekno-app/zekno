@@ -161,6 +161,9 @@ export function createEffects(
         case "read-settings":
           void perform(async () => settings.read(effect))
           return
+        case "write-setting":
+          void perform(async () => settings.write(effect))
+          return
       }
     },
     checkServers: servers.checkServers,

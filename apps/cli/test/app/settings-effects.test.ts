@@ -1,14 +1,19 @@
 /**
  * The settings screen's effects (specs/010-app-settings,
- * contracts/app-screen.md, "Tests"; tasks T043): reading this folder's
- * settings for an app, in a folder of each kind, and the marks against this
- * machine's last deploy. The app is started as `zekno` starts it (the
- * keychain read once, by `loadStart`); after that a key store and a
- * connection that fail are given, so a read that touched either would show.
+ * contracts/app-screen.md, "Tests"; tasks T043 and T057): reading this
+ * folder's settings for an app, in a folder of each kind, and the marks
+ * against this machine's last deploy; writing a change, and every way a
+ * write is refused. The app is started as `zekno` starts it (the keychain
+ * read once, by `loadStart`); after that a key store and a connection that
+ * fail are given, so an effect that touched either would show.
  */
 import { describe, expect, test } from "bun:test"
 import {
+  chmodSync,
+  copyFileSync,
   mkdirSync,
+  readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   truncateSync,
@@ -16,10 +21,13 @@ import {
 } from "node:fs"
 import { join } from "node:path"
 
+import { createStore, type Store } from "../../src/app/app"
 import { createEffects } from "../../src/app/effects/effects"
 import { faultOf } from "../../src/app/effects/settings"
 import { loadStart } from "../../src/app/effects/profile"
 import type { AppEvent, Effect } from "../../src/app/state/events"
+import { top } from "../../src/app/state/reading"
+import { initialState } from "../../src/app/state/state"
 import type { SettingsView } from "../../src/app/state/types"
 import { openTeam } from "../../src/cli/context"
 import { writeLink } from "../../src/ops/link"
@@ -33,7 +41,7 @@ import {
   DESIGN_SETTINGS,
   SENTINEL,
 } from "../support/settings-files"
-import { withMemory } from "../support/settings-view"
+import { K, text, typing, withMemory } from "../support/settings-view"
 
 type Machine = ReturnType<typeof machine>
 type Outcome = SettingsView["outcome"]
@@ -364,5 +372,225 @@ describe("a fault's sentences", () => {
       first: "No settings file at zekno.app.json.",
       rest: "",
     })
+  })
+})
+
+/**
+ * The settings screen of demo on dev, in the app as it runs: the reducer and
+ * the effects together, the keychain and every connection failing after the
+ * start. `press` gives keys and waits for what they asked for.
+ */
+async function screenIn(m: Machine) {
+  const start = await loadStart(m.deps)
+  if (start.kind !== "team") throw new Error(start.kind)
+  const touched = { keychain: 0, servers: 0 }
+  const events: AppEvent[] = []
+  const effectsRun: Effect[] = []
+  const box: { store?: Store } = {}
+  const effects = createEffects(
+    {
+      ...m.deps,
+      keyStore: {
+        ...m.keyStore,
+        get: async () => {
+          touched.keychain++
+          return Promise.reject(new Error("the keychain was read"))
+        },
+      },
+      connect: () => {
+        touched.servers++
+        throw new Error("a server was contacted")
+      },
+    },
+    (event) => {
+      events.push(event)
+      box.store!.dispatch(event)
+    },
+    (error) => {
+      throw error
+    },
+    undefined,
+    {},
+    start
+  )
+  const base = initialState(start, { columns: 100, rows: 30 })
+  const store = createStore(
+    {
+      ...base,
+      stack: [
+        ...base.stack,
+        {
+          name: "app",
+          server: "dev",
+          app: "demo",
+          pane: "deploys",
+          deploy: 0,
+          secret: 0,
+        },
+      ],
+    },
+    (effect) => {
+      effectsRun.push(effect)
+      if (effect.kind !== "exit") effects.run(effect)
+    }
+  )
+  box.store = store
+  const press = async (...keys: AppEvent[]) => {
+    for (const key of keys) store.dispatch(key)
+    await Bun.sleep(20)
+  }
+  await press(text("e"))
+  return { store, events, effectsRun, press, touched }
+}
+
+const settingsFile = (m: Machine) => join(m.project, "zekno.app.json")
+/** The memory row of web, opened, emptied, `value` typed and checked: the question y/N is open. */
+const memoryTo = (value: string): AppEvent[] => [
+  K.down,
+  K.down,
+  K.down,
+  K.enter,
+  K.backspace,
+  K.backspace,
+  ...typing(value),
+  K.enter,
+]
+/** The last refusal of a write, if there was one. */
+const refusal = (events: AppEvent[]) =>
+  events.filter((event) => event.type === "setting-refused").at(-1)
+
+describe("writing", () => {
+  test("y writes the file with that one change, says so, and the screen reads it again and shows it; nothing is deployed", async () => {
+    const m = await empty()
+    writeFileSync(settingsFile(m), DESIGN_FILE)
+    const app = await screenIn(m)
+    await app.press(...memoryTo("2g"))
+    const asking = top(app.store.get())
+    expect(asking.name === "settings" && asking.change?.stage).toBe("asking")
+    const before = app.events.length
+    await app.press(text("y"))
+    const after = app.events.slice(before).map((event) => event.type)
+    expect(after).toEqual(["setting-written", "settings-read"])
+    // The file is design.md's with exactly one line changed.
+    const written = readFileSync(settingsFile(m), "utf8")
+    const was = DESIGN_FILE.split("\n")
+    const now = written.split("\n")
+    expect(now.length).toBe(was.length)
+    expect(
+      now.flatMap((line, at) => (line === was[at] ? [] : [[was[at], line]]))
+    ).toEqual([['        "memory": "1g",', '        "memory": "2g",']])
+    // The screen shows the new value.
+    const view = app.store.get().settingsView
+    const memory =
+      view?.outcome.kind === "read"
+        ? view.outcome.report.services[0]!.rows.find(
+            (row) => row.label === "memory"
+          )
+        : undefined
+    expect(memory?.shown).toBe("2g")
+    // Nothing was deployed, and neither the keychain nor a server was asked.
+    expect(app.effectsRun.map((effect) => effect.kind)).not.toContain("deploy")
+    expect(app.touched).toEqual({ keychain: 0, servers: 0 })
+    // No temporary file is left beside it.
+    expect(readdirSync(m.project).sort()).toEqual(["zekno.app.json"])
+  })
+
+  test("removing a setting: an empty answer, then y", async () => {
+    const m = await empty()
+    writeFileSync(settingsFile(m), DESIGN_FILE)
+    const app = await screenIn(m)
+    await app.press(...memoryTo(""), text("y"))
+    expect(readFileSync(settingsFile(m), "utf8")).not.toContain('"memory"')
+    expect(refusal(app.events)).toBeUndefined()
+  })
+
+  test("the file edited elsewhere while the screen is open: the next refresh shows what it holds now", async () => {
+    const m = await empty()
+    writeFileSync(settingsFile(m), DESIGN_FILE)
+    const app = await screenIn(m)
+    writeFileSync(settingsFile(m), DESIGN_FILE.replace('"1g"', '"3g"'))
+    await app.press({ type: "tick" })
+    const view = app.store.get().settingsView
+    expect(
+      view?.outcome.kind === "read" &&
+        view.outcome.settings.services[0]![1].memory
+    ).toBe("3g")
+  })
+
+  test("the file edited elsewhere while a change is being confirmed: y writes nothing, CS12, and the other edit is kept", async () => {
+    const m = await empty()
+    writeFileSync(settingsFile(m), DESIGN_FILE)
+    const app = await screenIn(m)
+    await app.press(...memoryTo("2g"))
+    const edited = DESIGN_FILE.replace('"bun run start"', '"bun run serve"')
+    writeFileSync(settingsFile(m), edited)
+    await app.press(text("y"))
+    expect(refusal(app.events)).toEqual({
+      type: "setting-refused",
+      server: "dev",
+      app: "demo",
+      notice: {
+        tone: "error",
+        text: "zekno.app.json changed since zekno read it, so nothing was written. Try again.",
+      },
+    })
+    expect(readFileSync(settingsFile(m), "utf8")).toBe(edited)
+    // The line says why, the change is closed, and the screen shows the file as it is now.
+    const state = app.store.get()
+    expect(state.notice?.text).toContain("changed since zekno read it")
+    const screen = top(state)
+    expect(screen.name === "settings" && screen.change).toBeUndefined()
+    expect(
+      state.settingsView?.outcome.kind === "read" &&
+        state.settingsView.outcome.settings.services[0]![1].start
+    ).toBe("bun run serve")
+  })
+
+  test("a file now a symbolic link is not written through, CS13; the file it leads to is as it was", async () => {
+    const m = await empty()
+    writeFileSync(settingsFile(m), DESIGN_FILE)
+    const app = await screenIn(m)
+    await app.press(...memoryTo("2g"))
+    copyFileSync(settingsFile(m), join(m.project, "copy.json"))
+    rmSync(settingsFile(m))
+    symlinkSync("copy.json", settingsFile(m))
+    await app.press(text("y"))
+    expect(refusal(app.events)?.notice).toEqual({
+      tone: "error",
+      text: "zekno.app.json is a symbolic link. zekno changes it only as a file of its own.",
+    })
+    expect(readFileSync(join(m.project, "copy.json"), "utf8")).toBe(DESIGN_FILE)
+  })
+
+  test("a folder that cannot be written to: CS14, and the file as it was", async () => {
+    const m = await empty()
+    writeFileSync(settingsFile(m), DESIGN_FILE)
+    const app = await screenIn(m)
+    await app.press(...memoryTo("2g"))
+    chmodSync(m.project, 0o555)
+    try {
+      await app.press(text("y"))
+    } finally {
+      chmodSync(m.project, 0o755)
+    }
+    expect(refusal(app.events)?.notice).toEqual({
+      tone: "error",
+      text: "Could not write zekno.app.json.",
+    })
+    expect(readFileSync(settingsFile(m), "utf8")).toBe(DESIGN_FILE)
+    expect(app.touched).toEqual({ keychain: 0, servers: 0 })
+  })
+
+  test("enter, n and esc at the question write nothing", async () => {
+    const m = await empty()
+    writeFileSync(settingsFile(m), DESIGN_FILE)
+    const app = await screenIn(m)
+    for (const no of [K.enter, text("n"), K.esc]) {
+      await app.press(...memoryTo("2g"), no, K.up, K.up, K.up)
+      expect(readFileSync(settingsFile(m), "utf8")).toBe(DESIGN_FILE)
+    }
+    expect(
+      app.effectsRun.filter((effect) => effect.kind === "write-setting")
+    ).toEqual([])
   })
 })

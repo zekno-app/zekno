@@ -23,6 +23,8 @@ import {
   opened,
   play,
   settingsRead,
+  typing,
+  withMemory,
 } from "../support/settings-view"
 
 /** The window as the app draws it. */
@@ -388,5 +390,169 @@ describe("the screen keeps its state", () => {
     const state = play(board(), K.esc).state
     expect(top(state).name).toBe("app")
     expect(draw(state).join("\n")).toContain("Deploys")
+  })
+})
+
+/** The settings of the board AppSettingsEdit: design.md's file with web's memory at 512m, as deployed. */
+const EDIT = withMemory(DESIGN_SETTINGS, "512m")
+/** The memory row of the board, opened and emptied, `value` typed, and enter. */
+const memory = (size = { columns: 100, rows: 30 }, value?: string) =>
+  play(
+    opened(size),
+    settingsRead(EDIT, { deployed: EDIT }),
+    K.down,
+    K.down,
+    K.down,
+    K.enter,
+    ...(value === undefined
+      ? []
+      : [
+          ...Array.from({ length: 4 }, () => K.backspace),
+          ...typing(value),
+          K.enter,
+        ])
+  ).state
+
+/** A line of the one pane at 100 columns: 94 columns inside. */
+const onePane = (inside: string) => ` │ ${inside.padEnd(94)} │`
+/** A line of the change box inside it: 90 columns inside. */
+const inBox = (inside: string) => onePane(`│ ${inside.padEnd(90)} │`)
+
+describe("changing a value (board AppSettingsEdit)", () => {
+  test("asking, 512m to 1g, line by line: one pane, the Deploy section, the box at its foot, the hints", () => {
+    const lines = draw(memory(undefined, "1g"))
+    expect(lines[2]).toContain("› prod › demo › settings")
+    expect(lines.join("\n")).not.toContain("Services")
+    expect(lines.slice(4, 27)).toEqual([
+      ` ╭${"─".repeat(96)}╮`,
+      onePane(`web${" ".repeat(77)}zekno.app.json`),
+      onePane("Deploy"),
+      onePane(row("start", "bun run start")),
+      onePane(row("restart", "on failure")),
+      onePane(row("memory", "512m", true)),
+      onePane(row("cpus", "1")),
+      ...Array.from({ length: 9 }, () => onePane("")),
+      onePane(`╭${"─".repeat(92)}╮`),
+      inBox("Change a setting  web · memory limit"),
+      inBox("now  512m"),
+      inBox("new  1g"),
+      inBox(
+        "? Write this to zekno.app.json? Nothing is deployed until you deploy. (y/N)"
+      ),
+      onePane(`╰${"─".repeat(92)}╯`),
+      ` ╰${"─".repeat(96)}╯`,
+    ])
+    expect(lines.slice(27)).toEqual([
+      "",
+      "",
+      " y write it  n keep 512m  esc back",
+    ])
+    fits(lines, 100, 30)
+  })
+
+  test("typing: the question with the value filled in and the cursor; a refused value's rule under it, set in by two columns", () => {
+    const open = draw(memory()).join("\n")
+    expect(open).toContain(inBox("? Memory limit › 512m"))
+    expect(draw(memory()).at(-1)).toBe(" enter next  esc back")
+    const refused = draw(memory(undefined, "lots")).join("\n")
+    expect(refused).toContain(inBox("? Memory limit › lots"))
+    expect(refused).toContain(inBox("  Use a size such as 512m or 1g."))
+  })
+
+  test("picking restart: the question and the three rules, the marker on the one chosen", () => {
+    const state = play(
+      opened(),
+      settingsRead(EDIT),
+      K.down,
+      K.down,
+      K.enter
+    ).state
+    const lines = draw(state)
+    const text = lines.join("\n")
+    expect(text).toContain(inBox("Change a setting  web · restart rule"))
+    expect(text).toContain(inBox("? Restart rule"))
+    expect(text).toContain(inBox("    no"))
+    expect(text).toContain(inBox("  ❯ on failure"))
+    expect(text).toContain(inBox("    always"))
+    expect(lines.at(-1)).toBe(" ↑↓ move  enter choose  esc back")
+  })
+
+  test("a value that is not set reads in its words; a long value's end is shown, with the cursor", () => {
+    const worker = play(
+      opened(),
+      settingsRead(EDIT),
+      K.tab,
+      K.down,
+      K.down,
+      K.down,
+      K.enter,
+      ...typing("2g"),
+      K.enter
+    ).state
+    const text = draw(worker).join("\n")
+    expect(text).toContain(inBox("Change a setting  worker · memory limit"))
+    expect(text).toContain(inBox("now  no limit"))
+    expect(text).toContain(inBox("new  2g"))
+    expect(draw(worker).at(-1)).toBe(" y write it  n keep no limit  esc back")
+    const long = play(
+      opened(),
+      settingsRead(EDIT),
+      K.down,
+      K.enter,
+      ...typing(` ${"word ".repeat(80)}end`)
+    ).state
+    const drawn = draw(long)
+    fits(drawn, 100, 30)
+    expect(drawn.join("\n")).toContain("end")
+  })
+
+  for (const [name, state] of [
+    ["typing", () => memory({ columns: 80, rows: 24 })],
+    ["refused", () => memory({ columns: 80, rows: 24 }, "lots")],
+    ["asking", () => memory({ columns: 80, rows: 24 }, "1g")],
+    [
+      "picking",
+      () =>
+        play(
+          opened({ columns: 80, rows: 24 }),
+          settingsRead(EDIT),
+          K.down,
+          K.down,
+          K.enter
+        ).state,
+    ],
+  ] as const) {
+    test(`80 by 24, ${name}: it fits, the row being changed is drawn, and the box is whole`, () => {
+      const lines = draw(state(), 80, 24)
+      fits(lines, 80, 24)
+      const text = lines.join("\n")
+      expect(text).toMatch(/❯ (memory|restart)/)
+      expect(text).toContain("Change a setting  web ·")
+      expect(lines.filter((line) => line.includes("╰")).length).toBe(2)
+    })
+  }
+
+  test("colours: the box's border and ? in the brand colour, the pane's border faint, the new value bold, the rule refused in the warning colour", () => {
+    for (const [background, brand] of [
+      ["dark", BRAND],
+      ["light", BRAND_DARKER],
+    ] as const) {
+      const asking = drawnInColour(memory(undefined, "1g"), background).split(
+        "\n"
+      )
+      expect(asking[4]).toMatch(/\x1b\[2m╭/)
+      expect(
+        asking.find((line) => line.includes("Change a setting"))
+      ).toContain("\x1b[1mChange a setting")
+      // The box's top border: the second line that opens a box.
+      const boxTop = asking.find((line, at) => at > 4 && line.includes("╭"))!
+      expect(boxTop).toContain(`\x1b[${rgb(brand)}m╭`)
+      expect(asking.find((line) => line.includes("new"))).toContain("\x1b[1m1g")
+      expect(asking.find((line) => line.includes("(y/N)"))).toContain(
+        `\x1b[${rgb(brand)}m?`
+      )
+      const refused = drawnInColour(memory(undefined, "lots"), background)
+      expect(refused).toContain("\x1b[33mUse a size such as 512m or 1g.")
+    }
   })
 })

@@ -6,8 +6,9 @@
  * back.
  *
  * This part of the reducer never reads or writes the file: it asks for
- * `read-settings`, which effects/settings.ts runs, and takes what it
- * reports.
+ * `read-settings` and `write-setting`, which effects/settings.ts runs, and
+ * takes what they report. A change is opened, typed, checked and asked
+ * about in settings-change.ts, with the pure checks of settings/.
  */
 import { applySelectKey, clampIndex } from "../../ui/parts/select"
 import type { SettingRow } from "../../settings/types"
@@ -22,6 +23,7 @@ import {
   type ReadOutcome,
   type SettingsScreen,
 } from "./reading"
+import { onChange, openChange } from "./settings-change"
 import { go, push, replaceTop, stay, updateScreens } from "./steps"
 import type { SettingsView, State } from "./types"
 
@@ -63,12 +65,15 @@ const deploy = (state: State, screen: SettingsScreen): Step =>
  * The settings screen's keys. On a sentence in place of the settings only
  * `esc`, `?`, `q` and Ctrl-C do anything; before the read comes back, `d`
  * deploys too. What this part leaves (undefined) is help, quit and back.
+ * While a change is open its keys answer it and nothing else does; its
+ * typed value is the reducer's text question (`typeSetting`).
  */
 export function onSettings(
   state: State,
   screen: SettingsScreen,
   key: AppKey
 ): Step | undefined {
+  if (screen.change) return onChange(state, screen, key)
   const read = settingsReadOf(state, screen)
   if (!read) {
     if (isText(key, "d") && !settingsViewOf(state, screen))
@@ -95,13 +100,14 @@ export function onSettings(
   }
   if (key.kind === "enter") {
     const row = rows[clampIndex(screen.row, rows.length)]
+    if (!row) return stay(state)
     // A plain variable or a volume is added with `zekno settings set`; its `none` row says so.
-    if (row && "adding" in row.path)
+    if ("adding" in row.path)
       return stay({
         ...state,
         notice: { tone: "info", text: AS7(row.path.service, row.path.key) },
       })
-    return stay(state)
+    return openChange(state, screen, read, row.path)
   }
   if (isText(key, "d")) return deploy(state, screen)
   return undefined
@@ -109,7 +115,10 @@ export function onSettings(
 
 /**
  * The settings as just read. Each settings screen of that app keeps its
- * service and its row number, within what the file holds now.
+ * service and its row number, within what the file holds now; a change
+ * that was open is closed when the file can no longer be shown. One that
+ * stays open keeps the SHA-256 it was opened on: its write is refused when
+ * the file changed since.
  */
 export function settingsRead(
   state: State,
@@ -123,12 +132,9 @@ export function settingsRead(
   const { outcome } = event
   return stay(
     updateScreens({ ...state, settingsView: view }, "settings", (screen) => {
-      if (
-        screen.server !== event.server ||
-        screen.app !== event.app ||
-        outcome.kind !== "read"
-      )
+      if (screen.server !== event.server || screen.app !== event.app)
         return screen
+      if (outcome.kind !== "read") return { ...screen, change: undefined }
       const service = clampIndex(screen.service, outcome.report.services.length)
       const rows = outcome.report.services[service]?.rows.length ?? 0
       return { ...screen, service, row: clampIndex(screen.row, rows) }

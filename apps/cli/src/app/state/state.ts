@@ -64,6 +64,7 @@ import {
   settingsTick,
   settingWritten,
 } from "./settings"
+import { typeSetting } from "./settings-change"
 import {
   go,
   keep,
@@ -177,6 +178,8 @@ function onTextQuestion(state: State, key: AppKey): Step {
       return typeSecretName(state, screen, input, flags)
     case "logs":
       return typeFilter(state, screen, input, flags)
+    case "settings":
+      return typeSetting(state, screen, input, flags)
     default:
       return stay(state)
   }

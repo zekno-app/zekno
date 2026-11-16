@@ -21,6 +21,12 @@ export const SERVICES_WIDTH = 22
 export const LABEL_WIDTH = 11
 /** The selection marker's column. */
 export const MARKER_WIDTH = 2
+/** The label column of the change's `now` and `new` rows (board `AppSettingsEdit`). */
+export const NOW_WIDTH = 5
+/** The most lines the `now` and `new` values of a change take; a longer value ends with "…". */
+export const VALUE_LINES = 3
+/** The most columns the value after `n keep` takes in the hint line; a longer one ends with "…". */
+export const KEEP_WIDTH = 24
 
 /** A pane's border and padding, on each side together. */
 const PANE_FRAME = 4
@@ -28,9 +34,19 @@ const PANE_FRAME = 4
 /**
  * The hint lines of the settings screen but the one for showing the
  * settings, which is `HINTS.settings` (placeholder.tsx), as
- * contracts/app-screen.md, "Keys", gives them.
+ * contracts/app-screen.md, "Keys", gives them. Asking y/N takes its hints
+ * from the question's answers (state/settings-change.ts, `askChoices`).
  */
 export const SENTENCE_HINTS: readonly KeyHint[] = [["esc", "back"]]
+export const TYPING_HINTS: readonly KeyHint[] = [
+  ["enter", "next"],
+  ["esc", "back"],
+]
+export const PICKING_HINTS: readonly KeyHint[] = [
+  ["↑↓", "move"],
+  ["enter", "choose"],
+  ["esc", "back"],
+]
 
 /**
  * The lines the hint line takes in `width` columns: `KeyHints` keeps each
@@ -82,8 +98,12 @@ export const serviceInner = (columns: number): number =>
 /** The columns inside the Services pane. */
 export const SERVICES_INNER = SERVICES_WIDTH - PANE_FRAME
 
-/** The columns inside the one pane drawn in place of the two. */
+/** The columns inside the one pane drawn in place of the two, or while a change is open. */
 export const wholeInner = (columns: number): number => columns - 2 - PANE_FRAME
+
+/** The columns inside the change's box, in that one pane. */
+export const boxInner = (columns: number): number =>
+  wholeInner(columns) - PANE_FRAME
 
 /** Words broken into lines of `width` columns, as the screen draws them. */
 export const linesOf = (pieces: readonly Piece[], width: number): Piece[][] =>
