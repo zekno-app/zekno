@@ -3,7 +3,9 @@
  * contracts/commands.md, "At a terminal"; contracts/app-screen.md, "Rows";
  * research R9 items 11 and 12): a service's settings as rows in sections,
  * and which differ from this machine's last deploy made from settings
- * ("changed, not deployed", research R4).
+ * ("changed, not deployed", research R4), and what that deploy had and the
+ * file no longer has ("removed, not deployed", security review S3): a
+ * setting no longer set, a plain variable, a volume, a whole service.
  *
  * A value is compared by its meaning: a start command by its words, a
  * processor limit as a number. Nothing is marked when the deployed settings
@@ -135,6 +137,45 @@ function partRow(
   )
 }
 
+/** The settings the last deploy had for `service`, or undefined when not known or it had no such service. */
+const deployedOf = (
+  deployed: Settings | undefined,
+  service: string
+): ServiceSettings | undefined =>
+  deployed?.services.find(([name]) => name === service)?.[1]
+
+/**
+ * One row for each plain variable, or each volume, the last deploy had for
+ * this service and the file no longer has (security review S3), in the
+ * deploy's order: its value reads as a setting left out (`none`), marked
+ * removed with what it was. A plain variable is labelled `plain` only when
+ * no plain row comes before it (`after`); a volume by its name. It adds a
+ * setting, as a `none` row does.
+ */
+function removedRows(
+  service: readonly [string, ServiceSettings],
+  deployed: Settings | undefined,
+  key: "plain" | "volume",
+  after: boolean
+): SettingRow[] {
+  const [name, settings] = service
+  const old = deployedOf(deployed, name)
+  if (old === undefined) return []
+  const listed = (each: ServiceSettings) =>
+    (key === "plain" ? each.plain : each.volumes) ?? []
+  const now = new Set(listed(settings).map(([each]) => each))
+  return listed(old)
+    .filter(([each]) => !now.has(each))
+    .map(([each, value], at) => ({
+      section: key === "plain" ? "Variables" : "Volumes",
+      label: key === "volume" ? sanitize(each) : after || at > 0 ? "" : "plain",
+      path: { service: name, key, adding: true },
+      shown: NOT_SET[key],
+      set: false,
+      removed: { was: sanitize(key === "plain" ? `${each}=${value}` : value) },
+    }))
+}
+
 /** One row per plain variable, `NAME=value`, labelled `plain` on the first only. */
 function plainRows(
   service: readonly [string, ServiceSettings],
@@ -181,15 +222,20 @@ function volumeRows(
 }
 
 /**
- * The rows `zekno settings` prints for one service: only the settings that
- * are set, in the order of the sections; the port with whether it is
- * published (`publish` has no row of its own).
+ * The rows `zekno settings` prints for one service: the settings that are
+ * set, and those the last deploy had and the file no longer has, marked as
+ * the screen marks them, in the order of the sections; the port with
+ * whether it is published (`publish` has no row of its own).
  */
 function reportRows(
   service: readonly [string, ServiceSettings],
   deployed: Settings | undefined
 ): SettingRow[] {
   const [name, settings] = service
+  const old = deployedOf(deployed, name)
+  // A setting no longer set keeps its row when the last deploy had it: the next deploy drops it (security review S3).
+  const shows = (key: keyof ServiceSettings): boolean =>
+    settings[key] !== undefined || old?.[key] !== undefined
   const rows: SettingRow[] = [
     partRow(service, deployed, "Source", "image", "image"),
   ]
@@ -199,18 +245,17 @@ function reportRows(
     ["memory", "Deploy"],
     ["cpus", "Deploy"],
   ] as const)
-    if (settings[key] !== undefined)
-      rows.push(partRow(service, deployed, section, key, key))
-  if (settings.port !== undefined) {
-    const port = settings.port
+    if (shows(key)) rows.push(partRow(service, deployed, section, key, key))
+  if (shows("port")) {
+    const { port, publish } = settings
     rows.push(
       row(
         "Networking",
         "port",
         { service: name, key: "port" },
-        portShown(port, settings.publish),
+        port === undefined ? undefined : portShown(port, publish),
         NOT_SET.port,
-        markOf(deployed, name, [port, settings.publish], (old) => ({
+        markOf(deployed, name, [port, publish], (old) => ({
           value: [old.port, old.publish],
           shown:
             old.port === undefined
@@ -220,19 +265,48 @@ function reportRows(
       )
     )
   }
-  if (settings.secrets !== undefined)
+  if (shows("secrets"))
     rows.push(partRow(service, deployed, "Variables", "secrets", "secrets"))
-  rows.push(...plainRows(service, deployed), ...volumeRows(service, deployed))
+  const plain = plainRows(service, deployed)
+  rows.push(
+    ...plain,
+    ...removedRows(service, deployed, "plain", plain.length > 0),
+    ...volumeRows(service, deployed),
+    ...removedRows(service, deployed, "volume", false)
+  )
   return rows
 }
 
-/** What `zekno settings` shows: every service, its rows that are set, marked against `deployed` when it is known. */
+/**
+ * The services the last deploy had and the file no longer has, each with
+ * the image it ran, in the deploy's order (security review S3): the next
+ * deploy stops them. None when the last deploy is not known.
+ */
+export function removedServices(
+  settings: Settings,
+  deployed?: Settings
+): { name: string; was: string }[] {
+  const now = new Set(settings.services.map(([name]) => name))
+  return (deployed?.services ?? [])
+    .filter(([name]) => !now.has(name))
+    .map(([name, service]) => ({
+      name: sanitize(name),
+      was: sanitize(service.image),
+    }))
+}
+
+/**
+ * What `zekno settings` shows: every service, its rows that are set or were
+ * deployed, marked against `deployed` when it is known, and the services it
+ * no longer has.
+ */
 export function reportOf(
   settings: Settings,
   deployed?: Settings,
   app?: string,
   file = SETTINGS_FILE
 ): SettingsReport {
+  const removed = removedServices(settings, deployed)
   return {
     ...(app === undefined ? {} : { app }),
     file,
@@ -240,13 +314,17 @@ export function reportOf(
       name: service[0],
       rows: reportRows(service, deployed),
     })),
+    ...(removed.length > 0 ? { removed } : {}),
   }
 }
 
 /**
  * Every row of one service on the settings screen, set or not
  * (contracts/app-screen.md, "Rows"), the ones not set with the words of a
- * setting left out; a `plain` or volumes row `none` adds one.
+ * setting left out; a `plain` or volumes row `none` adds one. A plain
+ * variable or a volume the last deploy had and the file no longer has is a
+ * row of its own, marked removed, after those the file has (security review
+ * S3); a `none` row is there only when there is neither.
  */
 export function screenRows(
   service: readonly [string, ServiceSettings],
@@ -270,8 +348,19 @@ export function screenRows(
         value: deployedHas(old) ? undefined : 0,
       }))
     )
-  const plain = plainRows(service, deployed)
-  const volumes = volumeRows(service, deployed)
+  const plain = [
+    ...plainRows(service, deployed),
+    ...removedRows(
+      service,
+      deployed,
+      "plain",
+      Boolean(service[1].plain?.length)
+    ),
+  ]
+  const volumes = [
+    ...volumeRows(service, deployed),
+    ...removedRows(service, deployed, "volume", false),
+  ]
   return [
     partRow(service, deployed, "Source", "image", "image"),
     partRow(service, deployed, "Deploy", "start", "start"),

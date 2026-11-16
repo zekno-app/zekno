@@ -16,11 +16,13 @@ import { Box, Text } from "ink"
 import type { ReactNode } from "react"
 
 import type { SettingRow } from "../../settings/types"
-import { AS1, AS2 } from "../../settings/words"
+import { AS1, AS2, AS8 } from "../../settings/words"
 import type { RunState } from "../../shared/views"
 import { firstSentence, listWindow } from "../../ui/ink/questions"
+import type { Piece } from "../../ui/ink/wrap"
 import type { KeyHint } from "../../ui/parts/key-hints"
 import { clampIndex } from "../../ui/parts/select"
+import { useTheme } from "../../ui/terminal/theme"
 import { Frame, Header, Trail } from "../frame"
 import {
   settingsViewOf,
@@ -86,22 +88,40 @@ function AppState({
   )
 }
 
-/** The Services pane: one row per service, the one shown marked, and AS2 at its foot. */
+/**
+ * The lines of a service the last deploy had and the file no longer has
+ * (security review S3): its name, faint, where a service's name goes, and
+ * under it AS8 in the warning colour, set in as the names are.
+ */
+export function removedLines(name: string, warning: string): Piece[][] {
+  return [
+    [{ text: `  ${cut(name, SERVICES_INNER - 2)}`, dim: true }],
+    ...linesOf([{ text: AS8(), color: warning }], SERVICES_INNER - 2).map(
+      (line) => [{ text: "  " }, ...line]
+    ),
+  ]
+}
+
+/** The Services pane: one row per service, the one shown marked, the services the next deploy stops, and AS2 at its foot. */
 function ServicesPane({
   names,
+  removed,
   selected,
   height,
 }: {
   names: readonly string[]
+  removed: readonly string[]
   selected: number
   height: number
 }) {
+  const theme = useTheme()
   const foot = linesOf([{ text: AS2, dim: true }], SERVICES_INNER)
-  // The pane's border and title, and its foot.
+  const gone = removed.flatMap((name) => removedLines(name, theme.warning))
+  // The pane's border and title, the services removed, and its foot.
   const shown = listWindow(
     names.length,
     selected,
-    Math.max(1, height - 3 - foot.length)
+    Math.max(1, height - 3 - gone.length - foot.length)
   )
   return (
     <Pane title="Services" width={SERVICES_WIDTH} gap={0}>
@@ -120,6 +140,7 @@ function ServicesPane({
         })}
         <More direction="↓" count={shown.below} />
       </Box>
+      <Lines lines={gone} />
       <Box flexGrow={1} />
       <Lines lines={foot} />
     </Pane>
@@ -293,6 +314,7 @@ export function SettingsScreen({
       <Box flexGrow={1} columnGap={1}>
         <ServicesPane
           names={services.map((entry) => entry.name)}
+          removed={(outcome?.report.removed ?? []).map((entry) => entry.name)}
           selected={shown}
           height={body}
         />

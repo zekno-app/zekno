@@ -9,7 +9,7 @@ import type { AppEvent, Effect, Step } from "../../src/app/state/events"
 import { initialState, update } from "../../src/app/state/state"
 import type { State, TeamView } from "../../src/app/state/types"
 import { composeText } from "../../src/settings/compose"
-import { screenRows } from "../../src/settings/rows"
+import { removedServices, screenRows } from "../../src/settings/rows"
 import type { Settings } from "../../src/settings/types"
 import { DESIGN_SETTINGS } from "./settings-files"
 
@@ -85,6 +85,7 @@ export function settingsRead(
     app?: string
   } = {}
 ): AppEvent {
+  const removed = removedServices(settings, options.deployed)
   return {
     type: "settings-read",
     server: options.server ?? "prod",
@@ -98,6 +99,7 @@ export function settingsRead(
           name: service[0],
           rows: screenRows(service, options.deployed),
         })),
+        ...(removed.length > 0 ? { removed } : {}),
       },
       settings,
       sha256: options.sha256 ?? "a".repeat(64),

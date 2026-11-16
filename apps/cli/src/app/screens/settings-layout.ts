@@ -9,7 +9,7 @@
  */
 import { sanitize } from "../../server/sanitize"
 import type { SettingRow } from "../../settings/types"
-import { AS3 } from "../../settings/words"
+import { AS3, AS8 } from "../../settings/words"
 import { wrapPieces, type Piece } from "../../ui/ink/wrap"
 import type { KeyHint } from "../../ui/parts/key-hints"
 import { LOGO_HEIGHT } from "../../ui/terminal/logo"
@@ -148,12 +148,18 @@ export function labelWidth(rows: readonly SettingRow[], inner: number): number {
 /**
  * A row's value as pieces: the value (dim when it is the words of a setting
  * left out) and, when it changed since the last deploy, two spaces and AS3
- * in the warning colour.
+ * in the warning colour; when the last deploy had it and the file no
+ * longer does, two spaces and AS8 (security review S3).
  */
 export function valuePieces(row: SettingRow, warning: string): Piece[] {
   const pieces: Piece[] = [{ text: row.shown, dim: !row.set }]
   if (row.changed)
     pieces.push({ text: `  ${AS3(row.changed.was)}`, color: warning })
+  if (row.removed)
+    pieces.push({
+      text: `  ${AS8(row.removed.was, row.path.key === "volume")}`,
+      color: warning,
+    })
   return pieces
 }
 

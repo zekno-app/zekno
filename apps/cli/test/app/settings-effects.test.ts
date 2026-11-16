@@ -35,6 +35,7 @@ import { openTeam } from "../../src/cli/context"
 import { writeLink } from "../../src/ops/link"
 import { composeText } from "../../src/settings/compose"
 import { screenRows } from "../../src/settings/rows"
+import { settingsText } from "../../src/settings/text"
 import { AS6, SH1, SH2 } from "../../src/settings/words"
 import { ready, type machine } from "../support/helpers"
 import {
@@ -291,6 +292,35 @@ describe("reading", () => {
         .map((row) => [service.name, row.label, row.changed])
     )
     expect(marked).toEqual([["web", "memory", { was: "512m" }]])
+    expect(app.touched).toEqual({ keychain: 0, servers: 0 })
+  })
+
+  test("what the next deploy removes (security review S3): a service the file no longer has, and a variable", async () => {
+    const m = await ready()
+    m.compose(composeText(DESIGN_SETTINGS))
+    expect(await m.zekno("deploy", "--app", "demo", "--server", "dev")).toBe(0)
+    rmSync(join(m.project, "compose.yaml"))
+    // Only web is left, without its plain variable.
+    const web = DESIGN_SETTINGS.services[0]![1]
+    writeFileSync(
+      join(m.project, "zekno.app.json"),
+      settingsText({
+        version: 1,
+        services: [["web", { ...web, plain: undefined }]],
+      })
+    )
+    const app = await appIn(m)
+    const read = settingsOf(await app.read())
+    expect(read.settings.services.map(([name]) => name)).toEqual(["web"])
+    expect(read.report.removed).toEqual([
+      { name: "worker", was: "ghcr.io/acme/demo-worker:1.4.2" },
+    ])
+    expect(
+      read.report.services[0]!.rows.filter((row) => row.removed).map((row) => [
+        row.label,
+        row.removed,
+      ])
+    ).toEqual([["plain", { was: "NODE_ENV=production" }]])
     expect(app.touched).toEqual({ keychain: 0, servers: 0 })
   })
 

@@ -7,7 +7,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { applyChange } from "../../src/settings/change"
-import { reportOf, screenRows } from "../../src/settings/rows"
+import { removedServices, reportOf, screenRows } from "../../src/settings/rows"
 import type {
   ServiceSettings,
   SettingPath,
@@ -114,10 +114,18 @@ describe("reportOf: the rows zekno settings prints", () => {
     expect(port.changed).toEqual({ was: "3000, published on 80" })
   })
 
-  test("a setting the last deploy had and the file no longer has is not shown", () => {
+  test("a setting the last deploy had and the file no longer has: its row, as the screen shows it, marked with the old value (security review S3)", () => {
     const now = changedTo({ service: "web", key: "memory" }, undefined)
     const rows = reportOf(now, DESIGN_SETTINGS).services[0]!.rows
-    expect(rows.some((row) => row.label === "memory")).toBe(false)
+    expect(rows.find((row) => row.label === "memory")).toMatchObject({
+      shown: "no limit",
+      set: false,
+      changed: { was: "1g" },
+    })
+    // With nothing deployed known, only the settings that are set.
+    expect(
+      reportOf(now).services[0]!.rows.some((row) => row.label === "memory")
+    ).toBe(false)
   })
 })
 
@@ -273,11 +281,19 @@ describe("the marks (research R4)", () => {
       { service: "web", key: "plain", name: "NODE_ENV" },
       undefined
     )
+    // The variable the last deploy had is a row of its own, marked removed with what it was (security review S3).
     expect(
       screenRows(gone.services[0]!, DESIGN_SETTINGS).find(
         (row) => row.label === "plain"
       )
-    ).toMatchObject({ shown: "none", changed: {} })
+    ).toEqual({
+      section: "Variables",
+      label: "plain",
+      path: { service: "web", key: "plain", adding: true },
+      shown: "none",
+      set: false,
+      removed: { was: "NODE_ENV=production" },
+    })
     expect(
       screenRows(WORKER, DESIGN_SETTINGS).find((row) => row.label === "plain")!
         .changed
@@ -322,4 +338,116 @@ test("every value shown, an old one too, is cleaned", () => {
   expect(row.shown).toBe("A=xy")
   expect(row.changed).toEqual({ was: "A=old" })
   expect(reportOf(settings).services[0]!.rows.at(-1)!.shown).toBe("A=xy")
+})
+
+describe("what the next deploy removes (security review S3)", () => {
+  /** The review's case: the last deploy had web with NODE_ENV and REQUIRE_AUTH, volumes data and audit, and a service auth. */
+  const DEPLOYED: Settings = {
+    version: 1,
+    services: [
+      [
+        "web",
+        {
+          image: "ghcr.io/acme/web:1",
+          secrets: ["DATABASE_URL"],
+          plain: [
+            ["NODE_ENV", "production"],
+            ["REQUIRE_AUTH", "1"],
+          ],
+          volumes: [
+            ["data", "/data"],
+            ["audit", "/var/audit"],
+          ],
+        },
+      ],
+      ["auth", { image: "ghcr.io/acme/auth:1" }],
+    ],
+  }
+  const NOW: Settings = {
+    version: 1,
+    services: [
+      [
+        "web",
+        {
+          image: "ghcr.io/acme/web:1",
+          plain: [["NODE_ENV", "production"]],
+          volumes: [["data", "/data"]],
+        },
+      ],
+    ],
+  }
+  const marks = (rows: readonly SettingRow[]) =>
+    rows
+      .filter((row) => row.changed ?? row.removed)
+      .map((row) => [
+        row.label,
+        row.shown,
+        row.changed
+          ? `changed ${row.changed.was}`
+          : `removed ${row.removed!.was}`,
+      ])
+
+  test("zekno settings: the secrets no longer set, the variable and the volume, each marked with what it was; the service, with its image", () => {
+    const report = reportOf(NOW, DEPLOYED, "demo")
+    expect(marks(report.services[0]!.rows)).toEqual([
+      ["secrets", "none", "changed DATABASE_URL"],
+      ["", "none", "removed REQUIRE_AUTH=1"],
+      ["audit", "none", "removed /var/audit"],
+    ])
+    expect(report.removed).toEqual([
+      { name: "auth", was: "ghcr.io/acme/auth:1" },
+    ])
+  })
+
+  test("the screen: the same marks, the removed rows after those the file has, and adding a setting as a none row does", () => {
+    const rows = screenRows(NOW.services[0]!, DEPLOYED)
+    expect(marks(rows)).toEqual([
+      ["secrets", "none", "changed DATABASE_URL"],
+      ["", "none", "removed REQUIRE_AUTH=1"],
+      ["audit", "none", "removed /var/audit"],
+    ])
+    expect(rows.map((row) => row.label).slice(-4)).toEqual([
+      "plain",
+      "",
+      "data",
+      "audit",
+    ])
+    expect(rows.at(-1)!.path).toEqual({
+      service: "web",
+      key: "volume",
+      adding: true,
+    })
+    // Everything removed: the removed rows stand in place of the none rows.
+    const bare: Settings = {
+      version: 1,
+      services: [["web", { image: "ghcr.io/acme/web:1" }]],
+    }
+    const all = screenRows(bare.services[0]!, DEPLOYED)
+    expect(
+      all
+        .filter((row) => row.section === "Variables")
+        .map((row) => [row.label, row.removed?.was])
+    ).toEqual([
+      ["secrets", undefined],
+      ["plain", "NODE_ENV=production"],
+      ["", "REQUIRE_AUTH=1"],
+    ])
+    expect(
+      all.some(
+        (row) =>
+          row.removed === undefined &&
+          row.shown === "none" &&
+          row.section === "Volumes"
+      )
+    ).toBe(false)
+  })
+
+  test("nothing removed, or nothing deployed known: no removed mark anywhere", () => {
+    expect(reportOf(DEPLOYED, DEPLOYED).removed).toBeUndefined()
+    expect(reportOf(NOW).removed).toBeUndefined()
+    expect(
+      screenRows(NOW.services[0]!).some((row) => row.removed !== undefined)
+    ).toBe(false)
+    expect(removedServices(NOW)).toEqual([])
+  })
 })

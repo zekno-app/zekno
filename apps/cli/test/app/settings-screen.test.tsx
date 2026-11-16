@@ -389,6 +389,117 @@ describe("colours, on a dark and a light terminal", () => {
   }
 })
 
+/** The review's case of S3, as the CLI report's tests have it: the last deploy had a memory limit, REQUIRE_AUTH, the volume audit and the service auth. */
+const S3_DEPLOYED: Settings = {
+  version: 1,
+  services: [
+    [
+      "web",
+      {
+        image: "ghcr.io/acme/web:1",
+        memory: "512m",
+        plain: [
+          ["NODE_ENV", "production"],
+          ["REQUIRE_AUTH", "1"],
+        ],
+        volumes: [
+          ["data", "/data"],
+          ["audit", "/var/audit"],
+        ],
+      },
+    ],
+    ["auth", { image: "ghcr.io/acme/auth:1" }],
+  ],
+}
+const S3_NOW: Settings = {
+  version: 1,
+  services: [
+    [
+      "web",
+      {
+        image: "ghcr.io/acme/web:1",
+        plain: [["NODE_ENV", "production"]],
+        volumes: [["data", "/data"]],
+      },
+    ],
+  ],
+}
+
+describe("what the next deploy removes (security review S3)", () => {
+  const s3 = (size = { columns: 100, rows: 30 }) =>
+    play(opened(size), settingsRead(S3_NOW, { deployed: S3_DEPLOYED })).state
+
+  test("100 by 30: the service the file no longer has under the others with its mark; the variable and the volume as rows of their own, marked with what they were", () => {
+    const lines = draw(s3())
+    fits(lines, 100, 30)
+    for (const line of [
+      twoPanes(
+        "Services",
+        "web                                                      zekno.app.json"
+      ),
+      twoPanes("❯ web", "Source"),
+      twoPanes("  auth", row("image", "ghcr.io/acme/web:1", true)),
+      twoPanes("  ! removed, not", "Deploy"),
+      twoPanes("  deployed", row("start", "the image's own")),
+      twoPanes(
+        "",
+        row("memory", "no limit  ! changed, not deployed (was 512m)")
+      ),
+      twoPanes("", row("plain", "NODE_ENV=production")),
+      twoPanes(
+        "",
+        row("", "none  ! removed, not deployed (was REQUIRE_AUTH=1)")
+      ),
+      twoPanes("", row("data", "/data")),
+      twoPanes(
+        "",
+        row("audit", "none  ! removed, not deployed (was /var/audit; its data")
+      ),
+      twoPanes("", row("", "stays)")),
+    ])
+      expect(lines).toContain(line)
+  })
+
+  test("80 by 24: it fits, the service's mark in the Services pane; moving down reaches the removed rows", () => {
+    let state = s3({ columns: 80, rows: 24 })
+    const first = draw(state, 80, 24)
+    fits(first, 80, 24)
+    expect(first.join("\n")).toContain("│   ! removed, not   │")
+    for (let at = 0; at < 12; at++) state = play(state, K.down).state
+    const last = draw(state, 80, 24)
+    fits(last, 80, 24)
+    expect(words(last.join("\n"))).toContain(
+      "audit none ! removed, not deployed (was /var/audit; its data stays)"
+    )
+  })
+
+  test("enter on a removed row adds one, as a none row does (AS7)", () => {
+    let state = s3()
+    // image, start, restart, memory, cpus, port, published, secrets, plain, the removed variable.
+    for (let at = 0; at < 9; at++) state = play(state, K.down).state
+    const after = play(state, K.enter).state
+    expect(after.notice).toEqual({
+      tone: "info",
+      text: "Add one with `zekno settings set web.plain.<NAME> <value>`.",
+    })
+  })
+
+  test("the marks are in the warning colour, the removed service's name faint", () => {
+    const lines = drawnInColour(s3(), "dark").split("\n")
+    const variable = lines.find((line) => line.includes("REQUIRE_AUTH"))!
+    expect(variable).toContain(
+      "\x1b[33m  ! removed, not deployed (was REQUIRE_AUTH=1)"
+    )
+    const service = lines.find(
+      (line) => line.includes("! removed, not") && !line.includes("(was")
+    )!
+    expect(service).toContain("\x1b[33m! removed, not")
+    expect(lines.some((line) => line.includes("\x1b[2m  auth\x1b[22m"))).toBe(
+      true
+    )
+  })
+})
+
 describe("the screen keeps its state", () => {
   test("the app screen is underneath, and esc goes back to it", () => {
     const state = play(board(), K.esc).state

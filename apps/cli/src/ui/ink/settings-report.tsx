@@ -12,7 +12,7 @@ import { Box, Text } from "ink"
 
 import { sanitize } from "../../server/sanitize"
 import type { SettingsReport } from "../../settings/types"
-import { AS3 } from "../../settings/words"
+import { AS3, AS8 } from "../../settings/words"
 import { useTheme } from "../terminal/theme"
 import type { SettingChangeShown } from "../types"
 import { Wrapped, type Piece } from "./wrap"
@@ -43,7 +43,9 @@ export function labelWidth(report: SettingsReport): number {
  * text colour, which goes on under itself, never under the labels, when it
  * is wider than the window. A value changed since this machine's last deploy
  * is followed by two spaces and `! changed, not deployed (was <old>)` in the
- * warning colour.
+ * warning colour; a setting, a plain variable or a volume that deploy had
+ * and the file no longer has, by `! removed, not deployed (was <old>)`, and
+ * a service it had, after the others, by the same (security review S3).
  */
 export function SettingsBlock({
   report,
@@ -81,11 +83,20 @@ export function SettingsBlock({
           {service.rows.map((row, index) => {
             const first =
               index === 0 || service.rows[index - 1]!.section !== row.section
-            const pieces: Piece[] = [{ text: row.shown }]
+            // A setting no longer set reads as the words of one left out, dim, as on the screen.
+            const pieces: Piece[] = [{ text: row.shown, dim: !row.set }]
             if (row.changed !== undefined)
               pieces.push(
                 { text: "  " },
                 { text: AS3(row.changed.was), color: theme.warning }
+              )
+            if (row.removed !== undefined)
+              pieces.push(
+                { text: "  " },
+                {
+                  text: AS8(row.removed.was, row.path.key === "volume"),
+                  color: theme.warning,
+                }
               )
             return (
               <Box key={`row-${index}`} paddingLeft={INDENT}>
@@ -99,6 +110,26 @@ export function SettingsBlock({
               </Box>
             )
           })}
+        </Box>
+      ))}
+      {(report.removed ?? []).map((service, at) => (
+        // A service the last deploy had and the file no longer has: its name as a service's, and AS8 with its image.
+        <Box key={`removed-${at}`} flexDirection="column">
+          <Text> </Text>
+          <Box paddingLeft={INDENT}>
+            <Wrapped
+              pieces={[
+                {
+                  text: sanitize(service.name),
+                  bold: true,
+                  color: theme.brand,
+                },
+                { text: "  " },
+                { text: AS8(sanitize(service.was)), color: theme.warning },
+              ]}
+              columns={columns - INDENT}
+            />
+          </Box>
         </Box>
       ))}
     </Box>

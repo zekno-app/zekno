@@ -211,6 +211,74 @@ describe("zekno settings", () => {
     expect(run.screen).toEqual(["  demo  from zekno.app.json", ...ROWS])
   }, 60_000)
 
+  test("what the next deploy removes (security review S3): marked at a terminal, after a real deploy; piped and --json as before", async () => {
+    const m = await ready()
+    rmSync(join(m.project, "compose.yaml"))
+    const before: Settings = {
+      version: 1,
+      services: [
+        [
+          "web",
+          {
+            image: "ghcr.io/acme/web:1",
+            plain: [
+              ["NODE_ENV", "production"],
+              ["REQUIRE_AUTH", "1"],
+            ],
+            volumes: [
+              ["data", "/data"],
+              ["audit", "/var/audit"],
+            ],
+          },
+        ],
+        ["auth", { image: "ghcr.io/acme/auth:1" }],
+      ],
+    }
+    const after: Settings = {
+      version: 1,
+      services: [
+        [
+          "web",
+          {
+            image: "ghcr.io/acme/web:1",
+            plain: [["NODE_ENV", "production"]],
+            volumes: [["data", "/data"]],
+          },
+        ],
+      ],
+    }
+    writeFileSync(join(m.project, "zekno.app.json"), settingsText(before))
+    expect(await m.zekno("link", "--app", "demo", "--server", "dev")).toBe(0)
+    expect(await m.zekno("deploy")).toBe(0)
+    writeFileSync(join(m.project, "zekno.app.json"), settingsText(after))
+    const run = await atTerminal(m, "settings")
+    expect(run.code).toBe(0)
+    expect(run.screen).toEqual([
+      "  demo  from zekno.app.json",
+      "",
+      "  web",
+      "  Source        image     ghcr.io/acme/web:1",
+      "  Variables     plain     NODE_ENV=production",
+      "                          none  ! removed, not deployed (was REQUIRE_AUTH=1)",
+      "  Volumes       data      /data",
+      "                audit     none  ! removed, not deployed (was /var/audit; its data stays)",
+      "",
+      "  auth  ! removed, not deployed (was ghcr.io/acme/auth:1)",
+    ])
+    expect(await piped(m, "settings")).toEqual({
+      code: 0,
+      out: [
+        "web\tsource.image\tghcr.io/acme/web:1",
+        "web\tvariables.plain.NODE_ENV\tproduction",
+        "web\tvolumes.data\t/data",
+      ],
+      err: [],
+    })
+    expect((await piped(m, "settings", "--json")).out).toEqual([
+      JSON.stringify(JSON.parse(settingsText(after))),
+    ])
+  }, 60_000)
+
   test("no secret value appears in any output, piped, as JSON or at a terminal (SC-004)", async () => {
     const m = await ready()
     rmSync(join(m.project, "compose.yaml"))

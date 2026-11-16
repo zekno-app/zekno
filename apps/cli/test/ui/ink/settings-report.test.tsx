@@ -156,6 +156,117 @@ describe("at a terminal (board `CmdSettings`, left column)", () => {
   })
 })
 
+/** The review's case of S3: the last deploy had REQUIRE_AUTH, the volume audit, a memory limit and the service auth; the file no longer has them. */
+const S3_DEPLOYED: Settings = {
+  version: 1,
+  services: [
+    [
+      "web",
+      {
+        image: "ghcr.io/acme/web:1",
+        memory: "512m",
+        plain: [
+          ["NODE_ENV", "production"],
+          ["REQUIRE_AUTH", "1"],
+        ],
+        volumes: [
+          ["data", "/data"],
+          ["audit", "/var/audit"],
+        ],
+      },
+    ],
+    ["auth", { image: "ghcr.io/acme/auth:1" }],
+  ],
+}
+const S3_NOW: Settings = {
+  version: 1,
+  services: [
+    [
+      "web",
+      {
+        image: "ghcr.io/acme/web:1",
+        plain: [["NODE_ENV", "production"]],
+        volumes: [["data", "/data"]],
+      },
+    ],
+  ],
+}
+
+describe("what the next deploy removes (security review S3)", () => {
+  test("at a terminal: the setting no longer set, the variable, the volume and the service, each marked with what it was", async () => {
+    expect(await shown(reportOf(S3_NOW, S3_DEPLOYED, "demo"))).toEqual([
+      "  demo  from zekno.app.json",
+      "",
+      "  web",
+      "  Source        image     ghcr.io/acme/web:1",
+      "  Deploy        memory    no limit  ! changed, not deployed (was 512m)",
+      "  Variables     plain     NODE_ENV=production",
+      "                          none  ! removed, not deployed (was REQUIRE_AUTH=1)",
+      "  Volumes       data      /data",
+      "                audit     none  ! removed, not deployed (was /var/audit; its data stays)",
+      "",
+      "  auth  ! removed, not deployed (was ghcr.io/acme/auth:1)",
+    ])
+  })
+
+  test("the looks: a value no longer set dim, as on the screen; every mark in the warning colour; the service's name as a service's", () => {
+    const lines = drawnInColour(BLOCK, "SettingsBlock", {
+      report: reportOf(S3_NOW, S3_DEPLOYED, "demo"),
+      columns: 120,
+    }).split("\n")
+    const line = (start: string) =>
+      lines.find((each) => plainOf(each).startsWith(start))!
+    expect(wordRuns(line("  Deploy        memory"))).toEqual([
+      { text: "Deploy", bold: true, dim: false },
+      { text: "memory", bold: false, dim: true },
+      { text: "no limit", bold: false, dim: true },
+      {
+        text: "! changed, not deployed (was 512m)",
+        bold: false,
+        dim: false,
+        color: "yellow",
+      },
+    ])
+    expect(wordRuns(line("                audit"))).toEqual([
+      { text: "audit", bold: false, dim: true },
+      { text: "none", bold: false, dim: true },
+      {
+        text: "! removed, not deployed (was /var/audit; its data stays)",
+        bold: false,
+        dim: false,
+        color: "yellow",
+      },
+    ])
+    expect(wordRuns(line("  auth"))).toEqual([
+      { text: "auth", bold: true, dim: false, color: BRAND },
+      {
+        text: "! removed, not deployed (was ghcr.io/acme/auth:1)",
+        bold: false,
+        dim: false,
+        color: "yellow",
+      },
+    ])
+  })
+
+  test("piped: the file's lines only, as before; no mark, no removed line", () => {
+    const out: string[] = []
+    const err: string[] = []
+    plainUi(
+      (line) => out.push(line),
+      (line) => err.push(line)
+    ).settingsReport({
+      ...reportOf(S3_NOW, S3_DEPLOYED, "demo"),
+      piped: pipedLines(S3_NOW),
+    })
+    expect(out).toEqual([
+      "web\tsource.image\tghcr.io/acme/web:1",
+      "web\tvariables.plain.NODE_ENV\tproduction",
+      "web\tvolumes.data\t/data",
+    ])
+    expect(err).toEqual([])
+  })
+})
+
 describe("piped (contracts/commands.md, 'Piped, TERM=dumb')", () => {
   test("one line per setting that is set, with tabs, the values as the file holds them; no first line, no sections, no marks", () => {
     const out: string[] = []

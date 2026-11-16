@@ -98,6 +98,12 @@ export type SettingRow = {
   set: boolean
   /** Changed since this machine's last deploy, with the old value when there was one. */
   changed?: { was?: string }
+  /**
+   * A plain variable or a volume the last deploy had and the file no longer
+   * has, with what it was (security review S3): the next deploy drops it. Its
+   * row reads as a setting left out, and adds one, as a `none` row does.
+   */
+  removed?: { was: string }
 }
 
 /** What `zekno settings` shows. */
@@ -106,7 +112,12 @@ export type SettingsReport = {
   app?: string
   file: string
   services: readonly { name: string; rows: readonly SettingRow[] }[]
-  /** SH3, when this folder's zekno.json names a Compose file instead. */
+  /**
+   * The services the last deploy had and the file no longer has, each with
+   * the image it ran (security review S3): the next deploy stops them.
+   */
+  removed?: readonly { name: string; was: string }[]
+  /** IN6, when compose.yaml is beside the settings file and nothing decides which a deploy uses. */
   note?: string
   /**
    * What plain output prints, one line per setting that is set: the service,

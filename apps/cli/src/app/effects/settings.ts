@@ -26,7 +26,7 @@ import { sanitize } from "../../server/sanitize"
 import { applyChange } from "../../settings/change"
 import { composeText, deployedSettings } from "../../settings/compose"
 import { readSettingsFile } from "../../settings/file"
-import { screenRows } from "../../settings/rows"
+import { removedServices, screenRows } from "../../settings/rows"
 import { namedPath, settingsPlace } from "../../settings/source"
 import type { Settings } from "../../settings/types"
 import {
@@ -182,6 +182,7 @@ export function createSettings(context: Context) {
         trust,
         effect.deployed
       )
+      const removed = removedServices(read.settings, before)
       return {
         kind: "read",
         report: {
@@ -191,6 +192,7 @@ export function createSettings(context: Context) {
             name: service[0],
             rows: screenRows(service, before),
           })),
+          ...(removed.length > 0 ? { removed } : {}),
         },
         settings: read.settings,
         sha256: read.sha256,

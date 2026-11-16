@@ -433,6 +433,16 @@ export const AS3 = (was?: string): string =>
   was === undefined
     ? "! changed, not deployed"
     : `! changed, not deployed (was ${was})`
+/**
+ * AS8 (security review S3): what the last deploy had and the file no longer
+ * has, so the next deploy drops it: a plain variable or a volume, by what it
+ * was, a volume's data staying (FR-012); a whole service by the image it
+ * ran, or with no old value where there is no room for one.
+ */
+export const AS8 = (was?: string, volume = false): string =>
+  was === undefined
+    ? "! removed, not deployed"
+    : `! removed, not deployed (was ${was}${volume ? "; its data stays" : ""})`
 /** AS4 */
 export const AS4 = "Change a setting"
 /** AS5 */
