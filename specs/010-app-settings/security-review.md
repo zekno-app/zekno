@@ -686,6 +686,21 @@ the member (`twin`, a key store that throws), every command, SH4, the own file u
 `deploy/zekno.app.json` and a yes signs that file. Before the fix the commands printed the
 folder's own file with status 0 and the question named no file. **Commit** `8814494`.
 
+**The app's first-use question: closed (2026-11-17).** The first of the known limits above is
+closed in commit `cba1392` (branch `011-settings-polish`, the review of the screens no board
+showed). The full-screen app asks its first-use question in one place, over Home as it opens
+(`loadStart`, then the question `use-link`); `d` in such a folder asks nothing and says the
+`zekno.json` is not in use, as before. That question now names the file a yes deploys when the
+`zekno.json` is in this folder and names another file than `compose.yaml`, in the single commands'
+words: its title reads `Ada linked this folder to demo on dev, with deploy/zekno.app.json`. Both
+decide by one rule (`namedFile`, `project/project.ts`, the name cleaned as every name shown is).
+With `compose.yaml`, and for a `zekno.json` in a folder above, the words are as before. Only the
+words changed: the answers, what `y` records (the file judged again, byte for byte) and what `d`
+deploys are unchanged. Tests: `test/project/project-flow.test.tsx`, the question and its panel at
+100 by 30 and 80 by 24, and `loadStart` on a second machine of the member in folders C (the file
+named) and B (`compose.yaml`, the words unchanged); both failed before the change. The other known
+limits above stay.
+
 #### S7. Options the settings commands do not take
 
 **Change.** `cli/cli.ts` refuses any option a settings command does not take (`--json` for

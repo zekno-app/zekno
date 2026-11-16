@@ -486,3 +486,107 @@ Tests: `test/app/settings-type-ahead.test.tsx` (the real app reading keys from a
 the walkthrough's `y` 3 ms after the read that opens the question writes nothing, a `y` once it is
 drawn writes), `test/app/settings-state.test.ts` (each stage held, with times; the dropped keys'
 sentence), `test/app/settings-screen.test.tsx` (the change box at both cuts; AS7).
+
+## As built: after the review of the screens (2026-11-17)
+
+Written by the implementer of the review of the screens no board showed (branch
+`011-settings-polish`). The maintainer handed that review to the orchestrator, who read the
+walkthrough of the real program and decided what changes; what these notes do not name stays as
+built. Where these notes and the sections above differ, these are built. Changes 33 to 37 are
+commit `3420778`; the app's first-use question is commit `cba1392` (contracts/deploy.md, "As
+built: after the review of the screens").
+
+33. **The window keeps the heading of its first row** (replaces item 5's window, and closes the
+    known limit "the window of rows can begin with a section's first row while its heading is
+    above the window"). The rows are a window of whole rows (`rowWindow`, settings-layout.ts), and
+    the section heading of the first row drawn is always drawn: in its own place when that row is
+    the first of its section, so nothing stands for the heading in `↑ <n> more`; else kept on the
+    line under `↑ <n> more`, with the rows of its section above the first row hidden. `↑ <n> more`
+    counts every line before the first row drawn but the heading drawn; `↓ <n> more` every line
+    after the last row drawn. The window grows one row at a time around the selected row, on the
+    side with fewer lines drawn, below first, so the selected row stays near the middle as before.
+    At 80 by 24, design.md's file with memory selected now starts with `Source` (the walkthrough
+    had `↑ 1 more` there, then `image`); with `port` selected:
+
+    ```text
+     │ Services           │ │ web                                  zekno.app.json │
+     │ ❯ web              │ │   ↑ 4 more                                          │
+     │   worker           │ │ Deploy                                              │
+     │                    │ │   memory     1g  ! changed, not deployed (was 512m) │
+     │                    │ │   cpus       1                                      │
+     │                    │ │ Networking                                          │
+     │                    │ │ ❯ port       3000                                   │
+     │                    │ │   published  not published                          │
+     │                    │ │ Variables                                           │
+     │                    │ │   secrets    DATABASE_URL, SESSION_KEY              │
+     │                    │ │   plain      NODE_ENV=production                    │
+     │                    │ │   ↓ 2 more                                          │
+    ```
+
+34. **Whole rows.** A row whose value takes several lines (a wrapped value, a mark that wraps, a
+    value cut with AS9) is drawn whole or not at all, and the window may end on an empty line where
+    the next row does not fit. At 80 by 24, the review's S3 file with `published` selected (the
+    walkthrough drew `512m)` under `↑ 6 more` with the line before it hidden, and the removed
+    variable's first line alone at the foot):
+
+    ```text
+     │ ❯ web              │ │   ↑ 6 more                                          │
+     │   auth             │ │ Deploy                                              │
+     │   ! removed, not   │ │   cpus       no limit                               │
+     │   deployed         │ │ Networking                                          │
+     │                    │ │   port       none                                   │
+     │                    │ │ ❯ published  not published                          │
+     │                    │ │ Variables                                           │
+     │                    │ │   secrets    none                                   │
+     │                    │ │   plain      NODE_ENV=production                    │
+     │                    │ │   ↓ 6 more                                          │
+     │                    │ │                                                     │
+    ```
+
+    Only a row taller than the whole window, which only a notice of several lines at 80 by 24 can
+    make, is drawn from its first line as far as there is room, the rest counted in `↓ <n> more`;
+    no screen of the walkthrough reaches it.
+35. **While a change is open** the rows of the section are the same window: whole rows, the
+    section's heading kept under `↑ <n> more` (a service can have 128 plain variables). The change
+    box now leaves room above it for the row being changed, whole, with its heading and the `more`
+    lines (and never less than item 27's five lines). So at 80 by 24 a change in the middle of the
+    review's long start command draws `now` and `new` on one line each, where item 31 says two,
+    and the start row above the box is whole: its last line, `… 48 more lines  ! changed, not
+    deployed (was bun run start)`, was hidden before.
+36. **A mark stays with its words.** The `!` of AS3 and AS8 is held to the word after it
+    (`markPieces`): where a mark wraps, after a value or after AS9's `… <n> more lines`, the line
+    breaks before the `!`, never between it and its words. This replaces the sentence under the S4
+    drawing above ("At 100 by 30 the same row reads ... `!`"): at 100 by 30 the review's long start
+    command reads `… 52 more lines: c shows them in the Compose text` and, on the next line,
+    `! changed, not deployed (was bun run start)`. At 80 by 24 a start command of 29 characters,
+    last deployed as `bun run start`:
+
+    ```text
+     │                    │ │ ❯ start      bun run start --port 3000 now          │
+     │                    │ │              ! changed, not deployed (was bun run   │
+     │                    │ │              start)                                 │
+    ```
+
+37. **A refusal goes when the value changes** ("Changing a value", step 1). The reason under a
+    refused value, and the line that says why keys were dropped as a paste (item 30), is drawn until
+    the first key that changes the value: one Backspace after `lots` was refused draws
+    `? Memory limit › lot` with no line under it. A key that changes nothing (an arrow, Backspace on
+    an empty value) leaves it. The next Enter checks the value again, and draws the reason again
+    when it is refused.
+
+**Known, left as they are** (decided by the review): the settings when no board spoke (the
+80-column layout, the removed marks, the long-value cut, the empty and broken states, the Compose
+text, the light terminal); the words of a value not set inside a change; orphan words where a long
+sentence wraps; the "too small" message's layout (feature 004's screen). Of item 32's known list,
+the heading above the window is closed by item 33.
+
+Tests (each failed before its change and passes after): `test/app/settings-screen.test.tsx`, "the
+window keeps the heading of its first row", "moving through every row of design.md's file and the
+review's S3 file" (every window against every line drawn with room for all: the first line drawn is
+the first row's heading, rows whole, the counts true), "a row of several lines at the window's
+edge", "while a change is open, the window of its section keeps the section's heading and whole
+rows" (40 plain variables, typing and asking), "a mark stays with its words" (both sizes, and every
+room from 12 to 60 columns for AS3 and AS8), "a refusal goes at the first key that changes the
+value"; `test/app/settings-state.test.ts`, "enter with a value its rule refuses keeps the question
+open, with the rule" (its expectation changed: the reason now goes at the first key that changes
+the value).

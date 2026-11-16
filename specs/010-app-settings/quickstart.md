@@ -130,6 +130,7 @@ Checked by the orchestrator after each step, from the repository root (`bun run 
 | The app's `d` and the docs (T033, T034, T067 to T069) | 1598 | 102 | 147, 1 skipped | 28 |
 | The fixes after the security review's first pass | 1647 | 102 | 147, 1 skipped | 28 |
 | The fixes after its second pass and the walkthrough | 1664 | 102 | 147, 1 skipped | 28 |
+| The review of the screens no board showed (branch `011-settings-polish`) | 1673 | 102 | 147, 1 skipped | 28 |
 
 ### The pseudo-terminal walkthrough
 
@@ -240,7 +241,8 @@ Rough edges (commit `a7505e9`):
   `compose` at a terminal.
 - Left as they are and recorded as known in the contracts: the orphan words where long sentences
   wrap; the uneven "too small" layout (feature 004's screen); the 80 by 24 window hiding a section
-  heading above its first row.
+  heading above its first row (closed on 2026-11-17 in commit `3420778`: see "After the review of
+  the screens" below).
 
 ### The agent end-to-end tests
 
@@ -277,6 +279,44 @@ terminal emulator by hand (the walkthrough used a pseudo-terminal and a screen m
 case-sensitive disk for the exact-name rule; how long runs of combining marks draw.
 
 Known and left, each recorded where it belongs: the first-use question inside the full-screen
-app does not name the file a yes deploys (the single-command one does); a `zekno.json` whose
-signer was later removed from the team is still followed by the settings commands, while a deploy
-leaves it aside; four source files are longer than 500 lines since the reformat to 80 columns.
+app does not name the file a yes deploys (the single-command one does), **closed on 2026-11-17 in
+commit `cba1392`** (see "After the review of the screens" below); a `zekno.json` whose signer was
+later removed from the team is still followed by the settings commands, while a deploy leaves it
+aside; four source files are longer than 500 lines since the reformat to 80 columns.
+
+### After the review of the screens (2026-11-17)
+
+The maintainer handed the review of the screens no board showed to the orchestrator, who read the
+walkthrough and decided what changes. Built on branch `011-settings-polish` (from `dev`):
+
+| Change | Commit | Recorded in |
+|---|---|---|
+| The window of rows keeps the heading of its first row: under `↑ <n> more`, or in its own place; the counts stay true; the same while a change is open | `3420778` | contracts/app-screen.md, items 33 and 35 |
+| A row of several lines is drawn whole or not at all; `↓ <n> more` counts what is left; the change box leaves room for the row being changed | `3420778` | items 34 and 35 |
+| The `!` of a mark is held to its words: where AS3 or AS8 wraps, the line breaks before it | `3420778` | item 36 |
+| The reason under a refused value goes at the first key that changes the value | `3420778` | item 37 |
+| The app's first-use question names the file a yes deploys when it is not `compose.yaml` (S6's known limit for the app, closed) | `cba1392` | contracts/deploy.md and security-review.md, S6 |
+
+Each change has a test of the drawn screen that failed before it and passes after it
+(contracts/app-screen.md and contracts/deploy.md name them). One existing expectation changed:
+`test/app/settings-state.test.ts`, "enter with a value its rule refuses keeps the question open,
+with the rule", which pinned that typing kept the reason (change 4).
+
+The walkthrough's scenes for the settings screen and for changing a setting were run again on the
+real program after the changes, with the same driver and test-only dependencies, at 100 by 30 and
+80 by 24, plus new scenes for the five changes (the window moving down through design.md's file and
+the review's S3 file, a mark that wraps, a refusal clearing, the first-use question for a link
+naming `deploy/zekno.app.json` and for one naming `compose.yaml`): 46 sessions, 250 captures, each
+plain and styled, kept in the scratchpad (`walkthrough-010/captures-final`, listed in
+`walkthrough-010/final-screens.md`); the captures of the first walkthrough are kept as they were.
+Every session ended with status 0, the cursor shown, raw mode off and the alternate screen left;
+the `y` written 3 ms after the Enter that opens the write question still wrote nothing.
+
+Checks, from the repository root: `bun run typecheck` and `bun run lint` 5 of 5; `bun run test`
+CLI 1673 pass, core 102, runner 147 and 1 skipped, web 28, 0 fail (core, runner and web run again
+without the cache: the same); `prettier --check` in `apps/cli`: all files formatted.
+`git diff --stat dev HEAD -- packages/core apps/runner apps/cli/src/version/runner-release.json
+apps/cli/test/plain/plain-at-head.ts apps/cli/e2e.config.ts apps/cli/tests` prints nothing. Not
+run: the end-to-end tests (`bun run test:e2e`) and `next build`, by the rules of this work;
+`apps/cli/tests/link.e2e.ts` draws the first-use question for a `compose.yaml` link, whose words
+did not change.

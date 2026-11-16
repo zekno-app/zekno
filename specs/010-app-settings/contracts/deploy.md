@@ -220,3 +220,40 @@ Written by the implementer. Where these notes and the sections above differ, the
 - **What a settings deploy asks for (S9).** The values a deploy from settings asks for at a
   terminal, and the app lists before `d`, come from `expectedValues` of its Compose text, which no
   longer gives none for a value full of asterisks (contracts/compose-text.md, "As built").
+
+## As built: after the review of the screens (2026-11-17)
+
+Written by the implementer of the review of the screens no board showed (branch
+`011-settings-polish`). Where these notes and the sections above differ, these are built.
+
+- **The app's first-use question names the file (S6, closed for the app).** The known limit of the
+  note above is closed in commit `cba1392`. The full-screen app asks its first-use question in one
+  place: over Home, as it opens in a folder whose team-signed `zekno.json` is not yet used on this
+  machine (`loadStart`, `app/effects/profile.ts`; the question `use-link`). `d` never asks it: in
+  such a folder `d` says "This folder's zekno.json is not in use. Open zekno here again to be
+  asked." as before. The question now names the file a yes deploys when the `zekno.json` is in
+  this folder and names another file than `compose.yaml`, with the words of the single commands:
+  the panel's title reads `Ada linked this folder to demo on dev, with deploy/zekno.app.json`, the
+  single command's first sentence without its full stop, and the line under it is unchanged (`The
+  link is signed by your team. It has not been used in this folder on this machine. Use it
+  here?`). Both decide with one rule, `namedFile` in `project/project.ts`: the file is named when
+  the `zekno.json`'s `compose` is not exactly `compose.yaml`, cleaned as every name shown is. With
+  `compose.yaml` the words are exactly as before, and a `zekno.json` in a folder above is named
+  with its folder and file as before. Only the words changed: the answers, their keys, what `y`
+  records and what `d` deploys are unchanged.
+
+  At 80 by 24, the program as the walkthrough drove it (a link naming `deploy/zekno.app.json`, the
+  app opened on a second machine of the member; capture `FirstUse-80x24-deploy-1-question`):
+
+  ```text
+   ╭─ Ada linked this folder to demo on prod, with deploy/zekno.app.json ─────╮
+   │ The link is signed by your team. It has not been used in this folder on  │
+   │ this machine. Use it here?                                               │
+  ```
+
+  Tests: `test/project/project-flow.test.tsx`, "use this zekno.json here?, the file in this folder
+  naming another file than compose.yaml" (the question and its panel at 100 by 30 and 80 by 24)
+  and "the app opened on a second machine of the member in a folder whose zekno.json names
+  deploy/zekno.app.json" (`loadStart` on the review's folders C and B: the file named, then the
+  words unchanged for `compose.yaml`). `apps/cli/tests/link.e2e.ts`, which reads this question for
+  a `compose.yaml` link, is unchanged and its words are the same.
