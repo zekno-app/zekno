@@ -160,7 +160,7 @@ $ zekno settings set web.memory 1g
 - The change line (`Ui.settingChange`) from column 2: `<svc> · <label>` dim, two spaces, the old
   value in the text colour, ` → ` with the arrow dim, the new value bold. A value not set reads as
   the words of a setting left out (`no limit`, `the image's own`, ...; contracts/app-screen.md,
-  "Words").
+  "Words"). As built: an empty plain value reads `""`, so it is seen.
 - The question is CS9 with today's yes-or-no question (`Ui.confirm`): `?` in the brand colour, its
   first sentence bold, `(y/N)` dim, and `yes` or `no` left after it. "No", Enter, Esc or Ctrl-C:
   `Nothing was done.`, status 1, nothing written.
@@ -253,7 +253,7 @@ above, each shown only after it passed its rule. Statuses in brackets.
 | CS1 | ``Say which setting: `zekno settings set <service>.<setting> <value>`.`` (`unset`: ``Say which setting: `zekno settings unset <service>.<setting>`.``) [2, with the help line] |
 | CS2 | ``Say the new value: `zekno settings set <service>.<setting> <value>`.`` [2, with the help line] |
 | CS3 | not used: CS1 covers `unset` |
-| CS4 | `zekno.app.json has no service <svc>. Its services are <svc>, <svc>.` (`<svc>` given is named only when it passes the service rule, else `that service`) [2] |
+| CS4 | `zekno.app.json has no service <svc>. Its services are <svc>, <svc>.` (`<svc>` given is named only when it passes the service rule, else `that service`) [2]. As built: a name that breaks the rule reads `zekno.app.json has no such service. Its services are web, worker.`; a file with one service reads `Its service is web.` |
 | CS5 | `There is no such setting. The settings are image, start, restart, memory, cpus, port, publish, secrets, plain.<NAME> and volumes.<name>.` [2] |
 | CS6 | The second sentence of SL1 to SL5 for that setting, such as `Domains are not in this version of zekno yet.` [2] |
 | CS7 | `That is not <a label>.` then the rule (table below) [2] |
@@ -266,7 +266,7 @@ above, each shown only after it passed its rule. Statuses in brackets.
 | CS14 | `Could not write zekno.app.json.` [1] |
 | CS15 | `A service needs an image, so source.image cannot be unset.` [2] |
 | CS16 | `<svc> · <label> is not set. Nothing was written.` [0] |
-| CS17 | `That change cannot be written.` then the place and rule of the settings-file sentence it breaks, such as `web, networking.publish: set networking.port too, the port it reaches.` [2] |
+| CS17 | `That change cannot be written.` then the place and rule of the settings-file sentence it breaks, such as `web, networking.publish: set networking.port too, the port it reaches.` [2]. As built: a change that would make the file larger than 64 KiB is `That change cannot be written. zekno.app.json is larger than the 64 KiB a settings file may be.`; a sentence with `(line <n>)` names the line of the file as it would be written. |
 | IN1 | `Image` (the question) |
 | IN2 | `Service name` (the question) |
 | IN3 | `Written zekno.app.json` with the detail `Run zekno deploy to use it.` [0] |

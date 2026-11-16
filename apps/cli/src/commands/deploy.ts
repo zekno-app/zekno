@@ -1,6 +1,3 @@
-import { realpathSync } from "node:fs"
-import { isAbsolute, relative, resolve } from "node:path"
-
 import { remoteThroughUi, type Deps } from "../cli/context"
 import {
   prepareDeploy,
@@ -9,12 +6,13 @@ import {
   type DeployPlan,
   type Where,
 } from "../ops/deploy"
-import { shownPath } from "../project/shown"
-import { sanitize } from "../server/sanitize"
+import { shownFile } from "../project/shown"
 import { plainDeployView, type DeployStart } from "../shared/deploy"
 
 /** Kept where earlier tests and tools look for them. */
 export { HELD_LINES, heldLines, leftOut } from "../shared/deploy"
+/** Kept here for its callers; it lives in project/shown.ts, where settings/ can use it too. */
+export { shownFile } from "../project/shown"
 
 /**
  * `typed`: the `--app` and `--server` the person typed, as opposed to those
@@ -29,23 +27,6 @@ type Options = Where & {
 /** The flags to type again for the same app and server: those typed, and none that zekno.json gives anyway. Both are names held to a pattern. */
 export function flagsAgain(typed: Options["typed"]): string {
   return `${typed?.app === undefined ? "" : ` --app ${typed.app}`}${typed?.server === undefined ? "" : ` --server ${typed.server}`}`
-}
-
-/** A Compose file as the person knows it: from the folder they are in when it is inside it, else from their home. Cleaned: a folder's name can hold anything. */
-export function shownFile(cwd: string, path: string): string {
-  const folders = [resolve(cwd)]
-  try {
-    // A file found by its real path is inside the folder's real path.
-    folders.push(realpathSync(folders[0]!))
-  } catch {
-    // A folder that cannot be found again is compared as it was given.
-  }
-  for (const folder of folders) {
-    const inside = relative(folder, path)
-    if (inside !== "" && !inside.startsWith("..") && !isAbsolute(inside))
-      return sanitize(inside)
-  }
-  return shownPath(path)
 }
 
 /**

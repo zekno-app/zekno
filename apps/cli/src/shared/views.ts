@@ -18,13 +18,14 @@ import {
   verifySecret,
   verifySecretRemoval,
   type Deploy,
+  type TeamTrust,
 } from "@workspace/core"
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 
 import { COMPOSE_READ_BYTES, tooManyAliases } from "../project/compose-file"
 import type { Team } from "../cli/context"
-import type { History, Server } from "../profile/profile"
+import type { History, ProfileStore, Server } from "../profile/profile"
 import { sanitize } from "../server/sanitize"
 
 /** Whether an app's services are running, as the runner last said (data-model.md). */
@@ -90,9 +91,10 @@ type Verified = {
  * The deploys this machine sent for one app on one server that verify,
  * oldest first, one per number. A history file that cannot be read shows no
  * deploys here; the deploy and rollback operations say what is wrong with it.
+ * Only the profile's files and the team list are needed, never the keychain.
  */
 export function verifiedDeploys(
-  team: Team,
+  team: Pick<Team, "store" | "trust">,
   server: Server,
   app: string
 ): Verified[] {
@@ -324,6 +326,23 @@ export function secretNamesOf(
   return secretRows(team, server, app, undefined)
     .filter((secret) => !secret.removed)
     .map((secret) => secret.name)
+}
+
+/**
+ * The Compose text of the latest deploy of an app this machine sent that its
+ * runner answered (`outcome` not `sent`) and that verifies against the team
+ * list given, read from under its signature (specs/010-app-settings,
+ * research R4). Undefined with none, or a history that cannot be read.
+ * Needs no keychain: the store and the team list only.
+ */
+export function lastDeployedCompose(
+  store: ProfileStore,
+  trust: TeamTrust,
+  server: Server,
+  app: string
+): string | undefined {
+  return accepted(verifiedDeploys({ store, trust }, server, app)).at(-1)?.deploy
+    .compose
 }
 
 /** The latest deploy of an app the runner accepted, from this machine's history. */

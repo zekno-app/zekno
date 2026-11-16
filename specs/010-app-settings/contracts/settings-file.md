@@ -29,6 +29,10 @@ fault, before anything is written, signed or sent (SC-005).
    (SR3).
 3. **Text.** Decoded as UTF-8 with `fatal: true` (SR4). A byte order mark (EF BB BF) at the very
    start is dropped.
+   As built: in a folder, a file this user cannot read is said as SR1, not SR5: Bun's `realpath`
+   of such a file fails before the file is opened, and the reader shared with a Compose file
+   (`readInsideBytes`) is left as it is for a Compose file. It is still refused, and nothing of it
+   is shown. With `-f` it is SR5.
 4. **One read.** The bytes are read once; their SHA-256, device, inode and mode are kept for a
    later write (R5 of research.md). The text is never read again for the same command.
 
@@ -128,6 +132,12 @@ are a quote and a backslash. To use a shell, the command starts with `sh -c` and
 - The services read at most 256 different secret names together (SV32).
 - The Compose text the settings turn into is at most 262,144 bytes (SV33).
 
+As built (Phase 2, 2026-11-16): no file within the other limits reaches SV33. The largest Compose
+text measured from a file within them (32 services, each with 256 secret names of one or two
+characters, 16 volumes and a start command of 256 words) is about 237 KiB, because a service
+lists a name once (SV20) and the app at most 256 names (SV32). SV33 is kept, and tested on settings
+built in memory, so that a limit changed later can never make a deploy larger than a runner takes.
+
 ## The order of checks
 
 The first fault stops the command; tests name one sentence per file:
@@ -140,6 +150,23 @@ The first fault stops the command; tests name one sentence per file:
 5. Each value, in the order of the text (SV2 to SV31).
 6. The rules across settings, in the order listed above (SV15, SV16, SV25, SV30, SV32), then the
    size of the Compose text (SV33).
+
+As built (Phase 2, 2026-11-16), where the list above was silent:
+
+- **Step 3.** `zekno` must be written `1`. An integer written with digits only, 2 or more, is SL0;
+  anything else (`1.0`, `1e0`, `0`, `"1"`, no `zekno`) is SV1.
+- **Step 4.** A key of the file is known only when it is a key of its schema, never one a
+  prototype has (`constructor`, `toString`, `__proto__` are keys not known). A service whose name
+  breaks its rule is not entered: its name cannot be said, so step 5 refuses it with SV4, and
+  nothing inside it is looked at first.
+- **Step 5.** "The order of the text" is the place where each value starts. A name is met before
+  its value (SV4, SV23, SV28 before a fault of the same entry's value). A count (SV2, SV3, SV21,
+  SV26, SV31) is at the place of its list or object, so it is said before a fault of one of its
+  entries. A required setting that is missing (SV7) is noticed where its object ends.
+- **A text larger than 65,536 bytes** given to the reader directly (not read from a file: a text
+  zekno is about to write) is SR3, so a change can never write a file the reader would refuse.
+- **Characters** are counted as code points (an emoji is one), in SJ4, the start command and a
+  plain value.
 
 ## What it can never hold (FR-003, FR-005)
 
@@ -204,7 +231,7 @@ line, set in by two columns (`ErrorLine`); in plain output it is one line on sta
 | SV6 | `<svc>, <section>: a setting this zekno does not know (line <n>).` (design); `<svc>: a setting this zekno does not know (line <n>).`; at the top, `A setting this zekno does not know (line <n>).` |
 | SV7 | `<svc>, source.image: a service needs an image, such as ghcr.io/acme/web:1.4.2.` |
 | SV8 | `<svc>, source.image: use an image reference, such as ghcr.io/acme/web:1.4.2.` |
-| SV9 | `<svc>, deploy.start:` then (a) `use a command, or leave start out to run the image's own.` (b) `a quote does not close.` (c) `it runs without a shell, so put ; & \| < > ( ) $ and backquotes in quotes. To use a shell, start it with sh -c.` (d) `use at most 4096 characters and 256 words.` (e) `use one line with no control character.` (f) `use a command in quotes, such as "bun run start".` |
+| SV9 | `<svc>, deploy.start:` then (a) `use a command, or leave start out to run the image's own.` (b) `a quote does not close.` (c) `it runs without a shell, so put ; & \| < > ( ) $ and backquotes in quotes. To use a shell, start it with sh -c.` (d) `use at most 4096 characters and 256 words.` (e) `use one line with no control character.` (f) `use a command in quotes, such as "bun run start".` As built: a backslash outside quotes, or inside double quotes before anything but `"` or `\`, is (c), since no shell reads it as an escape; a backslash that ends the command inside double quotes is (b). The checks come in this order: (e), then more than 4096 characters (d), then from the start (b) or (c), whichever is met first, then (a), then more than 256 words (d). |
 | SV10 | `<svc>, deploy.restart: use no, on-failure or always.` |
 | SV11 | `<svc>, deploy.memory: use a size such as 512m or 1g.` (design) |
 | SV12 | `<svc>, deploy.cpus: use a number of processors, such as 0.5 or 2.` |
