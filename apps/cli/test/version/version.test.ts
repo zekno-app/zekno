@@ -439,6 +439,9 @@ const NEVER_FETCHES: { [command: string]: string[] } = {
   logs: ["logs", "--app", "web", "--server", "dev", "--no-follow"],
   link: ["link", "--app", "web", "--server", "dev"],
   settings: ["settings"],
+  "settings set": ["settings", "set", "web.memory", "1g", "--yes"],
+  "settings unset": ["settings", "unset", "web.memory", "--yes"],
+  "settings init": ["settings", "init"],
 }
 
 /** The commands of the help, by their words, as docs.test.ts reads them. */

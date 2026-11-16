@@ -213,3 +213,41 @@ describe("piped (contracts/commands.md, 'Piped, TERM=dumb')", () => {
     ])
   })
 })
+
+describe("the change line of set and unset (board `CmdSettings`, middle column; T047)", () => {
+  const CHANGE = {
+    service: "web",
+    label: "memory limit",
+    now: "512m",
+    next: "1g",
+  }
+
+  test("at a terminal: from column 2, the service and label dim, the old value, a dim arrow, the new value bold", async () => {
+    const t = terminal(100, 30)
+    t.ui.settingChange(CHANGE)
+    await drawn()
+    await t.ui.close()
+    expect(t.lines()).toEqual(["  web · memory limit  512m → 1g"])
+    const line = drawnInColour(BLOCK, "ChangeLine", {
+      change: CHANGE,
+      columns: 100,
+    }).split("\n")[0]!
+    expect(wordRuns(line)).toEqual([
+      { text: "web · memory limit", bold: false, dim: true },
+      { text: "512m", bold: false, dim: false },
+      { text: "→", bold: false, dim: true },
+      { text: "1g", bold: true, dim: false },
+    ])
+  })
+
+  test("piped: the same words on standard output", () => {
+    const out: string[] = []
+    const err: string[] = []
+    plainUi(
+      (line) => out.push(line),
+      (line) => err.push(line)
+    ).settingChange({ ...CHANGE, now: "1g", next: "no limit" })
+    expect(out).toEqual(["web · memory limit  1g → no limit"])
+    expect(err).toEqual([])
+  })
+})

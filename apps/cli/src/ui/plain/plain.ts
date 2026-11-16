@@ -125,6 +125,10 @@ export function plainUi(
       for (const line of report.piped ?? []) out(line.join("\t"))
       if (report.note !== undefined) err(report.note)
     },
+    settingChange: (change) =>
+      out(
+        `${change.service} · ${change.label}  ${change.now} → ${change.next}`
+      ),
     close: async () => {},
   }
   return ui

@@ -150,6 +150,7 @@ export function inkUi(
     groups: (rows) => add({ kind: "groups", rows }),
     gap: () => add({ kind: "gap" }),
     doctorReport: (report) => add({ kind: "doctor", report }),
+    settingChange: (change) => add({ kind: "change", change }),
     settingsReport(report) {
       add({ kind: "settings", report })
       // SH3 after the services, as a warning, an empty line apart as each service is.

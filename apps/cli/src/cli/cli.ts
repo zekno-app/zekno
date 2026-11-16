@@ -17,7 +17,12 @@ import {
   type ImportRead,
 } from "../commands/secret"
 import { serverAdd, serverList, serverUpdate } from "../commands/server"
-import { settingsShow } from "../commands/settings"
+import {
+  settingsInit,
+  settingsSet,
+  settingsShow,
+  settingsUnset,
+} from "../commands/settings"
 import { status } from "../commands/status"
 import { teamOnce, type Deps } from "./context"
 import { CliError, UsageError, WrongInput } from "./errors"
@@ -57,6 +62,9 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
   zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
   zekno settings [--json]
+  zekno settings set <service>.<setting> <value> [--yes]
+  zekno settings unset <service>.<setting> [--yes]
+  zekno settings init
   zekno doctor [--server <name>] [--json]
   zekno version [--json]
   zekno --version [--json]
@@ -80,6 +88,9 @@ const WORDS: Record<string, number> = {
   logs: 1,
   link: 1,
   settings: 1,
+  "settings set": 4,
+  "settings unset": 3,
+  "settings init": 2,
   doctor: 1,
   version: 1,
 }
@@ -107,6 +118,9 @@ const WITHOUT_TEAM = new Set([
   "version",
   // specs/010-app-settings: the settings commands need no team (contracts/commands.md).
   "settings",
+  "settings set",
+  "settings unset",
+  "settings init",
 ])
 
 /** The project file that applies to `cwd`, or undefined, also when it cannot be read: for a check that may only stop a command early. */
@@ -365,6 +379,15 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         // It reads this folder's zekno.app.json and never asks; it may open the team to verify the history (ops/settings.ts).
         await settingsShow(deps, { json: values.json })
         return 0
+      case "settings set":
+        // The value is the fourth word: one argument, quoted for a start command (contracts/commands.md). It contacts no server.
+        return await settingsSet(deps, third, positionals[3], {
+          yes: values.yes === true,
+        })
+      case "settings unset":
+        return await settingsUnset(deps, third, { yes: values.yes === true })
+      case "settings init":
+        return await settingsInit(deps)
       case "doctor":
         // It never asks and takes nothing from zekno.json: no `withProject`, no asking step (contracts/doctor.md).
         return await doctor(deps, { server: values.server, json: values.json })

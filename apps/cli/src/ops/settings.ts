@@ -11,9 +11,14 @@
  * machine's history of deploys, so that a setting changed since the last
  * deploy is marked (research R4). It never asks, never accepts a zekno.json
  * and never writes `links.json`: a file it cannot use is left as it is.
+ * `set`, `unset` and `init` never open the team: they read and write the
+ * settings file, through the writer of settings/write.ts only.
  */
+import { lstatSync } from "node:fs"
+import { join } from "node:path"
+
 import { teamOf, type OpDeps, type Team } from "../cli/context"
-import { CliError } from "../cli/errors"
+import { CliError, UsageError, WrongInput } from "../cli/errors"
 import { findServer, profileStore } from "../profile/profile"
 import {
   DEFAULT_COMPOSE,
@@ -23,6 +28,7 @@ import {
 } from "../project/file"
 import { standingOf } from "../project/signed"
 import { sanitize } from "../server/sanitize"
+import { applyChange, parseSettingPath } from "../settings/change"
 import { deployedSettings } from "../settings/compose"
 import {
   isSettingsFile,
@@ -33,8 +39,27 @@ import { pipedLines } from "../settings/piped"
 import { reportOf } from "../settings/rows"
 import { present } from "../settings/source"
 import { settingsText } from "../settings/text"
-import type { Settings, SettingsRead, SettingsReport } from "../settings/types"
-import { SH1, SH2, SH3 } from "../settings/words"
+import type {
+  Change,
+  Settings,
+  SettingsRead,
+  SettingsReport,
+} from "../settings/types"
+import { checkImage, checkServiceName } from "../settings/values"
+import {
+  CS1,
+  CS13,
+  CS2,
+  CS5,
+  CS6,
+  IN1_RULE,
+  IN2_RULE,
+  IN4,
+  SH1,
+  SH2,
+  SH3,
+} from "../settings/words"
+import { createSettings, writeSettings } from "../settings/write"
 import { lastDeployedCompose } from "../shared/views"
 
 /**
@@ -139,4 +164,99 @@ export async function settingsData(deps: OpDeps): Promise<unknown> {
   if (!present(deps.cwd, SETTINGS_FILE))
     throw noSettings(deps.cwd, (await linkInUse(deps))?.link)
   return JSON.parse(settingsText(readHere(deps).settings))
+}
+
+/** A change of one setting, checked and not yet written: the file as it was read, and the change. */
+export type SettingPlan = { folder: string; read: SettingsRead; change: Change }
+
+/**
+ * CS13 when this folder's `zekno.app.json` is itself a symbolic link: the
+ * reader may follow one that stays inside the folder, but a change is never
+ * written through it (research R5), not even to a file inside the folder.
+ */
+function refuseLink(folder: string, read: SettingsRead): void {
+  let link: boolean
+  try {
+    link = lstatSync(join(folder, SETTINGS_FILE)).isSymbolicLink()
+  } catch {
+    return
+  }
+  if (link) throw new CliError(CS13(read.shown))
+}
+
+/**
+ * `zekno settings set` and `unset` up to the question (contracts/commands.md,
+ * "Order of checks", 1 to 6): the words (CS1, CS2: wrong usage, with the
+ * help line), the setting's name (CS6, CS5), the file (SH1, or the reader's
+ * sentence), the service, the value and the file with the change, each
+ * checked as the reader checks a file (CS4, CS7, CS15, CS17). A refusal of
+ * status 2 is `WrongInput`; one of status 0 (the same value, CS8; a setting
+ * not set, CS16) is given back as `nothing`, with nothing to write. A file
+ * that is a symbolic link is refused here (CS13), before anything is asked,
+ * since it would be refused at the write. `value` undefined with `unset`.
+ */
+export function prepareSettingChange(
+  deps: Pick<OpDeps, "cwd">,
+  path: string | undefined,
+  value: string | undefined,
+  unset: boolean
+): SettingPlan | { nothing: string } {
+  if (path === undefined) throw new UsageError(CS1(unset ? "unset" : "set"))
+  if (!unset && value === undefined) throw new UsageError(CS2)
+  const parsed = parseSettingPath(path)
+  if ("later" in parsed) throw new WrongInput(CS6(parsed.later))
+  if ("unknown" in parsed) throw new WrongInput(CS5)
+  if (!present(deps.cwd, SETTINGS_FILE)) throw new CliError(SH1)
+  const read = readHere(deps)
+  const change = applyChange(
+    read.settings,
+    parsed,
+    unset ? undefined : value,
+    read.shown
+  )
+  if ("refused" in change) {
+    if (change.status === 2) throw new WrongInput(change.refused)
+    return { nothing: change.refused }
+  }
+  refuseLink(deps.cwd, read)
+  return { folder: deps.cwd, read, change }
+}
+
+/**
+ * Writes a change, whole or not at all, never over a file that changed since
+ * it was read, never through a link (settings/write.ts; CS12, CS13, CS14).
+ * Nothing is deployed and no server is contacted (FR-025).
+ */
+export function writeSettingChange(plan: SettingPlan): void {
+  refuseLink(plan.folder, plan.read)
+  writeSettings(plan.read, plan.change.settings)
+}
+
+/**
+ * `zekno settings init` before it asks: IN4 when anything named
+ * `zekno.app.json` is in this folder already, a link to nowhere included.
+ * `compose`: whether compose.yaml is here too (IN6).
+ */
+export function prepareInit(deps: Pick<OpDeps, "cwd">): { compose: boolean } {
+  if (present(deps.cwd, SETTINGS_FILE)) throw new CliError(IN4)
+  return { compose: present(deps.cwd, DEFAULT_COMPOSE) }
+}
+
+/**
+ * Creates `zekno.app.json` with one service of `image`, as `init` was
+ * answered (research R8), never over a file that is there, not even one
+ * made in between (IN4). The answers are held to their rules again here.
+ * Returns the file's path.
+ */
+export function createFromAnswers(
+  deps: Pick<OpDeps, "cwd">,
+  image: string,
+  service: string
+): string {
+  if (checkImage(image) !== undefined) throw new WrongInput(IN1_RULE)
+  if (checkServiceName(service) !== undefined) throw new WrongInput(IN2_RULE)
+  return createSettings(deps.cwd, {
+    version: 1,
+    services: [[service, { image }]],
+  })
 }

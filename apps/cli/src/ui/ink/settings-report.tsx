@@ -1,7 +1,8 @@
 /**
  * `zekno settings` at a terminal (specs/010-app-settings, contracts/commands.md,
  * "At a terminal"; board `CmdSettings`, left column): the first line, then
- * each service with its rows in sections.
+ * each service with its rows in sections; and the change line `set` and
+ * `unset` show before they ask (the board's middle column).
  *
  * Every value was cleaned where the rows were made (settings/rows.ts); names
  * and the file are cleaned here again, as everything from a file is before
@@ -13,6 +14,7 @@ import { sanitize } from "../../server/sanitize"
 import type { SettingsReport } from "../../settings/types"
 import { AS3 } from "../../settings/words"
 import { useTheme } from "../terminal/theme"
+import type { SettingChangeShown } from "../types"
 import { Wrapped, type Piece } from "./wrap"
 
 /** Where the section column starts: two columns in, as every line of the board. */
@@ -99,6 +101,37 @@ export function SettingsBlock({
           })}
         </Box>
       ))}
+    </Box>
+  )
+}
+
+/**
+ * The change line (board `CmdSettings`, middle column), from column 2:
+ * `<svc> · <label>` dim, two spaces, the old value in the text colour, the
+ * arrow dim, the new value bold.
+ */
+export function ChangeLine({
+  change,
+  columns,
+}: {
+  change: SettingChangeShown
+  columns: number
+}) {
+  return (
+    <Box paddingLeft={INDENT} width={columns}>
+      <Wrapped
+        pieces={[
+          {
+            text: `${sanitize(change.service)} · ${sanitize(change.label)}`,
+            dim: true,
+          },
+          { text: `  ${sanitize(change.now)} ` },
+          { text: "→", dim: true },
+          { text: " " },
+          { text: sanitize(change.next), bold: true },
+        ]}
+        columns={columns - INDENT}
+      />
     </Box>
   )
 }

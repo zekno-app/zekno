@@ -24,6 +24,9 @@ const ADDED_TO_HELP = [
   "At a terminal a command asks for a server or an app it was not given, and `zekno deploy` sets up what a first deploy needs. In a script it asks nothing.",
   // feature 010
   "  zekno settings [--json]",
+  "  zekno settings set <service>.<setting> <value> [--yes]",
+  "  zekno settings unset <service>.<setting> [--yes]",
+  "  zekno settings init",
 ]
 
 describe("with no terminal, every command does what it did before feature 006 (FR-028)", () => {

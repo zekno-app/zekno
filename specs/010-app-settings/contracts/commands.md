@@ -212,6 +212,16 @@ line, then CS10 on standard error, status 1, nothing written.
 7. The change line; the question, `--yes`, or CS10 (1).
 8. The write (research R5): CS12, CS13, CS14 (1); else CS11 (0).
 
+As built (US3, 2026-11-16):
+
+- CS13 is also checked after step 6 and before step 7: a `zekno.app.json` that is itself a symbolic
+  link (the reader follows one that stays inside the folder) is refused before the change line
+  and the question, since its "yes" could not be written. The write checks it again.
+- CS8 and CS16 (status 0) are one line in the text colour, set in by two columns at a terminal
+  (`Ui.info`), on standard output when piped.
+- A value that starts with `-` is read as an option by the argument parser, as for every command;
+  it is given after `--`: `zekno settings set --yes web.plain.FLAGS -- -v`.
+
 ## `zekno settings unset <service>.<setting> [--yes]`
 
 As `set`, with no value: the setting is removed from the file (a plain variable or a volume by its
@@ -254,6 +264,10 @@ $ zekno settings init
 - Esc or Ctrl-C at a question: `Nothing was done.`, status 1, nothing written.
 
 With no terminal: IN5, status 1, nothing written.
+
+As built: IN4 is checked before IN5, so a folder that has `zekno.app.json` says IN4 with no
+terminal too. IN4 counts anything named `zekno.app.json` in the folder, a link to nowhere
+included, as the writer does (it never puts a file where a name is taken).
 
 ## Sentences
 

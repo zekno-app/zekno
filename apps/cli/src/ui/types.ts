@@ -114,6 +114,20 @@ export function doctorCounts(problems: number, warnings: number): string {
 export const SERVERS_SKIPPED =
   "No server was checked, because the profile could not be verified."
 
+/**
+ * What `zekno settings set` and `unset` show before they ask
+ * (specs/010-app-settings, contracts/commands.md; `Ui.settingChange`): the
+ * service, the setting's words, and its old and new value as a person reads
+ * them, `no limit` for one not set. Each is a name that passed its rule,
+ * fixed words, or a value already cleaned.
+ */
+export type SettingChangeShown = {
+  service: string
+  label: string
+  now: string
+  next: string
+}
+
 /** One line of an app's logs, as `zekno logs` prints it. Each part is already cleaned or held to a pattern. */
 export type LogOutput = { time: string; service: string; text: string }
 
@@ -275,6 +289,13 @@ export interface Ui {
    * cells separated by tabs, and the note on standard error.
    */
   settingsReport(report: SettingsReport): void
+  /**
+   * The change `zekno settings set` or `unset` is about to write, before it
+   * asks (board `CmdSettings`): at a terminal `<svc> · <label>` dim, the old
+   * value, a dim arrow and the new value bold, from column 2; plain output
+   * prints `<svc> · <label>  <old> → <new>` on standard output.
+   */
+  settingChange(change: SettingChangeShown): void
   /** Finishes drawing. Call once, before the process exits. */
   close(): Promise<void>
 }

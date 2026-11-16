@@ -235,6 +235,9 @@ zekno status [--server <name>] [--json]
 zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
 zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
 zekno settings [--json]
+zekno settings set <service>.<setting> <value> [--yes]
+zekno settings unset <service>.<setting> [--yes]
+zekno settings init
 zekno doctor [--server <name>] [--json]
 zekno version [--json]
 zekno --version [--json]
@@ -558,6 +561,12 @@ zekno link --app api --server prod
 
 Shows this folder's `zekno.app.json` in sections. Piped, one line per
 setting; with `--json`, the file's data.
+
+`zekno settings set <service>.<setting> <value>` changes one setting: it
+shows the old and the new value and asks once; with no terminal it needs
+`--yes`. `zekno settings unset <service>.<setting>` removes one the same way.
+`zekno settings init` starts a file by asking for the image and the service's
+name. None of them contacts a server or deploys anything.
 
 ### zekno doctor
 
