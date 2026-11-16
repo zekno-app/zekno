@@ -212,12 +212,12 @@ function faultOf(
     case "SV31":
       return form(words.SV31(svc))
   }
-  if (id === "SV23" || id === "SV24") {
+  if (id === "SV23" || id === "SV24" || id === "SV24:hidden") {
     const namePath = ["services", svc, "variables", "plain", String(name)]
-    return id === "SV24" &&
+    return id !== "SV23" &&
       typeof name === "string" &&
       checkPlainName(name) === undefined
-      ? form(words.SV24(svc, name))
+      ? form(words.SV24(svc, name, id === "SV24:hidden"))
       : form(words.SV23(svc, lineOf(namePath)), lineOf(namePath))
   }
   if (id === "SV28" || id === "SV29") {

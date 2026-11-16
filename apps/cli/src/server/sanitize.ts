@@ -33,10 +33,38 @@ const IGNORABLE = /\p{Default_Ignorable_Code_Point}/u
 /** The two variation selectors that choose between text and emoji form. Emoji keep their form. */
 const EMOJI_FORM = new Set([0xfe0e, 0xfe0f])
 
+/** A pictograph: the only character a text-or-emoji form selector chooses a form for. */
+const PICTOGRAPH = /\p{Extended_Pictographic}/u
+
 const isControl = (code: number) =>
   code < 0x20 || (code >= 0x7f && code <= 0x9f)
 const isHidden = (code: number, char: string) =>
   INVISIBLE.test(char) || (IGNORABLE.test(char) && !EMOJI_FORM.has(code))
+
+/**
+ * Whether `text` holds a character a person cannot see where it is drawn:
+ * a control character, any character `sanitize` takes out as invisible or
+ * drawn as nothing (the classes above), or a text-or-emoji form selector
+ * (U+FE0E, U+FE0F) that does not follow a pictograph, where it chooses
+ * nothing and is drawn as nothing. What is drawn of such text is not the
+ * text. A value that is signed and also shown must not hold one
+ * (specs/010-app-settings, security review S2): this is the one definition
+ * of what drawing would hide.
+ */
+export function holdsHidden(text: string): boolean {
+  let after: string | undefined
+  for (const char of text) {
+    const code = char.codePointAt(0)!
+    if (isControl(code) || isHidden(code, char)) return true
+    if (
+      EMOJI_FORM.has(code) &&
+      (after === undefined || !PICTOGRAPH.test(after))
+    )
+      return true
+    after = char
+  }
+  return false
+}
 const inRange = (code: number | undefined, low: number, high: number) =>
   code !== undefined && code >= low && code <= high
 

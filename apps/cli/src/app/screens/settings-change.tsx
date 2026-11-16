@@ -123,7 +123,7 @@ export function boxLines(
           { text: words.question, bold: true },
           { text: " " },
           { text: "›", dim: true },
-          // Filled in from the file, which may hold a character drawn as nothing: cleaned, as every value shown is.
+          // Filled in from the file: cleaned, as every value shown is, though the reader refuses what cleaning would take out.
           {
             text: ` ${typedShown(sanitize(change.typed), words.question, inner)}`,
           },

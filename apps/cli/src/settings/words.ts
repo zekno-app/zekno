@@ -115,10 +115,15 @@ export const SV8 = (svc: string): PlaceRule =>
     "use an image reference, such as ghcr.io/acme/web:1.4.2."
   )
 
-/** What can be wrong with a start command: SV9 (a) to (e); (f) is not a string. */
-export type StartProblem = "empty" | "quote" | "shell" | "long" | "control"
+/** What can be wrong with a start command: SV9 (a) to (e) and (g); (f) is not a string. */
+export type StartProblem =
+  "empty" | "quote" | "shell" | "long" | "control" | "hidden"
 
-/** SV9 (a) to (e), as the rule after the place. */
+/** The rule of a value holding a character drawn as nothing (security review S2), after its place: SV9 (g) and SV24's second form. */
+const HIDDEN =
+  "use no invisible character, such as a zero-width space or a right-to-left mark."
+
+/** SV9 (a) to (e) and (g), as the rule after the place. */
 const START_RULES: Record<StartProblem, string> = {
   empty: "use a command, or leave start out to run the image's own.",
   quote: "a quote does not close.",
@@ -126,8 +131,11 @@ const START_RULES: Record<StartProblem, string> = {
     "it runs without a shell, so put ; & | < > ( ) $ and backquotes in quotes. To use a shell, start it with sh -c.",
   long: "use at most 4096 characters and 256 words.",
   control: "use one line with no control character.",
+  hidden: HIDDEN,
 }
-/** SV9: (a) to (e) by the problem, (f) `type` for a start that is not a string. */
+/** The same rule as a sentence of its own, after `That is not ...` (CS7) for a value typed. */
+export const HIDDEN_RULE = `${HIDDEN.charAt(0).toUpperCase()}${HIDDEN.slice(1)}`
+/** SV9: (a) to (e) and (g) by the problem, (f) `type` for a start that is not a string. */
 export const SV9 = (svc: string, problem: StartProblem | "type"): PlaceRule =>
   at(
     `${svc}, deploy.start`,
@@ -192,11 +200,13 @@ export const SV23 = (svc: string, n: number): PlaceRule =>
     `${svc}, variables.plain`,
     `a variable name uses letters, digits and underscore, does not start with a digit, and is at most 128 characters (line ${n}).`
   )
-/** SV24 */
-export const SV24 = (svc: string, name: string): PlaceRule =>
+/** SV24; `hidden`: the value holds a character drawn as nothing (security review S2). */
+export const SV24 = (svc: string, name: string, hidden = false): PlaceRule =>
   at(
     `${svc}, variables.plain.${name}`,
-    "use a value in quotes, one line with no control character, at most 4096 characters."
+    hidden
+      ? HIDDEN
+      : "use a value in quotes, one line with no control character, at most 4096 characters."
   )
 /** SV25 */
 export const SV25 = (svc: string, name: string): PlaceRule =>

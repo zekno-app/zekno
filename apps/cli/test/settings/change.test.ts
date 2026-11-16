@@ -484,9 +484,18 @@ describe("how a value reads (contracts/commands.md and contracts/app-screen.md, 
   })
 
   test("a value is cleaned before it is shown", () => {
-    const settings = change(DESIGN_SETTINGS, "web.plain.X", "a\u202eb").settings
+    // No file or change can hold U+202E any more (security review S2); settings made in memory still never draw it.
+    const settings: Settings = {
+      version: 1,
+      services: [["web", { image: "nginx:1.27", plain: [["X", "a\u202eb"]] }]],
+    }
     expect(
       shownValue({ service: "web", key: "plain", name: "X" }, settings)
     ).toBe("ab")
+    expect(refusal(DESIGN_SETTINGS, "web.plain.X", "a\u202eb")).toEqual({
+      refused:
+        "That is not a value zekno can write. Use no invisible character, such as a zero-width space or a right-to-left mark.",
+      status: 2,
+    })
   })
 })

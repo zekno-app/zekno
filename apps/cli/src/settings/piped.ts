@@ -5,8 +5,9 @@
  * file holds it (`on-failure`, not `on failure`; secrets joined with `,` and
  * no space; `publish` a line of its own). No first line, no sections, no
  * marks: a script reads it. Every value is cleaned with `sanitize`, as every
- * line from the file is; the reader holds a value to no control character
- * already, so only invisible characters could ever be taken out.
+ * line from the file is, though the reader already refuses every character
+ * it would take out (control characters, and since security review S2 the
+ * invisible ones), so cleaning changes nothing a file can hold.
  */
 import { sanitize } from "../server/sanitize"
 import type { ServiceSettings, Settings } from "./types"

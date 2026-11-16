@@ -18,7 +18,7 @@ import {
   checkMemory,
   checkMountPath,
   checkPlainName,
-  checkPlainValue,
+  plainValueProblem,
   checkPort,
   checkRestart,
   checkServiceName,
@@ -151,7 +151,14 @@ const SecretsSchema = z
 const PlainSchema = z
   .map(
     z.string().refine((name) => !checkPlainName(name), fails("SV23")),
-    checkedString("SV24", (value) => !checkPlainValue(value)),
+    z.string(fails("SV24")).superRefine((value, context) => {
+      const problem = plainValueProblem(value)
+      if (problem !== undefined)
+        context.addIssue({
+          code: "custom",
+          message: problem === "form" ? "SV24" : "SV24:hidden",
+        })
+    }),
     fails("SV22")
   )
   .refine((plain) => plain.size <= MAX_PLAIN, counted("SV26", isMap))

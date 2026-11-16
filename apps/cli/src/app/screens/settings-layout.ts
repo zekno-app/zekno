@@ -198,8 +198,8 @@ export const lineOfRow = (lines: readonly RowLine[], row: number): number =>
 /**
  * The Compose text as the lines it is drawn in, `inner` columns wide, faint:
  * a line wider than the pane goes on under itself, at its own indent. Each
- * line is cleaned (`sanitize`): a plain value may hold a character drawn as
- * nothing, which the text keeps and the screen does not draw.
+ * line is cleaned (`sanitize`), as every line from the file is; the reader
+ * already refuses a character drawn as nothing (security review S2).
  */
 export function composeLines(compose: string, inner: number): Piece[][] {
   const text = compose.endsWith("\n") ? compose.slice(0, -1) : compose

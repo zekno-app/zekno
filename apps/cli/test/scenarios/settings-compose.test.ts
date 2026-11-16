@@ -210,20 +210,24 @@ describe("zekno settings compose prints what zekno deploy signs (FR-027, SC-002)
       expect(drawn).toEqual([expect.objectContaining({ style: "quiet" })])
   })
 
-  test("a plain value with an invisible character: piped, the text exactly as signed; at a terminal, drawn without it", async () => {
+  test("a plain value with an invisible character is refused (security review S2): nothing printed, piped or at a terminal", async () => {
     const m = machine()
     writeFileSync(
       join(m.project, "zekno.app.json"),
       DESIGN_FILE.replace('"production"', '"prod\u202Euction"')
     )
-    const run = await printed(m, "settings", "compose")
-    expect(run.code).toBe(0)
-    expect(run.text).toContain('"NODE_ENV": "prod\u202Euction"')
+    expect(await printed(m, "settings", "compose")).toEqual({
+      code: 1,
+      text: "",
+      err: [
+        "zekno.app.json could not be read as settings. web, variables.plain.NODE_ENV: use no invisible character, such as a zero-width space or a right-to-left mark.",
+      ],
+    })
     const t = terminal(100, 40)
     m.deps.ui = t.ui
-    expect(await m.zekno("settings", "compose")).toBe(0)
+    expect(await m.zekno("settings", "compose")).toBe(1)
     await t.ui.close()
     expect(t.raw()).not.toContain("\u202E")
-    expect(t.lines()).toContain('      "NODE_ENV": "production"')
+    expect(t.lines()).not.toContain('      "NODE_ENV": "production"')
   })
 })

@@ -7,12 +7,21 @@
  * Each check gives `undefined` for a good value, or the rule it breaks as a
  * sentence a person can act on (contracts/commands.md, "Each setting's
  * words"). Every string is first held to `holdsOnlyAllowed`, so nothing a
- * setting holds can end a line, hide itself, or need escaping in the Compose
- * text beyond what `quote` does (research R2).
+ * setting holds can end a line or need escaping in the Compose text beyond
+ * what `quote` does (research R2); the two that may hold text outside ASCII,
+ * the start command and a plain value, are then held to `holdsInvisible`,
+ * so nothing they hold hides itself where it is shown (security review S2).
  */
 import { isReservedSecretName, LIMITS, SECRET_NAME } from "@workspace/core"
 
-import { IN2_RULE, settingWords, startRule, type StartProblem } from "./words"
+import { holdsHidden } from "../server/sanitize"
+import {
+  HIDDEN_RULE,
+  IN2_RULE,
+  settingWords,
+  startRule,
+  type StartProblem,
+} from "./words"
 import type { SettingPath } from "./types"
 
 /** The settings file's name: a file of exactly this name is read as settings, any other as a Compose file. */
@@ -74,6 +83,19 @@ export function holdsOnlyAllowed(text: string): boolean {
   return !NOT_ALLOWED.test(text) && !LONE_SURROGATE.test(text)
 }
 
+/**
+ * Whether a string a person reads where zekno shows it holds a character
+ * drawn as nothing or that turns text around: zero-width spaces and
+ * joiners, the soft hyphen, bidirectional controls, tag characters, Hangul
+ * fillers, variation selectors not after a pictograph, and every other
+ * character `sanitize` takes out when it draws (security review S2; one
+ * definition, `holdsHidden` in server/sanitize.ts). Such a value would read
+ * as another everywhere it is shown and be signed as it is. Only the start
+ * command and a plain value can hold a character outside ASCII; every other
+ * setting is held to an ASCII pattern, which refuses them already.
+ */
+export const holdsInvisible = (text: string): boolean => holdsHidden(text)
+
 /** Characters as a person counts them: code points, not UTF-16 units. */
 export const characters = (text: string): number => [...text].length
 
@@ -129,6 +151,7 @@ export function splitStart(
   command: string
 ): { words: string[] } | { problem: StartProblem } {
   if (!holdsOnlyAllowed(command)) return { problem: "control" }
+  if (holdsInvisible(command)) return { problem: "hidden" }
   if (characters(command) > MAX_TEXT) return { problem: "long" }
   const words: string[] = []
   const end = command.length
@@ -265,11 +288,23 @@ export function checkPlainName(name: string): string | undefined {
     : "A variable name uses letters, digits and underscore, does not start with a digit, and is at most 128 characters."
 }
 
-/** A plain variable's value: one line, no control character, at most 4096 characters; empty is a value. */
+/**
+ * What is wrong with a plain variable's value: a character no setting holds
+ * or more than 4096 characters (`form`), or a character drawn as nothing
+ * (`hidden`); empty is a value.
+ */
+export function plainValueProblem(
+  value: string
+): "form" | "hidden" | undefined {
+  if (!holdsOnlyAllowed(value) || characters(value) > MAX_TEXT) return "form"
+  return holdsInvisible(value) ? "hidden" : undefined
+}
+
+/** A plain variable's value: one line, no control or invisible character, at most 4096 characters; empty is a value. */
 export function checkPlainValue(value: string): string | undefined {
-  return holdsOnlyAllowed(value) && characters(value) <= MAX_TEXT
-    ? undefined
-    : settingWords("plain").rule
+  const problem = plainValueProblem(value)
+  if (problem === undefined) return undefined
+  return problem === "form" ? settingWords("plain").rule : HIDDEN_RULE
 }
 
 /** A volume's name. */
