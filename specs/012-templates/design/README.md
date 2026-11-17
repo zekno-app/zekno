@@ -44,6 +44,10 @@ Changed again on 2026-11-17, after the plan (`../plan.md`), with the maintainer'
 - 2026-11-18: SH4, said since T4 also when the file here is a Compose file written by hand, names
   that file in its last words (`not the compose.yaml here.`) where it said `not the zekno.app.json
   here.`; for a settings file it is unchanged (contracts/commands.md, step 6).
+- 2026-11-18, found by the walkthrough (T056): a name longer than the summary's name column, such
+  as MongoDB's `MONGO_INITDB_ROOT_PASSWORD`, was cut inside the name and glued to its value. It is
+  now drawn whole on a line of its own, its value from column 26 on the next, in the summary and in
+  `--show`'s secrets. No board shows MongoDB; every line a board shows is unchanged.
 
 The right column of `AddLook` still says "The numbers here are examples"; since this change they
 are the real ones, and only the shortened digests differ from what zekno prints.

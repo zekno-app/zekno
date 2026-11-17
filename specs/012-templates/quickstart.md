@@ -238,7 +238,138 @@ on GitHub's machine, which may be slower; and the first pull request's run is th
 
 Each board against the real program (T056). Results:
 
-_Not run yet._
+Run on 2026-11-18 on branch `012-templates` (after `3742e59`), macOS on Apple silicon, Bun 1.4.4. A
+driver script in the session's scratchpad (`walkthrough-012/drive.ts`) calls `run` of
+`apps/cli/src/cli/cli.ts` with `inkUi()`, or the plain interface where `main.ts` would pick it, and
+`memoryKeyStore()` (through the tests' `machine()`), a temporary profile folder, and `HOME` and
+`ZEKNO_HOME` of its own; the server `prod` is the stand-in server reached by a stand-in `ssh` at
+`deploy@203.0.113.7`, running the real runner with the stand-in Docker; `fetch` fails and the real
+`ssh` and network tools are refused. A Python driver (`harness.py`, `walk.py`) runs it in a
+pseudo-terminal of 100 by 30 or 80 by 24, reads the terminal the whole time, types the keys one at a
+time and keeps the screen in a terminal model that keeps colours (`vt.py`). 134 captures, 106 at
+100 by 30 and 28 at 80 by 24: 45 of `AddTemplate`, 27 of `AddLook`, 62 of `AddOther`, each with
+its text, its looks and its size, listed one per line with the command, the keys and the board
+comparison in `walkthrough-012/captures-final/INDEX.md`. Nothing reached a real host, the keychain,
+`~/.zekno` or the network; no Docker container, volume or network was made.
+
+**`AddTemplate`.** The summary (with the readers question answered `web`, with one service, for
+each of the four templates, with `--for worker`, `--name db` and `--yes`), the question, the result,
+a no (`n`, Enter, Esc and Ctrl-C at AD3; Esc and Ctrl-C at AD10), AD11, and the next deploy:
+every word, symbol, column and look of the board matches (the title and software bold, the about
+and `by zekno` dim with `by zekno` at the box's right edge at both sizes; the box's labels dim,
+`demo` bold, where and the file's services dim; headings bold; the service bold in the brand
+colour; `pinned by digest`, the dot, `never shown`, `read by`, `••••` dim; the note in the warning
+colour; `?` brand, the question bold, `(y/N)` dim, `yes` or `no` left after it; `✔` green and AD18
+dim from column 2; `Nothing was added.` dim from column 0). Differences, none of them a defect:
+
+- The summary starts with `✔ Read by  web` when the readers question was asked (the contract's
+  line, D13; the board's summary does not show it).
+- The readers question's rows start at column 2 (`  ❯ ◉ web` / `    ◯ worker`), where the board's
+  grid and the contract's text block put the marker at the left edge. The picker and every list of
+  zekno draw their rows so.
+- Esc or Ctrl-C at the readers question leave the question's line above `Nothing was added.`:
+  `? Which services read DATABASE_URL?` then `Nothing was added.`
+- The next deploy's panel is `zekno deploy`'s own, unchanged by this feature: the count the board
+  calls new matches (`from zekno.app.json  3 services: web, worker, postgres`), the rest differs from
+  the board's drawing of it: `╭─ Deploy 2 ─...╮`, `app demo` not bold, `server prod` with no
+  `deploy@...`, `secrets 3` where the board lists the names and versions, and
+  `✔ demo is live on prod in 0.1s` with its hint where the board draws
+  `✔ Deploy 6 demo is running on prod 9.3 s`.
+- On a light terminal the command looks exactly as on a dark one: it never asks the terminal its
+  background (no OSC 11 query was seen), so the brand stays #2383e2, as for every command since
+  feature 004; only the full-screen app switches to its darker blue.
+
+**`AddLook`.** The picker (and `✔ Template  postgres` left behind, D12), Esc at it, `--list`
+(terminal, piped, `--json`), `--show` of each template at both sizes (piped and `--json` for
+postgres, piped for redis), `mongo`, `nope` and `Bad Name`: words, columns and looks match the
+board (`--list` from column 2 with the name bold and the about and `by zekno` dim; `--show`'s title
+bold and the rest dim, the service bold brand, sections bold, labels dim, values in the text
+colour; AL3 exactly as the board, status 2). Differences:
+
+- The picker's rows start at column 2, as the readers question's:
+
+  ```text
+  ? Add which template?
+    ❯ postgres  PostgreSQL 18.7  A relational database
+      mysql     MySQL 9.7        A relational database
+  ```
+
+- `--show` prints the digest whole (D25), so at 100 and at 80 columns the image goes on under its
+  value column, where the board shortens it and the contract's text block shows one line of 117
+  columns (the docs say so):
+
+  ```text
+    Source        image          postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e
+                                 4162593691c61bbc
+  ```
+
+  Redis's start command goes on the same way under its value column.
+- Esc at the picker leaves `? Add which template?` above `Nothing was added.`
+
+**`AddOther`.** The lines for a Compose file written by hand (postgres at both sizes, mysql, redis
+at both sizes), AH6 answered yes and no, the piped forms, every refusal a person can reach, and the
+script lines: the board's words, statuses and looks match (the file bold, AH2 dim, `Under` dim and
+`services:` in the text colour, faint borders, the lines in the text colour, AH6 as a question,
+AD17; the six refusals of the board with `✖` red, the first sentence bold and the second dim set in
+by two, statuses 2, 2, 2, 2, 1, 1; AD4 alone on standard error, status 1; AD23's three lines with
+tabs; AD12 for two services and no `--for`). Differences:
+
+- The box widths: the service's box is as wide as the window (100 columns, the image line one
+  space from its border; the box is two columns wider than its longest line only where the window
+  allows), the connection secret's box is 40 columns, two wider than its line. The contract's text
+  block has the same second box, and a first box whose borders are 100 columns but whose lines are
+  102 and 103; apps/cli/README.md's block is the program's exactly.
+- At 80 columns the image line, and at both sizes Redis's `command:` line, go on inside the box from
+  its first column:
+
+  ```text
+  │     image: postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4b │
+  │ cf2e4162593691c61bbc                                                         │
+  ```
+
+  Piped, each is one line.
+- AD29 (design.md's file, whose `web` and `worker` list `DATABASE_URL` in their secrets) comes after
+  the readers question, as the order of checks has it (step 10 before step 11), though no answer
+  avoids it: `? Which services read DATABASE_URL?`, Enter, then `✔ Read by  web` and
+  `✖ web already reads a secret named DATABASE_URL.` / `Remove it from web.`, status 2.
+
+**Fixed, test first** (the one defect found): MongoDB's made secret `MONGO_INITDB_ROOT_PASSWORD`
+is 26 characters, longer than the 24-column name column, and was cut inside its name and glued to
+its value, in the summary and in `--show`'s secrets:
+
+```text
+  MONGO_INITDB_ROOT_PASSWO32 random characters
+  RD
+```
+
+A name of more than 22 characters is now drawn whole on a line of its own, its value from column
+26 on the next (`test/ui/ink/addition-report.test.tsx`, `test/ui/ink/templates.test.tsx`; the
+contract and design/README.md say so). No line a board shows changed. SH4 as `zekno add` says it
+for a Compose file here was also corrected today (`3742e59`): it ends `not the compose.yaml here.`
+
+**Plan.md's D list, reached and seen**: D1 (`postgres-data`, `db-data`, AD9), D2 and D3 (the
+versions and `/var/lib/postgresql`), D5 (`mongodb`, `mongo` in AL3, the second note), D6
+(`REDIS_URL`), D8 (the order), D9 (AL3's second form, AL4), D10 and D11 (AU1 to AU8, AU10, the
+third word), D12, D13, D14 (AD12, AD14), D15 (AD22 at zekno add's questions, `✖ Nothing was
+done.` at the app question), D16 (AD4, status 1), D17 (AH8, AH9, AU10, the bare lines, `$$`), D18,
+D19 (`--name db` and `{service}`), D21 (AD15), D22 (AD20, AD21, AD24), D24, D25, D26, D27 (AD8 and
+AD13 status 1), D28 (AD5 for the template added before), D30, D31 (`Makes 2 secrets`, `its three
+secrets`), D32 (the volume's name in the text colour). IN6 (terminal and script) and SH4 (both
+forms, terminal and script) as `zekno add` says them now.
+
+**Not checked**: AD19 and AD25 (they need a failure between two writes, or more records than a
+person makes), AD27 and AD28 and AU9 (no template of this zekno breaks its checks, asks a question
+or has several services), D7 (mysql added after postgres, which is AD5 as shown for postgres), a
+window narrower than 80 columns or resized while a question is open, type-ahead, and the real
+keychain and real Docker (T031 ran the four templates with real Docker).
+
+**SC-001**, timed: in a folder whose `zekno.app.json` (web, worker) was already deployed to `prod`,
+from the start of `zekno add postgres` to the deploy's result line, with the readers question
+answered by Enter and AD3 by `y` as soon as each was drawn: 0.52 s (add 0.42 s, deploy 0.13 s, the
+stand-in Docker), well under the two minutes of SC-001; the deploy's `docker compose up` had
+`POSTGRES_PASSWORD` and `DATABASE_URL` in its environment, and its Compose text the service
+`postgres` with its pinned image and the volume `postgres-data`, each secret only as `${NAME}`. The app reaching the database is T031's real Docker run: 2.7 s from `zekno add` to the
+client's first answer for postgres. A person's time is their reading and two key presses on top.
 
 ## Checks at the end
 

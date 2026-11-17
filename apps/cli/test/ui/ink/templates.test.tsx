@@ -165,6 +165,21 @@ describe("--show (board `AddLook`, middle column)", () => {
     expect(mongodb[0]).toBe("  MongoDB 9.0  A document database. By zekno.")
   })
 
+  test("a secret's name too long for its column (MongoDB's password): whole on its own line, its words from column 26 on the next (the walkthrough, T056)", async () => {
+    for (const columns of [100, 80]) {
+      const mongodb = await shown(
+        (ui) => ui.templateView(view("mongodb")),
+        columns
+      )
+      const at = mongodb.indexOf("  MONGO_INITDB_ROOT_PASSWORD")
+      expect(mongodb.slice(at, at + 3)).toEqual([
+        "  MONGO_INITDB_ROOT_PASSWORD",
+        "                          made on your machine, 32 random characters",
+        "  MONGODB_URI             built from it, for your own services",
+      ])
+    }
+  })
+
   test("its looks: title bold and the rest dim; the service bold in the brand colour; sections bold, labels dim, values in the text colour; headings bold; names in the text colour and their words dim; Good to know's lines and Nothing was changed. dim", () => {
     const lines = drawnInColour(
       TEMPLATES,

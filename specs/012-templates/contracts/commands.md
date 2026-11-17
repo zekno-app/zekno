@@ -90,6 +90,9 @@ Builds a secret from it
   connection secret: its name, its text with `••••` (dim) in place of each made value and the
   service's name in place of `{service}`; under it, dim, `read by <readers>`. Left out when the
   template offers none.
+- **A long name** (2026-11-18, the walkthrough, T056): a name of more than 22 characters, such as
+  MongoDB's `MONGO_INITDB_ROOT_PASSWORD`, leaves no two spaces before column 26. It is drawn whole
+  on a line of its own, and its value starts at column 26 on the next line.
 - **Notes**: each of the template's notes as `! <note>`, the whole line in the warning colour.
 - **The question**: AD3 with today's yes-or-no question (`Ui.confirm`): `?` in the brand colour,
   `Add <service> to <app>?` bold, ` Nothing is deployed until you deploy.` in the text colour,
@@ -252,7 +255,8 @@ $ zekno add postgres --show
   (research R10; the board shortens it). A start command is the Deploy section's `start` row.
 - **Secrets** bold; per made secret, its name padded to 24 and `made on your machine, <n> random
   characters` dim; per connection secret, `built from it, for your own services` dim (`from them`
-  when it uses several, new).
+  when it uses several, new). A name of more than 22 characters is drawn whole on a line of its
+  own, its words from column 26 on the next, as in the summary (2026-11-18).
 - **Good to know** bold; dim: AV3 when a service keeps data in a volume; AV4; then each note of the
   template but `Zekno does not back up this data.`, which AV3 says.
 - AV5 dim. Exit status 0.

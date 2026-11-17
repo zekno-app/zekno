@@ -136,6 +136,33 @@ describe("the summary (board `AddTemplate`, left column)", () => {
     )
   })
 
+  test("a name too long for its column (MongoDB's password, a long --name): whole on its own line, its value from column 26 on the next (the walkthrough, T056)", async () => {
+    const mongodb = await shown(reportOf(FIRST_TEMPLATES.mongodb!))
+    const at = mongodb.indexOf("  MONGO_INITDB_ROOT_PASSWORD")
+    expect(mongodb.slice(at, at + 3)).toEqual([
+      "  MONGO_INITDB_ROOT_PASSWORD",
+      "                          32 random characters",
+      "                          read by mongodb",
+    ])
+    const long = "postgres-of-the-reports"
+    const lines = await shown({
+      ...POSTGRES,
+      services: [{ ...POSTGRES.services[0]!, name: long }],
+    })
+    const row = lines.indexOf(`  ${long}`)
+    expect(lines.slice(row, row + 2)).toEqual([
+      `  ${long}`,
+      "                          postgres:18.7  pinned by digest",
+    ])
+    // A name of 22 characters and two spaces still fits before column 26.
+    expect(
+      await shown({
+        ...POSTGRES,
+        made: [{ ...POSTGRES.made[0]!, name: "A".repeat(22) }],
+      })
+    ).toContain(`  ${"A".repeat(22)}  32 random characters`)
+  })
+
   test("several services, volumes and made secrets: the counts as digits (D31), volumes listed, from them", async () => {
     const report: AdditionReport = {
       ...POSTGRES,

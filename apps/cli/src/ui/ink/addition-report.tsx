@@ -34,7 +34,14 @@ const NAME_COLUMN = 24
 /** The box's label column: `server` and two spaces. */
 const BOX_LABELS = 8
 
-/** One row of a block: the name in its column, in its look, and the value's pieces, going on under the value column. */
+/**
+ * One row of a block: the name in its column, in its look, and the value's
+ * pieces, going on under the value column. A name that leaves no two spaces
+ * before the value column, such as MongoDB's `MONGO_INITDB_ROOT_PASSWORD`,
+ * is drawn whole on a line of its own and its value from the value column on
+ * the next, never broken inside the name (specs/012-templates, the
+ * walkthrough, T056).
+ */
 function Row({
   name = "",
   look,
@@ -46,6 +53,18 @@ function Row({
   pieces: readonly Piece[]
   columns: number
 }) {
+  if (Bun.stringWidth(name) > NAME_COLUMN - 2)
+    return (
+      <Box flexDirection="column">
+        <Box paddingLeft={ROW_INDENT} width={columns}>
+          <Wrapped
+            pieces={[{ text: name, ...look }]}
+            columns={Math.max(1, columns - ROW_INDENT)}
+          />
+        </Box>
+        <Row pieces={pieces} columns={columns} />
+      </Box>
+    )
   return (
     <Box paddingLeft={ROW_INDENT} width={columns}>
       <Box width={NAME_COLUMN} flexShrink={0}>

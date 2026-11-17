@@ -83,7 +83,13 @@ const Heading = ({ text, columns }: { text: string; columns: number }) => (
   <Indented pieces={[{ text, bold: true }]} columns={columns} />
 )
 
-/** A secret's row: its name in the text colour, padded to 24, and its words dim. */
+/**
+ * A secret's row: its name in the text colour, padded to 24, and its words
+ * dim. A name that leaves no two spaces before column 26, such as MongoDB's
+ * `MONGO_INITDB_ROOT_PASSWORD`, is drawn whole on a line of its own and its
+ * words from column 26 on the next, never broken inside the name
+ * (specs/012-templates, the walkthrough, T056).
+ */
 function SecretRow({
   name,
   words,
@@ -93,6 +99,13 @@ function SecretRow({
   words: string
   columns: number
 }) {
+  if (Bun.stringWidth(name) > NAME_COLUMN - 2)
+    return (
+      <Box flexDirection="column">
+        <Indented pieces={[{ text: name }]} columns={columns} />
+        <SecretRow name="" words={words} columns={columns} />
+      </Box>
+    )
   return (
     <Box paddingLeft={INDENT} width={columns}>
       <Box width={NAME_COLUMN} flexShrink={0}>
