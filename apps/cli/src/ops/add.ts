@@ -119,6 +119,8 @@ export type AddInput = {
   template: Template
   name?: string
   for?: readonly string[]
+  /** `--app` as typed, before the questions: it decides the file as the deploy decides it (security review T2). */
+  app?: string
   /** The flags and the folder's link, or, at a terminal, the questions that ask for what is missing, asked only after the file was read. */
   where: Where | (() => Promise<Where>)
 }
@@ -179,10 +181,15 @@ export function hasServer(deps: Pick<OpDeps, "home">): void {
  * read once and checked whole (the reader's sentences, status 1); a Compose
  * file written by hand, named as the deploy names it and never read, also
  * when a `zekno.app.json` lies here that the deploy does not use; none is
- * AD13. SH4 as the settings commands say it.
+ * AD13. SH4 as the settings commands say it. `app` is `--app`: with another
+ * app than the link's, the deploy signs this folder's own file, so that is
+ * the one (security review T2).
  */
-function targetOf(deps: Pick<OpDeps, "cwd" | "home">): AddTarget {
-  const found = findPlace(deps)
+function targetOf(
+  deps: Pick<OpDeps, "cwd" | "home">,
+  app: string | undefined
+): AddTarget {
+  const found = findPlace(deps, app)
   if (found.kind === "none") throw new CliError(AD13)
   if (found.kind === "compose") return { kind: "hand", file: found.file }
   return {
@@ -272,7 +279,7 @@ export async function prepareAdd(
   deps: OpDeps,
   input: AddInput
 ): Promise<AddPlan | AddQuestion | HandPlan> {
-  const target = targetOf(deps)
+  const target = targetOf(deps, input.app)
   if (target.kind === "hand" && input.for !== undefined)
     throw new WrongInput(AU10(target.file))
   const where =

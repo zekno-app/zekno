@@ -26,6 +26,7 @@ import {
   linkedElsewhere,
   ROOT,
   runs,
+  SUB,
   subFolder,
   VISIBLE,
 } from "../support/settings-places"
@@ -84,6 +85,26 @@ describe("findPlace: the file a deploy here would use, as an answer (specs/012-t
     expect(found.read.settings).toEqual(runs(HIDDEN))
     expect(found.read.settings).not.toEqual(runs(VISIBLE))
     expect(found.read.shown).toBe("deploy/zekno.app.json")
+  }, 60_000)
+
+  test("another app than the link's (zekno add --app): this folder's own file, as zekno deploy --app gives it; the link's own app or none: the link's file (security review T2)", async () => {
+    const { m, signedFile, ownFile } = await subFolder()
+    const other = findPlace(untouched(m.deps), "billing")
+    if (other.kind !== "settings") throw new Error(other.kind)
+    expect(other.read.path).toBe(realpathSync(ownFile))
+    expect(other.read.settings).toEqual(runs(SUB))
+    expect(other.place.source.kind).toBe("default")
+    for (const app of ["demo", undefined]) {
+      const own = findPlace(untouched(m.deps), app)
+      if (own.kind !== "settings") throw new Error(own.kind)
+      expect(own.read.path).toBe(signedFile)
+    }
+    // The link names compose.yaml while zekno.app.json lies here: with another app, both are here and nothing decides.
+    const { m: compose } = await linkedCompose()
+    const both = findPlace(untouched(compose.deps), "billing")
+    if (both.kind !== "settings") throw new Error(both.kind)
+    expect([both.read.settings, both.place.both]).toEqual([runs(VISIBLE), true])
+    expect(findPlace(untouched(compose.deps), "demo").kind).toBe("compose")
   }, 60_000)
 
   test("a folder with neither file, with compose.yaml only, with zekno.app.json only, and with both", () => {

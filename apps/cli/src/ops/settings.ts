@@ -137,10 +137,20 @@ export type FoundPlace =
  * else is thrown: `zekno add` takes the Compose file as an answer
  * (specs/012-templates, research R8), and `readPlaced` makes SH1 to SH3 of
  * the other two.
+ *
+ * `app`: the app the command was told with `--app`, for `zekno add`. A
+ * link's file goes only with its own app, as the deploy gives it
+ * (`withProject`; feature 004, P2): with another app, the file is this
+ * folder's own, the one `zekno deploy --app <app>` here signs
+ * (specs/012-templates, security review T2).
  */
-export function findPlace(deps: Pick<OpDeps, "cwd" | "home">): FoundPlace {
+export function findPlace(
+  deps: Pick<OpDeps, "cwd" | "home">,
+  app?: string
+): FoundPlace {
   const { inUse, pending } = linkOf(deps)
-  const place = settingsPlace(deps.cwd, inUse)
+  const ownApp = app === undefined || inUse?.app === app
+  const place = settingsPlace(deps.cwd, ownApp ? inUse : undefined)
   // A zekno.json not in use here yet that names another file than this folder's settings: a yes to the deploy's question
   // deploys that file, so this one is not shown or changed as if it were the one deployed (S6).
   if (pending !== undefined && place.kind === "settings") {

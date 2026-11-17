@@ -27,6 +27,7 @@ import type { Settings } from "../../src/settings/types"
 import { AD5, AD6 } from "../../src/templates/add-words"
 import { BEFORE_FILE } from "../support/add-files"
 import { machine, ready } from "../support/helpers"
+import { fileOf, ROOT, runs, SUB, subFolder } from "../support/settings-places"
 import { FIRST_SET } from "../support/template-files"
 
 type Machine = ReturnType<typeof machine>
@@ -40,17 +41,20 @@ beforeAll(async () => {
   writeFileSync(join(m.project, "zekno.app.json"), BEFORE_FILE)
 }, 60_000)
 
-/** Runs `zekno <args>` with the plain interface: its status and what it wrote on each stream. */
-async function piped(...args: string[]) {
-  m.out.length = 0
-  m.err.length = 0
-  const code = await m.zekno(...args)
-  return { code, out: [...m.out], err: [...m.err] }
+/** Runs `zekno <args>` on `on` with the plain interface: its status and what it wrote on each stream. */
+async function on(machine: Machine, ...args: string[]) {
+  machine.out.length = 0
+  machine.err.length = 0
+  const code = await machine.zekno(...args)
+  return { code, out: [...machine.out], err: [...machine.err] }
 }
 
-/** The Compose text of each deploy of `app` this machine signed, oldest first, read from under its signature. */
-async function signed(app = "demo"): Promise<string[]> {
-  const team = await openTeam(m.deps)
+/** Runs `zekno <args>` with the plain interface: its status and what it wrote on each stream. */
+const piped = (...args: string[]) => on(m, ...args)
+
+/** The Compose text of each deploy of `app` `machine` signed, oldest first, read from under its signature. */
+async function signed(app = "demo", machine = m): Promise<string[]> {
+  const team = await openTeam(machine.deps)
   const server = team.profile.servers[0]!
   return team.store.history(server.serverId, app).map((entry) => {
     const read = readSignedDeploy({
@@ -215,4 +219,49 @@ describe("a folder whose zekno.json, signed and in use, names deploy/zekno.app.j
       m.deps.cwd = m.project
     }
   })
+})
+
+describe("--app another app below a zekno.json in use (security review T2)", () => {
+  test("the folder's own file gains the service, the one zekno deploy --app signs there; the link's file and app are left as they were", async () => {
+    const { m: sub, signedFile, ownFile } = await subFolder()
+    expect(
+      await on(
+        sub,
+        "add",
+        "postgres",
+        "--yes",
+        "--app",
+        "billing",
+        "--server",
+        "dev"
+      )
+    ).toEqual({
+      code: 0,
+      out: [
+        "added\tpostgres\tzekno.app.json",
+        "stored\tPOSTGRES_PASSWORD\t1",
+        "stored\tDATABASE_URL\t1",
+      ],
+      err: [],
+    })
+    expect(readFileSync(signedFile, "utf8")).toBe(fileOf(ROOT))
+    const own = settingsOf(ownFile)
+    expect(own.services.map(([name]) => name)).toEqual(["web", "postgres"])
+    expect(own.services[0]).toEqual([
+      "web",
+      { ...runs(SUB).services[0]![1], secrets: ["DATABASE_URL"] },
+    ])
+    const billing = await listSecrets(sub.deps, {
+      app: "billing",
+      server: "dev",
+    })
+    expect(billing.secrets.map((secret) => secret.name)).toEqual([
+      "DATABASE_URL",
+      "POSTGRES_PASSWORD",
+    ])
+    expect(
+      (await on(sub, "deploy", "--app", "billing", "--server", "dev")).code
+    ).toBe(0)
+    expect((await signed("billing", sub)).at(-1)).toBe(composeText(own))
+  }, 60_000)
 })

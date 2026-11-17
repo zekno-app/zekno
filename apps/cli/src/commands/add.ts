@@ -90,7 +90,7 @@ export type AddInput = {
    * the order given (AU6 names the first `--list` or `--show` does not
    * take), with `--list`, `--show` and `--json` among them.
    */
-  options?: { list?: boolean; show?: boolean; json?: boolean }
+  options?: { list?: boolean; show?: boolean; json?: boolean; app?: string }
   /** The flags, the folder's link, then at a terminal a question for each detail still missing; called once the file was read. */
   details: () => Promise<Where>
 }
@@ -259,6 +259,8 @@ export async function add(deps: Deps, input: AddInput): Promise<number> {
     template,
     ...(input.name === undefined ? {} : { name: input.name }),
     ...(input.for === undefined ? {} : { for: input.for }),
+    // `--app` decides the file as the deploy decides it, before any question (security review T2).
+    ...(input.options?.app === undefined ? {} : { app: input.options.app }),
     where: input.details,
   })
   if (isHand(prepared)) return byHand(deps, prepared, input.yes)
