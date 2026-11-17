@@ -368,14 +368,54 @@ from the start of `zekno add postgres` to the deploy's result line, with the rea
 answered by Enter and AD3 by `y` as soon as each was drawn: 0.52 s (add 0.42 s, deploy 0.13 s, the
 stand-in Docker), well under the two minutes of SC-001; the deploy's `docker compose up` had
 `POSTGRES_PASSWORD` and `DATABASE_URL` in its environment, and its Compose text the service
-`postgres` with its pinned image and the volume `postgres-data`, each secret only as `${NAME}`. The app reaching the database is T031's real Docker run: 2.7 s from `zekno add` to the
-client's first answer for postgres. A person's time is their reading and two key presses on top.
+`postgres` with its pinned image and the volume `postgres-data`, each secret only as `${NAME}`.
+The app reaching the database is T031's real Docker run: 2.7 s from `zekno add` to the client's
+first answer for postgres. A person's time is their reading and two key presses on top.
 
 ## Checks at the end
 
 T057. Results:
 
-_Not run yet._
+Run on 2026-11-18 on branch `012-templates` (after `181adba`), macOS on Apple silicon, Bun 1.4.4,
+Docker Engine 29.6.1.
+
+- `bun run typecheck --force` from the root: 5 of 5 tasks, none cached, all passed
+  (`@workspace/cli`, `@workspace/core`, `@workspace/runner`, `@workspace/ui`, `web`; `web` runs
+  `next typegen` before `tsc`, which is neither `next dev` nor `next build`).
+- `bun run lint --force`: 5 of 5 tasks, none cached, no problem (the same five packages).
+- `bun run test --force`: 4 of 4 tasks, none cached (`@workspace/cli`, `@workspace/core`,
+  `@workspace/runner`, `web`), on the second run. Totals: CLI 2164 pass and 4 skipped (the four
+  template tests that need `ZEKNO_TEMPLATES_DOCKER=1`), 2168 tests in 106 files; core 102 pass;
+  runner 147 pass and 1 skipped; web 32 pass; no failure. The first run failed once in the runner,
+  in a test this feature never changed, while the CLI's tests ran beside it: `release.ts check: the
+  tag, the branch and the versions > a tag is runner-v and a version, and nothing else`, `this test
+  timed out after 5000ms` (`killed 25 dangling processes`; 146 pass, 1 skip, 1 fail), and turbo
+  stopped the CLI's tests with it. The second run, unchanged, passed whole.
+- `bun run format` (Prettier in the five packages), then `git diff --stat`: no file of this feature
+  changed. Prettier rewrote 24 files this feature never touched (`git log d19b25f..HEAD` names none
+  of them), formatting already off at `d19b25f`: 22 in `apps/web` (`components/layout/site-nav.tsx`,
+  `lib/social-card.tsx`, `next.config.ts`, `modules/module-seams.test.ts` and 18 under
+  `modules/landing/`) and `packages/ui/src/components/accordion.tsx` and `sheet.tsx`: the order of
+  Tailwind classes, quotes and semicolons, line breaks. Each was written back as it was at `HEAD`,
+  by hand, so `git diff --stat` then printed nothing.
+- In `apps/cli`, `bun run test:templates` with Docker: 212 pass, 0 fail, 15 files, 70.4 s; each of
+  postgres, mysql, mongodb and redis `running after 15 s, no port bound, data in named volumes, no
+  made value on a command line, a client connected` (15.7 s to 16.5 s each). `docker ps -a`,
+  `docker volume ls` and `docker network ls` afterwards listed exactly what they listed before
+  (`sessora-redis` and `vata-e2e-pg`, not this feature's, untouched); nothing named
+  `zekno-test-template-` was left.
+- In `apps/cli`, `bun run compile`: `dist/zekno` built. From `/`, with a new empty `ZEKNO_HOME`,
+  `dist/zekno add --list` printed the four templates of the index (`postgres	PostgreSQL	18.7	zekno`
+  to `redis	Redis	8.10	zekno`), status 0, and `dist/zekno add redis --show` printed redis's piped
+  lines with its pinned image and start command, `made	REDIS_PASSWORD	32` and `built	REDIS_URL
+  redis://default:{REDIS_PASSWORD}@{service}:6379`, status 0. No template file lies in `/`; the
+  profile folder stayed empty.
+- `bun run build`: not run. For `apps/web` it is `next build`, which the maintainer's rule keeps
+  out of these sessions.
+- `git diff --stat d19b25f -- packages/core apps/runner apps/cli/src/version/runner-release.json
+  apps/cli/test/plain/plain-at-head.ts apps/cli/e2e.config.ts apps/cli/tests` printed nothing
+  (FR-018, SC-007).
+- The agent end-to-end tests under `apps/cli/tests` were not run: no screen of the app changes.
 
 ## Verified while planning (2026-11-17)
 

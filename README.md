@@ -259,7 +259,7 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 - [x] Publish the first runner release: 0.1.0, confirmed by a second build and proven on a real server
 - [x] CLI: asks for what is missing, one command from nothing, `zekno secret import`, `zekno doctor`, `zekno --version`
 - [x] CLI: app settings in zekno.app.json, zekno settings, a settings screen, the design of deploy message version 2
-- [ ] CLI: templates (zekno add), PostgreSQL, MySQL, MongoDB and Redis; contributed by pull request
+- [x] CLI: templates (zekno add), PostgreSQL, MySQL, MongoDB and Redis; contributed by pull request
 - [ ] Desktop app: connect a server, set secrets, deploy, roll back, logs
 - [ ] Website: landing pages and docs, then the signed-in dashboard
 - [ ] Local mock of the control plane for development
