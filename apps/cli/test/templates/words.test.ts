@@ -104,7 +104,7 @@ describe("file-words.ts: contracts/template-file.md", () => {
     )
   })
 
-  test("TF21 to TF33", () => {
+  test("TF21 to TF34", () => {
     expect(said(file.TF21("db"))).toBe(
       "services.db.source.image: pin the image by digest."
     )
@@ -143,6 +143,9 @@ describe("file-words.ts: contracts/template-file.md", () => {
     )
     expect(said(file.TF33("a-b", "c", "a"))).toBe(
       "services.a-b.volumes.c: it is added as a-b-c, as a volume of a is."
+    )
+    expect(said(file.TF34("DATABASE_URL"))).toBe(
+      "offers.DATABASE_URL: a connection secret points at {service} and nowhere else."
     )
   })
 

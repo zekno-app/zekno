@@ -52,7 +52,7 @@ above, two spaces of indent.
 | `also` | Names people may type instead, such as `mongo` for `mongodb`. Typing one is refused with a pointer to the right name (contracts/commands.md, AL3). | A list of 0 to 8 names, each held to the name rule, none twice, not the template's own name (TF12), and none another template's name or other name (TC2). |
 | `services` | What goes into `zekno.app.json`: the same format, the same checks. Its volume `data` becomes `postgres-data` in the app, so no two services share one (board). Several are allowed. | 1 to 8 services (TF13), each passing every rule of feature 010's settings file (TS), and the rules TF21 to TF25, TF32 and TF33. |
 | `makes` | Secrets made at random on the user's machine. | 1 to 16 names (TF14, TF15), each `{ "kind": "password", "length": <24 to 64> }` (TF16), each read by a service of the template (TF26). |
-| `offers` | Connection secrets for the user's own services, built from the made secrets. | 0 to 4 names (TF17, TF18), each a text of at most 512 characters with placeholders (TF19, TF28, TF29), not a made name nor one the template's services read (TF27). |
+| `offers` | Connection secrets for the user's own services, built from the made secrets. | 0 to 4 names (TF17, TF18), each a text of at most 512 characters with placeholders (TF19, TF28, TF29), pointing at `{service}` and nowhere else (TF34), not a made name nor one the template's services read (TF27). |
 | `notes` | Sentences shown before adding, each after `!` in the warning colour. | 1 to 8 sentences of at most 200 printable ASCII characters, each ending with `.` (TF20); `Zekno does not back up this data.` among them when a service keeps data in a volume (TF31). |
 | `asks` | Questions to the user, such as a domain. Kept for the version that brings domains. | Refused by its presence, whatever its value (TF4). |
 
@@ -95,6 +95,14 @@ made-name   = a name of `makes`
 An offer uses at least one made secret (TF29). Shown before adding with `••••` in place of each made
 value: `postgres://app:••••@postgres:5432/app`.
 
+An offer points at `{service}` and nowhere else (TF34; added after the security review, T5): it
+holds `{service}` exactly once, as the whole host of the address. That is: right after `//` or
+`@`, and followed by `:`, `/`, `?` or the end; inside the address's authority, so the text before
+it holds no `/` or `?` but its `//`; and with no `@` after it, so no host can follow it. Each of the
+first set passes as it is (`@{service}:5432/app`). A query that names another host to a client
+(libpq reads `?host=`) is not caught by the rule: the reviewer reads every connection secret
+(contracts/contributing.md, CG6).
+
 ### Names
 
 | Name | Rule |
@@ -135,7 +143,7 @@ The first fault stops the reader; tests name one sentence per file.
    missing (TF5), in the order of the format.
 7. `services` by the settings file's steps 3 to 6 (TS), then TF13's count.
 8. The template's own rules, in this order: TF21, TF22, TF23 for each service's image in the order
-   of the text; TF24; TF25; TF32; TF33; TF26; TF27; TF28; TF29; TF30; TF31.
+   of the text; TF24; TF25; TF32; TF33; TF26; TF27; TF28; TF29; TF34; TF30; TF31.
 9. Across the catalogue (the tests and the catalogue's first read): TC1, TC2.
 
 ## Sentences
@@ -211,6 +219,7 @@ its rule is the settings rule's own words. A later setting is said with its seco
 | TF31 | `notes` | `say "Zekno does not back up this data." when a service keeps data in a volume.` |
 | TF32 | `services.<svc>.volumes.<vol>` | `it is added as <svc>-<vol>, which must be a volume name of at most 63 characters.` |
 | TF33 | `services.<svc>.volumes.<vol>` | `it is added as <svc>-<vol>, as a volume of <other> is.` (`<other>` the service before it, in the order of the text, whose volume is added under that name) |
+| TF34 | `offers.<NAME>` | `a connection secret points at {service} and nowhere else.` (added after the security review, T5; said after TF29, for the first offer in the order of the text that breaks it) |
 
 ### Across the catalogue
 
@@ -423,7 +432,11 @@ and fails with one of these, the first that applies, naming the file:
   (contracts/contributing.md, "The template tests"); the four of the first set equal the texts
   above, byte for byte.
 - `test/templates/index.test.ts`: TI1 to TI5, each with a folder or an index text built to break
-  it, and the real folder and index passing.
+  it, and the real folder and index passing. Then the index's whole text equals the form above
+  for the files of the folder (the comment, the list, one line each in the order of the names,
+  `] as const`) and nothing else: the index runs at every start of zekno, so a statement more,
+  before, between or after the lines, fails the test though every line is right (security
+  review T6).
 - `test/templates/catalogue.test.ts`: the catalogue is the files the index names and nothing else (a
   `postgres.json` in the folder the command runs in and in `ZEKNO_HOME` changes nothing); TC1, TC2;
   the order.

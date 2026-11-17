@@ -6,7 +6,8 @@
  * the disk, and the index both as a module and as text, a difference fails
  * with the first of TI1 to TI5 that applies, naming the file; TI1 prints the
  * line to add. Each sentence is shown on a temporary folder and index built
- * to break it.
+ * to break it. Last, the whole text must be the contract's and nothing else
+ * (security review T6): the lines alone let a statement more through.
  */
 import { describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -18,6 +19,10 @@ import { TEMPLATE_FILES } from "../../src/templates/files/index"
 
 const FOLDER = join(import.meta.dir, "../../src/templates/files")
 const WHERE = "apps/cli/src/templates/files"
+const CONTRACT = join(
+  import.meta.dir,
+  "../../../../specs/012-templates/contracts/template-file.md"
+)
 
 /** A template file's name: `<name>.json`, `<name>` held to a template's name rule. */
 const TEMPLATE_FILE = /^[a-z][a-z0-9-]{0,31}\.json$/
@@ -63,6 +68,46 @@ function indexProblem(folder: string, text: string): string | undefined {
   return undefined
 }
 
+/**
+ * The index's whole text as contracts/template-file.md, "The index", writes
+ * it for the template files of `folder`: the contract's first comment, the
+ * list, one line for each file in the order of the names, and nothing else.
+ * The comment is read from the contract's own block, so this test copies
+ * neither it nor the code.
+ */
+function contractIndex(folder: string): string {
+  const block = /## The index\n[\s\S]*?```ts\n([\s\S]*?)```/.exec(
+    readFileSync(CONTRACT, "utf8")
+  )?.[1]
+  if (block === undefined) throw new Error("the contract has no index block")
+  const comment = block.slice(0, block.indexOf("export const TEMPLATE_FILES"))
+  const names = readdirSync(folder)
+    .filter((file) => TEMPLATE_FILE.test(file))
+    .sort()
+    .map((file) => file.slice(0, -".json".length))
+  return [
+    `${comment}export const TEMPLATE_FILES = [`,
+    ...names.map(lineFor),
+    "] as const",
+    "",
+  ].join("\n")
+}
+
+/**
+ * Every check of this test on a folder and its index's text, the first that
+ * fails thrown: TI1 to TI5, each line written as the contract writes it, then
+ * the whole text as the contract writes it and nothing else. The index runs
+ * at every start of zekno, so a statement more is code on every user's
+ * machine (security review T6).
+ */
+function checkIndex(folder: string, text: string): void {
+  const problem = indexProblem(folder, text)
+  if (problem !== undefined) throw new Error(problem)
+  for (const { name } of linesOf(text))
+    expect(text).toContain(`${lineFor(name)}\n`)
+  expect(text).toBe(contractIndex(folder))
+}
+
 /** A temporary folder holding `files` (a template's text does not matter here), and the index text `names` would give. */
 function folder(files: string[]): string {
   const made = tempDir("template-index")
@@ -78,6 +123,11 @@ describe("the real folder and index", () => {
   test("pass: every template file has its line, in the order of the names, and nothing else is in the folder", () => {
     const problem = indexProblem(FOLDER, text)
     if (problem !== undefined) throw new Error(problem)
+  })
+
+  test("the index is the contract's text and nothing else: its comment, the list, one line for each file", () => {
+    expect(text).toBe(contractIndex(FOLDER))
+    checkIndex(FOLDER, text)
   })
 
   test("the index as a module names the same files as its text, in the same order, and gives each file's text", () => {
@@ -172,6 +222,32 @@ describe("each sentence, on a folder and an index built to break it", () => {
     ).toBe(
       "apps/cli/src/templates/files holds Post Gres.json, which is not a template file. A template file is named <name>.json."
     )
+  })
+
+  test("nothing else: a statement more, before, between or after the lines, fails though every line is right (security review T6)", () => {
+    const real = readFileSync(join(FOLDER, "index.ts"), "utf8")
+    checkIndex(FOLDER, real)
+    const statement =
+      'import("node:child_process").then((cp) => cp.spawn("sh", ["-c", "true"]))'
+    const first = lineFor("mongodb")
+    for (const hostile of [
+      // The review's probe: after the list.
+      `${real}${statement}\n`,
+      // Before the list, after its comment.
+      real.replace(
+        "export const TEMPLATE_FILES = [",
+        `${statement}\nexport const TEMPLATE_FILES = [`
+      ),
+      // Inside the list, between two lines.
+      real.replace(`${first}\n`, `${first}\n  ...[await ${statement}],\n`),
+      // Another comment, or none.
+      real.replace("The template files this zekno carries", "Anything"),
+      real.slice(real.indexOf("export const")),
+    ]) {
+      expect(hostile).not.toBe(real)
+      expect(indexProblem(FOLDER, hostile)).toBeUndefined()
+      expect(() => checkIndex(FOLDER, hostile)).toThrow()
+    }
   })
 
   test("a line Prettier wrapped is read as one line", () => {

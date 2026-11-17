@@ -15,8 +15,8 @@
  * with a tag, from an allowed source (publishers.ts); no published port;
  * every secret a service reads made by the template; no two volumes added
  * under one name; every made secret read; connection secrets built only
- * from made secrets and `{service}`; the backup note; the version its
- * image's tag names.
+ * from made secrets and `{service}`, pointing at `{service}` and nowhere
+ * else; the backup note; the version its image's tag names.
  *
  * A fault never holds content of the file: it is a place built from names
  * that passed their rule, a line number, and fixed words (file-words.ts).
@@ -261,6 +261,27 @@ function servicesFault(fault: SettingsFault): Stop {
 const placeholdersOf = (text: string): string[] =>
   [...text.matchAll(PLACEHOLDER)].map((found) => found[1]!)
 
+/**
+ * TF34 (security review T5): an offer holds `{service}` exactly once, as the
+ * whole host of its address. Right after `//` or `@`, and followed by `:`,
+ * `/`, `?` or the end; inside the authority, so nothing before it but its
+ * `//` is a `/` or `?` (a `{service}` in the path names no host); with no
+ * `@` after it, so it is not the user part of another host's address. A
+ * connection secret carries a made password to the user's own services, so
+ * it may send them to the template's first service and nowhere else.
+ */
+function pointsAtService(text: string): boolean {
+  const parts = text.split("{service}")
+  if (parts.length !== 2) return false
+  const [before, after] = parts as [string, string]
+  return (
+    /(?:\/\/|@)$/.test(before) &&
+    /^(?:[:/?]|$)/.test(after) &&
+    !/[/?]/.test(before.replace("//", "")) &&
+    !after.includes("@")
+  )
+}
+
 /** Step 8: the template's own rules, in the contract's order. */
 function ownRules(
   settings: Settings,
@@ -308,6 +329,8 @@ function ownRules(
   for (const [offer, text] of offers)
     if (!placeholdersOf(text).some((placeholder) => made.includes(placeholder)))
       throw stop(words.TF29(offer))
+  for (const [offer, text] of offers)
+    if (!pointsAtService(text)) throw stop(words.TF34(offer))
   // `services` holds 1 to 8 services here, and the first has a tag (TF22).
   const tag = tagOf(services[0]![1].image)!
   if (tag !== software && !tag.startsWith(`${software}.`))

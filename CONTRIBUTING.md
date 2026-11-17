@@ -118,6 +118,8 @@ The template's own rules:
 - Every secret a service reads is made by the template.
 - Every secret the template makes is read by one of its services.
 - A connection secret is built from at least one made secret, and has a name of its own.
+- A connection secret points at `{service}` and nowhere else: `{service}` once, as the whole host,
+  such as `@{service}:5432`.
 - Data is kept in named volumes. Each is added to the app as `<service>-<volume>`, which must be a
   volume name of at most 63 characters, and no other volume of the template may be added under
   the same name.
@@ -130,6 +132,8 @@ Across the templates:
 The index:
 
 - One line per template file, in the order of the names, written as the line above.
+- Nothing else is in `index.ts` but its first comment and those lines. It runs at every start of
+  zekno, so a change to anything else in it is a change of code.
 - Nothing else is in `apps/cli/src/templates/files/` but the template files and `index.ts`.
 - A file without its line is not in the CLI. The test says which line to add.
 
@@ -183,6 +187,7 @@ The reviewer also checks that:
 
 - the pull request changes the template's file and its line in the index, and nothing else;
 - the digest is the one the tag named on the day the file was written (the reviewer looks it up);
+- the connection secret points at `{service}` and nowhere else;
 - the version is one the software's project supports;
 - the author is the person who opened the pull request, or someone who agreed to be named.
 

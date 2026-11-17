@@ -361,7 +361,7 @@ function faulty(): BadFile[] {
     "services.db.networking.domains: Domains are not in this version of zekno yet."
   )
 
-  // The template's own rules (TF21 to TF33).
+  // The template's own rules (TF21 to TF34).
   fault(ACME_DB_BOARD, "services.db.source.image: pin the image by digest.")
   fault(
     db({ source: { image: `acme@sha256:${HEX}` } }),
@@ -395,6 +395,19 @@ function faulty(): BadFile[] {
     acme({ offers: { DATABASE_URL: "acme://app@{service}:5432/app" } }),
     "offers.DATABASE_URL: build it from at least one secret this template makes."
   )
+  // TF34 (security review T5): the review's two hosts, and {service} twice, in the path, or before another host.
+  for (const offer of [
+    `acme://app:{DB_PASSWORD}@${S}.example:5432/app`,
+    `acme://app:{DB_PASSWORD}@{service}.${S}.example:5432/app`,
+    `acme://app:{DB_PASSWORD}@{service}:5432/{service}${S}`,
+    `acme://${S}.example/@{service}:5432/app?p={DB_PASSWORD}`,
+    `acme://app:{DB_PASSWORD}@{service}:5432@${S}.example/app`,
+    `acme://app:{DB_PASSWORD}{service}:5432/${S}`,
+  ])
+    fault(
+      acme({ offers: { DATABASE_URL: offer } }),
+      "offers.DATABASE_URL: a connection secret points at {service} and nowhere else."
+    )
   fault(
     acme({ software: S }),
     "software: use the version the first service's image tag names, 1.2.3, or its start before a dot, such as 9.7 for 9.7.4."
