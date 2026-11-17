@@ -20,6 +20,7 @@ import {
 import type { Addition, Template } from "../../src/templates/types"
 import { BEFORE_SETTINGS } from "../support/add-files"
 import { FIRST_SET, FIRST_TEMPLATES } from "../support/template-files"
+import { FIRST_TEXTS } from "../support/template-lines"
 
 const FILE = "zekno.app.json"
 const PROD = { name: "prod", where: "deploy@203.0.113.7" }
@@ -183,7 +184,7 @@ describe("the summary of an addition (data-model.md, AdditionReport)", () => {
 
 describe("what --list and --show show (data-model.md, TemplateRow and TemplateView; contracts/commands.md, D18, D24)", () => {
   test("the rows of the list: the catalogue's order, the about without its full stop", () => {
-    expect(templateRows(catalogue())).toEqual([
+    expect(templateRows(catalogue(FIRST_TEXTS))).toEqual([
       {
         name: "postgres",
         title: "PostgreSQL",
@@ -216,7 +217,7 @@ describe("what --list and --show show (data-model.md, TemplateRow and TemplateVi
   })
 
   test("--list --json: one object, each template's fields in the contract's order, the about whole", () => {
-    expect(JSON.stringify(listObject(catalogue()))).toBe(
+    expect(JSON.stringify(listObject(catalogue(FIRST_TEXTS)))).toBe(
       JSON.stringify({
         templates: [
           ["postgres", "PostgreSQL", "A relational database.", "18.7", []],

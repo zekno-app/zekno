@@ -16,6 +16,7 @@ import { BRAND } from "../../../src/ui/terminal/theme"
 import { drawnInColour, plainOf, wordRuns } from "../../support/colour"
 import { FIRST_TEMPLATES } from "../../support/template-files"
 import {
+  FIRST_TEXTS,
   LIST,
   LIST_PIPED,
   POSTGRES_IMAGE,
@@ -58,17 +59,20 @@ function printed(draw: (ui: ReturnType<typeof plainUi>) => void) {
 describe("--list (board `AddLook`, left column)", () => {
   test("at a terminal: the four lines from column 2, each column padded to its longest plus two, the about without its full stop", async () => {
     const lines = await shown((ui) =>
-      ui.templateList(templateRows(catalogue()))
+      ui.templateList(templateRows(catalogue(FIRST_TEXTS)))
     )
     expect(lines).toEqual(LIST)
     expect(
-      await shown((ui) => ui.templateList(templateRows(catalogue())), 80)
+      await shown(
+        (ui) => ui.templateList(templateRows(catalogue(FIRST_TEXTS))),
+        80
+      )
     ).toEqual(LIST)
   })
 
   test("its looks: the name bold, the title and version in the text colour, the about and by zekno dim", () => {
     const lines = drawnInColour(TEMPLATES, "TemplateListBlock", {
-      rows: templateRows(catalogue()),
+      rows: templateRows(catalogue(FIRST_TEXTS)),
       columns: 100,
     }).split("\n")
     expect(lines.map(plainOf).map((line) => line.trimEnd())).toEqual(LIST)
@@ -87,9 +91,9 @@ describe("--list (board `AddLook`, left column)", () => {
   })
 
   test("the plain interface: one line each, with tabs, on standard output", () => {
-    expect(printed((ui) => ui.templateList(templateRows(catalogue())))).toEqual(
-      { out: LIST_PIPED, err: [] }
-    )
+    expect(
+      printed((ui) => ui.templateList(templateRows(catalogue(FIRST_TEXTS))))
+    ).toEqual({ out: LIST_PIPED, err: [] })
   })
 })
 

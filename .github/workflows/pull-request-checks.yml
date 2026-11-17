@@ -1,0 +1,73 @@
+# Checks every pull request (specs/012-templates/contracts/contributing.md, "The check"): the
+# types, the lint rules, every test, and the template tests with Docker. A pull request from a
+# fork runs it too.
+#
+# It runs on `pull_request`, never `pull_request_target`: the pull request's code runs here with a
+# token that can only read, and with no secret of the repository. Nothing is published, pushed or
+# written outside this machine. The check runs the pull request's own copy of this file and of
+# the tests, so a reviewer reads every file a pull request changes (CONTRIBUTING.md, "A pull
+# request that changes more").
+#
+# It reports; on its own it stops nothing. It holds a merge back only where a rule of the
+# repository makes `checks` a required check: the maintainer's setting.
+name: pull request checks
+
+on:
+  pull_request:
+
+# Nothing by default; the one job reads only.
+permissions: {}
+
+# A newer push to the same pull request replaces the run for the older one.
+concurrency:
+  group: pull-request-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      DO_NOT_TRACK: "1"
+    steps:
+      # Pinned to the same full commits as the other workflows.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.pin.outputs.bun }}
+
+      # No package's install script runs.
+      - name: Install
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun run test
+
+      # Every template file, with Docker, which GitHub's Ubuntu machine has. Each template's image
+      # is pulled from Docker Hub by the digest its file names.
+      - name: Template tests
+        working-directory: apps/cli
+        run: bun run test:templates

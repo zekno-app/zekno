@@ -4,7 +4,29 @@
  * (specs/012-templates, "`zekno add --list`" and "`zekno add <template>
  * --show`"; board `AddLook`), for the tests of the drawing and of the
  * command (tasks T032, T034).
+ *
+ * The board draws the first set. A contributor's template is one file and
+ * one line in the index, with no other change (FR-022, SC-009), so a test of
+ * what the first set looks like reads the first set's texts alone
+ * (`FIRST_TEXTS`), and a test of a command, which reads every template this
+ * zekno carries, compares the board's lines exactly only while the
+ * catalogue is the first set, and else their words in order
+ * (`sameWords`), since a longer name widens every column.
  */
+import { FIRST, TEMPLATE_TEXTS } from "../../src/templates/catalogue"
+import { catalogue } from "../../src/templates/catalogue"
+
+/** The texts of the first set alone, from the index: what the board draws. */
+export const FIRST_TEXTS = TEMPLATE_TEXTS.filter(([file]) =>
+  (FIRST as readonly string[]).includes(file.slice(0, -".json".length))
+)
+
+/** Whether the catalogue this zekno carries is the first set alone. */
+export const onlyFirstSet = (): boolean => catalogue().length === FIRST.length
+
+/** A line with each run of spaces one space: its words and their order. */
+export const sameWords = (line: string): string =>
+  line.trim().replace(/\s+/g, " ")
 
 export const POSTGRES_IMAGE =
   "postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc"

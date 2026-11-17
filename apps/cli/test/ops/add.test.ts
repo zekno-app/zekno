@@ -5,22 +5,31 @@
  * server, and the addition, one folder per step where that step and no
  * earlier one applies. Nothing is written, no value is made, the keychain is
  * read only by opening the team, and nothing is contacted. Steps 3 and 4 are
- * add-template.test.ts; the store, step 8, add-store.test.ts.
+ * add-template.test.ts; the store, step 8, add-store.test.ts. Last, a
+ * template that is one more text in the catalogue, prepared and added as any
+ * other (SC-009, tasks T042).
  */
 import { beforeAll, describe, expect, test } from "bun:test"
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { MISSING_APP } from "../../src/cli/errors"
-import { prepareAdd, withReaders } from "../../src/ops/add"
+import { checkTemplate, prepareAdd, withReaders } from "../../src/ops/add"
+import { commitAdd } from "../../src/ops/add-commit"
+import { TEMPLATE_TEXTS } from "../../src/templates/catalogue"
 import { checkSettings } from "../../src/settings/schema"
 import { settingsText } from "../../src/settings/text"
 import { SH4 } from "../../src/settings/words"
 import { AD13, AD14, AD6, AD7, AD9 } from "../../src/templates/add-words"
-import { BEFORE_FILE, BEFORE_SETTINGS, DESIGN_FILE } from "../support/add-files"
+import {
+  BEFORE_FILE,
+  BEFORE_SETTINGS,
+  DESIGN_FILE,
+  ONE_FILE,
+} from "../support/add-files"
 import { bench, plan, thrown, where } from "../support/add-ops"
 import { ready, twin } from "../support/helpers"
-import { FIRST_TEMPLATES } from "../support/template-files"
+import { FIRST_SET, FIRST_TEMPLATES } from "../support/template-files"
 
 const postgres = FIRST_TEMPLATES.postgres!
 
@@ -322,5 +331,43 @@ describe("prepared: the file, the app and the server, the store, the addition (s
     expect(prepared.addition.services[0]![1].volumes).toEqual([
       ["db-data", "/var/lib/postgresql"],
     ])
+  })
+})
+
+describe("one file and one line more (SC-009, FR-022)", () => {
+  test("a template that is one more text of the catalogue is found, prepared and added as any other, with no other change", async () => {
+    const texts = [
+      ...TEMPLATE_TEXTS,
+      [
+        "another-db.json",
+        FIRST_SET.postgres!.replace(
+          '"name": "postgres"',
+          '"name": "another-db"'
+        ),
+      ] as const,
+    ]
+    const template = checkTemplate("another-db", undefined, texts)
+    expect(template.name).toBe("another-db")
+    const { cwd, deps } = folder(ONE_FILE)
+    const prepared = plan(
+      await prepareAdd(deps, { template, where: where("example") })
+    )
+    expect(prepared.addition.readers).toEqual([
+      { offer: "DATABASE_URL", services: ["web"] },
+    ])
+    expect(await commitAdd(prepared)).toEqual({
+      service: "postgres",
+      file: "zekno.app.json",
+      stored: [
+        { name: "POSTGRES_PASSWORD", version: 1 },
+        { name: "DATABASE_URL", version: 1 },
+      ],
+      server: "dev",
+    })
+    const written = checkSettings(
+      readFileSync(join(cwd, "zekno.app.json"), "utf8"),
+      "zekno.app.json"
+    )
+    expect(written).toEqual(prepared.addition.settings)
   })
 })

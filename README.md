@@ -273,6 +273,8 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 
 The project is too early for outside contributions. Issues and design feedback are welcome, especially on the [security model](#security-model).
 
+Templates, the ready-made services `zekno add` adds to an app, are the one exception: [CONTRIBUTING.md](CONTRIBUTING.md) says how to write one and propose it by pull request.
+
 ## License
 
 Licensed under the MIT License. See [LICENSE](LICENSE).

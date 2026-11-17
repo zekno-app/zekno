@@ -21,8 +21,16 @@ import { BEFORE_FILE } from "../support/add-files"
 import { atTerminal, folder, two } from "../support/add-terminal"
 import { machine, ready } from "../support/helpers"
 import { FIRST_SET } from "../support/template-files"
-import { LIST, LIST_PIPED, SHOW, SHOW_PIPED } from "../support/template-lines"
-import { KEYS, shows, terminal } from "../support/terminal"
+import {
+  LIST,
+  LIST_PIPED,
+  onlyFirstSet,
+  sameWords,
+  SHOW,
+  SHOW_PIPED,
+} from "../support/template-lines"
+import { KEYS, shows, terminal, until } from "../support/terminal"
+import { catalogue } from "../../src/templates/catalogue"
 
 type Machine = ReturnType<typeof machine>
 
@@ -43,6 +51,23 @@ const PICKER = [
   "    redis     Redis 8.10       A cache and key-value store",
   "  ↑↓ move   enter choose   esc leave",
 ]
+
+/**
+ * `lines`, as the board draws them for the first set: exactly while this
+ * zekno carries the first set alone, else the first set's lines word for
+ * word, in order, before the others, one line each (a contributor's template
+ * may widen every column; FR-022).
+ */
+function asBoard(lines: readonly string[], board: readonly string[]) {
+  if (onlyFirstSet()) return expect([...lines]).toEqual([...board])
+  const rows = board.filter((line) => /^ {2}(❯| ) |^ {2}[a-z]/.test(line))
+  const words = lines.map(sameWords)
+  for (const line of board.filter((line) => !rows.includes(line)))
+    expect(words).toContain(sameWords(line))
+  const first = words.findIndex((line) => line === sameWords(rows[0]!))
+  expect(words.slice(first, first + rows.length)).toEqual(rows.map(sameWords))
+  expect(lines.length).toBe(board.length + catalogue().length - 4)
+}
 
 /**
  * A machine with nothing to read: an empty profile folder, a folder with no
@@ -113,7 +138,7 @@ describe("looking (board `AddLook`)", () => {
       ["add", "--app", "look", "--server", "dev", "--for", "web"],
       async (t) => {
         await shows(t, "? Add which template?")
-        expect(t.lines()).toEqual(PICKER)
+        asBoard(t.lines(), PICKER)
         t.keys(KEYS.enter)
         await shows(
           t,
@@ -145,9 +170,16 @@ describe("looking (board `AddLook`)", () => {
       async (t) => {
         await shows(t, "? Add which template?")
         t.keys(KEYS.down.repeat(3))
-        await shows(
-          t,
-          "  ❯ redis     Redis 8.10       A cache and key-value store"
+        await until(
+          () =>
+            t
+              .lines()
+              .some(
+                (line) =>
+                  sameWords(line) ===
+                  "❯ redis Redis 8.10 A cache and key-value store"
+              ),
+          "redis selected"
         )
         t.keys(KEYS.enter)
         await shows(
@@ -219,21 +251,21 @@ describe("looking (board `AddLook`)", () => {
 
   test("--list at a terminal, piped and with --json: status 0, no team, no keychain, no profile, no file, nothing written", async () => {
     const terminal = bare()
-    expect(await terminal.drawn(["add", "--list"])).toEqual({
-      code: 0,
-      lines: LIST,
-    })
+    const drawn = await terminal.drawn(["add", "--list"])
+    expect(drawn.code).toBe(0)
+    asBoard(drawn.lines, LIST)
     const piped = bare()
     expect(await piped.piped("add", "--list")).toBe(0)
-    expect({ out: piped.out, err: piped.err }).toEqual({
-      out: LIST_PIPED,
-      err: [],
-    })
+    expect(piped.err).toEqual([])
+    expect(piped.out.slice(0, 4)).toEqual(LIST_PIPED)
+    expect(piped.out).toHaveLength(catalogue().length)
     const json = bare()
     expect(await json.piped("add", "--list", "--json")).toBe(0)
     expect(json.err).toEqual([])
     expect(json.out).toHaveLength(1)
-    expect(JSON.parse(json.out[0]!)).toEqual({
+    const listed = JSON.parse(json.out[0]!) as { templates: unknown[] }
+    expect(listed.templates).toHaveLength(catalogue().length)
+    expect({ templates: listed.templates.slice(0, 4) }).toEqual({
       templates: ["postgres", "mysql", "mongodb", "redis"].map((name) => {
         const file = JSON.parse(FIRST_SET[name]!)
         return {

@@ -16,17 +16,20 @@ import { plainUi } from "../../../src/ui/plain/plain"
 import { BRAND } from "../../../src/ui/terminal/theme"
 import type { ListRow } from "../../../src/ui/types"
 import { drawnInColour, plainOf, wordRuns } from "../../support/colour"
+import { FIRST_TEXTS } from "../../support/template-lines"
 import { KEYS, shows, terminal } from "../../support/terminal"
 
 const QUESTIONS = join(import.meta.dir, "../../../src/ui/ink/questions.tsx")
 
 /** The picker's rows: the name, `<title> <software>`, the about without its full stop. */
-const ROWS: ListRow<string>[] = templateRows(catalogue()).map((row) => ({
-  value: row.name,
-  label: row.name,
-  column: `${row.title} ${row.software}`,
-  detail: row.about,
-}))
+const ROWS: ListRow<string>[] = templateRows(catalogue(FIRST_TEXTS)).map(
+  (row) => ({
+    value: row.name,
+    label: row.name,
+    column: `${row.title} ${row.software}`,
+    detail: row.about,
+  })
+)
 
 const missing = new Error("AU1, the sentence the command has with no terminal")
 const picker = { question: AL1, rows: ROWS, collapsed: AL2, missing }

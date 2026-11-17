@@ -1,0 +1,78 @@
+---
+title: Templates
+description: Ready-made services you add to an app with zekno add, and how to write one.
+---
+
+<Callout type="warn" title="Pre-alpha and unaudited">
+  The command-line tool, the runner and the core library have had internal
+  reviews only. Do not use them for anything you could not afford to lose, and
+  do not rely on them in production before an external audit.
+</Callout>
+
+A template is a ready-made service, such as a database, that `zekno add` adds
+to an app. Each one is a data file inside `zekno`, reviewed before it ships
+with a release. Nothing is downloaded when you use one.
+
+## The templates
+
+<TemplateList />
+
+`zekno add --list` prints the same list, and `zekno add <template> --show`
+shows what one would add, before you add it.
+
+Each gives your own services one connection secret:
+
+| Template   | Connection secret                                           |
+| ---------- | ----------------------------------------------------------- |
+| `postgres` | `DATABASE_URL`, such as `postgres://app:...@postgres:5432/app` |
+| `mysql`    | `DATABASE_URL`, such as `mysql://app:...@mysql:3306/app`       |
+| `mongodb`  | `MONGODB_URI`, such as `mongodb://app:...@mongodb:27017/app?authSource=admin` |
+| `redis`    | `REDIS_URL`, such as `redis://default:...@redis:6379`          |
+
+`postgres` and `mysql` both offer `DATABASE_URL`, so an app has one of them.
+Adding the second is refused, because the app already has a secret of that
+name.
+
+## What adding one does
+
+`zekno add postgres` adds the service `postgres` to the app's
+`zekno.app.json`, with its data kept in the volume `postgres-data`. It makes
+the database's password on your machine, from your system's random source, and
+stores it sealed for your server, as `zekno secret set` stores a value. It is
+never shown. It builds the connection secret from it, and gives it to the
+services you choose. Nothing is deployed until you deploy: the next
+`zekno deploy` starts the database, and your app reaches it by its name.
+
+Adding is whole or not at all: the settings file is written and the secrets
+are stored, or neither is.
+
+## What it does not do
+
+- Zekno does not back up the data. Back it up yourself.
+- The data is kept in a Docker volume on your server.
+- The image is the software's official one, pinned by digest. A newer one
+  comes only with a newer `zekno`.
+- Removing the service from `zekno.app.json` keeps its volume. Zekno never
+  deletes a volume.
+
+MongoDB's image also declares a second volume, at `/data/configdb`. A single
+server leaves it empty, and Docker gives it a volume with no name. Your app
+connects to MongoDB as the database's administrator.
+
+Redis has no variable for its password. So its template starts it with one
+short line that writes the password, from the secret, into a file only Redis
+can read. The password is on no command line and in no settings file.
+
+## Add a template
+
+A template is one data file and one line in an index. Anyone can propose one
+by pull request:
+
+1. Copy a template file, change its values, and add its name to the index, one line.
+2. Run the template tests.
+3. Open a pull request. The tests run again on GitHub, with no access to any secret.
+4. A maintainer reads it and merges it.
+5. It ships with the next release, in `zekno add` and on the docs page, with its author.
+
+The guide, [CONTRIBUTING.md](https://github.com/zekno-app/zekno/blob/main/CONTRIBUTING.md),
+says what a file holds, every rule it must meet, and how to run the tests.

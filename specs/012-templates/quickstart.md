@@ -85,7 +85,44 @@ and after). Piped, the lines are bare and nothing is made without `--yes`.
 `bun run test:templates` with Docker (T036), and the index test (T010) without it:
 `bun test test/templates/index.test.ts`. Results:
 
-_Not run yet._
+Run on 2026-11-17 on macOS 27.0.1 (Apple silicon), Docker Engine 29.6.1, Compose 5.3.0, Bun
+1.4.4. The four pinned images were already in the local image store, so nothing was pulled.
+`bun run test:templates` (in `apps/cli`: `ZEKNO_TEMPLATES_DOCKER=1 bun test test/templates`), its
+last run: 188 pass, 0 fail, 12 files (the workflow's test among them), 70.6 s in all. The lines of the board, as `bun test` reported them (JUnit
+report of `test/templates/files.test.ts` and `test/templates/docker.test.ts`, run again on their
+own):
+
+| Test | Result | Time |
+|---|---|---|
+| `postgres form, settings rules, image pinned, publisher allowed` | pass | under 1 ms |
+| `postgres no published port, data in a volume` | pass | under 1 ms |
+| `postgres starts with Docker, a client connects` | pass | 17.1 s |
+| `mysql form, settings rules, image pinned, publisher allowed` | pass | under 1 ms |
+| `mysql no published port, data in a volume` | pass | under 1 ms |
+| `mysql starts with Docker, a client connects` | pass | 17.1 s |
+| `mongodb form, settings rules, image pinned, publisher allowed` | pass | 3 ms |
+| `mongodb no published port, data in a volume` | pass | 1 ms |
+| `mongodb starts with Docker, a client connects` | pass | 17.9 s |
+| `redis form, settings rules, image pinned, publisher allowed` | pass | under 1 ms |
+| `redis no published port, data in a volume` | pass | 2 ms |
+| `redis starts with Docker, a client connects` | pass | 17.1 s |
+
+Each third line started the template's service under the Compose project
+`zekno-test-template-<name>` from the Compose text zekno writes for it, beside a client service `app`
+of the same image, with secrets made by `makePassword` and given to `docker compose` through its
+environment only; 15 s after `up` each service was running with no restart, no port bound, its data
+in the named volume `zekno-test-template-<name>_<name>-data`; `docker top` of every container held
+no made value (compared, never printed); the client of `test/templates/clients.ts` connected with
+the connection secret, and a wrong password (and for MongoDB and Redis no password) was refused.
+Each was removed with `down -v` in a `finally`. Afterwards `docker ps -a`, `docker volume ls` and
+`docker network ls` listed nothing named `zekno-test-template-`, and exactly the networks they
+listed before the runs; the volumes too, but one anonymous volume of `sessora-fix031-pg`, a
+container of another project started meanwhile (the containers that were there before,
+`sessora-redis` among them, untouched). The temporary folders of the Compose files are removed
+too, and an `afterAll` removes each project again by its name should a run end before its
+`finally`. No template here lacks a client, so no line
+`<name> a client connects: no client check, the reviewer connects by hand` was skipped. Without
+`ZEKNO_TEMPLATES_DOCKER=1`, `bun test test/templates/docker.test.ts` skips the four.
 
 ## Real Docker
 
@@ -117,14 +154,85 @@ that were there before, `sessora-redis` among them, untouched).
 T042's proof: a copied file is named by TI1 until its line is in the index, then listed, shown and
 on the docs page, with no other change. Results:
 
-_Not run yet._
+Run on 2026-11-17, in `apps/cli`:
+
+1. `src/templates/files/postgres.json` copied to `src/templates/files/example-db.json` with `name`
+   `example-db` (`also` was `[]` already). `git status` showed that one file, untracked.
+2. `bun test test/templates`: 184 pass, 2 fail, both of `test/templates/index.test.ts`. The first
+   said exactly:
+
+   ```text
+   example-db.json is not in the index. Add this line to apps/cli/src/templates/files/index.ts, in its place by name:
+     ["example-db", await import("./example-db.json", { with: { type: "text" } })],
+   ```
+
+   The second, `TEMPLATE_TEXTS` against the folder, failed the same way.
+3. That line added first in `src/templates/files/index.ts` (its place by name, before `mongodb`).
+   `git status --short apps/cli/src` then showed `M apps/cli/src/templates/files/index.ts` and
+   `?? apps/cli/src/templates/files/example-db.json`, and nothing else. The line is 80 columns,
+   which `bun run format` keeps; a longer name is broken onto several lines by Prettier, which the
+   index test reads the same (it allows Prettier's breaks).
+4. `bun test test/templates test/layers`: 210 pass, 0 fail, `example-db`'s TT1 and TT2 among them
+   (its TT3 needs `ZEKNO_TEMPLATES_DOCKER=1`). Before this proof, two tests of
+   `test/templates/catalogue.test.ts` (T011) asserted that the catalogue was exactly the first set
+   and failed here; they now assert D8 on whatever the index names (the first set first, in the
+   boards' order, then the rest by name), so a contributor changes no test (FR-022). The tests of
+   `--list`, `--show` and the picker compare the board's lines exactly while the catalogue is the
+   first set, and else word for word. `bun test test/commands/add-looking.test.tsx
+   test/ui/ink/templates.test.tsx test/ui/ink/list-column.test.tsx test/ops test/version test/docs`
+   with the file in: 148 pass, 0 fail.
+5. `bun src/main.ts add --list` with an empty temporary `ZEKNO_HOME`, piped:
+
+   ```text
+   postgres	PostgreSQL	18.7	zekno
+   mysql	MySQL	9.7	zekno
+   mongodb	MongoDB	9.0	zekno
+   redis	Redis	8.10	zekno
+   example-db	PostgreSQL	18.7	zekno
+   ```
+
+   and `bun src/main.ts add example-db --show` printed postgres's piped lines.
+6. In `apps/web`, `bun test`: 32 pass, 0 fail; the page's own function, `readTemplateRows()`, gave
+   the four and `example-db	PostgreSQL: A relational database.	18.7	by zekno` last.
+7. The file and its line removed; `git status --short apps/cli/src` printed nothing.
+
+The tests also give the catalogue one more text (`catalogue(texts)`), which is listed, shown and
+added end to end like any other (`test/templates/catalogue.test.ts`, `test/ops/add.test.ts`,
+"one file and one line more").
 
 ## The check on GitHub
 
 The tests read for what assumes macOS (T039), and the first pull request's run of
 `pull request checks`. Results:
 
-_Not run yet: the workflow runs once the maintainer opens a pull request._
+**The workflow: not run.** `.github/workflows/pull-request-checks.yml` is the contract's file byte
+for byte (`test/templates/workflow.test.ts` checks it, and CW1 to CW8); it runs once the maintainer
+opens a pull request. Making `checks` a required check, and asking for approval before a
+first-time contributor's run, are the maintainer's settings (MS1, MS2).
+
+**What the tests assume of the machine**, read on 2026-11-17 in every test `bun run test` runs from
+the root (`apps/cli/test`, `apps/runner/test`, `packages/core/test`, `apps/web/modules`), looking
+for paths under `/private`, a disk that ignores letter case, `security` and the keychain, a home
+folder, a fixed port, the platform, and the programs a test starts:
+
+| What | Where | On Linux |
+|---|---|---|
+| Temporary folders under `/var`, a link to `/private/var` | `test/settings/file.test.ts`, `test/secrets/import-file.test.ts`, `test/project/*`, `test/plain/plain-scenes.ts` | Already portable: each compares through `realpathSync`, or takes `/private` off only where it is there. |
+| A disk that ignores letter case | `test/scenarios/settings-exact-name.test.ts`, `test/secrets/import-file.test.ts`, `test/project/project.test.ts` | Already portable: each finds out (a probe file, or `existsSync` of the other case) and checks the case the disk has. |
+| The keychain, `security` | none | No test uses the system's keychain: every test gives `memoryKeyStore()` or a keychain that throws. |
+| A home folder | `test/app/app-effects.test.ts` (`homedir()`) | Portable: it builds the path from `homedir()` itself. Every other test uses a temporary `ZEKNO_HOME`. |
+| A port | `packages/core/test/scenarios/cross-process.test.ts` | Portable: `Bun.serve({ port: 0 })`. No test listens on a fixed port. |
+| `/bin/sh` is `dash` on Ubuntu, `bash` on macOS | the stand-in scripts of `test/support/stand-in-server.ts`, the runner's stand-in Docker (`apps/runner/test/support/helpers.ts`), and the installer and check scripts they run | Read: the scripts use POSIX shell only. Run here: `dash -n` parses `INSTALL_SCRIPT` and `CHECK_SCRIPT`, and `bun test test/server` passed (151 tests) with the stand-in server's `sh` pointed at `/bin/dash` for that run only (the support file put back as it was). |
+| Shells that may be missing | `apps/runner/test/release/releasing-doc.test.ts` | Portable: it checks each of `/bin/sh`, `/bin/bash`, `/bin/dash`, `/bin/zsh` that exists. |
+| `git`, its identity | `apps/runner/test/release/*` | Portable: each run sets `GIT_CONFIG_GLOBAL=/dev/null` and a committer of its own. |
+| `uname`, `sha256sum` or `shasum` | `test/server/install/*` | Portable: the stand-in server answers `uname` itself and uses whichever of the two this machine has. |
+| `ps -o rss=`, `pgrep -P`, `mkfifo`, `cp -R`, `ls -A` | `apps/runner/test/support/helpers.ts`, `test/scenarios/plumbing.test.tsx`, several | On `ubuntu-24.04` (procps, coreutils). |
+| Docker | `test/scenarios/real-docker.test.ts`, `test/scenarios/templates-real-docker.test.ts`, `test/settings/compose-random.test.ts` | The first two are skipped unless Docker answers and the images they need are already in the local store, so `bun run test` on GitHub, which has none of them, pulls nothing. The third runs `docker compose config` where Compose is installed, as it is there: it reads files and contacts nothing. `test/templates/docker.test.ts` runs in the next step, `bun run test:templates`, and pulls the four images by digest. |
+| The compiled CLI | `test/compiled/compiled.test.ts` | Portable: built for the machine it runs on, and stops before it would read a keychain. |
+
+Nothing was found that only works on macOS, so no test was changed or skipped for Linux. Not
+checked without a Linux run: timing bounds and the memory bound of `test/scenarios/plumbing.test.tsx`
+on GitHub's machine, which may be slower; and the first pull request's run is the proof.
 
 ## The pseudo-terminal walkthrough
 

@@ -17,6 +17,8 @@ import {
   TEMPLATE_TEXTS,
 } from "../../src/templates/catalogue"
 import { TEMPLATE_FILES } from "../../src/templates/files/index"
+import { templateRows, templateView } from "../../src/templates/shown"
+import type { Template } from "../../src/templates/types"
 import { FIRST_SET, FIRST_TEMPLATES, GOOD } from "../support/template-files"
 
 /** acme-db's good file, named `name`. */
@@ -41,13 +43,11 @@ function refused(work: () => unknown): string {
 
 describe("the templates this zekno carries", () => {
   test("the four of the first set, in the boards' order: postgres, mysql, mongodb, redis (D8)", () => {
-    expect(catalogue().map((template) => template.name)).toEqual([
-      "postgres",
-      "mysql",
-      "mongodb",
-      "redis",
-    ])
-    expect(catalogue()).toEqual(
+    // Any template a contributor adds comes after them, by name: one file and one line in the index, and no test to change (FR-022, SC-009).
+    const names = catalogue().map((template) => template.name)
+    expect(names.slice(0, 4)).toEqual(["postgres", "mysql", "mongodb", "redis"])
+    expect(names.slice(4)).toEqual([...names.slice(4)].sort())
+    expect(catalogue().slice(0, 4)).toEqual(
       ["postgres", "mysql", "mongodb", "redis"].map(
         (name) => FIRST_TEMPLATES[name]!
       )
@@ -70,14 +70,16 @@ describe("the templates this zekno carries", () => {
       acmeNamed("acme-db"),
       acmeNamed("beta-db"),
     ]
+    // The carried templates past the first set, if a contributor added any, are sorted in among them by name (FR-022).
+    const carried = catalogue()
+      .slice(4)
+      .map((template) => template.name)
     expect(catalogue(texts).map((template) => template.name)).toEqual([
       "postgres",
       "mysql",
       "mongodb",
       "redis",
-      "acme-db",
-      "beta-db",
-      "zeta-db",
+      ...[...carried, "acme-db", "beta-db", "zeta-db"].sort(),
     ])
   })
 
@@ -189,5 +191,40 @@ describe("FR-001: nothing is read from the folder or the profile", () => {
       FIRST_TEMPLATES.postgres!
     )
     expect(findTemplate("postgres")).toEqual(FIRST_TEMPLATES.postgres!)
+  })
+})
+
+describe("one file and one line more (SC-009, FR-022; tasks T042)", () => {
+  /** A contributor's copy of postgres.json under a name of its own, as the index would give its text. */
+  const EXAMPLE: readonly [string, string] = [
+    "another-db.json",
+    FIRST_SET.postgres!.replace('"name": "postgres"', '"name": "another-db"'),
+  ]
+
+  test("a catalogue given one more good text lists it, shows it and finds it, with nothing else changed", () => {
+    const texts = [...TEMPLATE_TEXTS, EXAMPLE]
+    const list = catalogue(texts)
+    const carried = catalogue().map((template) => template.name)
+    // After the first set, by name, among any other a contributor added (D8).
+    expect(list.map((template) => template.name)).toEqual([
+      ...carried.slice(0, 4),
+      ...[...carried.slice(4), "another-db"].sort(),
+    ])
+    expect(list.filter((template) => template.name !== "another-db")).toEqual([
+      ...catalogue(),
+    ])
+    expect(templateRows(list).find((row) => row.name === "another-db")).toEqual(
+      {
+        name: "another-db",
+        title: "PostgreSQL",
+        software: "18.7",
+        about: "A relational database",
+        author: "zekno",
+      }
+    )
+    const found = findTemplate("another-db", list) as Template
+    expect(found.name).toBe("another-db")
+    expect(templateView(found)).toEqual(templateView(FIRST_TEMPLATES.postgres!))
+    expect(findTemplate("another-db")).toBeUndefined()
   })
 })
