@@ -13,7 +13,7 @@
 body{margin:0}
 </style>
 </helmet>
-<div style="width: 1500px; height: 700px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
+<div style="width: 1500px; height: 740px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
   <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px">
     <div style="color: #8b949e; font-weight: 600">A Compose file written by hand</div>
     <div><span style="color: #8b949e">$</span> zekno add postgres</div>
@@ -21,15 +21,15 @@ body{margin:0}
     <div style="color: #8b949e">Zekno does not edit it. Add these lines yourself.</div>
     <div style="color: #8b949e">Under <span style="color: #d7dde4">services:</span></div>
     <div style="box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 12px 16px; white-space: pre; color: #d7dde4">  postgres:
-    image: postgres:18.1@sha256:4f1c…a9e2
+    image: postgres:18.7@sha256:2ea8…1bbc
     restart: always
     environment:
       POSTGRES_USER: app
       POSTGRES_DB: app
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - data:/var/lib/postgresql/data</div>
-    <div style="color: #8b949e">Under <span style="color: #d7dde4">volumes:</span> &nbsp;<span style="color: #d7dde4">data:</span></div>
+      - postgres-data:/var/lib/postgresql</div>
+    <div style="color: #8b949e">Under <span style="color: #d7dde4">volumes:</span> &nbsp;<span style="color: #d7dde4">postgres-data:</span></div>
     <div style="color: #8b949e">In the <span style="color: #d7dde4">environment:</span> of each service that uses it</div>
     <div style="box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 12px 16px; white-space: pre; color: #d7dde4">      DATABASE_URL: ${DATABASE_URL}</div>
     <div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Make and store its two secrets for demo on prod?</span> <span style="color: #8b949e">(y/N)</span> yes</div>
@@ -38,13 +38,14 @@ body{margin:0}
   </div>
   <div style="width: 1px; background: #2a313a"></div>
   <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 13px">
-    <div style="color: #8b949e; font-weight: 600">When it cannot add. Nothing is changed, exit status 2</div>
+    <div style="color: #8b949e; font-weight: 600">When it cannot add. Nothing is changed</div>
     <div style="display: flex; flex-direction: column; gap: 6px"><div style="color: #8b949e">No server yet, so nothing to seal a secret for:</div><div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">There is no server to keep secrets for yet.</span></div><div style="padding-left: 17px; color: #8b949e">Run zekno deploy first. It sets up your team and a server.</div></div>
     <div style="display: flex; flex-direction: column; gap: 6px"><div style="color: #8b949e">The app has this template already:</div><div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">demo already has a secret named POSTGRES_PASSWORD.</span></div><div style="padding-left: 17px; color: #8b949e">A template can be added once to an app in this version.</div></div>
     <div style="display: flex; flex-direction: column; gap: 6px"><div style="color: #8b949e">A service of that name exists:</div><div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">zekno.app.json already has a service named postgres.</span></div><div style="padding-left: 17px; color: #8b949e">Give this one another name with --name &lt;service&gt;.</div></div>
     <div style="display: flex; flex-direction: column; gap: 6px"><div style="color: #8b949e">A service already reads a variable of the connection secret's name:</div><div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">web already has a variable named DATABASE_URL.</span></div><div style="padding-left: 17px; color: #8b949e">Remove it, or leave web out with --for &lt;service&gt;.</div></div>
     <div style="display: flex; flex-direction: column; gap: 6px"><div style="color: #8b949e">The file changed while the question was open:</div><div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">zekno.app.json changed while this was open.</span></div><div style="padding-left: 17px; color: #8b949e">Nothing was added. Run zekno add postgres again.</div></div>
     <div style="display: flex; flex-direction: column; gap: 6px"><div style="color: #8b949e">A folder with no settings file and no Compose file:</div><div><span style="color: #f85149">✖</span> <span style="color: #ffffff; font-weight: 600">This folder has no settings file.</span></div><div style="padding-left: 17px; color: #8b949e">Run zekno settings init to start one, then add the template.</div></div>
+    <div style="color: #8b949e">Exit status 2. The last two are 1, as <span style="color: #d7dde4">zekno settings</span> gives for the same cases.</div>
   </div>
   <div style="width: 1px; background: #2a313a"></div>
   <div style="width: 300px; display: flex; flex-direction: column; gap: 14px; color: #8b949e">
@@ -61,7 +62,7 @@ stored	DATABASE_URL	1</div>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1500,"height":700}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1500,"height":740}}'>
 class Component extends DCLogic {
 renderVals() {
 return {};

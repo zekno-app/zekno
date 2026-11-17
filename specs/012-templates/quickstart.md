@@ -54,8 +54,8 @@ With a second service `worker`: the question `Which services read DATABASE_URL?`
 | `add postgres` again | AD6 (2) |
 | `add postgres --name db` after the first | AD5 for `POSTGRES_PASSWORD` (2) |
 | a `web` with a plain `DATABASE_URL`, then `add postgres` | AD7 (2) |
-| edit `zekno.app.json` while the question is open, then `y` | AD8 (2), nothing added |
-| an empty folder | AD13 (2) |
+| edit `zekno.app.json` while the question is open, then `y` | AD8 (1), nothing added |
+| an empty folder | AD13 (1) |
 | `n`, Esc or Ctrl-C at the question | `Nothing was added.` (1) |
 
 ## 4. Whole or not at all (SC-004)
@@ -82,7 +82,8 @@ and after). Piped, the lines are bare and nothing is made without `--yes`.
 
 ## Template tests
 
-`bun run test:templates` with Docker (T036). Results:
+`bun run test:templates` with Docker (T036), and the index test (T010) without it:
+`bun test test/templates/index.test.ts`. Results:
 
 _Not run yet._
 
@@ -92,9 +93,10 @@ _Not run yet._
 
 _Not run yet._
 
-## One file is one template
+## One file and one line
 
-T042's proof. Results:
+T042's proof: a copied file is named by TI1 until its line is in the index, then listed, shown and
+on the docs page, with no other change. Results:
 
 _Not run yet._
 
@@ -119,8 +121,8 @@ _Not run yet._
 
 ## Verified while planning (2026-11-17)
 
-Recorded in research.md, R1, R3, R4, R10 and R16: the macro under `bun run`, `bun test`,
-`bun build --compile` and `tsc`; the four images' tags, digests, platforms and entrypoints; each
+Recorded in research.md, R1, R3, R4, R10 and R16: the index of text imports (and the macro first
+proposed) under `bun run`, `bun test`, `bun build --compile`, `tsc` and Prettier; the four images' tags, digests, platforms and entrypoints; each
 proposed template turned into Compose text by the real `zekno settings compose` and started with
 real Docker (a client connected with the connection secret, a wrong password and no password were
 refused, no command line held the password, no port was published, the data was in a named volume,

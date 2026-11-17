@@ -1,16 +1,18 @@
-# Template File Contract: `apps/cli/src/templates/files/<name>.json`
+# Template File Contract: `apps/cli/src/templates/files/<name>.json` and the index
 
 User Stories 1, 2 and 5 (FR-001 to FR-003d, FR-022, FR-023). The board `TemplateFile` is binding for
 the format. The reader is `apps/cli/src/templates/` (`read.ts` reads and checks a file, `shape.ts`
-holds the shape, `publishers.ts` the allowed publishers, `file-words.ts` every sentence below); the
+holds the shape, `publishers.ts` the allowed sources, `file-words.ts` every sentence below); the
 services part is checked by the settings reader of feature 010 (`settings/schema.ts`,
 `checkSettingsValue`). Research R1 and R2 say why.
 
 ## Where a template comes from
 
 - One file is one template: `apps/cli/src/templates/files/<name>.json`, in the public repository,
-  added by a pull request a maintainer reviewed, shipped inside the CLI with a release.
-- The CLI holds the texts of the files it was built with (research R1, plan.md N1). It never reads a
+  added by a pull request a maintainer reviewed, shipped inside the CLI with a release, and named on
+  one line of the index, `apps/cli/src/templates/files/index.ts` (below; decided on 2026-11-17).
+- The CLI holds the texts of the files the index names, as they were when it was built (research
+  R1). It never reads a
   template from the folder it runs in, the profile folder, a path given on the command line, or the
   network (FR-001). A file named `postgres.json` in the project folder or in `ZEKNO_HOME` changes
   nothing (a test puts one in each).
@@ -25,7 +27,7 @@ services part is checked by the settings reader of feature 010 (`settings/schema
   "name": "<name>",                               required; the file's own name
   "title": "<title>",                             required
   "about": "<about>",                             required
-  "software": "<version>",                        required; the first service's image tag
+  "software": "<version>",                        required; the version as people name it
   "author": "<author>",                           required
   "also": [ "<name>", ... ],                      optional; 0 to 8
   "services": { "<service>": <service>, ... },    required; 1 to 8, each a service of zekno.app.json
@@ -45,10 +47,10 @@ above, two spaces of indent.
 | `name` | What a person types: `zekno add postgres`. In the list, the picker, the docs page. | `^[a-z][a-z0-9-]{0,31}$`, the file's name without `.json` (TF6, TF7), not another template's name or other name (TC1). |
 | `title` | The software's name: `PostgreSQL`. | 1 to 40 characters of letters, digits, space, `.`, `+`, `-` (TF8). |
 | `about` | What it is, one sentence: `A relational database.` The list and the picker show it without its full stop. | 1 to 80 printable ASCII characters, ending with `.` (TF9). |
-| `software` | The software's version: `18.7`. Shown after the title. | `^[0-9A-Za-z][0-9A-Za-z._-]{0,31}$` (TF10), equal to the first service's image tag (TF30). |
+| `software` | The software's version as people name it: `18.7`, `9.7`. Shown after the title. | `^[0-9A-Za-z][0-9A-Za-z._-]{0,31}$` (TF10); the first service's image tag is it, or starts with it and a dot (`9.7` for `mysql:9.7.4`) (TF30). |
 | `author` | Who wrote the file, credited in the list, `--show` and the docs page: `by zekno`. | `^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$`, the shape of a GitHub user name (TF11). |
 | `also` | Names people may type instead, such as `mongo` for `mongodb`. Typing one is refused with a pointer to the right name (contracts/commands.md, AL3). | A list of 0 to 8 names, each held to the name rule, none twice, not the template's own name (TF12), and none another template's name or other name (TC2). |
-| `services` | Exactly what goes into `zekno.app.json`: the same format, the same checks. Several are allowed. | 1 to 8 services (TF13), each passing every rule of feature 010's settings file (TS), and the rules TF21 to TF25 and TF32. |
+| `services` | What goes into `zekno.app.json`: the same format, the same checks. Its volume `data` becomes `postgres-data` in the app, so no two services share one (board). Several are allowed. | 1 to 8 services (TF13), each passing every rule of feature 010's settings file (TS), and the rules TF21 to TF25 and TF32. |
 | `makes` | Secrets made at random on the user's machine. | 1 to 16 names (TF14, TF15), each `{ "kind": "password", "length": <24 to 64> }` (TF16), each read by a service of the template (TF26). |
 | `offers` | Connection secrets for the user's own services, built from the made secrets. | 0 to 4 names (TF17, TF18), each a text of at most 512 characters with placeholders (TF19, TF28, TF29), not a made name nor one the template's services read (TF27). |
 | `notes` | Sentences shown before adding, each after `!` in the warning colour. | 1 to 8 sentences of at most 200 printable ASCII characters, each ending with `.` (TF20); `Zekno does not back up this data.` among them when a service keeps data in a volume (TF31). |
@@ -60,7 +62,7 @@ As a service of `zekno.app.json` (specs/010-app-settings/contracts/settings-file
 settings"): `source`, `deploy`, `networking`, `variables`, `volumes`, with every value and limit of
 that contract, its later settings refused as there. On top of those, a template's service:
 
-- names its image by version and digest, from an allowed publisher (TF21 to TF23);
+- names its image by version and digest, from an allowed source (TF21 to TF23);
 - publishes no port (TF24); `networking.port` may be set, for the summary and `--show`;
 - reads only secrets the template makes (TF25), and its plain values are fixed text;
 - keeps its data in named volumes only, as every service of a settings file does; each volume is
@@ -103,18 +105,19 @@ value: `postgres://app:••••@postgres:5432/app`.
 
 Made and offered names are capital letters so that `{service}` can never name one.
 
-## The allowed publishers (FR-002)
+## The allowed sources (FR-002)
 
-`apps/cli/src/templates/publishers.ts` lists them, each with how its images are written. Changing
-the list is a change of code, reviewed as code, and is the maintainer's decision (contracts/contributing.md,
-CG7). This version lists one:
+`apps/cli/src/templates/publishers.ts` lists the sources a template's image may come from, each with
+how its images are written (FR-002: a Docker Official Image, from a list kept in the repository).
+Changing the list is a change of code, reviewed as code, and is the maintainer's decision
+(contracts/contributing.md, CG7). This version lists one:
 
-| Publisher | How an image is written | Example |
+| Source | How an image is written | Example |
 |---|---|---|
 | Docker Official Images (`docker.io/library`) | `<name>:<tag>@sha256:<64 hex>`, no registry and no `/` | `postgres:18.7@sha256:2ea8…61bbc` |
 
 An image is pinned when it ends with `@sha256:` and 64 lowercase hex digits (TF21) and names a tag
-(TF22); its publisher is allowed when it is written as one entry of the list writes its images
+(TF22); its source is allowed when it is written as one entry of the list writes its images
 (TF23).
 
 ## The order of checks
@@ -165,7 +168,7 @@ the sentence, the error's message and stack.
 | TF7 | `name` | `use the file's own name, <name of the file>.` |
 | TF8 | `title` | `use 1 to 40 letters, digits, spaces, dots, plus signs and hyphens, such as "PostgreSQL".` |
 | TF9 | `about` | `use one sentence of at most 80 characters that ends with a full stop, such as "A relational database."` |
-| TF10 | `software` | `use the software's version as the image's tag writes it, such as "18.7".` |
+| TF10 | `software` | `use the software's version as people name it, such as "18.7" or "9.7".` |
 | TF11 | `author` | `use a name of letters, digits and inner hyphens, at most 39 characters, such as a GitHub user name.` |
 | TF12 | `also` | `use a list of at most 8 other names people may type, each written as a template's name, none twice and not this one's, such as ["mongo"].` |
 | TF13 | `services` | `name 1 to 8 services, such as { "postgres": { "source": { "image": "postgres:18.7@sha256:..." } } }.` |
@@ -197,14 +200,14 @@ its rule is the settings rule's own words. A later setting is said with its seco
 |----|-------|------|
 | TF21 | `services.<svc>.source.image` | `pin the image by digest.` (board) |
 | TF22 | `services.<svc>.source.image` | `name the image's version with a tag, such as postgres:18.7@sha256:<digest>.` |
-| TF23 | `services.<svc>.source.image` | `use an image of an allowed publisher, as apps/cli/src/templates/publishers.ts lists them.` |
+| TF23 | `services.<svc>.source.image` | `use a Docker Official Image, or another source apps/cli/src/templates/publishers.ts lists.` |
 | TF24 | `services.<svc>.networking.publish` | `a template publishes no port.` |
 | TF25 | `services.<svc>.variables.secrets` | `<NAME> is not made by this template. A template's services read only the secrets it makes.` (`<NAME>` passed the secret-name rule already) |
 | TF26 | `makes.<NAME>` | `no service of this template reads it.` |
 | TF27 | `offers.<NAME>` | `it is the name of a made secret, or of one a service of this template reads.` |
 | TF28 | `offers.<NAME>` | `each {...} names {service} or a secret this template makes.` |
 | TF29 | `offers.<NAME>` | `build it from at least one secret this template makes.` |
-| TF30 | `software` | `use the tag of the first service's image, <tag>.` |
+| TF30 | `software` | `use the version the first service's image tag names, <tag>, or its start before a dot, such as 9.7 for 9.7.4.` |
 | TF31 | `notes` | `say "Zekno does not back up this data." when a service keeps data in a volume.` |
 | TF32 | `services.<svc>.volumes.<vol>` | `it is added as <svc>-<vol>, which must be a volume name of at most 63 characters.` |
 
@@ -274,7 +277,7 @@ maintainer in plan.md (D4 to D6).
   "name": "mysql",
   "title": "MySQL",
   "about": "A relational database.",
-  "software": "9.7.4",
+  "software": "9.7",
   "author": "zekno",
   "also": [],
   "services": {
@@ -308,7 +311,7 @@ maintainer in plan.md (D4 to D6).
   "name": "mongodb",
   "title": "MongoDB",
   "about": "A document database.",
-  "software": "9.0.8",
+  "software": "9.0",
   "author": "zekno",
   "also": ["mongo"],
   "services": {
@@ -344,7 +347,7 @@ maintainer in plan.md (D4 to D6).
   "name": "redis",
   "title": "Redis",
   "about": "A cache and key-value store.",
-  "software": "8.10.3",
+  "software": "8.10",
   "author": "zekno",
   "also": [],
   "services": {
@@ -370,7 +373,43 @@ maintainer in plan.md (D4 to D6).
 ```
 
 The order of the list and the picker: the four of the first set in the boards' order (postgres,
-mysql, mongodb, redis), then every other template by name (plan.md, D8).
+mysql, mongodb, redis), then every other template by name (plan.md, D8, approved).
+
+## The index
+
+`apps/cli/src/templates/files/index.ts` names every template file, one line each, in the order of
+their names, and nothing else (research R1). For the first set, exactly:
+
+```ts
+/**
+ * The template files this zekno carries: one line for each file of this
+ * folder, in the order of their names (specs/012-templates,
+ * contracts/template-file.md, "The index"). Each file is taken as its text,
+ * for the strict reader. A test fails when a file and its line do not match.
+ */
+export const TEMPLATE_FILES = [
+  ["mongodb", await import("./mongodb.json", { with: { type: "text" } })],
+  ["mysql", await import("./mysql.json", { with: { type: "text" } })],
+  ["postgres", await import("./postgres.json", { with: { type: "text" } })],
+  ["redis", await import("./redis.json", { with: { type: "text" } })],
+] as const
+```
+
+A new template's line is `  ["<name>", await import("./<name>.json", { with: { type: "text" } })],`,
+in its place by name. The path is written out, so the compiled CLI holds the file and the layering
+test can follow it. `templates/catalogue.ts` makes `TEMPLATE_TEXTS` of it, `<name>.json` and the
+file's text, and checks each line gave text.
+
+`test/templates/index.test.ts` reads the folder from the disk and the index as a module and as text,
+and fails with one of these, the first that applies, naming the file:
+
+| Id | Sentence |
+|----|----------|
+| TI1 | `<name>.json is not in the index. Add this line to apps/cli/src/templates/files/index.ts, in its place by name:` then the line |
+| TI2 | `The index names <name>.json, which is not in apps/cli/src/templates/files. Remove its line, or add the file.` |
+| TI3 | `The index's line for <name> takes another file. Write ./<name>.json in it.` |
+| TI4 | `The index lists its lines in the order of the names: <name> goes before <other>.` |
+| TI5 | `apps/cli/src/templates/files holds <file>, which is not a template file. A template file is named <name>.json.` (anything but `index.ts` and template files) |
 
 ## Tests
 
@@ -382,6 +421,8 @@ mysql, mongodb, redis), then every other template by name (plan.md, D8).
 - `test/templates/files.test.ts`: for each file of `templates/files/`, the three tests of the board
   (contracts/contributing.md, "The template tests"); the four of the first set equal the texts
   above, byte for byte.
-- `test/templates/catalogue.test.ts`: the catalogue is the bundled files and nothing else (a
+- `test/templates/index.test.ts`: TI1 to TI5, each with a folder or an index text built to break
+  it, and the real folder and index passing.
+- `test/templates/catalogue.test.ts`: the catalogue is the files the index names and nothing else (a
   `postgres.json` in the folder the command runs in and in `ZEKNO_HOME` changes nothing); TC1, TC2;
   the order.

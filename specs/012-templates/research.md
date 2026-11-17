@@ -9,9 +9,10 @@ repository but these documents was written.
 
 The probes ran in the session's scratchpad (`probe012/`), never in the repository:
 
-- `macro/`: a Bun macro that reads a folder of JSON files at bundle time, run with `bun run`,
-  `bun test` and `bun build --compile`; `Bun.Transpiler.scanImports` and `transformSync` on it;
-  `tsc` with the CLI's compiler options (R1).
+- `macro/` and `index/`: two ways to put the template files into the CLI, a Bun macro and an index
+  of text imports (three forms), each run with `bun run`, `bun test` and `bun build --compile`,
+  read by `Bun.Transpiler.scanImports` and `transformSync`, checked by `tsc` with the CLI's compiler
+  options, and the index formatted by Prettier at 80 columns (R1).
 - `run.sh`: each proposed template's service written as `zekno.app.json` beside a client service,
   turned into Compose text by the real `zekno settings compose` of this branch (with `ZEKNO_HOME`
   pointed at an empty scratch folder), started with real Docker as project `zekno-probe-<name>-<mode>`,
@@ -27,38 +28,56 @@ At the end no container, network or volume of a `zekno-probe-` project was left
 (`docker ps -a`, `docker network ls`, and `docker volume ls` by the Compose project label). The four
 pinned images stay in the local image store, for the builder's real Docker task.
 
-## R1. Where templates live, and how they reach the CLI **(maintainer: inside the CLI, one data file per template, nothing downloaded)**
+## R1. Where templates live, and how they reach the CLI **(maintainer: inside the CLI, one data file per template, nothing downloaded; an index file, decided 2026-11-17 after the plan)**
 
 - **Decision.** The template files are `apps/cli/src/templates/files/<name>.json`, one per
-  template, read by the strict reader of R2. Nothing reads a template from the project folder, the
-  profile folder or the network (FR-001): the texts are part of the program.
-- **How the texts get into the program: needs the maintainer (plan.md, N1).** A compiled CLI
-  holds only what is imported, and the layering test (`test/layers/layers.test.ts`) refuses any file
-  of `src` that is not `.ts` or `.tsx` or a data file it names. Two ways were weighed:
-  - **A Bun macro (recommended).** `templates/bundled.ts` exports `templateTexts()`, which reads
-    every `*.json` of `templates/files/` with `node:fs` and returns `[file name, text]` pairs sorted
-    by name. `templates/catalogue.ts` imports it `with { type: "macro" }`. Bun runs the function
-    when it transpiles or bundles the importing file and puts its result in place of the call.
-    Probed (`macro/`): `bun src/main.ts`, `bun test` and `bun build --compile` (then run from `/`)
-    each gave both files' texts; `strings` on the binary found no trace of the macro's own code;
-    `tsc` with `"module": "Preserve"` and `"moduleResolution": "Bundler"` (the CLI's options) passed.
-    A file changed or added between two runs of `bun src/main.ts` was in the second run's result
-    (Bun's transpiler did not serve the importing file's old result).
-    One template is then one file and nothing else (FR-022, SC-009 as written). Costs: a mechanism
-    the repository does not use yet; `Bun.Transpiler#transformSync`, which the layering test uses to
-    look for hidden loads, throws `Macro "./bundled" not found` on the importing file, so the test
-    must take the `with { type: "macro" }` off that one import before it transforms the text (the
-    import itself stays visible to `scanImports`, which reports `./bundled` as an ordinary import, so
-    rule 3 still checks it).
-  - **An index file.** `templates/files.ts` imports each file `with { type: "text" }` (a Bun loader
-    already in the toolchain) and a test fails when the folder and the index differ. No new
-    mechanism; but a new template is then one file and one line, against SC-009.
-  Either way the layering test's `DATA_FILES` gains the rule "every `templates/files/<name>.json`",
-  once, instead of a line per file.
-- **Alternatives considered.** Reading the folder at run time next to the source: it works from
-  source and not in the compiled binary, so two paths would be needed. `bun build --compile` with the
-  files as extra entry points and `Bun.embeddedFiles`: also two paths (source and binary). A
-  generated `.ts` file: a build step that can go stale, and generated code in the tree.
+  template, read by the strict reader of R2. Beside them, `apps/cli/src/templates/files/index.ts`
+  names each file on one line:
+
+  ```ts
+  export const TEMPLATE_FILES = [
+    ["mongodb", await import("./mongodb.json", { with: { type: "text" } })],
+    ["mysql", await import("./mysql.json", { with: { type: "text" } })],
+    ["postgres", await import("./postgres.json", { with: { type: "text" } })],
+    ["redis", await import("./redis.json", { with: { type: "text" } })],
+  ] as const
+  ```
+
+  `templates/catalogue.ts` turns it into `TEMPLATE_TEXTS`, `[file name, text]` pairs, and reads each
+  with the strict reader. Nothing reads a template from the project folder, the profile folder or
+  the network (FR-001): the texts are part of the program, and only the files the index names are.
+  A test (contracts/template-file.md, "The index") fails when a file of the folder is not in the
+  index, when the index names a file that is not there, when a line's name and file differ, and when
+  the lines are not in name order, each with a sentence that says what to write. So a template is
+  one file and one line (FR-022, SC-009 as reworded on 2026-11-17).
+- **Why this form** (probed in the scratchpad, `index/`, with Bun 1.4.4 and the CLI's compiler
+  options):
+  - `with { type: "text" }` hands over the file's bytes as a string, so the strict reader sees what
+    the contributor wrote (a key written twice, the lines). Under `bun src/main.ts`, `bun test` and
+    `bun build --compile` (the binary run from `/`) each entry gave the file's exact text, and `tsc`
+    (5.9.3, `"module": "Preserve"`) passed.
+  - **A re-export does not work**: `export { default as postgres } from "./postgres.json" with {
+    type: "text" }` gave the JSON already parsed by Bun (an object, not the text), and
+    `Bun.Transpiler#transformSync` dropped the attribute. The strict reader would never see the file.
+  - **Static imports** (`import postgres from "./postgres.json" with { type: "text" }`) work too,
+    but each template is then named twice (the import, and the list), against "one line".
+  - The dynamic import with a written-out path is what `bun build --compile` bundles, and what the
+    layering test already accepts: `scanImports` reports each as a `dynamic-import` of
+    `./<name>.json`, and `hiddenLoadsOf` finds a plain string as its first argument. The module
+    awaits its imports at load (top-level await), which Bun supports in the program and the binary.
+  - Prettier at 80 columns keeps each line of the first set on one line; a name of more than about
+    twelve characters makes it wrap, which changes nothing but the look.
+- **The layering test** (`test/layers/layers.test.ts`) refuses any file of `src` that is not
+  `.ts` or `.tsx` or a data file it names. `DATA_FILES` gains the rule "every
+  `templates/files/<name>.json` whose name is a template's", once, instead of a line per file. Nothing
+  else in it changes: no special case.
+- **Alternatives considered.** A Bun macro that reads the folder when the CLI is bundled (probed: it
+  worked under `bun run`, `bun test` and `bun build --compile`, its code did not ship, and a changed
+  file was read again on the next run): one file and no line, but a new mechanism, and the layering
+  test would need a special case because `transformSync` throws on a macro import. The maintainer
+  chose the index. Reading the folder at run time: it works from source and not in the compiled
+  binary. `bun build --compile` with the files as extra entry points and `Bun.embeddedFiles`: two
+  paths, source and binary. A generated `.ts` file: a build step that can go stale.
 
 ## R2. The template file, and how it is read **(maintainer: the board `TemplateFile`; data read strictly, known fields only, never code; `asks` kept and refused)**
 
@@ -113,7 +132,9 @@ Tags and digests were read from Docker Hub's public tag list on 2026-11-17, the 
   an example, and `latest` is 26.10, an innovation release); MongoDB 9.0, its newest major release;
   Redis 8.10, the newest stable release (8.12 is a release candidate). Each digest is the index of
   the tag's variant with no suffix (Debian or Ubuntu based; Oracle Linux for MySQL), so one name runs
-  on x86-64 and ARM servers alike. The boards' versions were examples (design/README.md).
+  on x86-64 and ARM servers alike. The redrawn boards show these versions as people name them,
+  PostgreSQL 18.7, MySQL 9.7, MongoDB 9.0, Redis 8.10: that is each template's `software`, and the
+  image's tag is that version or starts with it and a dot (TF30).
 - **What each image's configuration says** (`docker image inspect`):
 
   | Image | Entrypoint, command | Declared volumes | Exposed ports |
@@ -157,9 +178,9 @@ Tags and digests were read from Docker Hub's public tag list on 2026-11-17, the 
   | mongodb (also `mongo`) | `mongodb`, restart always, port 27017 | `MONGO_INITDB_ROOT_PASSWORD` | `MONGO_INITDB_ROOT_USERNAME=app` | `MONGODB_URI` = `mongodb://app:{MONGO_INITDB_ROOT_PASSWORD}@{service}:27017/app?authSource=admin` | `data` at `/data/db` |
   | redis | `redis`, restart always, port 6379, the start command below | `REDIS_PASSWORD` | none | `REDIS_URL` = `redis://default:{REDIS_PASSWORD}@{service}:6379` | `data` at `/data` |
 
-  The postgres row is the board's but for the mount path (R3) and the version. What the boards do
-  not show (MySQL's and MongoDB's settings, the names `MONGODB_URI` and `REDIS_URL`'s form, the
-  note for MongoDB's administrator user) is listed for the maintainer in plan.md (D4 to D6).
+  The postgres row is the board's. What the boards do not show (MySQL's and MongoDB's settings, the
+  names `MONGODB_URI` and `REDIS_URL`'s form, the note for MongoDB's administrator user) was
+  approved by the maintainer on 2026-11-17 (plan.md, D4 to D6).
 - **The Redis start command (approved 2026-11-17)**, exactly:
 
   ```text
@@ -210,11 +231,12 @@ Tags and digests were read from Docker Hub's public tag list on 2026-11-17, the 
   volume as `data`. Adding postgres and then mysql would mount one volume at `/var/lib/postgresql`
   and at `/var/lib/mysql`; adding postgres to an app whose `web` already keeps uploads in `data`
   would put the database in the uploads volume. Both are silent and both lose data.
-- **Decision (plan.md, D1).** A template names its volumes for itself (`data`, as the board's file
+- **Decision (D1, approved).** A template names its volumes for itself (`data`, as the board's file
   does), and adding it names each `<service>-<volume>` in the app: `postgres-data`, or `db-data`
   with `--name db`. A volume of that name already in the app is refused with a sentence of its own.
-  The boards' words change in three places (`data kept in volume postgres-data`, the `--show` row,
-  the hand-written lines); the board `TemplateFile` does not change.
+  Approved by the maintainer on 2026-11-17; the redrawn boards show `postgres-data` in
+  `AddTemplate`, `--show` and the hand-written lines, and `TemplateFile` says the volume `data`
+  becomes `postgres-data` in the app.
 - **Rationale.** The service name is already unique in the app, so the volume name is too; a
   service removed and added again under another name starts with an empty volume, as the spec's last
   edge case says.
@@ -407,38 +429,52 @@ write covers both. The order:
 - **Risk.** The build must see `apps/cli` beside `apps/web`, as a monorepo checkout does. Stated in
   plan.md, Risks.
 
-## R15. Where the spec, the boards and the code disagree, or are silent
+## R15. Where the spec, the boards and the code disagreed, and how each was settled
 
-1. The boards' volume `data` is shared by every service of an app that mounts `data` (R5). Planned
-   as `<service>-<volume>` (D1).
+Found while planning; the maintainer answered on 2026-11-17, and the boards, the spec and these
+documents were changed to match.
+
+1. The boards' volume `data` would be shared by every service of an app that mounts `data` (R5).
+   Settled: `<service>-<volume>` in the app (D1); the boards now show `postgres-data`.
 2. The boards' Postgres path `/var/lib/postgresql/data` makes the 18 image refuse to start (R3).
-   Planned as `/var/lib/postgresql` (D2).
-3. FR-002 says "published by the software's own publisher". Docker Official Images are built and
+   Settled: `/var/lib/postgresql` (D2); the boards now show it.
+3. FR-002 said "published by the software's own publisher". Docker Official Images are built and
    published by Docker's official-images programme with each project's maintainers (MySQL's by
-   Oracle, Redis's by Redis); PostgreSQL's and MongoDB's are kept by the docker-library maintainers,
-   not by the PostgreSQL Global Development Group or MongoDB Inc. The allowed publisher is "Docker
-   Official Images", which is what the boards call "the official image".
+   Oracle, Redis's by Redis); PostgreSQL's and MongoDB's are kept by the docker-library maintainers.
+   Settled: FR-002 now says a Docker Official Image, from a list of allowed sources kept in the
+   repository (`templates/publishers.ts`).
 4. FR-016 asks what is shown before adding to say the image changes only with a new CLI; the board
    `AddTemplate` shows only "pinned by digest". `--show` and the docs say it; the summary is built as
-   drawn.
-5. The board puts "changed while this was open" and "no settings file" under exit status 2; the
-   same cases of `zekno settings` are status 1 (CS12, SH1). Built as the board says, for `zekno add`.
+   drawn (approved with D8 to D33).
+5. The board put "changed while this was open" and "no settings file" under exit status 2, where
+   `zekno settings` says status 1 (CS12, SH1). Settled: status 1, as `zekno settings` (D27); AD21, a
+   store changed while the question was open, is the same kind and is 1 too. The board `AddOther` now
+   says so.
 6. The board `TemplateFile` says a file "cannot publish a port, because settings cannot say those";
-   settings can (`networking.publish`). A template rule refuses it (TF16).
-7. A generic "a client connects" for any future template is not possible (R12, D23).
+   settings can (`networking.publish`). A template rule refuses it (TF24); the guide says it
+   correctly (CG9).
+7. A generic "a client connects" for any future template is not possible (R12, D23, approved).
 8. The format allows several services, but nothing said what `{service}` and `--name` mean then
-   (R2: the first service; D19).
-9. SC-009 ("exactly one file") needs N1 (R1).
+   (R2: the first service; D19, approved).
+9. SC-009 ("exactly one file") could not hold without a new mechanism (R1). Settled: an index file;
+   FR-022 and SC-009 now say one file and one line in the index.
 10. Two different templates that offer the same connection secret (postgres and mysql both offer
-    `DATABASE_URL`) cannot both be added to one app: the second is refused by the secret that exists
-    (AD5). The spec speaks only of the same template twice.
-11. The spec's last edge case ("a renamed service starts with an empty one") holds with D1, not
-    with the boards' `data`.
+    `DATABASE_URL`) cannot both be added to one app (AD5). Accepted for this version (D7); the docs
+    say so.
+11. The spec's last edge case ("a renamed service starts with an empty one") holds with D1.
+12. The boards show each version as people name it (MySQL 9.7, MongoDB 9.0, Redis 8.10) where the
+    image's tag names the release (`9.7.4`, `9.0.8`, `8.10.3`). Settled by the redrawn boards:
+    `software` is the version as shown, and the first service's image tag must be it or start with
+    it and a dot (TF30).
+13. Still on the redrawn boards: the shortened digests (`2ea8…1bbc`) in `AddLook` (`--show`),
+    `AddOther` and `TemplateFile`, where zekno prints them whole (D25, approved); and `AddLook`'s
+    right column, "The numbers here are examples", though they are now the real ones. Both are the
+    boards' own and change nothing that is built.
 
 ## R16. What was run, and what was only read
 
-- **Run**: the macro probe (R1) under `bun run`, `bun test`, `bun build --compile` and `tsc`;
-  `Bun.Transpiler` on the importing file; Docker Hub's tag list; `docker buildx imagetools inspect`;
+- **Run**: the macro and index probes (R1) under `bun run`, `bun test`, `bun build --compile`,
+  `tsc` and Prettier; `Bun.Transpiler` on the importing files; Docker Hub's tag list; `docker buildx imagetools inspect`;
   four pulls by digest; `docker image inspect`; the four entrypoints copied out; `run.sh` eight times
   (each template with a made password and with an empty one) with the real `zekno settings compose`
   and real Docker; `docker compose config` on a hand-written file with `$` and `$$`; the clean-up

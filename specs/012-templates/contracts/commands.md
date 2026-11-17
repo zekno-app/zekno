@@ -1,13 +1,12 @@
 # Commands Contract: `zekno add`
 
 User Stories 1 to 4 (FR-004 to FR-016, FR-019). The boards `AddTemplate`, `AddLook` and `AddOther`
-are binding for the words of each line, colours, what is bold or dim, and layout. Where a board
-shows `data` as the volume's name or `/var/lib/postgresql/data` as its path, this contract writes
-`postgres-data` and `/var/lib/postgresql` (research R5 and R3; plan.md, D1 and D2, for the
-maintainer). The command is drawn and asked in `apps/cli/src/commands/add.ts`, done in
-`apps/cli/src/ops/add.ts` and `ops/add-commit.ts` (data only), its words in
-`apps/cli/src/templates/add-words.ts`. Lines no board shows are marked (new) and listed in
-plan.md, "Design choices for the maintainer".
+are binding for the words of each line, colours, what is bold or dim, and layout; they were redrawn
+on 2026-11-17 after the plan (design/README.md). Where a board shortens a digest (`2ea8…1bbc`),
+this contract prints it whole (D25). The command is drawn and asked in
+`apps/cli/src/commands/add.ts`, done in `apps/cli/src/ops/add.ts` and `ops/add-commit.ts` (data
+only), its words in `apps/cli/src/templates/add-words.ts`. Lines no board shows are marked (new);
+each is one of plan.md's design choices, approved on 2026-11-17.
 
 None of it contacts a server or the network, deploys, or signs a deploy (FR-010, SC-005). Adding
 reads the keychain once, to seal and sign the secrets (`withSigner`), and opens the team as
@@ -168,9 +167,9 @@ Board `AddOther`, right column.
   $ zekno add
   ? Add which template?
   ❯ postgres  PostgreSQL 18.7  A relational database
-    mysql     MySQL 9.7.4      A relational database
-    mongodb   MongoDB 9.0.8    A document database
-    redis     Redis 8.10.3     A cache and key-value store
+    mysql     MySQL 9.7        A relational database
+    mongodb   MongoDB 9.0      A document database
+    redis     Redis 8.10       A cache and key-value store
     ↑↓ move   enter choose   esc leave
   ```
 
@@ -189,9 +188,9 @@ At a terminal:
 ```text
 $ zekno add --list
   postgres  PostgreSQL 18.7  A relational database        by zekno
-  mysql     MySQL 9.7.4      A relational database        by zekno
-  mongodb   MongoDB 9.0.8    A document database          by zekno
-  redis     Redis 8.10.3     A cache and key-value store  by zekno
+  mysql     MySQL 9.7        A relational database        by zekno
+  mongodb   MongoDB 9.0      A document database          by zekno
+  redis     Redis 8.10       A cache and key-value store  by zekno
 ```
 
 From column 2: the name bold, `<title> <software>` in the text colour, the about without its full
@@ -201,9 +200,9 @@ Piped, one line each, with tabs (board):
 
 ```text
 postgres	PostgreSQL	18.7	zekno
-mysql	MySQL	9.7.4	zekno
-mongodb	MongoDB	9.0.8	zekno
-redis	Redis	8.10.3	zekno
+mysql	MySQL	9.7	zekno
+mongodb	MongoDB	9.0	zekno
+redis	Redis	8.10	zekno
 ```
 
 `--json`, one object on one line (new, D18):
@@ -325,7 +324,9 @@ standard error and status 1 (new, D17); with `--yes`, the secrets are made and s
 
 ## The order of checks
 
-The first that applies stops the command. Nothing is written before step 15.
+The first that applies stops the command. Nothing is written before step 15. The board `AddOther`
+gives its refusals exit status 2 and its last two, AD8 and AD13, status 1, as `zekno settings`
+gives for the same cases (D27); AD21 is of AD8's kind and is 1 too.
 
 1. The words and the options: AU1 to AU7, and ``Unexpected "<x>" after `zekno add`.`` for a third
    word (status 2, with the help line).
@@ -337,7 +338,7 @@ The first that applies stops the command. Nothing is written before step 15.
    the keychain is not opened for it.
 5. No template given: the picker at a terminal (with no terminal it was AU1 at step 1); then AD28
    and AU9 for the one picked.
-6. Which file (research R8): SH4 (status 1); no file: AD13 (status 2); a Compose file: the
+6. Which file (research R8): SH4 (status 1); no file: AD13 (status 1, as SH1); a Compose file: the
    hand-written path from step 7, with AU10 for `--for`; a settings file: read whole and checked
    (the reader's sentences, status 1).
 7. The app and the server: the flags, the folder's link, then at a terminal a question for each;
@@ -352,7 +353,7 @@ The first that applies stops the command. Nothing is written before step 15.
 12. The settings with the services added, as `checkSettings` reads the text `settingsText` would
     write: AD15 with the settings sentence's place and rule (status 2).
 13. The summary; then AD3, `--yes`, or AD4 (status 1). A no: AD22 (status 1).
-14. The file and the store unchanged since steps 6 and 8: AD8, AD21 (status 2).
+14. The file and the store unchanged since steps 6 and 8: AD8, AD21 (status 1, as CS12).
 15. Adding, whole or not at all (below).
 
 ## Whole or not at all (FR-008, SC-004)
@@ -390,12 +391,12 @@ columns (`ErrorLine`); piped they are one line on standard error. Statuses in br
 | AD5 | `<app> already has a secret named <NAME>.` then `A template can be added once to an app in this version.` (board) [2] |
 | AD6 | `<file> already has a service named <service>.` then `Give this one another name with --name <service>.` (board; the second `<service>` is written as is) [2] |
 | AD7 | `<svc> already has a variable named <NAME>.` then `Remove it, or leave <svc> out with --for <service>.` (board) [2] |
-| AD8 | `<file> changed while this was open.` then `Nothing was added. Run zekno add <template> again.` (board) [2] |
+| AD8 | `<file> changed while this was open.` then `Nothing was added. Run zekno add <template> again.` (board) [1, as CS12; D27] |
 | AD9 | `<file> already has a volume named <vol>.` then `Give this one another name with --name <service>.` (new, D1) [2] |
 | AD10 | `Which services read <NAME>?` (board; the question) |
 | AD11 | `Pick at least one service.` (new, D13; the reason under the rows) |
 | AD12 | `<file> has several services. Say which read <NAME> with --for <service>.` (new, D14; the board: "it stops and names the flag") [2] |
-| AD13 | `This folder has no settings file.` then `Run zekno settings init to start one, then add the template.` (board) [2] |
+| AD13 | `This folder has no settings file.` then `Run zekno settings init to start one, then add the template.` (board) [1, as SH1; D27] |
 | AD14 | `<file> has no service named <svc>. Its services are <svc>, <svc>.` (`<file> has no such service.` when the name breaks the service rule; `Its service is <svc>.` with one) (new, as CS4) [2] |
 | AD15 | `<service> cannot be added to <file>.` then `<place>: <rule>` of the settings sentence it breaks, such as `services: at most 32 services.`; for a file that would pass 64 KiB, `<file> would be larger than the 64 KiB a settings file may be.` (new, D21) [2] |
 | AD16 | `Added <service> to <file>` (board) |
@@ -403,7 +404,7 @@ columns (`ErrorLine`); piped they are one line on standard error. Statuses in br
 | AD18 | `Run zekno deploy to start it.` (board) |
 | AD19 | `<service> was added to <file>, but its secrets could not be stored, and the file could not be put back.` then `Remove <service> from <file> before you deploy.` (new) [1] |
 | AD20 | `The secrets could not be stored on this machine, so nothing was added.` (new) [1] |
-| AD21 | `The secrets of <app> on <server> changed while this was open.` then `Nothing was added. Run zekno add <template> again.` (new, as AD8) [2] |
+| AD21 | `The secrets of <app> on <server> changed while this was open.` then `Nothing was added. Run zekno add <template> again.` (new, as AD8) [1] |
 | AD22 | `Nothing was added.` (board) [1] |
 | AD23 | the plain lines: `added	<service>	<file>`, then `stored	<NAME>	<version>` per secret (board) [0] |
 | AD24 | `<app> on <server> would have more than 256 secrets, more than one deploy carries. Nothing was added.` (new, as I13) [1] |
@@ -474,8 +475,8 @@ shown`; `<n> random characters`; `read by <names>`; `Builds a secret from it` (`
 | Status | When |
 |--------|------|
 | 0 | added; listed; shown; the hand-written lines printed and their secrets stored |
-| 1 | a fault of the settings file; AD4, AD19, AD20, AD22, AD24, AD25, AD27; AH8, AH9; a refusal of the keychain or of signing; a question of the app or server left |
-| 2 | AU1 to AU10; AL3, AL4; AD1, AD5 to AD9, AD12 to AD15, AD21, AD28; a third word |
+| 1 | a fault of the settings file; AD4, AD8, AD13, AD19, AD20, AD21, AD22, AD24, AD25, AD27; AH8, AH9; a refusal of the keychain or of signing; a question of the app or server left |
+| 2 | AU1 to AU10; AL3, AL4; AD1, AD5, AD6, AD7, AD9, AD12, AD14, AD15, AD28; a third word |
 
 ## Tests
 

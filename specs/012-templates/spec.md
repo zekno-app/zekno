@@ -23,6 +23,7 @@
 - Q: Can the same template be added twice to one app? → A: No, one of each per app in this version, because a secret's name is shared by the whole app.
 - Q: Do tests run on GitHub for each pull request? → A: Yes, with no access to any secret of the repository.
 - Q: How does Redis get its password, since its official image has no variable for one? → A: The template's start command, run inside the container, writes the password from the secret into a file only Redis can read, then starts Redis with it. Approved on 2026-11-17.
+- Q: How do the template files reach the CLI? → A: Each template is one file in the templates folder, and one index file names each of them, one line per template. A test fails when a file of the folder is not in the index, or the index names a file that is not there. Decided on 2026-11-17, after the plan.
 
 ## Why
 
@@ -104,15 +105,15 @@ A script adds a template with no terminal.
 
 ### User Story 5 - Contribute a template (Priority: P2)
 
-Someone outside the project wants Zekno to offer a database they use. They copy an existing template file, change its values, run the template tests on their machine and open a pull request. The tests run again on GitHub. A maintainer reads the file and merges it. With the next release, `zekno add` lists it with the author's name, and the docs site shows it.
+Someone outside the project wants Zekno to offer a database they use. They copy an existing template file, change its values, add its line to the index, run the template tests on their machine and open a pull request. The tests run again on GitHub. A maintainer reads the file and merges it. With the next release, `zekno add` lists it with the author's name, and the docs site shows it.
 
 **Why this priority**: the catalogue grows only if adding to it is easy for a contributor and cheap to review for a maintainer; and the format must be right from the first release, because changing it later breaks every contribution.
 
-**Independent Test**: a new template file that follows the guide passes the template tests with no other file changed, and appears in the list, in what `zekno add` shows, and on the docs page; a file that breaks a rule (an image with no digest, a published port, an unknown field, an image from a publisher that is not allowed) fails the tests with a sentence that names the rule and the place.
+**Independent Test**: a new template file that follows the guide, with its line in the index, passes the template tests with no other change, and appears in the list, in what `zekno add` shows, and on the docs page; a file that breaks a rule (an image with no digest, a published port, an unknown field, an image from a publisher that is not allowed) fails the tests with a sentence that names the rule and the place.
 
 **Acceptance Scenarios**:
 
-1. **Given** the guide and an existing template, **When** a contributor adds one file, **Then** the template is listed, shown, added and documented with no other change to the code.
+1. **Given** the guide and an existing template, **When** a contributor adds one file and its line in the index, **Then** the template is listed, shown, added and documented with no other change to the code.
 2. **Given** a template file that breaks a rule, **When** the tests run, **Then** they fail and name the rule and the place in the file.
 3. **Given** a pull request from a fork, **When** it is opened, **Then** the tests run on GitHub without access to any secret of the repository, and their result shows on the pull request.
 4. **Given** a merged template, **When** the next CLI is released, **Then** the list and the docs page show its name, what it is, the software's version and its author.
@@ -143,7 +144,7 @@ Someone outside the project wants Zekno to offer a database they use. They copy 
 **Where templates come from**
 
 - **FR-001**: Templates MUST be part of the CLI itself, each one a file in the public repository that enters by a reviewed pull request. Adding one MUST NOT contact the network or read a template from the project folder, the profile folder or anywhere a person other than the CLI's publisher could have written.
-- **FR-002**: Each template's image MUST be named by version, pinned by its digest, and published by the software's own publisher, from a list of allowed publishers kept in the repository.
+- **FR-002**: Each template's image MUST be named by version, pinned by its digest, and be a Docker Official Image, from a list of allowed sources kept in the repository.
 - **FR-003**: A template MUST be expressible entirely as app settings of feature 010: it adds nothing the settings file could not say, and it is checked by the same rules before it is written.
 - **FR-003a**: A template MUST be one data file, read strictly: known fields only, within size limits, and never code. The only things it can compute are a secret made at random and a secret built by placing made secrets and the service's name into a fixed text.
 - **FR-003b**: The format MUST allow a template to hold several services, and MUST keep a place for questions to the developer. A template that asks a question is refused by this version with one sentence.
@@ -178,7 +179,7 @@ Someone outside the project wants Zekno to offer a database they use. They copy 
 
 **Contributing**
 
-- **FR-022**: Adding a template to the catalogue MUST need one new file and no change to other code: the list, what is shown before adding, the docs page and the tests all read the same files.
+- **FR-022**: Adding a template to the catalogue MUST need one new file and one line in the index, and no other change: the list, what is shown before adding, the docs page and the tests all read the same files. A test fails when the folder and the index differ.
 - **FR-023**: An automatic test MUST check every template: the file's form, the settings rules, the image's digest and publisher, no published port, data in a named volume; and, where Docker is present, that the service starts and a client connects with the secrets that were made.
 - **FR-024**: The template tests MUST run on GitHub for every pull request, with no access to any secret of the repository, including for a pull request from a fork.
 - **FR-025**: A guide for contributors MUST state the rules a template has to meet and what the reviewer checks by hand.
@@ -214,7 +215,7 @@ Someone outside the project wants Zekno to offer a database they use. They copy 
 - **SC-007**: The diff of this feature touches no message format, no file of the core library and no file of the runner.
 - **SC-008**: Each template of the first set is started once with real Docker from the settings it adds, and a client inside the app's network connects with the connection secret.
 
-- **SC-009**: Adding a new template to the catalogue changes exactly one file, and the list, the docs page and the tests pick it up.
+- **SC-009**: Adding a new template to the catalogue takes one new file and one line in the index, and no other change, and the list, the docs page and the tests pick it up.
 - **SC-010**: Each rule a template has to meet has a test with a file that breaks it, and that test names the rule and the place.
 
 ## Assumptions

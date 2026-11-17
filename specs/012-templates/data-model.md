@@ -1,6 +1,7 @@
 # Data Model: Templates
 
-Four new data files inside the CLI, one per template. Nothing new is stored in the project folder
+Four new data files inside the CLI, one per template, and an index that names each on one line
+(`templates/files/index.ts`). Nothing new is stored in the project folder
 but the services a template adds to `zekno.app.json` (feature 010's format, unchanged), and nothing
 new in the profile folder but the sealed secret records `zekno secret set` already writes (same
 format). No message, signed text or file format of `packages/core`, the runner or the profile
@@ -19,7 +20,7 @@ written out there.
 | `name` | string | `^[a-z][a-z0-9-]{0,31}$`, the file's own name | refused |
 | `title` | string | 1 to 40 of letters, digits, space, `.+-` | refused |
 | `about` | string | 1 to 80 printable ASCII, ends with `.` | refused |
-| `software` | string | the first service's image tag | refused |
+| `software` | string | the version as people name it; the first service's image tag is it or starts with it and a dot | refused |
 | `author` | string | a GitHub user name's shape, at most 39 | refused |
 | `also` | string[] | 0 to 8 names, none twice, not its own | none |
 | `services` | object | 1 to 8 services of `zekno.app.json`, plus TF21 to TF25, TF32 | refused |
@@ -83,8 +84,9 @@ throws, and builds every place from names that passed their rule and every rule 
 type Catalogue = readonly Template[]
 ```
 
-`catalogue()` (`templates/catalogue.ts`) reads `TEMPLATE_TEXTS`, the `[file name, text]` pairs the
-CLI was built with (research R1), once per run, with `readTemplate`, checks TC1 and TC2, and orders
+`catalogue()` (`templates/catalogue.ts`) reads `TEMPLATE_TEXTS`, the `[file name, text]` pairs it
+makes of the index, `TEMPLATE_FILES` (contracts/template-file.md, "The index"; research R1), once per
+run, with `readTemplate`, checks TC1 and TC2, and orders
 them. A fault is AD27 (a released zekno never has one). `findTemplate(name)` gives the template, or
 `{ also: string }` when `name` is in a template's `also`, or `undefined`.
 
@@ -285,7 +287,8 @@ Nothing is written before d. After a failure at a, b, c or d nothing was written
 
 ## Validation summary
 
-- A template file is read only by `readTemplate`, from the texts the CLI was built with; its
+- A template file is read only by `readTemplate`, from the texts of the files the index names, as
+  the CLI was built with them; its
   services only by feature 010's rules.
 - An addition is checked whole by the settings reader before it is shown.
 - A made value exists only between step c and the end of step e, in one function, and reaches only

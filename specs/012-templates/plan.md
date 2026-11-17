@@ -3,15 +3,17 @@
 **Branch**: `012-templates` (from `dev`) | **Date**: 2026-11-17 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/012-templates/spec.md`, its Clarifications of
-2026-11-17 (the Redis way approved the same day), and the four approved boards in
-[design/](./design/).
+2026-11-17 (the Redis way approved the same day), the four approved boards in
+[design/](./design/), and the maintainer's answers to this plan of 2026-11-17 (an index file; D1 to
+D33 approved, D27 changed; FR-002 reworded), after which the boards were redrawn.
 
 ## Summary
 
-A template is one JSON file inside the CLI (`apps/cli/src/templates/files/<name>.json`) that
-describes one or more services of feature 010's settings file, the passwords they need, the
+A template is one JSON file inside the CLI (`apps/cli/src/templates/files/<name>.json`), named
+on one line of an index beside it (`files/index.ts`), that describes one or more services of feature 010's settings file, the passwords they need, the
 connection secret it offers to the app's own services, and its author. The first set is PostgreSQL
-18.7, MySQL 9.7.4, MongoDB 9.0.8 and Redis 8.10.3, each the official image pinned by digest
+18.7, MySQL 9.7, MongoDB 9.0 and Redis 8.10 (images `18.7`, `9.7.4`, `9.0.8`, `8.10.3`), each the
+official image pinned by digest
 (research R3, R4; every one started with real Docker on 2026-11-17). A file is read by a strict
 reader of zekno's own, built on feature 010's JSON reader, and its `services` part is checked by
 the settings file's own rules, so a template can say nothing a settings file cannot
@@ -22,28 +24,31 @@ as the board draws it, asks once, then makes the passwords on this machine, seal
 file and stores the secrets, whole or not at all (research R7; contracts/commands.md). Nothing is
 deployed and nothing is contacted. A folder that deploys a hand-written Compose file gets the
 lines to add and, if the person agrees, the secrets. `--list` and `--show` look without a team. A
-contributor copies a file, runs `bun run test:templates`, and opens a pull request that one new
+contributor copies a file, adds its line to the index, runs `bun run test:templates`, and opens a
+pull request that one new
 workflow checks with a read-only token and no secret; a docs page is built from the same files
 (contracts/contributing.md). `packages/core`, the runner and every message stay as they are.
 
 ## Needs the maintainer
 
-Nothing below was chosen. Each blocks only the tasks named.
+Nothing waits for the maintainer. The one open question (N1: how the template files reach the
+compiled CLI) was answered on 2026-11-17: **an index file**, one line per template, with a test that
+fails when the folder and the index differ (research R1; contracts/template-file.md, "The index").
+The macro this plan first recommended is not used, and the layering test needs no special case.
+FR-022 and SC-009 now say "one new file and one line in the index". No task is blocked.
 
-| # | Question | Recommendation |
-|---|----------|----------------|
-| N1 | **How the template files reach the compiled CLI with one file per template** (research R1). The layering test refuses any non-code file in `src` it does not name, and a compiled binary holds only what is imported. (a) A **Bun macro**: `templates/bundled.ts` reads `templates/files/*.json` when Bun bundles or transpiles the CLI; one file is one template, as FR-022 and SC-009 say. It is a feature of Bun 1.4.4, not a dependency, but a mechanism the repository does not use yet, and the layering test must take the macro attribute off that one import before it transforms the text. (b) An **index file**: `templates/files.ts` imports each file `with { type: "text" }` and a test fails when the folder and the index differ; no new mechanism, but a template is one file and one line, against SC-009. | **(a)**, the macro. Probed: it works under `bun run`, `bun test` and `bun build --compile`, its code does not ship in the binary, and `tsc` accepts it with the CLI's options. Blocks T010 only; every other task reads the catalogue through `templates/catalogue.ts` and does not care which way it was filled. |
+## Design choices, approved by the maintainer
 
-## Design choices for the maintainer
+What the boards did not show, or showed in a way that could not be built as drawn. The maintainer
+approved D1 to D33 on 2026-11-17 as planned here, with one change: D27 follows `zekno settings`,
+not the board. The boards were then redrawn for D1, D2, D3 and D27 (design/README.md). The tasks
+that build each are in brackets.
 
-What the boards do not show, or show in a way that cannot be built as drawn. Each is planned with
-the recommendation given; a different answer changes the tasks named in brackets.
-
-| # | Choice | Recommendation, as planned |
+| # | Choice | As approved |
 |---|--------|---------------------------|
-| D1 | **Volume names.** A Compose volume is the whole app's: the boards' `data` would be one volume for every service that mounts `data`, so postgres then mysql, or postgres in an app whose `web` keeps uploads in `data`, would share it and lose data (research R5). | A template keeps naming its volume `data`; adding names it `<service>-<volume>` in the app (`postgres-data`; `db-data` with `--name db`). A name already in the app is refused with AD9 (new). Three lines of the boards change: `data kept in volume postgres-data`, `--show`'s row, and the hand-written lines. [T016, T023, T033, T044] |
-| D2 | **Postgres 18's data path.** The boards mount `/var/lib/postgresql/data`; the 18 image refuses to start with a volume there (research R3). | `/var/lib/postgresql`, the image's declared volume, proven. [T009] |
-| D3 | **Versions.** The boards' were examples. | PostgreSQL 18.7, MySQL 9.7.4 (the `lts` tag; the boards showed 8.4), MongoDB 9.0.8 (`latest`; the boards showed 8.0), Redis 8.10.3, each pinned by its index digest (research R3). [T009] |
+| D1 | **Volume names.** A Compose volume is the whole app's: the boards' `data` would be one volume for every service that mounts `data`, so postgres then mysql, or postgres in an app whose `web` keeps uploads in `data`, would share it and lose data (research R5). | A template keeps naming its volume `data`; adding names it `<service>-<volume>` in the app (`postgres-data`; `db-data` with `--name db`). A name already in the app is refused with AD9 (new). The redrawn boards show `postgres-data`. [T016, T023, T033, T044] |
+| D2 | **Postgres 18's data path.** The boards mount `/var/lib/postgresql/data`; the 18 image refuses to start with a volume there (research R3). | `/var/lib/postgresql`, the image's declared volume, proven; the redrawn boards show it. [T009] |
+| D3 | **Versions.** The first boards' were examples. | PostgreSQL 18.7, MySQL 9.7.4 (the `lts` tag), MongoDB 9.0.8 (`latest`), Redis 8.10.3, each pinned by its index digest (research R3). Shown as the redrawn boards show them, PostgreSQL 18.7, MySQL 9.7, MongoDB 9.0, Redis 8.10: that is each file's `software`, and the image tag is it or starts with it and a dot (TF30). [T009] |
 | D4 | **MySQL's settings** (no board). | Makes `MYSQL_ROOT_PASSWORD` and `MYSQL_PASSWORD`; `MYSQL_USER=app`, `MYSQL_DATABASE=app`; offers `DATABASE_URL` = `mysql://app:{MYSQL_PASSWORD}@{service}:3306/app`. Not `MYSQL_RANDOM_ROOT_PASSWORD`, which prints the password to the log. [T009] |
 | D5 | **MongoDB's settings** (no board). | Name `mongodb`, also `mongo` (the board's example); `MONGO_INITDB_ROOT_USERNAME=app`, makes its password; offers `MONGODB_URI` (the name MongoDB's drivers' docs use) = `mongodb://app:{...}@{service}:27017/app?authSource=admin`; a second note, `Your app connects as the database's administrator.`, since the image makes only an administrator without a mounted init script. [T009] |
 | D6 | **Redis's connection secret.** | `REDIS_URL` (board) = `redis://default:{REDIS_PASSWORD}@{service}:6379`, the user named, which every current client reads; volume `data` at `/data`. [T009] |
@@ -65,9 +70,9 @@ the recommendation given; a different answer changes the tasks named in brackets
 | D22 | **The secret store's own cases**: AD19 (the file could not be put back), AD20, AD21, AD24, AD25. | As written; AD24 and AD25 as I13 and I14 with `Nothing was added.` [T025, T027] |
 | D23 | **"A client connects" for any template** cannot be generic: each database speaks its own protocol. And the board's test lines are drawn by `bun test`'s own reporter. | A client per template of the first set in `test/templates/clients.ts`; a template without one gets every other check and a skipped test naming the reviewer's step. Test names as the board; marks and times `bun test`'s. [T036] |
 | D24 | **What "notes" and "Good to know" show.** | The summary shows each note after `!`; `--show` shows AV3 (in place of the backup note), AV4, then the other notes. The list and picker show `about` without its full stop. [T023, T033] |
-| D25 | **Digests printed whole** in `--show` and the hand-written lines (the boards shorten them to `4f1c…a9e2`): a person copies or checks them. | Whole. [T033, T044] |
+| D25 | **Digests printed whole** in `--show` and the hand-written lines (the boards, redrawn too, shorten them to `2ea8…1bbc`): a person copies or checks them. | Whole. [T033, T044] |
 | D26 | **A start command in the summary** (Redis's): no board. | Not in the summary; `--show` has it in the Deploy section, and the docs page says what it does. [T023] |
-| D27 | **AD8 and AD13 are status 2** (board), where `zekno settings`'s CS12 and SH1 are 1. | As the board. [T025, T027] |
+| D27 | **AD8 and AD13**: the first board gave them status 2, where `zekno settings`'s CS12 and SH1 are 1. | **Changed by the maintainer**: status 1, as `zekno settings`; AD21, of AD8's kind, is 1 too. The redrawn `AddOther` says so. [T025, T027] |
 | D28 | **"The app has this template already"** is known by a secret it makes or offers being the app's (the board's AD5 names that secret). | As planned. [T025] |
 | D29 | **The check pulls the images from Docker Hub** on every pull request (its Docker part). | Accept; MS4 in contracts/contributing.md. [T039] |
 | D30 | **Blank lines.** The boards set blocks apart by 12 px; a terminal has whole lines only, and the summary must fit 80 by 24. | No empty line between the blocks of the summary and of `--show`. [T023, T033] |
@@ -79,7 +84,7 @@ the recommendation given; a different answer changes the tasks named in brackets
 
 **Language/Version**: TypeScript 5 on Bun 1.4.4 (pinned in the root `package.json`)
 
-**Primary Dependencies**: `@workspace/core`, Ink 8.0.0, React 19.3.1, zod 4.6.7 (all already in `apps/cli/package.json`); Bun's built-ins (`crypto.getRandomValues`, `node:fs`, a macro if N1 says so); feature 010's `settings/` reader, writer and Compose text. **No new dependency, tool, library or file format** other than the template files, which are JSON read by the existing reader. In `apps/web`, Next.js 16 and fumadocs as installed.
+**Primary Dependencies**: `@workspace/core`, Ink 8.0.0, React 19.3.1, zod 4.6.7 (all already in `apps/cli/package.json`); Bun's built-ins (`crypto.getRandomValues`, `node:fs`, its `text` loader for the index's imports); feature 010's `settings/` reader, writer and Compose text. **No new dependency, tool, library or file format** other than the template files, which are JSON read by the existing reader. In `apps/web`, Next.js 16 and fumadocs as installed.
 
 **Storage**: the template files, inside the CLI. A template's services go into the project's `zekno.app.json` (feature 010's format); its secrets into the profile's secret store as sealed records (`zekno secret set`'s format). Nothing else.
 
@@ -109,21 +114,24 @@ the recommendation given; a different answer changes the tasks named in brackets
 | Once per app | One of each per app, because a secret's name is the app's |
 | Questions (`asks`) | Kept in the format, refused until domains |
 | Several services | The format allows it; the first set has one each |
-| Contributions | By pull request: one file, a guide, an automatic test of every template, a docs page crediting authors, a maintainer's review, a release |
+| Contributions | By pull request: one file and its line in the index, a guide, an automatic test of every template, a docs page crediting authors, a maintainer's review, a release |
 | The check | One workflow on `pull_request`, `permissions: {}`, `contents: read` on the job, actions pinned to full commits, no secret, `persist-credentials: false`; typecheck, lint, tests, template tests; required check is the maintainer's setting |
 | Starters | Not in this feature |
-| Look and words | The four boards, binding |
+| How template files reach the CLI (N1, after the plan) | An index file, `templates/files/index.ts`, one line per template, and a test that fails when the folder and the index differ; FR-022 and SC-009 say one file and one line |
+| The plan's design choices (after the plan) | D1 to D33 approved as planned, but D27: AD8 and AD13 (and AD21) are status 1, as `zekno settings` |
+| Allowed images (FR-002, after the plan) | A Docker Official Image, from a list of allowed sources kept in the repository |
+| Look and words | The four boards, binding, as redrawn on 2026-11-17 after the plan |
 | Stack | Bun, TypeScript, Ink with React, zod, `bun test`, ESLint and Prettier at 80 columns. No new dependency |
 
 ## Constitution Check
 
-*GATE: checked before Phase 0 research and again after Phase 1 design. Both pass, with N1 open.*
+*GATE: checked before Phase 0 research and again after Phase 1 design, and again after the maintainer's answers of 2026-11-17. All pass.*
 
 | Principle | How this plan complies | Status |
 |-----------|------------------------|--------|
 | I. Security Promise First | Nothing reaches a hosted service or a server: adding is local (FR-010, SC-005). A made password is made on this machine from the system's random source, sealed and signed at once by `createSecret` as `zekno secret set` does, and kept nowhere else: not in the settings file, a line, an error, a log, an argument or a returned value (research R6; SC-002, tested with a sentinel random source). A template is reviewed data inside the CLI, read strictly anyway (known fields, size and counts bounded, duplicate keys refused, its services by the settings rules, faults naming places only); it cannot run code, fetch, mount a folder of the server, publish a port, read a secret the user sets, or name an image that can change (contracts/template-file.md, "What a file can never do"). The image is pinned by digest and from an allowed publisher. Every template fails closed without its password (research R4). The password never reaches a command line in the container, also for Redis (`$$`, proven) and in the hand-written lines (research R10). Adding is whole or nothing (research R7). The check on GitHub runs with a read-only token and no secret. No signing key is held anywhere new. | Pass |
 | II. Honest Surface | "Runner" everywhere, never "agent". What is shown before adding says Zekno does not back up the data and where it is kept; `--show` and the docs say the image changes only with a new zekno (FR-016; research R15 item 4 notes the summary's board). Refusals say why and what to do. The docs page keeps the "Pre-alpha and unaudited" callout; every page that has one keeps it (FR-017). The docs say what cannot be undone in the one window of research R7, that two templates offering `DATABASE_URL` cannot share an app (D7), and that MongoDB's app user is its administrator (D5). The check's limits are stated: it runs a pull request's own copy of the tests (contracts/contributing.md, CG8). | Pass |
-| III. Read the Installed Docs First | The docs page's component follows `node_modules/next/dist/docs/01-app/01-getting-started/08-caching.md` ("Predictable values": module-scope synchronous reads are prerendered); no other Next.js code changes. Bun's macro behaviour was read in `bun-types/docs/bundler/macros.mdx` and probed. Ink's `useInput`, `Text`, `Box` as the code already uses them. Tasks that use an API name the installed docs to check. | Pass |
+| III. Read the Installed Docs First | The docs page's component follows `node_modules/next/dist/docs/01-app/01-getting-started/08-caching.md` ("Predictable values": module-scope synchronous reads are prerendered); no other Next.js code changes. Bun's `text` loader and dynamic imports were probed for the index (research R1). Ink's `useInput`, `Text`, `Box` as the code already uses them. Tasks that use an API name the installed docs to check. | Pass |
 | IV. One Design System | The terminal keeps feature 004's justified deviation (`ui/terminal/theme.ts`); the new drawings are built from `Panel`, the field rows, `ListPrompt`'s pieces, `ErrorLine`, `Ui.confirm`; no new colour. The docs page uses fumadocs' MDX table and the site's tokens; no new component system. Both themes: the CLI's light and dark themes are tested; the docs page inherits the site's. | Pass |
 | V. Motion With Purpose | Nothing moves but the existing spinner. | Pass |
 | VI. Accessible and Fast by Default | Every state has words and a symbol (`✔`, `✖`, `!`, `◉`/`◯`), never colour alone; the summary fits 80 by 24 with no blank lines (D30); every question works from the keyboard and Esc leaves. The docs page is a static table with a header row. | Pass |
@@ -157,7 +165,8 @@ apps/cli/
 ├── package.json                       # the script test:templates
 ├── src/
 │   ├── templates/                     # new folder: everything about a template that needs neither a team nor a terminal
-│   │   ├── files/                     # new: the template files, data only
+│   │   ├── files/                     # new: the template files, data only, and their index
+│   │   │   ├── index.ts               # new: one line per template file
 │   │   │   ├── postgres.json
 │   │   │   ├── mysql.json
 │   │   │   ├── mongodb.json
@@ -165,11 +174,10 @@ apps/cli/
 │   │   ├── types.ts                   # new: Template, MadeSecret, Offer, TemplateFault, Addition, TemplateRow, AdditionReport, TemplateView, HandLines
 │   │   ├── file-words.ts              # new: TR, TF, TS's mapping, TC
 │   │   ├── add-words.ts               # new: AD, AU, AL, AV, AH and the summary's words
-│   │   ├── publishers.ts              # new: the allowed publishers (FR-002)
+│   │   ├── publishers.ts              # new: the allowed sources (FR-002)
 │   │   ├── shape.ts                   # new: the top-level fields, makes and offers as zod strictObjects
 │   │   ├── read.ts                    # new: readTemplate, the order of checks
-│   │   ├── bundled.ts                 # new (N1): the texts of files/ at bundle time
-│   │   ├── catalogue.ts               # new: TEMPLATE_TEXTS, catalogue, findTemplate, the order
+│   │   ├── catalogue.ts               # new: TEMPLATE_TEXTS from the index, catalogue, findTemplate, the order
 │   │   ├── made.ts                    # new: makePassword, fillOffer, shownOffer
 │   │   ├── addition.ts                # new: planAddition (pure)
 │   │   ├── hand.ts                    # new: the lines for a hand-written Compose file
@@ -194,7 +202,7 @@ apps/cli/
 └── test/
     ├── support/template-files.ts      # new: good and hostile template fixtures, each with its sentence
     ├── templates/                     # new, mirroring src/templates
-    │   ├── read.test.ts, files.test.ts, catalogue.test.ts, made.test.ts
+    │   ├── read.test.ts, files.test.ts, index.test.ts, catalogue.test.ts, made.test.ts
     │   ├── addition.test.ts, hand.test.ts, shown.test.ts, words.test.ts
     │   ├── docker.test.ts, clients.ts, workflow.test.ts
     ├── settings/schema.test.ts, file.test.ts, write.test.ts   # extended
@@ -202,7 +210,7 @@ apps/cli/
     ├── commands/add.test.tsx                                  # new
     ├── ui/ink/several.test.tsx, templates.test.tsx, addition-report.test.tsx   # new
     ├── scenarios/add-settings.test.ts, add-hand.test.ts, add-scripts.test.ts, templates-real-docker.test.ts   # new
-    ├── layers/layers.test.ts                                  # templates/ in LAYOUT and rule 3; the data files; the macro
+    ├── layers/layers.test.ts                                  # templates/ in LAYOUT and rule 3; the data files
     ├── plain/plain-unchanged.test.ts                          # ADDED_TO_HELP; the three options elsewhere
     ├── version/version.test.ts                                # add never fetches
     └── docs/docs.test.ts                                      # unchanged; the docs name the new lines
@@ -236,16 +244,15 @@ nothing from `app/`, `commands/`, `asking/` or `ops/`, and from `ui/` nothing. I
 `settings/` imports `templates/`. `ops/`, `commands/` and `ui/` (types only, through `ui/types.ts`)
 import it.
 
-The layering test changes in five places and gains no exception:
+The layering test changes in four places and gains no exception:
 
 - `LAYOUT` gains `"templates"`, after `"shared"`;
 - `BASE` gains `"templates"`, and rule 3's text reads `3. shared/, server/, project/, profile/,
   secrets/, settings/, templates/ and version/ import nothing from app/, commands/, asking/ or
   ops/, and from ui/ only ui/types.ts.`;
 - `DATA_FILES` gains every `templates/files/<name>.json` (a pattern, held to the name rule, not a
-  list), so a new template needs no change to the test;
-- with N1's macro: the text given to `transformSync` has `with { type: "macro" }` taken off the one
-  import of `templates/catalogue.ts` (the import still counts for every rule);
+  list), so a new template needs no change to the test; the index's imports write each path out,
+  so the test follows them as it follows every import;
 - "the checker itself" gains `broken("templates/addition.ts", "ops/add.ts")` giving `["3."]` and
   `broken("templates/read.ts", "settings/schema.ts")` giving `[]`.
 
@@ -281,7 +288,7 @@ A checklist for the security review (T055) and the end checks (T057). The base i
 
 1. **Setup**: the folder `templates/` with its types and the layering test; `checkSettingsValue`;
    `SettingsRead.bytes`.
-2. **Foundational**: the words; the publishers; the reader and its fixtures; the catalogue (N1);
+2. **Foundational**: the words; the allowed sources; the reader and its fixtures; the index and the catalogue;
    the four files and their tests; the made values; the addition; `restoreSettings`;
    `findPlace`. Each with its tests first.
 3. **US1, add a database** (P1, MVP): `prepareAdd`, `commitAdd`, the summary, the readers question,
@@ -309,9 +316,10 @@ the version test's table in the same task.
 - **A made value in memory.** JavaScript strings cannot be wiped. Mitigation: the values exist in
   one function's locals, after the last check and before the store's write, and reach only
   `createSecret`; the sentinel tests look everywhere else.
-- **The macro (N1).** A build-time code path, run whenever Bun transpiles `catalogue.ts`: it reads
-  only `templates/files/`. If the maintainer prefers (b), T010 changes and SC-009 becomes "one file
-  and one line".
+- **A file without its line in the index** is not in the CLI. Mitigation: the index test (TI1)
+  fails and says which line to add; the docs page reads the folder, and the same test keeps the two
+  alike. The index awaits its imports when it loads (top-level await), which Bun supports in the
+  program and the compiled binary (research R1).
 - **An image digest that goes away.** Docker Hub keeps a manifest pulled by digest; if one were
   removed, the deploy fails with Docker's own line naming the image (the spec's edge case). A new
   release pins a new digest.
@@ -330,4 +338,4 @@ the version test's table in the same task.
 
 ## Complexity Tracking
 
-No principle is violated. Nothing to justify. N1 is a question of mechanism, not a deviation.
+No principle is violated. Nothing to justify.

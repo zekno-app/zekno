@@ -15,25 +15,25 @@ body{margin:0}
 </helmet>
 <div style="width: 1700px; height: 820px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
   <div style="width: 560px; display: flex; flex-direction: column; gap: 10px">
-    <div style="display: flex; justify-content: space-between"><span><span style="color: #ffffff; font-weight: 600">postgres.json</span></span><span style="color: #8b949e">one file is one template</span></div>
+    <div style="display: flex; justify-content: space-between"><span><span style="color: #ffffff; font-weight: 600">postgres.json</span></span><span style="color: #8b949e">one file, and one line in the index</span></div>
     <div style="box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 12px 16px; white-space: pre; flex-grow: 1">{
   <span style="color: #2383e2">"template"</span>: 1,
   <span style="color: #2383e2">"name"</span>: "postgres",
   <span style="color: #2383e2">"title"</span>: "PostgreSQL",
   <span style="color: #2383e2">"about"</span>: "A relational database.",
-  <span style="color: #2383e2">"software"</span>: "18.1",
+  <span style="color: #2383e2">"software"</span>: "18.7",
   <span style="color: #2383e2">"author"</span>: "zekno",
   <span style="color: #2383e2">"also"</span>: [],
   <span style="color: #2383e2">"services"</span>: {
     <span style="color: #2383e2">"postgres"</span>: {
-      <span style="color: #2383e2">"source"</span>: { <span style="color: #2383e2">"image"</span>: "postgres:18.1@sha256:4f1c…a9e2" },
+      <span style="color: #2383e2">"source"</span>: { <span style="color: #2383e2">"image"</span>: "postgres:18.7@sha256:2ea8…1bbc" },
       <span style="color: #2383e2">"deploy"</span>: { <span style="color: #2383e2">"restart"</span>: "always" },
       <span style="color: #2383e2">"networking"</span>: { <span style="color: #2383e2">"port"</span>: 5432 },
       <span style="color: #2383e2">"variables"</span>: {
         <span style="color: #2383e2">"secrets"</span>: ["POSTGRES_PASSWORD"],
         <span style="color: #2383e2">"plain"</span>: { <span style="color: #2383e2">"POSTGRES_USER"</span>: "app", <span style="color: #2383e2">"POSTGRES_DB"</span>: "app" }
       },
-      <span style="color: #2383e2">"volumes"</span>: { <span style="color: #2383e2">"data"</span>: "/var/lib/postgresql/data" }
+      <span style="color: #2383e2">"volumes"</span>: { <span style="color: #2383e2">"data"</span>: "/var/lib/postgresql" }
     }
   },
   <span style="color: #2383e2">"makes"</span>: {
@@ -50,7 +50,7 @@ body{margin:0}
     <div style="font-weight: 600">What each part is</div>
     <div style="display: grid; grid-template-columns: 120px 1fr; column-gap: 10px"><span style="color: #d7dde4">name, title …</span><span>What the list and the docs page show. The author is credited.</span></div>
     <div style="display: grid; grid-template-columns: 120px 1fr; column-gap: 10px"><span style="color: #d7dde4">also</span><span>Names people may type instead, such as mongo for mongodb.</span></div>
-    <div style="display: grid; grid-template-columns: 120px 1fr; column-gap: 10px"><span style="color: #d7dde4">services</span><span>Exactly what goes into zekno.app.json. Same format, same checks. Several are allowed.</span></div>
+    <div style="display: grid; grid-template-columns: 120px 1fr; column-gap: 10px"><span style="color: #d7dde4">services</span><span>What goes into zekno.app.json. Same format, same checks. Its volume data becomes postgres-data in the app, so no two services share one.</span></div>
     <div style="display: grid; grid-template-columns: 120px 1fr; column-gap: 10px"><span style="color: #d7dde4">makes</span><span>Secrets made at random on the user's machine.</span></div>
     <div style="display: grid; grid-template-columns: 120px 1fr; column-gap: 10px"><span style="color: #d7dde4">offers</span><span>A connection secret for the user's own services. {service} is the service's name in their app.</span></div>
     <div style="display: grid; grid-template-columns: 120px 1fr; column-gap: 10px"><span style="color: #d7dde4">notes</span><span>Sentences shown before adding. Backups are always named.</span></div>
@@ -63,7 +63,7 @@ body{margin:0}
   <div style="width: 1px; background: #2a313a"></div>
   <div style="width: 280px; display: flex; flex-direction: column; gap: 12px; color: #8b949e">
     <div style="font-weight: 600">How one gets in</div>
-    <div>1. Copy a template file and change its values.</div>
+    <div>1. Copy a template file, change its values, and add its name to the index, one line.</div>
     <div>2. Run the template tests.</div>
     <div>3. Open a pull request. The tests run again on GitHub, with no access to any secret.</div>
     <div>4. A maintainer reads it and merges it.</div>
