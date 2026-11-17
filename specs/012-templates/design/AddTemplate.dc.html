@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>zekno add postgres</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1500px; height: 660px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; padding: 24px 24px; display: flex; gap: 24px">
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+    <div><span style="color: #8b949e">$</span> zekno add postgres</div>
+    <div style="display: flex; justify-content: space-between"><span><span style="color: #ffffff; font-weight: 600">PostgreSQL 18.1</span> <span style="color: #8b949e">&nbsp;A relational database.</span></span><span style="color: #8b949e">by zekno</span></div>
+    <div style="box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 12px 16px">
+      <div style="display: grid; grid-template-columns: 80px 1fr; row-gap: 2px">
+        <span style="color: #8b949e">app</span><span><span style="color: #ffffff; font-weight: 600">demo</span></span>
+        <span style="color: #8b949e">server</span><span>prod <span style="color: #8b949e">deploy@203.0.113.7</span></span>
+        <span style="color: #8b949e">file</span><span>zekno.app.json <span style="color: #8b949e">&nbsp;2 services: web, worker</span></span>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px"><div><span style="color: #ffffff; font-weight: 600">Adds a service</span></div><div style="display: grid; grid-template-columns: 190px 1fr; column-gap: 8px; row-gap: 2px; padding-left: 17px"><span style="color: #2383e2; font-weight: 600">postgres</span><span>postgres:18.1 <span style="color: #8b949e">&nbsp;pinned by digest</span></span><span></span><span>restart always <span style="color: #8b949e">·</span> port 5432, not published</span><span></span><span>data kept in volume <span style="color: #ffffff">data</span></span></div></div>
+    <div style="display: flex; flex-direction: column; gap: 4px"><div><span style="color: #ffffff; font-weight: 600">Makes a secret on this machine</span> <span style="color: #8b949e">&nbsp;never shown</span></div><div style="display: grid; grid-template-columns: 190px 1fr; column-gap: 8px; row-gap: 2px; padding-left: 17px"><span>POSTGRES_PASSWORD</span><span>32 random characters</span><span></span><span style="color: #8b949e">read by postgres</span></div></div>
+    <div style="display: flex; flex-direction: column; gap: 4px"><div><span style="color: #ffffff; font-weight: 600">Builds a secret from it</span></div><div style="display: grid; grid-template-columns: 190px 1fr; column-gap: 8px; row-gap: 2px; padding-left: 17px"><span>DATABASE_URL</span><span>postgres://app:<span style="color: #8b949e">••••</span>@postgres:5432/app</span><span></span><span style="color: #8b949e">read by web</span></div></div>
+    <div style="color: #d29922">! Zekno does not back up this data.</div>
+    <div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Add postgres to demo?</span> Nothing is deployed until you deploy. <span style="color: #8b949e">(y/N)</span></div>
+  </div>
+  <div style="width: 1px; background: #2a313a"></div>
+  <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+    <div style="color: #8b949e; font-weight: 600">After a yes</div>
+    <div style="display: flex; flex-direction: column; gap: 2px"><div><span style="color: #3fb950">✔</span> Added postgres to zekno.app.json</div><div><span style="color: #3fb950">✔</span> Stored POSTGRES_PASSWORD and DATABASE_URL, sealed for prod</div><div style="padding-left: 17px; color: #8b949e">Run zekno deploy to start it.</div></div>
+    <div style="display: flex; flex-direction: column; gap: 6px"><div style="color: #8b949e">With more than one service, it asks who reads the connection secret:</div><div><span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Which services read DATABASE_URL?</span></div><div style="display: grid; grid-template-columns: 16px 20px 1fr; column-gap: 8px"><span style="color: #2383e2">❯</span><span style="color: #3fb950">◉</span><span style="color: #ffffff; font-weight: 600">web</span><span></span><span style="color: #8b949e">◯</span><span>worker</span></div><div style="color: #8b949e; padding-left: 17px"><span style="color: #d7dde4">↑↓</span> move&nbsp;&nbsp; <span style="color: #d7dde4">space</span> pick&nbsp;&nbsp; <span style="color: #d7dde4">enter</span> done&nbsp;&nbsp; <span style="color: #d7dde4">esc</span> leave</div></div>
+    <div style="display: flex; flex-direction: column; gap: 6px"><div style="color: #8b949e">A no, esc or Ctrl-C changes nothing:</div><div style="color: #8b949e">Nothing was added.</div></div>
+    <div style="display: flex; flex-direction: column; gap: 6px"><div style="color: #8b949e">The next deploy carries it. Only the counts are new:</div><div><span style="color: #8b949e">$</span> zekno deploy</div><div style="box-sizing: border-box; border: 1px solid #2a313a; border-radius: 6px; padding: 12px 16px"><div style="display: grid; grid-template-columns: 80px 1fr; row-gap: 2px"><span style="color: #8b949e">app</span><span><span style="color: #ffffff; font-weight: 600">demo</span></span><span style="color: #8b949e">server</span><span>prod <span style="color: #8b949e">deploy@203.0.113.7</span></span><span style="color: #8b949e">from</span><span>zekno.app.json <span style="color: #8b949e">&nbsp;3 services: web, worker, postgres</span></span><span style="color: #8b949e">secrets</span><span>DATABASE_URL v1, POSTGRES_PASSWORD v1, SESSION_KEY v1</span></div></div><div><span style="color: #3fb950">✔</span> <span style="color: #ffffff; font-weight: 600">Deploy 6</span> demo is running on prod <span style="color: #8b949e">&nbsp;9.3 s</span></div></div>
+  </div>
+  <div style="width: 1px; background: #2a313a"></div>
+  <div style="width: 280px; display: flex; flex-direction: column; gap: 14px; color: #8b949e">
+    <div style="font-weight: 600">How it behaves</div>
+    <div>It changes <span style="color: #d7dde4">zekno.app.json</span> and stores secrets on this machine. It contacts no server and no network.</div>
+    <div>It does everything or nothing: never a service without its secrets.</div>
+    <div>It never replaces a service, a variable or a secret.</div>
+    <div>The service is ordinary settings afterwards. <span style="color: #d7dde4">zekno settings</span> shows it, and you can change it.</div>
+    <div style="font-weight: 600; padding-top: 6px">Options</div>
+    <div><span style="color: #d7dde4">--name &lt;service&gt;</span> another name for the service.</div>
+    <div><span style="color: #d7dde4">--for &lt;service&gt;</span> who reads the connection secret. Repeat it for several.</div>
+    <div><span style="color: #d7dde4">--app</span> <span style="color: #d7dde4">--server</span> as the other commands.</div>
+    <div><span style="color: #d7dde4">--yes</span> go ahead without the question.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1500,"height":660}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

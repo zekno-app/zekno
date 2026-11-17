@@ -36,4 +36,5 @@
 - Eight decisions of 2026-11-17 are recorded under Clarifications. Each template's exact
   settings, the file's format and every screen are left to the boards on purpose (FR-021): the
   approval step for designs applies to this stage.
-- One question is open and does not block this feature: starters for frameworks (Assumptions).
+- The four boards were approved on 2026-11-17. One thing waits for the maintainer: the exact
+  settings of the Redis template (how it gets its password).

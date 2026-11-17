@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-17
 
-**Status**: Draft. Direction and eight decisions agreed with the maintainer on 2026-11-17 (see Clarifications). Every screen and the exact settings of each template are approved on boards before anything is built.
+**Status**: Draft. Decisions agreed with the maintainer on 2026-11-17 (see Clarifications). The four boards are approved (`design/`). The exact settings of the Redis template wait for the maintainer.
 
 **Input**: User description: "Stage 2 of the road map: templates. `zekno add postgres` adds a ready-made service to an app, with the secrets it needs." Decided with the maintainer on 2026-11-17: templates ship inside the CLI, and a template adds a service to the app's settings file (`zekno.app.json`); in a folder with a hand-written Compose file zekno prints the lines to add and edits nothing. The command's name was left to the builder's recommendation: `zekno add <template>`. Which templates come first was left for planning.
 
@@ -12,7 +12,9 @@
 
 ### Session 2026-11-17
 
-- Q: Which templates are in the first set? → A: Databases: PostgreSQL, MySQL, MongoDB and a Redis-compatible store. The maintainer asked whether starters for frameworks (Next.js, React with Vite, Bun) can be added too: see "Starters" under Assumptions; that question is open.
+- Q: Which templates are in the first set? → A: Databases: PostgreSQL, MySQL, MongoDB and Redis, each the software's official image. A compatible store (Valkey) in place of Redis was proposed and refused by the maintainer: Redis itself is supported.
+- Q: Can starters for frameworks (Next.js, React with Vite, Bun) be templates? → A: Not in this feature. They wait for building from source (see "Starters" under Assumptions).
+- Q: Are the boards approved? → A: Yes, the four boards of the row "Templates (spec 012)" on 2026-11-17, then changed in three places for Redis in place of Valkey (`design/README.md`).
 - Q: What does `zekno add` do when there is no server yet? → A: It says to run `zekno deploy` first and changes nothing.
 - Q: Is there a command to remove a template's service? → A: Not in this version. The developer edits the settings file. The data volume is never deleted.
 - Q: Can people outside the project contribute templates? → A: Yes, by pull request to the public repository: one data file per template, a guide for contributors, an automatic test of every template, and a page of the docs site built from the same files that credits each author. A maintainer reviews each one, and it ships with a CLI release.
@@ -128,7 +130,7 @@ Someone outside the project wants Zekno to offer a database they use. They copy 
 - A template's image no longer exists in its registry, or the server cannot pull it: that is seen at the deploy, and the sentence must say which image.
 - The developer adds a template the app already has: refused in this version, with one sentence that says why (one of each per app).
 - A template file that has a question (`asks`): this version refuses it and says questions arrive with domains.
-- A template whose software cannot take its password from a variable (the official Redis image takes it only on the command line): it cannot be a template, because a start command is plain text in the settings file. A compatible image that can (Valkey) is used instead, and the list says what it is compatible with.
+- Software that has no variable for its password (the official Redis image): its template starts it with a short command, run inside the container, that writes the password from the secret into a file only that software can read. The password is never part of a start command, of the settings file or of a process's command line.
 - A pull request that changes a workflow file as well as a template.
 - A template is taken out of a later version of the CLI while an app still uses its service: the app keeps working, because the service is ordinary settings.
 - The database's data when the service is removed from the settings, or renamed: the volume is not deleted, and a renamed service starts with an empty one.
@@ -144,7 +146,8 @@ Someone outside the project wants Zekno to offer a database they use. They copy 
 - **FR-003**: A template MUST be expressible entirely as app settings of feature 010: it adds nothing the settings file could not say, and it is checked by the same rules before it is written.
 - **FR-003a**: A template MUST be one data file, read strictly: known fields only, within size limits, and never code. The only things it can compute are a secret made at random and a secret built by placing made secrets and the service's name into a fixed text.
 - **FR-003b**: The format MUST allow a template to hold several services, and MUST keep a place for questions to the developer. A template that asks a question is refused by this version with one sentence.
-- **FR-003c**: The first set MUST be PostgreSQL, MySQL, MongoDB and one Redis-compatible store.
+- **FR-003c**: The first set MUST be PostgreSQL, MySQL, MongoDB and Redis, each from the software's official image.
+- **FR-003d**: A made secret's value MUST reach the software only as a secret variable of its container. It MUST NOT be part of a start command, and MUST NOT appear on the command line of any process in the container.
 
 **Adding one**
 
@@ -221,6 +224,6 @@ Someone outside the project wants Zekno to offer a database they use. They copy 
 - A setting cannot build one value out of another, so a connection secret is built on the developer's machine and stored whole. When a made password is replaced later, the connection secret has to be made again; this version says so and does not do it for the developer.
 - Removing a template's service is done by editing the settings file. A command for it is out of this version. Its volume is never deleted by Zekno.
 - Backups, replicas, moving to a newer major version of a database, and templates read from a catalogue, an address or the developer's own folder are out of this version. A template reaches users only through the repository and a release.
-- **Starters** (open, asked by the maintainer on 2026-11-17): a starter for a framework, such as Next.js, React with Vite or Bun, is source code that has to be built into an image, and this version of Zekno runs only images that already exist in a registry. Starters are therefore not in this feature; the recommendation is to bring them with building from source, as settings for an app the framework's own tool created, not as code Zekno keeps.
+- **Starters** (decided with the maintainer on 2026-11-17): a starter for a framework, such as Next.js, React with Vite or Bun, is source code that has to be built into an image, and this version of Zekno runs only images that already exist in a registry. Starters are therefore not in this feature; they come with building from source, as settings for an app the framework's own tool created, not as code Zekno keeps.
 - Paying authors, and templates that are not reviewed, are out of this version.
 - The tests on GitHub are one workflow that reads the repository and nothing else. Making it a required check for a pull request is a setting of the repository and the maintainer's step.
