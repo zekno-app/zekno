@@ -131,6 +131,24 @@ function listedHere(
 }
 
 /**
+ * A read with the bytes it read (specs/012-templates, research R7, step f).
+ * They are a property that is not enumerable: a read compares, prints and
+ * copies by its other fields as before (the SHA-256 already stands for the
+ * bytes), and a test of feature 010 that compares a whole read keeps passing
+ * unchanged. Read them as `read.bytes`; a spread copy (`{ ...read }`) leaves
+ * them out.
+ */
+function withBytes(
+  read: Omit<SettingsRead, "bytes">,
+  bytes: Uint8Array
+): SettingsRead & { bytes: Uint8Array } {
+  return Object.defineProperty(read, "bytes", {
+    value: bytes,
+    enumerable: false,
+  }) as SettingsRead & { bytes: Uint8Array }
+}
+
+/**
  * Reads and checks a settings file, once. `source` names it as a Compose
  * file would be named (`default`: `zekno.app.json` in that folder;
  * `project`: the file a zekno.json names; `given`: `-f`). Every problem is a
@@ -180,15 +198,18 @@ export function readSettingsFile(
     }
     const checked = checkSettings(text, shown)
     if (!isSettings(checked)) throw new CliError(faultSentence(checked, shown))
-    return {
-      path: read.path,
-      shown,
-      sha256: createHash("sha256").update(read.bytes).digest("hex"),
-      dev: read.dev,
-      ino: read.ino,
-      mode: read.mode,
-      settings: checked,
-    }
+    return withBytes(
+      {
+        path: read.path,
+        shown,
+        sha256: createHash("sha256").update(read.bytes).digest("hex"),
+        dev: read.dev,
+        ino: read.ino,
+        mode: read.mode,
+        settings: checked,
+      },
+      read.bytes
+    )
   } catch (error) {
     if (error instanceof CliError) throw error
     throw new CliError(SR5(shown))

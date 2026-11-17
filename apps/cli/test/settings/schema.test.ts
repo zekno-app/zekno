@@ -9,8 +9,13 @@
 import { describe, expect, test } from "bun:test"
 
 import { CliError } from "../../src/cli/errors"
-import { faultSentence } from "../../src/settings/file"
-import { checkSettings, isSettings } from "../../src/settings/schema"
+import { faultSentence, SETTINGS_BYTES } from "../../src/settings/file"
+import { readJson, type JsonValue } from "../../src/settings/json"
+import {
+  checkSettings,
+  checkSettingsValue,
+  isSettings,
+} from "../../src/settings/schema"
 import type { Settings, SettingsFault } from "../../src/settings/types"
 import {
   DESIGN_FILE,
@@ -129,6 +134,37 @@ describe("every file of the test set gives its settings, or exactly its sentence
       "SESSION_KEY",
     ])
   })
+})
+
+describe("checkSettingsValue: steps 3 to 6 on a value already read (specs/012-templates, tasks T002)", () => {
+  // Every text of the test set that reaches step 3: within the size, JSON, and an object.
+  const reaching = FILES.filter(
+    (file) =>
+      typeof file.text === "string" &&
+      Buffer.byteLength(file.text) <= SETTINGS_BYTES &&
+      "value" in readJson(file.text.replace(/^\ufeff/, ""))
+  )
+
+  test("the test set holds texts that reach step 3, good and faulty", () => {
+    expect(reaching.length).toBeGreaterThan(70)
+    expect(reaching.some((file) => "settings" in file.expect)).toBe(true)
+    expect(reaching.some((file) => "fault" in file.expect)).toBe(true)
+  })
+
+  for (const file of reaching) {
+    const text = file.text as string
+    test(`${file.name}: the same result as checkSettings of the text`, () => {
+      const read = readJson(text.replace(/^\ufeff/, ""))
+      if (!("value" in read)) throw new Error("the text is not JSON")
+      expect(
+        checkSettingsValue(
+          read.value as ReadonlyMap<string, JsonValue>,
+          read.lines,
+          read.numbers
+        )
+      ).toEqual(checkSettings(text, FILE))
+    })
+  }
 })
 
 describe("no fault holds anything of the file", () => {

@@ -4,7 +4,8 @@
  * and the folders of apps/cli/src import each other only in the directions of
  * plan.md, "Which way imports point", rules 1 to 4 and 6 (FR-007), with the
  * folder settings/ placed among them by specs/010-app-settings/plan.md,
- * "Which way imports point". Rule 5,
+ * "Which way imports point", and the folder templates/ by
+ * specs/012-templates/plan.md, "Which way imports point". Rule 5,
  * nothing cli/cli.ts imports statically loads Ink or React, is the walk of
  * main.ts's static imports in test/asking/asking.test.ts.
  *
@@ -31,13 +32,26 @@ const DEPENDENCIES = Object.keys(
   ).dependencies ?? {}
 )
 
-/** Files of data, not code, that src holds or imports, relative to src, each with what imports it. Any other must be .ts or .tsx. */
+/**
+ * Files of data, not code, that src holds or imports, relative to src, each
+ * with what imports it. Any other must be .ts or .tsx. Beside the list, one
+ * rule (`TEMPLATE_FILE`): every `templates/files/<name>.json` whose `<name>`
+ * is a template's name, imported as text by templates/files/index.ts
+ * (specs/012-templates, research R1), so a new template needs no line here.
+ */
 const DATA_FILES = [
   // The runner release this zekno carries, imported by version/runner-release.ts.
   "version/runner-release.json",
   // apps/cli/package.json, whose version version/version.ts builds into zekno.
   "../package.json",
 ]
+
+/** A template file: `templates/files/<name>.json`, `<name>` held to a template's name rule. */
+const TEMPLATE_FILE = /^templates\/files\/[a-z][a-z0-9-]{0,31}\.json$/
+
+/** Whether a path, relative to src, is a data file: one `DATA_FILES` names, or a template file. */
+const isDataFile = (path: string): boolean =>
+  DATA_FILES.includes(path) || TEMPLATE_FILE.test(path)
 
 /** The folders of apps/cli/src, as plan.md lays them out. A folder added or renamed is a change to the plan and its rules. */
 const LAYOUT = [
@@ -52,6 +66,7 @@ const LAYOUT = [
   "server",
   "settings",
   "shared",
+  "templates",
   "ui",
   "version",
 ]
@@ -127,9 +142,9 @@ const SOURCES = readdirSync(SRC, { recursive: true, encoding: "utf8" })
   .map((path) => join(SRC, path))
   .sort()
 
-/** Of `paths` (relative to src), those the parser does not read: neither .ts nor .tsx, nor a data file named in `DATA_FILES`. */
+/** Of `paths` (relative to src), those the parser does not read: neither .ts nor .tsx, nor a data file (`isDataFile`). */
 const notSource = (paths: readonly string[]): string[] =>
-  paths.filter((path) => !/\.tsx?$/.test(path) && !DATA_FILES.includes(path))
+  paths.filter((path) => !/\.tsx?$/.test(path) && !isDataFile(path))
 
 /**
  * The `import(…)` and `require(…)` of a source text whose argument is not a
@@ -269,6 +284,7 @@ const BASE = [
   "profile",
   "secrets",
   "settings",
+  "templates",
   "version",
 ]
 
@@ -312,7 +328,7 @@ const RULES: { rule: string; breaks(edge: Edge): boolean }[] = [
       ["ui", "app", "asking", "commands"].includes(folderOf(edge.to)),
   },
   {
-    rule: "3. shared/, server/, project/, profile/, secrets/, settings/ and version/ import nothing from app/, commands/, asking/ or ops/, and from ui/ only ui/types.ts.",
+    rule: "3. shared/, server/, project/, profile/, secrets/, settings/, templates/ and version/ import nothing from app/, commands/, asking/ or ops/, and from ui/ only ui/types.ts.",
     breaks: (edge) =>
       BASE.includes(folderOf(edge.from)) &&
       (["app", "commands", "asking", "ops"].includes(folderOf(edge.to)) ||
@@ -355,13 +371,13 @@ const passesOn = (file: string, code: string): string[] =>
  * Imports that land where no rule follows them, as `from -> to`: on a file
  * that is not .ts or .tsx (a .js file beside the code would carry its imports
  * past every rule), or on a file outside src, whose imports are not read; a
- * data file named in `DATA_FILES` excepted.
+ * data file (`isDataFile`) excepted.
  */
 const strayTargets = (edges: readonly Edge[]): string[] =>
   edges
     .filter(
       (edge) =>
-        !DATA_FILES.includes(edge.to) &&
+        !isDataFile(edge.to) &&
         (edge.to.startsWith("../") || !/\.tsx?$/.test(edge.to))
     )
     .map((edge) => `${edge.from} -> ${edge.to}`)
@@ -466,6 +482,8 @@ describe("the checker itself", () => {
     expect(broken("shared/deploy.ts", "asking/asking.ts")).toEqual(["3."])
     expect(broken("settings/compose.ts", "ops/settings.ts")).toEqual(["3."])
     expect(broken("settings/source.ts", "project/compose-read.ts")).toEqual([])
+    expect(broken("templates/addition.ts", "ops/add.ts")).toEqual(["3."])
+    expect(broken("templates/read.ts", "settings/schema.ts")).toEqual([])
     expect(broken("ui/ink/doctor-report.tsx", "ops/doctor.ts")).toEqual(["4."])
     expect(
       broken("ui/ink/doctor-report.tsx", "asking/asking.ts", "type")
@@ -574,6 +592,15 @@ describe("the checker itself", () => {
       "ui/c.cjs",
       "ui/d.json",
     ])
+    // A template file is data; a file of another name in that folder is not, and the index is code like any .ts file.
+    expect(
+      notSource([
+        "templates/files/postgres.json",
+        "templates/files/Bad Name.json",
+        "templates/notes.md",
+        "templates/files/index.ts",
+      ])
+    ).toEqual(["templates/files/Bad Name.json", "templates/notes.md"])
     expect(
       strayTargets([
         { from: "ui/parts/panel.tsx", to: "ui/parts/bridge.js", kind: "value" },

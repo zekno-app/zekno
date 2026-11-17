@@ -36,6 +36,14 @@ export type SettingsRead = {
   shown: string
   /** The SHA-256 of the bytes read, as lowercase hex. */
   sha256: string
+  /**
+   * The bytes read, so a run that wrote the file can put it back exactly
+   * (specs/012-templates, research R7). `readSettingsFile` always sets it, as
+   * a property that is not enumerable; it is optional here only so that a
+   * read written out without it, as feature 010's tests write one, still
+   * type-checks (settings/file.ts, `withBytes`).
+   */
+  bytes?: Uint8Array
   /** The file's identity and mode, from the descriptor it was read from. */
   dev: number
   ino: number

@@ -311,11 +311,30 @@ function check(text: string): Settings | SettingsFault {
               : words.SJ5
     return { kind: "form", ...said, line: read.line }
   }
-  const top = read.value as ReadonlyMap<string, JsonValue>
-  const lineOf = (path: Path): number => read.lines.get(pathKey(path)) ?? 1
+  return checkSettingsValue(
+    read.value as ReadonlyMap<string, JsonValue>,
+    read.lines,
+    read.numbers
+  )
+}
+
+/**
+ * Steps 3 to 6 of contracts/settings-file.md, "The order of checks", on a
+ * value `readJson` already read: its top object, the line of each key and
+ * the text of each number, by `pathKey`. `checkSettings` calls it after
+ * reading a file; the template reader (specs/012-templates, research R2)
+ * calls it on a template's `services`, so they are held to the same rules
+ * and their faults name the template file's own lines.
+ */
+export function checkSettingsValue(
+  top: ReadonlyMap<string, JsonValue>,
+  lines: ReadonlyMap<string, number>,
+  numbers: ReadonlyMap<string, string>
+): Settings | SettingsFault {
+  const lineOf = (path: Path): number => lines.get(pathKey(path)) ?? 1
 
   // 3. The version of the file.
-  const version = read.numbers.get(pathKey(["zekno"]))
+  const version = numbers.get(pathKey(["zekno"]))
   if (typeof top.get("zekno") !== "number" || version === undefined)
     return { kind: "form", ...words.SV1 }
   if (version !== "1")
@@ -328,7 +347,7 @@ function check(text: string): Settings | SettingsFault {
   if (unknown !== undefined) return unknown
 
   // 5. Each value, in the order of the text: of zod's issues, the one met first.
-  const parsed = SettingsSchema.safeParse(inputOf(top, [], read.numbers))
+  const parsed = SettingsSchema.safeParse(inputOf(top, [], numbers))
   if (!parsed.success) {
     const { at, end } = placesOf(top)
     const placeOf = (path: Path, id: string): number => {

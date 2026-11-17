@@ -11,6 +11,7 @@ import {
   chmodSync,
   linkSync,
   mkdirSync,
+  readFileSync,
   realpathSync,
   statSync,
   symlinkSync,
@@ -82,6 +83,17 @@ describe("what a read gives", () => {
       settings: DESIGN_SETTINGS,
     })
     expect(read.mode & 0o777).toBe(0o640)
+  })
+
+  test("the bytes read, kept so a run that wrote the file can put it back exactly (specs/012-templates, research R7)", () => {
+    const folder = folderWith(`\ufeff${DESIGN_FILE.replace(/\n/g, "\r\n")}`)
+    const read = readSettingsFile({ kind: "default", folder }, folder)
+    const onDisk = readFileSync(join(folder, SETTINGS_FILE))
+    const { bytes } = read
+    if (bytes === undefined) throw new Error("the read kept no bytes")
+    expect(bytes).toBeInstanceOf(Uint8Array)
+    expect(Buffer.from(bytes).equals(onDisk)).toBe(true)
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(read.sha256)
   })
 
   test("the file a zekno.json names, inside its folder, also in a folder below", () => {
