@@ -41,6 +41,16 @@ export function quote(text: string): string {
   return `"${escaped}"`
 }
 
+/** A service's `mem_limit` and `cpus` lines, in that order; a hand-written Compose file is given the very same lines (specs/012-templates, templates/hand.ts). */
+export function limitLines(service: ServiceSettings): string[] {
+  const lines: string[] = []
+  if (service.memory !== undefined)
+    lines.push(`    mem_limit: ${quote(service.memory)}`)
+  if (service.cpus !== undefined)
+    lines.push(`    cpus: ${String(Number(service.cpus))}`)
+  return lines
+}
+
 /** The lines of one service, in the order of contracts/compose-text.md, "Each setting". */
 function serviceLines(name: string, service: ServiceSettings): string[] {
   const lines = [`  ${quote(name)}:`, `    image: ${quote(service.image)}`]
@@ -53,10 +63,7 @@ function serviceLines(name: string, service: ServiceSettings): string[] {
   }
   if (service.restart !== undefined)
     lines.push(`    restart: ${quote(service.restart)}`)
-  if (service.memory !== undefined)
-    lines.push(`    mem_limit: ${quote(service.memory)}`)
-  if (service.cpus !== undefined)
-    lines.push(`    cpus: ${String(Number(service.cpus))}`)
+  lines.push(...limitLines(service))
   if (service.port !== undefined)
     lines.push(
       service.publish === undefined

@@ -8,12 +8,16 @@
  *
  * The form is Compose's short syntax, as a person writes it: under
  * `services:`, two spaces, each service's name and `:`; then `image` (whole,
- * with its digest), `command` (a start command), `restart`; `environment:`
- * with the plain values, then each secret; `volumes:` with `- <vol>:<path>`,
- * each volume named `<service>-<volume>` as adding to a settings file names
- * it (D1). A key with nothing to say is left out. The connection secrets'
- * lines go in the `environment:` of each service that uses them, six spaces
- * in.
+ * with its digest), `command` (a start command), `restart`, `mem_limit` and
+ * `cpus` (a template's limits, the very lines `composeText` writes, so the
+ * service pasted is limited as the one added to a settings file);
+ * `environment:` with the plain values, then each secret; `volumes:` with
+ * `- <vol>:<path>`, each volume named `<service>-<volume>` as adding to a
+ * settings file names it (D1). A key with nothing to say is left out. The
+ * port is not written, as the board draws the lines: `expose` changes
+ * nothing between the services of one Compose project, and a template
+ * publishes no port (TF24). The connection secrets' lines go in the
+ * `environment:` of each service that uses them, six spaces in.
  *
  * What keeps the lines safe to paste (research R10):
  *
@@ -33,7 +37,7 @@
  *   `<NAME>: ${<NAME>}`, its name held to the secret-name rule. No value of
  *   a secret is ever in a line.
  */
-import { quote } from "../settings/compose"
+import { limitLines, quote } from "../settings/compose"
 import { splitStart } from "../settings/values"
 import { servicesInApp } from "./addition"
 import type { HandLines, Template } from "./types"
@@ -78,6 +82,7 @@ export function handLines(
     }
     if (each.restart !== undefined)
       lines.push(`    restart: ${scalar(each.restart)}`)
+    lines.push(...limitLines(each))
     const plain = each.plain ?? []
     const secrets = each.secrets ?? []
     if (plain.length + secrets.length > 0) {

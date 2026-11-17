@@ -29,6 +29,9 @@ Changed again on 2026-11-17, after the plan (`../plan.md`), with the maintainer'
 - The last two refusals of `AddOther` (the file changed while the question was open, and a folder
   with no settings file) are exit status 1, as `zekno settings` gives for the same cases. The
   others stay 2.
+- 2026-11-17, found while building: the hand-written lines (`AddOther`) also carry a template's
+  limits (`mem_limit`, `cpus`), as the settings file does, with no change to any line the boards
+  show. The port is still left out, as `AddOther` draws it (contracts/commands.md).
 
 The right column of `AddLook` still says "The numbers here are examples"; since this change they
 are the real ones, and only the shortened digests differ from what zekno prints.

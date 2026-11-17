@@ -6,9 +6,10 @@
  * only by research R10's rule; Redis's start command as `composeText` writes
  * it, every `$` written `$$`; `--name` renaming the service and its volume
  * (the connection secret's host is in its stored value, which
- * test/ops/add-hand.test.ts opens). Last, when Docker Compose is here, the
- * lines inside a file are read by `docker compose config`, which contacts
- * nothing and starts nothing.
+ * test/ops/add-hand.test.ts opens); a template's limits as `composeText`
+ * writes them, every key agreeing with its lines but the port the board
+ * leaves out. Last, when Docker Compose is here, the lines inside a file are
+ * read by `docker compose config`, which contacts nothing and starts nothing.
  */
 import { describe, expect, test } from "bun:test"
 import { writeFileSync } from "node:fs"
@@ -18,14 +19,44 @@ import { tempDir } from "../../../runner/test/support/helpers"
 import { composeText } from "../../src/settings/compose"
 import { servicesInApp } from "../../src/templates/addition"
 import { handLines } from "../../src/templates/hand"
+import { isTemplate, readTemplate } from "../../src/templates/read"
 import type { Template } from "../../src/templates/types"
-import { FIRST_TEMPLATES } from "../support/template-files"
+import { FIRST_SET, FIRST_TEMPLATES } from "../support/template-files"
 
 const postgres = FIRST_TEMPLATES.postgres!
 const redis = FIRST_TEMPLATES.redis!
 
 const POSTGRES_IMAGE =
   "postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc"
+
+/**
+ * postgres's file given a start command, a memory limit and a processor
+ * limit beside its port: every key a template's service may carry, read by
+ * the template reader. No template of the first set has the two limits.
+ */
+const limited: Template = (() => {
+  const file = JSON.parse(FIRST_SET.postgres!)
+  file.services.postgres.deploy = {
+    start: "postgres -c max_connections=50",
+    restart: "always",
+    memory: "512m",
+    cpus: 0.5,
+  }
+  const read = readTemplate(
+    "postgres.json",
+    `${JSON.stringify(file, null, 2)}\n`
+  )
+  if (!isTemplate(read)) throw new Error("The limited template does not read.")
+  return read
+})()
+
+/** One service of a Compose text, as YAML reads it. */
+const serviceIn = (text: string, name: string): Record<string, unknown> =>
+  (
+    Bun.YAML.parse(text) as {
+      services: Record<string, Record<string, unknown>>
+    }
+  ).services[name]!
 
 describe("the lines (board `AddOther`, left column)", () => {
   test("postgres: the board's lines with D1 and D2's words and the whole digest (D25)", () => {
@@ -162,6 +193,84 @@ describe("the lines (board `AddOther`, left column)", () => {
     expect(lines.volumes).toEqual(["on-data"])
   })
 
+  test("a template's limits: mem_limit and cpus after restart, the very lines composeText writes; its port left out, as the board leaves it out", () => {
+    const lines = handLines(limited, undefined, "compose.yaml")
+    expect(lines.service).toEqual([
+      "  postgres:",
+      `    image: ${POSTGRES_IMAGE}`,
+      '    command: ["postgres", "-c", "max_connections=50"]',
+      "    restart: always",
+      '    mem_limit: "512m"',
+      "    cpus: 0.5",
+      "    environment:",
+      "      POSTGRES_USER: app",
+      "      POSTGRES_DB: app",
+      "      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}",
+      "    volumes:",
+      "      - postgres-data:/var/lib/postgresql",
+    ])
+    const compose = composeText({
+      version: 1,
+      services: servicesInApp(limited, undefined),
+    }).split("\n")
+    for (const line of ['    mem_limit: "512m"', "    cpus: 0.5"])
+      expect(compose).toContain(line)
+    expect(lines.service.join("\n")).not.toMatch(/expose|ports/)
+    // A processor limit is written as composeText writes it, a plain number from its checked text.
+    const onlyCpus = handLines(
+      {
+        ...limited,
+        services: [["postgres", { image: POSTGRES_IMAGE, cpus: "2" }]],
+      },
+      undefined,
+      "compose.yaml"
+    )
+    expect(onlyCpus.service).toEqual([
+      "  postgres:",
+      `    image: ${POSTGRES_IMAGE}`,
+      "    cpus: 2",
+    ])
+  })
+
+  test("every key a template may carry: the hand lines agree with composeText's for the same service, key by key, but the port", () => {
+    /** A template's first service as the hand lines write it and as composeText writes it, each read by YAML. */
+    const both = (template: Template) => {
+      const services = servicesInApp(template, undefined)
+      const name = services[0]![0]
+      const lines = handLines(template, undefined, "compose.yaml").service
+      return {
+        hand: serviceIn(["services:", ...lines, ""].join("\n"), name),
+        compose: serviceIn(composeText({ version: 1, services }), name),
+      }
+    }
+    // The limited template has every key composeText writes for a service that publishes no port (TF24).
+    expect(Object.keys(both(limited).compose)).toEqual([
+      "image",
+      "command",
+      "restart",
+      "mem_limit",
+      "cpus",
+      "expose",
+      "environment",
+      "volumes",
+    ])
+    for (const template of [...Object.values(FIRST_TEMPLATES), limited]) {
+      const { hand, compose } = both(template)
+      // The board's lines leave out `expose` (contracts/commands.md), and write a volume in Compose's short form.
+      expect(Object.keys(hand)).toEqual(
+        Object.keys(compose).filter((key) => key !== "expose")
+      )
+      for (const key of Object.keys(hand))
+        if (key === "volumes")
+          expect(hand.volumes).toEqual(
+            (compose.volumes as { source: string; target: string }[]).map(
+              ({ source, target }) => `${source}:${target}`
+            )
+          )
+        else expect(hand[key]).toEqual(compose[key])
+    }
+  })
+
   test("no volume, no connection secret: none of their lines", () => {
     const template: Template = {
       ...postgres,
@@ -198,9 +307,9 @@ const SENTINEL = "zkSENTINELhand7c3e"
 
 describe("read by Docker Compose (contacts nothing, starts nothing)", () => {
   test.skipIf(!composeAnswers())(
-    "each template's lines in a file with a service that reads the connection secret: Redis's command keeps $$REDIS_PASSWORD and no value, no port, the volume named",
+    "each template's lines in a file with a service that reads the connection secret: Redis's command keeps $$REDIS_PASSWORD and no value, no port, the volume named, the limits read",
     () => {
-      for (const template of Object.values(FIRST_TEMPLATES)) {
+      for (const template of [...Object.values(FIRST_TEMPLATES), limited]) {
         const lines = handLines(template, undefined, "compose.yaml")
         const offer = template.offers[0]!.name
         const text = [
@@ -250,6 +359,18 @@ describe("read by Docker Compose (contacts nothing, starts nothing)", () => {
         for (const [variable, value] of service.plain ?? [])
           expect(added.environment[variable]).toBe(value)
         expect(added.image).toBe(service.image)
+        // The limits, as Compose reads them: a memory limit in bytes, a processor limit as a number.
+        if (service.memory !== undefined)
+          expect(added.mem_limit).toBe(
+            String(
+              Number(service.memory.slice(0, -1)) *
+                1024 ** (service.memory.endsWith("g") ? 3 : 2)
+            )
+          )
+        else expect(added).not.toHaveProperty("mem_limit")
+        if (service.cpus !== undefined)
+          expect(added.cpus).toBe(Number(service.cpus))
+        else expect(added).not.toHaveProperty("cpus")
         // No value on a command line: a start command keeps every `$` for the container's shell.
         expect(JSON.stringify(added.command ?? null)).not.toContain(SENTINEL)
         if (template.name === "redis")

@@ -306,9 +306,13 @@ In the environment: of each service that uses it
   text colour; AH5 dim with `environment:` in the text colour; the connection secrets' lines in a
   second box; AH6 as a yes-or-no question; AD17.
 - **The lines** (research R10): two spaces, the service's name and `:`; `image`, `command` (a start
-  command, as a flow list of quoted words with every `$` written `$$`), `restart`; `environment:`
-  with the plain values, then each secret as `<NAME>: ${<NAME>}`; `volumes:` with
-  `- <service>-<vol>:<path>`. Keys in the order above, a key with nothing to say left out. A value is
+  command, as a flow list of quoted words with every `$` written `$$`), `restart`, `mem_limit` and
+  `cpus` (a template's limits, the very lines `composeText` writes: `mem_limit: "512m"`, `cpus: 0.5`;
+  added 2026-11-17, design/README.md); `environment:` with the plain values, then each secret as
+  `<NAME>: ${<NAME>}`; `volumes:` with `- <service>-<vol>:<path>`. Keys in the order above, a key
+  with nothing to say left out. The port is not written (no `expose`, never `ports`), as the board
+  draws the lines: every template of the first set has a port, and `expose` changes nothing between
+  the services of one Compose project. A value is
   bare as the board writes `app` only when it starts with a letter, holds only letters, digits and
   `._/:@-`, and is not a YAML word for true, false or null; else it is written as `composeText`
   writes a string (`quote`). The image is whole, with its digest. The connection secret's line is
