@@ -4,9 +4,22 @@
 
 **Created**: 2026-11-17
 
-**Status**: Draft. Direction agreed with the maintainer on 2026-11-17; the first set of templates and every screen are decided in the design, before anything is built.
+**Status**: Draft. Direction and eight decisions agreed with the maintainer on 2026-11-17 (see Clarifications). Every screen and the exact settings of each template are approved on boards before anything is built.
 
 **Input**: User description: "Stage 2 of the road map: templates. `zekno add postgres` adds a ready-made service to an app, with the secrets it needs." Decided with the maintainer on 2026-11-17: templates ship inside the CLI, and a template adds a service to the app's settings file (`zekno.app.json`); in a folder with a hand-written Compose file zekno prints the lines to add and edits nothing. The command's name was left to the builder's recommendation: `zekno add <template>`. Which templates come first was left for planning.
+
+## Clarifications
+
+### Session 2026-11-17
+
+- Q: Which templates are in the first set? → A: Databases: PostgreSQL, MySQL, MongoDB and a Redis-compatible store. The maintainer asked whether starters for frameworks (Next.js, React with Vite, Bun) can be added too: see "Starters" under Assumptions; that question is open.
+- Q: What does `zekno add` do when there is no server yet? → A: It says to run `zekno deploy` first and changes nothing.
+- Q: Is there a command to remove a template's service? → A: Not in this version. The developer edits the settings file. The data volume is never deleted.
+- Q: Can people outside the project contribute templates? → A: Yes, by pull request to the public repository: one data file per template, a guide for contributors, an automatic test of every template, and a page of the docs site built from the same files that credits each author. A maintainer reviews each one, and it ships with a CLI release.
+- Q: Can a template ask the developer something, such as a domain? → A: The format keeps a place for questions now. They are built with domains (stage 3). Until then a template that has one is refused with a clear sentence.
+- Q: Can one template hold several services? → A: The format allows it. Each template of the first set has one.
+- Q: Can the same template be added twice to one app? → A: No, one of each per app in this version, because a secret's name is shared by the whole app.
+- Q: Do tests run on GitHub for each pull request? → A: Yes, with no access to any secret of the repository.
 
 ## Why
 
@@ -15,6 +28,8 @@ An app almost always needs something beside itself: a database, a cache. On a ma
 App settings (feature 010) made an app a list of services in a file. A template is a service someone already wrote well. Adding one should be a single command that leaves the app's settings, and the secrets it needs, exactly as a careful person would have made them.
 
 A template is code that runs on the developer's server. So where templates come from matters as much as what they do. The maintainer chose the smallest trust: templates are part of the CLI itself, reviewed and released with it. Nothing is downloaded when the command runs.
+
+Anyone can write one. On a managed platform an unreviewed template runs on the platform's machines; here it would run on the user's own server, next to a database password. So what is open is who may write a template, not what runs without anyone looking: a template is a small data file in the public repository, proposed by pull request, checked by an automatic test and read by a maintainer before it ships.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -84,6 +99,23 @@ A script adds a template with no terminal.
 
 ---
 
+### User Story 5 - Contribute a template (Priority: P2)
+
+Someone outside the project wants Zekno to offer a database they use. They copy an existing template file, change its values, run the template tests on their machine and open a pull request. The tests run again on GitHub. A maintainer reads the file and merges it. With the next release, `zekno add` lists it with the author's name, and the docs site shows it.
+
+**Why this priority**: the catalogue grows only if adding to it is easy for a contributor and cheap to review for a maintainer; and the format must be right from the first release, because changing it later breaks every contribution.
+
+**Independent Test**: a new template file that follows the guide passes the template tests with no other file changed, and appears in the list, in what `zekno add` shows, and on the docs page; a file that breaks a rule (an image with no digest, a published port, an unknown field, an image from a publisher that is not allowed) fails the tests with a sentence that names the rule and the place.
+
+**Acceptance Scenarios**:
+
+1. **Given** the guide and an existing template, **When** a contributor adds one file, **Then** the template is listed, shown, added and documented with no other change to the code.
+2. **Given** a template file that breaks a rule, **When** the tests run, **Then** they fail and name the rule and the place in the file.
+3. **Given** a pull request from a fork, **When** it is opened, **Then** the tests run on GitHub without access to any secret of the repository, and their result shows on the pull request.
+4. **Given** a merged template, **When** the next CLI is released, **Then** the list and the docs page show its name, what it is, the software's version and its author.
+
+---
+
 ### Edge Cases
 
 - No team or no server on this machine yet: secrets cannot be sealed for a server that does not exist. The command says what to do first and changes nothing.
@@ -94,7 +126,10 @@ A script adds a template with no terminal.
 - The settings file would grow past its limits (services, secret names, size) with the new service.
 - The settings file changed while the question was open.
 - A template's image no longer exists in its registry, or the server cannot pull it: that is seen at the deploy, and the sentence must say which image.
-- The developer adds the same template twice under two names (two databases).
+- The developer adds a template the app already has: refused in this version, with one sentence that says why (one of each per app).
+- A template file that has a question (`asks`): this version refuses it and says questions arrive with domains.
+- A template whose software cannot take its password from a variable (the official Redis image takes it only on the command line): it cannot be a template, because a start command is plain text in the settings file. A compatible image that can (Valkey) is used instead, and the list says what it is compatible with.
+- A pull request that changes a workflow file as well as a template.
 - A template is taken out of a later version of the CLI while an app still uses its service: the app keeps working, because the service is ordinary settings.
 - The database's data when the service is removed from the settings, or renamed: the volume is not deleted, and a renamed service starts with an empty one.
 
@@ -104,9 +139,12 @@ A script adds a template with no terminal.
 
 **Where templates come from**
 
-- **FR-001**: Templates MUST be part of the CLI itself. Adding one MUST NOT contact the network or read a template from the project folder, the profile folder or anywhere a person other than the CLI's publisher could have written.
-- **FR-002**: Each template's image MUST be named by version and pinned by its digest.
+- **FR-001**: Templates MUST be part of the CLI itself, each one a file in the public repository that enters by a reviewed pull request. Adding one MUST NOT contact the network or read a template from the project folder, the profile folder or anywhere a person other than the CLI's publisher could have written.
+- **FR-002**: Each template's image MUST be named by version, pinned by its digest, and published by the software's own publisher, from a list of allowed publishers kept in the repository.
 - **FR-003**: A template MUST be expressible entirely as app settings of feature 010: it adds nothing the settings file could not say, and it is checked by the same rules before it is written.
+- **FR-003a**: A template MUST be one data file, read strictly: known fields only, within size limits, and never code. The only things it can compute are a secret made at random and a secret built by placing made secrets and the service's name into a fixed text.
+- **FR-003b**: The format MUST allow a template to hold several services, and MUST keep a place for questions to the developer. A template that asks a question is refused by this version with one sentence.
+- **FR-003c**: The first set MUST be PostgreSQL, MySQL, MongoDB and one Redis-compatible store.
 
 **Adding one**
 
@@ -115,10 +153,10 @@ A script adds a template with no terminal.
 - **FR-006**: Each secret a template needs that is a password or a key MUST be made on the developer's machine from the system's random source, sealed for the server at once, and never printed, logged, written to the settings file, placed in an argument or kept in memory longer than needed.
 - **FR-007**: A connection secret built from a password (for example a database address) MUST be built on the developer's machine and stored as a secret, and MUST be given to the services the developer chose.
 - **FR-008**: Adding MUST be all or nothing: the service in the file and every secret, or none of them.
-- **FR-009**: Adding MUST NOT replace a service, a variable or a secret that exists. A clash stops the command with one sentence, and the developer can give another service name.
+- **FR-009**: Adding MUST NOT replace a service, a variable or a secret that exists. A clash of service names stops the command with one sentence, and the developer can give another service name. A template the app already has MUST be refused: one of each per app in this version.
 - **FR-010**: Adding MUST NOT deploy and MUST NOT contact the server. What was added runs after the next deploy, and the command says so.
 - **FR-011**: A database or cache added from a template MUST keep its data in a named volume and MUST NOT be published outside the server by default.
-- **FR-012**: The command needs an app and a server to store secrets for. It finds them as `zekno secret set` does (flags, the folder's link, a question at a terminal). With no team or no server yet, it MUST say what to do first and change nothing.
+- **FR-012**: The command needs an app and a server to store secrets for. It finds them as `zekno secret set` does (flags, the folder's link, a question at a terminal). With no team or no server yet, it MUST say to run `zekno deploy` first and change nothing.
 
 **Looking first**
 
@@ -134,6 +172,14 @@ A script adds a template with no terminal.
 - **FR-016**: What is shown before adding, and the docs, MUST say that Zekno does not back up the data, where the data is kept, and that the image's version changes only with a new version of the CLI.
 - **FR-017**: Every place the product says it is pre-alpha and unaudited MUST still say so.
 
+**Contributing**
+
+- **FR-022**: Adding a template to the catalogue MUST need one new file and no change to other code: the list, what is shown before adding, the docs page and the tests all read the same files.
+- **FR-023**: An automatic test MUST check every template: the file's form, the settings rules, the image's digest and publisher, no published port, data in a named volume; and, where Docker is present, that the service starts and a client connects with the secrets that were made.
+- **FR-024**: The template tests MUST run on GitHub for every pull request, with no access to any secret of the repository, including for a pull request from a fork.
+- **FR-025**: A guide for contributors MUST state the rules a template has to meet and what the reviewer checks by hand.
+- **FR-026**: The docs site MUST have a page that lists the templates, built from the template files, with each one's author.
+
 **What stays as it is**
 
 - **FR-018**: No message format, no part of the core library and no part of the runner MUST change. No runner release MUST be needed.
@@ -142,11 +188,11 @@ A script adds a template with no terminal.
 
 **Decided with the maintainer before building**
 
-- **FR-021**: Which templates are in the first set, the exact settings of each, and the look and wording of every new screen and line MUST be shown to the maintainer with a recommendation, and approved, before anything is built.
+- **FR-021**: The exact settings of each template, the template file's format, and the look and wording of every new screen and line MUST be shown to the maintainer with a recommendation, and approved, before anything is built.
 
 ### Key Entities
 
-- **Template**: a named, reviewed description inside the CLI of one service: its image and version, its settings, the secrets it needs and how each is made, and the connection secret it offers to other services.
+- **Template**: a named, reviewed data file inside the CLI that describes one or more services: each image and version, its settings, the secrets it needs and how each is made, the connection secret it offers to other services, and its author.
 - **Made secret**: a password or key created at random on the developer's machine when a template is added. Stored sealed. Never shown.
 - **Connection secret**: a secret built from made secrets and fixed parts, such as a database address, that the app's own services read.
 - **Addition**: what one run of the command would do: the service, the secrets, and which services read what. Shown before it happens, and done whole or not at all.
@@ -164,12 +210,17 @@ A script adds a template with no terminal.
 - **SC-007**: The diff of this feature touches no message format, no file of the core library and no file of the runner.
 - **SC-008**: Each template of the first set is started once with real Docker from the settings it adds, and a client inside the app's network connects with the connection secret.
 
+- **SC-009**: Adding a new template to the catalogue changes exactly one file, and the list, the docs page and the tests pick it up.
+- **SC-010**: Each rule a template has to meet has a test with a file that breaks it, and that test names the rule and the place.
+
 ## Assumptions
 
 - The app is described by a settings file, or the developer accepts printed lines for a hand-written Compose file.
-- One template adds one service. A template that needs two services is out of this version.
+- Each template of the first set adds one service. The format allows several.
 - The services of one app reach each other by name, as they do today. A template as an app of its own waits for the stage that brings a network apps share (domains and the proxy).
 - A setting cannot build one value out of another, so a connection secret is built on the developer's machine and stored whole. When a made password is replaced later, the connection secret has to be made again; this version says so and does not do it for the developer.
 - Removing a template's service is done by editing the settings file. A command for it is out of this version. Its volume is never deleted by Zekno.
-- Backups, replicas, moving to a newer major version of a database, templates from a catalogue or an address, and templates a user writes are out of this version.
-- The first set is small. Which templates are in it is decided in the design (FR-021).
+- Backups, replicas, moving to a newer major version of a database, and templates read from a catalogue, an address or the developer's own folder are out of this version. A template reaches users only through the repository and a release.
+- **Starters** (open, asked by the maintainer on 2026-11-17): a starter for a framework, such as Next.js, React with Vite or Bun, is source code that has to be built into an image, and this version of Zekno runs only images that already exist in a registry. Starters are therefore not in this feature; the recommendation is to bring them with building from source, as settings for an app the framework's own tool created, not as code Zekno keeps.
+- Paying authors, and templates that are not reviewed, are out of this version.
+- The tests on GitHub are one workflow that reads the repository and nothing else. Making it a required check for a pull request is a setting of the repository and the maintainer's step.

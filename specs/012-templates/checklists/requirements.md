@@ -33,6 +33,7 @@
 
 - The spec names the product's own words (`zekno add`, `zekno deploy`, settings file, secret,
   image, volume), which are what a user of Zekno sees.
-- Which templates come first, each one's exact settings and every screen are left to the design
-  on purpose (FR-021): the maintainer asked to decide the first set while planning, and the
+- Eight decisions of 2026-11-17 are recorded under Clarifications. Each template's exact
+  settings, the file's format and every screen are left to the boards on purpose (FR-021): the
   approval step for designs applies to this stage.
+- One question is open and does not block this feature: starters for frameworks (Assumptions).
