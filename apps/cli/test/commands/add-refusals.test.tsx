@@ -183,8 +183,17 @@ describe("every refusal at a terminal: ✖ and its first sentence, the second un
       code: 2,
     },
     {
-      name: "AD7, a reader with a variable of the connection secret's name",
-      file: DESIGN_FILE,
+      name: "AD7, a reader with a plain variable of the connection secret's name",
+      file: settingsText({
+        version: 1,
+        services: [
+          [
+            "web",
+            { image: "ghcr.io/acme/web:1", plain: [["DATABASE_URL", "x"]] },
+          ],
+          ["worker", { image: "ghcr.io/acme/worker:1" }],
+        ],
+      }),
       args: [
         "add",
         "postgres",
@@ -198,6 +207,25 @@ describe("every refusal at a terminal: ✖ and its first sentence, the second un
       lines: two(
         "web already has a variable named DATABASE_URL.",
         "Remove it, or leave web out with --for <service>."
+      ),
+      code: 2,
+    },
+    {
+      name: "AD29, a service that already reads a secret of that name, though left out with --for (security review T1)",
+      file: DESIGN_FILE,
+      args: [
+        "add",
+        "postgres",
+        "--app",
+        "r29",
+        "--server",
+        "dev",
+        "--for",
+        "worker",
+      ],
+      lines: two(
+        "web already reads a secret named DATABASE_URL.",
+        "Remove it from web."
       ),
       code: 2,
     },

@@ -28,6 +28,7 @@ import {
   AD15,
   AD24,
   AD25,
+  AD29,
   AD4,
   AD5,
   AD6,
@@ -369,10 +370,26 @@ describe("every refusal is one line on standard error (contracts/commands.md, 'W
       code: 2,
     },
     {
-      name: "AD7, a reader with a variable of the connection secret's name",
-      file: DESIGN_FILE,
+      name: "AD7, a reader with a plain variable of the connection secret's name",
+      file: settingsText({
+        version: 1,
+        services: [
+          [
+            "web",
+            { image: "ghcr.io/acme/web:1", plain: [["DATABASE_URL", "x"]] },
+          ],
+          ["worker", { image: "ghcr.io/acme/worker:1" }],
+        ],
+      }),
       args: adding("r7", "--for", "web"),
       sentence: AD7("web", "DATABASE_URL"),
+      code: 2,
+    },
+    {
+      name: "AD29, a service that already reads a secret of that name, though left out with --for (security review T1)",
+      file: DESIGN_FILE,
+      args: adding("r29", "--for", "worker"),
+      sentence: AD29("web", "DATABASE_URL"),
       code: 2,
     },
     {

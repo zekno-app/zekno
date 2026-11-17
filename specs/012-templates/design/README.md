@@ -32,6 +32,11 @@ Changed again on 2026-11-17, after the plan (`../plan.md`), with the maintainer'
 - 2026-11-17, found while building: the hand-written lines (`AddOther`) also carry a template's
   limits (`mem_limit`, `cpus`), as the settings file does, with no change to any line the boards
   show. The port is still left out, as `AddOther` draws it (contracts/commands.md).
+- 2026-11-17, after the security review (T1): one more refusal, drawn as `AddOther` draws the
+  others (`✖`, its first sentence bold, the second dim under it), status 2. A service of the file
+  that already lists in its `secrets` a secret the template makes or builds is refused with
+  `worker already reads a secret named POSTGRES_PASSWORD.` then `Remove it from worker.` (AD29,
+  contracts/commands.md). AD7 keeps its words, for a plain variable of a service chosen to read.
 
 The right column of `AddLook` still says "The numbers here are examples"; since this change they
 are the real ones, and only the shortened digests differ from what zekno prints.

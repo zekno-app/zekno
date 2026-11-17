@@ -196,7 +196,7 @@ describe("add-words.ts: contracts/commands.md", () => {
     ])
   })
 
-  test("AD1 to AD28", () => {
+  test("AD1 to AD29", () => {
     expect(add.AD1).toBe(
       "There is no server to keep secrets for yet. Run zekno deploy first. It sets up your team and a server."
     )
@@ -283,6 +283,9 @@ describe("add-words.ts: contracts/commands.md", () => {
     )
     expect(add.AD28("acme-db")).toBe(
       "acme-db asks a question when it is added. Questions are not in this version of zekno yet. They come with domains."
+    )
+    expect(add.AD29("worker", "POSTGRES_PASSWORD")).toBe(
+      "worker already reads a secret named POSTGRES_PASSWORD. Remove it from worker."
     )
   })
 

@@ -1,7 +1,7 @@
 /**
  * Every sentence and word of `zekno add` (specs/012-templates,
  * contracts/commands.md, "Sentences" and "The summary's words"), each with
- * its id there: AD1 to AD28 (AD2 and AD26 are not used), AU1 to AU10, AL1
+ * its id there: AD1 to AD29 (AD2 and AD26 are not used), AU1 to AU10, AL1
  * to AL4, AV1 to AV6, AH1 to AH9 (AH7 is not used), and the summary's words.
  * Copied from the contract; a change here is a change to the contract.
  *
@@ -138,6 +138,14 @@ export const AD27 = (template: string): string =>
 /** AD28 (new, D20; TF4) [2] */
 export const AD28 = (template: string): string =>
   `${template} asks a question when it is added. Questions are not in this version of zekno yet. They come with domains.`
+/**
+ * AD29 (new, security review T1) [2]: a service of the file already lists in
+ * its secrets a secret the template makes or builds, so it would read the new
+ * one without being named in the summary. Said in place of AD7 where both
+ * apply.
+ */
+export const AD29 = (svc: string, secret: string): string =>
+  `${svc} already reads a secret named ${secret}. Remove it from ${svc}.`
 
 // Usage, with the help line (status 2).
 

@@ -10,9 +10,12 @@
  * is given, each volume named `<service>-<volume>` in the app so no two
  * services share one (D1). Each connection secret is read by the services of
  * the file chosen for it (`--for`, the one other service, or a question),
- * which gain its name last in their secrets. The settings with the services
- * added are read back as a settings file is read, so the file zekno writes
- * is one its reader reads (AD15 otherwise).
+ * which gain its name last in their secrets, and by no other: a service of
+ * the file that already lists a name the template stores is refused (AD29),
+ * so the summary's "read by" is what the Compose text gives (security review
+ * T1). The settings with the services added are read back as a settings file
+ * is read, so the file zekno writes is one its reader reads (AD15
+ * otherwise).
  */
 import { checkSettings, isSettings } from "../settings/schema"
 import { settingsText } from "../settings/text"
@@ -92,8 +95,8 @@ function broken(
 
 /**
  * The addition of `input.template` to `input.settings`, or the first refusal
- * by contracts/commands.md, "The order of checks" (AU9, AD6, AD9, AD14, AD7,
- * AD15; each status 2), or the connection secrets whose readers a person
+ * by contracts/commands.md, "The order of checks" (AU9, AD6, AD9, AD14, AD29,
+ * AD7, AD15; each status 2), or the connection secrets whose readers a person
  * must choose: with no `readers`, when the file has several services.
  */
 export function planAddition(
@@ -147,14 +150,21 @@ export function planAddition(
         : inFile.filter((name) => named(offer.name).includes(name)),
   }))
 
-  // 11. No reader has a variable of the connection secret's name already.
+  // 11. No service of the file lists a name the template stores in its secrets: secrets are the app's, and the Compose
+  // text gives a service every secret its `secrets` lists, so it would read the new one unnamed by the summary (security
+  // review T1). Then no reader has a plain variable of the connection secret's name, which the secret would replace.
+  const stored = [
+    ...template.makes.map((made) => made.name),
+    ...template.offers.map((offer) => offer.name),
+  ]
+  for (const [name, each] of settings.services) {
+    const listed = stored.find((secret) => each.secrets?.includes(secret))
+    if (listed !== undefined) return refuse("AD29", words.AD29(name, listed))
+  }
   for (const { offer, services: reading } of readBy)
     for (const reader of reading) {
       const [, each] = settings.services.find(([name]) => name === reader)!
-      if (
-        each.secrets?.includes(offer) ||
-        each.plain?.some(([variable]) => variable === offer)
-      )
+      if (each.plain?.some(([variable]) => variable === offer))
         return refuse("AD7", words.AD7(reader, offer))
     }
 

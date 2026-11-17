@@ -128,7 +128,7 @@ type Addition = {
 }
 
 /** Why an addition cannot be made: the sentence's id and its words. */
-type AdditionRefused = { id: "AD6" | "AD7" | "AD9" | "AD14" | "AD15" | "AU9"; sentence: string; status: 2 }
+type AdditionRefused = { id: "AD6" | "AD7" | "AD9" | "AD14" | "AD15" | "AD29" | "AU9"; sentence: string; status: 2 }
 
 function planAddition(input: {
   template: Template
@@ -271,7 +271,7 @@ which file ─▶ settings file: read whole ────────────
 app and server (flags, link, questions) ─▶ the store: AD5, AD24, AD25
         │
         ▼
-service and volume names (AD6, AD9) ─▶ readers (--for, one, the question, AD12) ─▶ AD7 ─▶ AD15
+service and volume names (AD6, AD9) ─▶ readers (--for, one, the question, AD12) ─▶ AD29 ─▶ AD7 ─▶ AD15
         │
         ▼
 the summary ─▶ the question / --yes / AD4 ─▶ no: AD22

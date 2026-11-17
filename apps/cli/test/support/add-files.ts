@@ -2,10 +2,11 @@
  * The settings files `zekno add` is tried on (specs/012-templates, tasks T022
  * to T030). design.md's file of feature 010 already gives `web` and `worker`
  * the secret `DATABASE_URL`, which postgres offers, so adding postgres to it
- * is AD7 for either reader. The board `AddTemplate` starts from that app
- * before its database: its next deploy carries `SESSION_KEY` from before and
- * `DATABASE_URL` and `POSTGRES_PASSWORD` new. `BEFORE_FILE` is that file:
- * design.md's, `DATABASE_URL` taken out of both services.
+ * is AD29, whoever reads it (security review T1). The board `AddTemplate`
+ * starts from that app before its database: its next deploy carries
+ * `SESSION_KEY` from before and `DATABASE_URL` and `POSTGRES_PASSWORD` new.
+ * `BEFORE_FILE` is that file: design.md's, `DATABASE_URL` taken out of both
+ * services.
  */
 import { settingsText } from "../../src/settings/text"
 import type { Settings } from "../../src/settings/types"

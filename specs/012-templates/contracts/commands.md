@@ -352,8 +352,12 @@ gives for the same cases (D27); AD21 is of AD8's kind and is 1 too.
 9. The service's name in the app: AD6 (status 2). Each volume `<service>-<vol>`: AD9 (status 2).
 10. Who reads each connection secret: AD14 for a `--for` that is not a service of the file (status
     2); the question; AD12 with no terminal (status 2).
-11. Each reader's variables: AD7 for the first reader that has a plain variable or a secret of the
-    connection secret's name (status 2).
+11. The services' secrets, then each reader's variables (security review T1): AD29 for the first
+    service of the file, in its order, that lists in its `secrets` a name the template makes or
+    builds, reader or not (the first such name, made secrets first; status 2); then AD7 for the
+    first reader that has a plain variable of the connection secret's name (status 2). Where both
+    would apply, AD29 is said. A plain variable of that name in a service that is not a reader
+    stays. So the summary's `read by` names every service the Compose text gives each new secret.
 12. The settings with the services added, as `checkSettings` reads the text `settingsText` would
     write: AD15 with the settings sentence's place and rule (status 2).
 13. The summary; then AD3, `--yes`, or AD4 (status 1). A no: AD22 (status 1).
@@ -394,7 +398,7 @@ columns (`ErrorLine`); piped they are one line on standard error. Statuses in br
 | AD4 | `Adding a template changes <file> and stores secrets. Say --yes to go ahead.` (board) [1] |
 | AD5 | `<app> already has a secret named <NAME>.` then `A template can be added once to an app in this version.` (board) [2] |
 | AD6 | `<file> already has a service named <service>.` then `Give this one another name with --name <service>.` (board; the second `<service>` is written as is) [2] |
-| AD7 | `<svc> already has a variable named <NAME>.` then `Remove it, or leave <svc> out with --for <service>.` (board) [2] |
+| AD7 | `<svc> already has a variable named <NAME>.` then `Remove it, or leave <svc> out with --for <service>.` (board; since the security review, T1, for a plain variable of a reader only: a name in a service's `secrets` is AD29) [2] |
 | AD8 | `<file> changed while this was open.` then `Nothing was added. Run zekno add <template> again.` (board) [1, as CS12; D27] |
 | AD9 | `<file> already has a volume named <vol>.` then `Give this one another name with --name <service>.` (new, D1) [2] |
 | AD10 | `Which services read <NAME>?` (board; the question) |
@@ -415,6 +419,7 @@ columns (`ErrorLine`); piped they are one line on standard error. Statuses in br
 | AD25 | `<app> on <server> would have more than <n> secret records on this machine. Nothing was added.` (new, as I14) [1] |
 | AD27 | `This zekno's template <template> does not pass its own checks. Nothing was added.` (new; a released zekno never says it: its tests read every file) [1] |
 | AD28 | `<template> asks a question when it is added.` then `Questions are not in this version of zekno yet. They come with domains.` (new, D20; TF4) [2] |
+| AD29 | `<svc> already reads a secret named <NAME>.` then `Remove it from <svc>.` (new, security review T1, 2026-11-17: a service of the file that lists in its `secrets` a name the template makes or builds would read the new secret without the summary naming it) [2] |
 
 AD2 and AD26 are not used: the summary's words are listed below by themselves.
 
@@ -480,7 +485,7 @@ shown`; `<n> random characters`; `read by <names>`; `Builds a secret from it` (`
 |--------|------|
 | 0 | added; listed; shown; the hand-written lines printed and their secrets stored |
 | 1 | a fault of the settings file; AD4, AD8, AD13, AD19, AD20, AD21, AD22, AD24, AD25, AD27; AH8, AH9; a refusal of the keychain or of signing; a question of the app or server left |
-| 2 | AU1 to AU10; AL3, AL4; AD1, AD5, AD6, AD7, AD9, AD12, AD14, AD15, AD28; a third word |
+| 2 | AU1 to AU10; AL3, AL4; AD1, AD5, AD6, AD7, AD9, AD12, AD14, AD15, AD28, AD29; a third word |
 
 ## Tests
 

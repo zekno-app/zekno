@@ -64,7 +64,7 @@ export type Addition = {
 
 /** Why an addition cannot be made: the sentence's id and its words. */
 export type AdditionRefused = {
-  id: "AD6" | "AD7" | "AD9" | "AD14" | "AD15" | "AU9"
+  id: "AD6" | "AD7" | "AD9" | "AD14" | "AD15" | "AD29" | "AU9"
   sentence: string
   status: 2
 }

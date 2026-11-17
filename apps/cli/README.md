@@ -1136,8 +1136,12 @@ a letter. A template of several services takes no `--name`.
   app's, so each template can be added once per app. `postgres` and `mysql` both build
   `DATABASE_URL`, so an app has one of the two: adding the second is refused this way.
 - A service or a volume of that name in the file: give this one another name with `--name`.
-- A service that would read the connection secret has a variable of its name already: remove the
-  variable, or leave that service out with `--for`.
+- A service that would read the connection secret has a plain variable of its name already:
+  remove the variable, or leave that service out with `--for`.
+- A service of the file already lists in its `secrets` a secret the template makes or builds,
+  whether you chose it to read the new one or not: `worker already reads a secret named POSTGRES_PASSWORD.`
+  and `Remove it from worker.` A secret's name is the whole app's, so that service would read the
+  new secret too.
 - A `--for` that is no service of the file; settings that would break a rule of the file, such as
   more than 32 services or more than 64 KiB.
 - The file changed while the question was open: `zekno.app.json changed while this was open.`

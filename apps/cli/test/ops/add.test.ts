@@ -20,7 +20,7 @@ import { TEMPLATE_TEXTS } from "../../src/templates/catalogue"
 import { checkSettings } from "../../src/settings/schema"
 import { settingsText } from "../../src/settings/text"
 import { SH4 } from "../../src/settings/words"
-import { AD13, AD14, AD6, AD7, AD9 } from "../../src/templates/add-words"
+import { AD13, AD14, AD29, AD6, AD7, AD9 } from "../../src/templates/add-words"
 import {
   BEFORE_FILE,
   BEFORE_SETTINGS,
@@ -268,17 +268,17 @@ describe("prepared: the file, the app and the server, the store, the addition (s
     ])
   })
 
-  test("AD7: a reader with a variable of the connection secret's name (design.md's own file)", async () => {
+  test("AD29: a service that already reads a secret of the connection secret's name (design.md's own file), whoever is picked to read it (security review T1)", async () => {
     const { deps } = folder(DESIGN_FILE)
     expect(
       await thrown(() =>
         prepareAdd(deps, {
           template: postgres,
-          for: ["web"],
+          for: ["worker"],
           where: where("demo"),
         })
       )
-    ).toEqual({ kind: "WrongInput", message: AD7("web", "DATABASE_URL") })
+    ).toEqual({ kind: "WrongInput", message: AD29("web", "DATABASE_URL") })
     // Answered at the question, the same.
     const prepared = await prepareAdd(deps, {
       template: postgres,
@@ -289,7 +289,41 @@ describe("prepared: the file, the app and the server, the store, the addition (s
       await thrown(() =>
         withReaders(prepared, new Map([["DATABASE_URL", ["worker"]]]))
       )
-    ).toEqual({ kind: "WrongInput", message: AD7("worker", "DATABASE_URL") })
+    ).toEqual({ kind: "WrongInput", message: AD29("web", "DATABASE_URL") })
+  })
+
+  test("AD7: a reader with a plain variable of the connection secret's name, by --for and at the question", async () => {
+    const { deps } = folder(
+      settingsText({
+        version: 1,
+        services: [
+          [
+            "web",
+            { image: "ghcr.io/acme/web:1", plain: [["DATABASE_URL", "x"]] },
+          ],
+          ["worker", { image: "ghcr.io/acme/worker:1" }],
+        ],
+      })
+    )
+    expect(
+      await thrown(() =>
+        prepareAdd(deps, {
+          template: postgres,
+          for: ["web"],
+          where: where("demo"),
+        })
+      )
+    ).toEqual({ kind: "WrongInput", message: AD7("web", "DATABASE_URL") })
+    const prepared = await prepareAdd(deps, {
+      template: postgres,
+      where: where("demo"),
+    })
+    if (!("ask" in prepared)) throw new Error("no question")
+    expect(
+      await thrown(() =>
+        withReaders(prepared, new Map([["DATABASE_URL", ["worker", "web"]]]))
+      )
+    ).toEqual({ kind: "WrongInput", message: AD7("web", "DATABASE_URL") })
   })
 
   test("AD15: a file of 32 services cannot take one more", async () => {
