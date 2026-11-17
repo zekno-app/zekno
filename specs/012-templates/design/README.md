@@ -37,6 +37,10 @@ Changed again on 2026-11-17, after the plan (`../plan.md`), with the maintainer'
   that already lists in its `secrets` a secret the template makes or builds is refused with
   `worker already reads a secret named POSTGRES_PASSWORD.` then `Remove it from worker.` (AD29,
   contracts/commands.md). AD7 keeps its words, for a plain variable of a service chosen to read.
+- 2026-11-17, after the security review (T7): `TemplateFile`'s "What a file cannot do" says
+  `no code`; the guide no longer does, since a template's start command and plain values are what
+  runs on the user's server. CONTRIBUTING.md says so, and that a reviewer reads them as code
+  (contracts/contributing.md, CG1 and CG9). No line of the CLI changes.
 
 The right column of `AddLook` still says "The numbers here are examples"; since this change they
 are the real ones, and only the shortened digests differ from what zekno prints.

@@ -12,7 +12,8 @@ for it in that folder's `index.ts`: one file, and one line in the index.
 It adds one or more services to an app's `zekno.app.json`, with the secrets they need made on the
 user's machine. `zekno add postgres` is a template at work.
 
-A template is data, read strictly. It is never code.
+A template is data, read strictly. It configures and starts software on the user's server. Its
+start command and its plain values are what runs there, so a reviewer reads them as code.
 
 It ships inside the CLI with a release. Nothing is downloaded when it is used.
 
@@ -168,6 +169,12 @@ none, so its third line is skipped with the words
 `<name> a client connects: no client check, the reviewer connects by hand`. Every other check still
 runs. Say in your pull request how you connected to it.
 
+The tests, the install and a client check run the code of the copy they run in. So a reviewer runs
+a pull request's tests only after reading every line it changes, and only on a machine that holds
+no Zekno key and no `apps/cli/.env.local`, such as a throwaway virtual machine. There, install with
+`bun install --ignore-scripts`, so no package's install script runs. The reviewer connects by hand
+on that machine too.
+
 ## How one gets in
 
 1. Copy a template file, change its values, and add its name to the index, one line.
@@ -177,6 +184,8 @@ runs. Say in your pull request how you connected to it.
 5. It ships with the next release, in `zekno add` and on the docs page, with its author.
 
 ## What the reviewer checks by hand
+
+The reviewer reads every line the pull request changes before running anything of it.
 
 - Is it the software's official image?
 - Is the description honest about what it does not do?
@@ -188,6 +197,7 @@ The reviewer also checks that:
 - the pull request changes the template's file and its line in the index, and nothing else;
 - the digest is the one the tag named on the day the file was written (the reviewer looks it up);
 - the connection secret points at `{service}` and nowhere else;
+- each name in `also` is a name people use for this software, never another software's name;
 - the version is one the software's project supports;
 - the author is the person who opened the pull request, or someone who agreed to be named.
 
@@ -212,9 +222,13 @@ asking for a maintainer's approval before a first-time contributor's check runs.
 
 ## What a file cannot do
 
-It is data, read strictly: no code, no unknown field, nothing fetched. It cannot mount a folder of
-the server or run privileged, because settings cannot say those, and it cannot publish a port,
-because the template rules refuse it.
+It is data, read strictly: no unknown field, nothing fetched. It cannot mount a folder of the
+server or run privileged, because settings cannot say those, and it cannot publish a port, because
+the template rules refuse it.
+
+It does start software on the user's server. Its image, its start command and its plain values
+decide what runs there, with the template's passwords in its environment and the network open.
+That is why a reviewer reads them as code.
 
 The runner on the user's server starts it as it starts any other service of the app, with Docker
 Compose, after it verified the deploy.
