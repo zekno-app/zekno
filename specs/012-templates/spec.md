@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-17
 
-**Status**: Draft. Decisions agreed with the maintainer on 2026-11-17 (see Clarifications). The four boards are approved (`design/`). The exact settings of the Redis template wait for the maintainer.
+**Status**: Draft. Decisions agreed with the maintainer on 2026-11-17 (see Clarifications). The four boards are approved (`design/`). The Redis template's way of getting its password (a file only Redis can read, written from the secret at start) was approved on 2026-11-17.
 
 **Input**: User description: "Stage 2 of the road map: templates. `zekno add postgres` adds a ready-made service to an app, with the secrets it needs." Decided with the maintainer on 2026-11-17: templates ship inside the CLI, and a template adds a service to the app's settings file (`zekno.app.json`); in a folder with a hand-written Compose file zekno prints the lines to add and edits nothing. The command's name was left to the builder's recommendation: `zekno add <template>`. Which templates come first was left for planning.
 
@@ -22,6 +22,7 @@
 - Q: Can one template hold several services? → A: The format allows it. Each template of the first set has one.
 - Q: Can the same template be added twice to one app? → A: No, one of each per app in this version, because a secret's name is shared by the whole app.
 - Q: Do tests run on GitHub for each pull request? → A: Yes, with no access to any secret of the repository.
+- Q: How does Redis get its password, since its official image has no variable for one? → A: The template's start command, run inside the container, writes the password from the secret into a file only Redis can read, then starts Redis with it. Approved on 2026-11-17.
 
 ## Why
 

@@ -15,7 +15,7 @@ alignment, and for the words of each line.
 Changed after the approval, because the maintainer refused Valkey in place of Redis on the same
 day: the fourth template is `redis` (the official image), the example of a name people type is
 `mongo`, and the `builds` part of the file is gone, since no template needs it. The words about
-how Redis gets its password (`AddLook.dc.html`, right column) wait for the maintainer.
+how Redis gets its password (`AddLook.dc.html`, right column) were approved on the same day.
 
 Versions and digests on the boards are examples. Each is fixed when its template is built and
 tested.
