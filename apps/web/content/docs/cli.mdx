@@ -1142,11 +1142,334 @@ $ zekno settings init
 Adds a ready-made service, such as a database, to this folder's
 `zekno.app.json`, with the secrets it needs made on your machine.
 
-`zekno add --list` lists the templates this `zekno` carries. It needs no team,
-server or file.
+A template is a service someone already wrote well. Each one is a data file
+inside `zekno`, reviewed before it ships with a release. Nothing is downloaded
+when you use one, and no template is read from your folder or your profile.
+Its image is the software's official one, pinned by digest. The
+[templates page](/docs/templates) lists them with their authors, and
+[CONTRIBUTING.md](https://github.com/zekno-app/zekno/blob/main/CONTRIBUTING.md)
+says how to write one.
 
-`zekno add <template> --show` shows what a template would add, before you add
-it. It changes nothing.
+| Template | Software | Made on your machine | Connection secret, for your own services |
+| --- | --- | --- | --- |
+| `postgres` | PostgreSQL 18.7 | `POSTGRES_PASSWORD` | `DATABASE_URL`: `postgres://app:<password>@postgres:5432/app` |
+| `mysql` | MySQL 9.7 | `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` | `DATABASE_URL`: `mysql://app:<password>@mysql:3306/app` |
+| `mongodb` | MongoDB 9.0 | `MONGO_INITDB_ROOT_PASSWORD` | `MONGODB_URI`: `mongodb://app:<password>@mongodb:27017/app?authSource=admin` |
+| `redis` | Redis 8.10 | `REDIS_PASSWORD` | `REDIS_URL`: `redis://default:<password>@redis:6379` |
+
+Each password is 32 letters and digits, made from your system's random
+source. The three databases name their user and their database `app`. Each
+service restarts always, keeps its data in a volume named for it
+(`postgres-data` for the service `postgres`), and publishes no port: only the
+app's own services reach it, by its name. `zekno add mongo` says to run
+`zekno add mongodb`.
+
+#### Adding one
+
+`zekno add` needs your team and a server, to seal the secrets for. With none
+yet it says `There is no server to keep secrets for yet.` and
+`Run zekno deploy first. It sets up your team and a server.`, exit status 2,
+before any file of the folder is read. It adds to the file `zekno deploy` in
+this folder would use, found by the rule of [zekno settings](#zekno-settings):
+a settings file is read whole and checked; a Compose file written by hand gets
+the lines to add instead (below). With neither it says
+`This folder has no settings file.` and
+`Run zekno settings init to start one, then add the template.`, exit status 1.
+The app and the server come from `--app` and `--server`, the folder's link, or
+a question at a terminal, as for `zekno secret set`. It contacts no server and
+deploys nothing.
+
+At a terminal it shows what it will add, then asks once. In this folder
+`zekno.app.json` has two services, so the question of who reads
+`DATABASE_URL` (below) came first:
+
+```text
+$ zekno add postgres
+✔ Read by  web
+PostgreSQL 18.7  A relational database.                                 by zekno
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ app     demo                                                                 │
+│ server  prod deploy@203.0.113.7                                              │
+│ file    zekno.app.json  2 services: web, worker                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Adds a service
+  postgres                postgres:18.7  pinned by digest
+                          restart always · port 5432, not published
+                          data kept in volume postgres-data
+Makes a secret on this machine  never shown
+  POSTGRES_PASSWORD       32 random characters
+                          read by postgres
+Builds a secret from it
+  DATABASE_URL            postgres://app:••••@postgres:5432/app
+                          read by web
+! Zekno does not back up this data.
+? Add postgres to demo? Nothing is deployed until you deploy. (y/N) yes
+✔ Added postgres to zekno.app.json
+✔ Stored POSTGRES_PASSWORD and DATABASE_URL, sealed for prod
+  Run zekno deploy to start it.
+```
+
+- The box names the app, the server and where it is, and the file with the
+  services it has now.
+- **Adds a service**: the service's name in the app, its image (`--show`
+  prints the whole digest), its restart rule, its port, never published, and
+  its volume.
+- **Makes a secret on this machine**: each password, never shown, and the
+  services that read it.
+- **Builds a secret from it**: the connection secret, its password drawn as
+  `••••`, and the services that read it.
+- Each line after `!` is a note of the template.
+
+After a yes, the file has the service, added last, and each service that
+reads the connection secret has its name last in `secrets`. The secrets are
+stored as `zekno secret set` stores a value, sealed for the server, and
+`zekno secret ls` lists them, not deployed. Nothing is deployed: the next
+`zekno deploy` starts the database, and your app reaches it by the service's
+name. `n`, Enter, Esc or Ctrl-C: `Nothing was added.`, exit status 1, and no
+secret is made.
+
+**Who reads the connection secret.** `--for <service>` names them, once per
+service: `zekno add postgres --for web --for worker`. Without it, the one
+other service of the file reads it, and the summary says so. With several, at
+a terminal, a question comes before the summary:
+
+```text
+? Which services read DATABASE_URL?
+  ❯ ◉ web
+    ◯ worker
+  ↑↓ move   space pick   enter done   esc leave
+```
+
+It opens with the first service picked. Space picks or unpicks. Enter with
+none picked says `Pick at least one service.` and stays open. Enter leaves
+`✔ Read by  web, worker`. With no terminal it never guesses:
+`zekno.app.json has several services. Say which read DATABASE_URL with --for <service>.`,
+exit status 2.
+
+**`--name <service>`** gives the service another name in the app, when one of
+that name is there already: `zekno add postgres --name db` adds the service
+`db` with the volume `db-data`, and `DATABASE_URL` names the host `db`. A name
+is lowercase letters, digits and hyphens, starting with a letter. A template
+of several services takes no `--name`.
+
+**`--yes`** adds without the question. At a terminal the summary is still
+drawn.
+
+**Refused, with nothing changed** (exit status 2 unless said):
+
+- The app has a secret of a name the template makes or builds:
+  `demo already has a secret named POSTGRES_PASSWORD.` and
+  `A template can be added once to an app in this version.` A secret's name is
+  the whole app's, so each template can be added once per app. `postgres` and
+  `mysql` both build `DATABASE_URL`, so an app has one of the two: adding the
+  second is refused this way.
+- A service or a volume of that name in the file: give this one another name
+  with `--name`.
+- A service that would read the connection secret has a variable of its name
+  already: remove the variable, or leave that service out with `--for`.
+- A `--for` that is no service of the file; settings that would break a rule
+  of the file, such as more than 32 services or more than 64 KiB.
+- The file changed while the question was open:
+  `zekno.app.json changed while this was open.` and
+  `Nothing was added. Run zekno add postgres again.` (exit status 1). The same
+  for the app's secrets:
+  `The secrets of demo on prod changed while this was open.` (exit status 1).
+
+#### Whole or not at all
+
+Nothing is written before everything is checked and you said yes. Then, in
+this order: the file and the app's secrets are read again, to see that neither
+changed; the passwords are made and every record is sealed and signed (the
+keychain is read here, once); the settings file is written; the secrets are
+stored, in one write. When the secrets cannot be stored, the file is put back
+as it was, and `zekno` says
+`The secrets could not be stored on this machine, so nothing was added.` When
+even that fails, it says what is left:
+`postgres was added to zekno.app.json, but its secrets could not be stored, and the file could not be put back.`
+and `Remove postgres from zekno.app.json before you deploy.`
+
+One case cannot be undone: `zekno` stopped between writing the file and
+storing the secrets, by a power cut or `kill -9`. The file then has the
+service, and `zekno secret ls` does not list its secrets. To finish by hand,
+remove the service from `zekno.app.json`, and the connection secret's name
+from the `secrets` of each service that reads it, then run `zekno add` again.
+A deploy before that gives the database no password, unless you type one when
+the deploy asks for it, and each of the four refuses to start without one:
+none runs open.
+
+#### Looking first: the picker, --list and --show
+
+`zekno add` with no template, at a terminal, offers the list. Enter leaves
+`✔ Template  postgres` and goes on as `zekno add postgres`. Esc:
+`Nothing was added.`
+
+```text
+$ zekno add
+? Add which template?
+  ❯ postgres  PostgreSQL 18.7  A relational database
+    mysql     MySQL 9.7        A relational database
+    mongodb   MongoDB 9.0      A document database
+    redis     Redis 8.10       A cache and key-value store
+  ↑↓ move   enter choose   esc leave
+```
+
+`zekno add --list` and `zekno add <template> --show` need no team, server,
+file or keychain, and change nothing. They take `--json` and no other option.
+
+```text
+$ zekno add --list
+  postgres  PostgreSQL 18.7  A relational database        by zekno
+  mysql     MySQL 9.7        A relational database        by zekno
+  mongodb   MongoDB 9.0      A document database          by zekno
+  redis     Redis 8.10       A cache and key-value store  by zekno
+```
+
+Piped, one line each, with tabs: `postgres	PostgreSQL	18.7	zekno`. With
+`--json`, one object:
+`{"templates":[{"name":"postgres","title":"PostgreSQL","about":"A relational database.","software":"18.7","author":"zekno","also":[]}, ...]}`.
+
+```text
+$ zekno add postgres --show
+  PostgreSQL 18.7  A relational database. By zekno.
+  postgres
+  Source        image          postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc
+  Deploy        restart        always
+  Networking    port           5432, not published
+  Variables     secrets        POSTGRES_PASSWORD
+                plain          POSTGRES_USER=app, POSTGRES_DB=app
+  Volumes       postgres-data  /var/lib/postgresql
+  Secrets
+  POSTGRES_PASSWORD       made on your machine, 32 random characters
+  DATABASE_URL            built from it, for your own services
+  Good to know
+  Zekno does not back up this data. It is kept in a Docker volume on your server.
+  The image is the official one, pinned by digest. A newer one comes with a newer zekno.
+  Nothing was changed.
+```
+
+The service is shown as it would be added, with the sections of
+`zekno settings`; Redis's start command is the `start` row of its Deploy
+section. The image line is longer than 100 columns: in a window of 100 columns
+or fewer its digest goes on, under it, on a second line. To copy it whole,
+pipe the command: piped, `--show` prints the service as `zekno settings`
+prints its piped lines, then `made	POSTGRES_PASSWORD	32` and
+`built	DATABASE_URL	postgres://app:{POSTGRES_PASSWORD}@{service}:5432/app`,
+with tabs. With `--json`, it prints the template's data as one object.
+
+#### A Compose file written by hand
+
+When `zekno deploy` in this folder would use a Compose file written by hand,
+`zekno add` never edits it, and never reads it. It prints the lines to add,
+then makes and stores the secrets when you agree:
+
+```text
+$ zekno add postgres
+This folder deploys from compose.yaml, a file written by hand.
+Zekno does not edit it. Add these lines yourself.
+Under services:
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   postgres:                                                                                      │
+│     image: postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc │
+│     restart: always                                                                              │
+│     environment:                                                                                 │
+│       POSTGRES_USER: app                                                                         │
+│       POSTGRES_DB: app                                                                           │
+│       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}                                                    │
+│     volumes:                                                                                     │
+│       - postgres-data:/var/lib/postgresql                                                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+Under volumes:  postgres-data:
+In the environment: of each service that uses it
+╭──────────────────────────────────────╮
+│       DATABASE_URL: ${DATABASE_URL}  │
+╰──────────────────────────────────────╯
+? Make and store its two secrets for demo on prod? (y/N) yes
+✔ Stored POSTGRES_PASSWORD and DATABASE_URL, sealed for prod
+```
+
+- Put the service's lines under `services:`, the volume under the top-level
+  `volumes:`, and the connection secret's line in the `environment:` of each
+  service that uses it. The volume is named `<service>-<volume>`, as in a
+  settings file: `postgres-data`, or `db-data` with `--name db`.
+- A `$` in a value is written `$$`, so Compose leaves it for the container,
+  and each secret is `${NAME}`: the runner gives Compose its value when it
+  starts the app. No value is ever in the lines.
+- The secrets are made and stored as for a settings file, and refused the
+  same way when the app has a secret of one of their names. `--for` is
+  refused: you add the line to the services you choose. A no, Esc or Ctrl-C:
+  `No secret was made.`, exit status 1.
+- Piped, it prints the service's lines and the connection secret's lines
+  exactly as you would type them, with no box and no words around them. It
+  does not print the volume to declare: add it under the top-level `volumes:`
+  yourself (`postgres-data:` for postgres), since Compose refuses a service
+  that names a volume nobody declared. Without `--yes`, it then says
+  `Making its secrets stores them on this machine. Say --yes to go ahead.` on
+  standard error, exit status 1, and makes nothing. With `--yes`, one line
+  follows for each secret stored, such as `stored	POSTGRES_PASSWORD	1`.
+
+#### With no terminal (scripts)
+
+`zekno add` never asks. Without `--yes` it stops, exit status 1, and changes
+nothing:
+`Adding a template changes zekno.app.json and stores secrets. Say --yes to go ahead.`
+on standard error. With `--yes` it adds, and prints one line for each thing
+done, with tabs: the file it changed, then each secret and the version it got.
+
+```bash
+zekno add postgres --yes --app demo --server prod --for web
+```
+
+```text
+added	postgres	zekno.app.json
+stored	POSTGRES_PASSWORD	1
+stored	DATABASE_URL	1
+```
+
+`--app` and `--server` come from the flags or the folder's link. One that is
+missing stops it with the sentence the other commands use, such as
+``Say which app with `--app <name>`, or link this folder to it with `zekno link`, which keeps it in zekno.json.``
+Every refusal is one line on standard error, its two sentences joined by a
+space.
+
+#### What it does not do
+
+- **Zekno does not back up the data.** Back it up yourself.
+- **The data is kept in a Docker volume on your server**, named
+  `zekno-<app>_<volume>`: for the app `demo`, the service `postgres` keeps it
+  in `zekno-demo_postgres-data`.
+- **The image changes only with a new `zekno`.** Each template names one image
+  by its digest. A newer image comes with a newer release of `zekno`, in a
+  template that changed.
+- **Nothing is deployed until you deploy.** Adding writes `zekno.app.json` and
+  the secret store on your machine, and nothing else.
+- **No command removes a template's service.** To remove it, edit
+  `zekno.app.json`: take out the service, and the connection secret's name
+  from the `secrets` of the services that read it. The next deploy stops the
+  service. Its volume is never deleted, by `zekno` or by Compose: to delete
+  its data, run `docker volume rm zekno-demo_postgres-data` on the server. Its
+  secrets stay stored for the app until you remove them with
+  `zekno secret rm`. A volume you keep holds the database as it was:
+  PostgreSQL, MySQL and MongoDB take their password only when they start on an
+  empty volume, so they keep the first one.
+
+MongoDB's template makes the database's administrator only, since its image
+can make no other user without a script mounted from the server: your app
+connects as the administrator (`MONGO_INITDB_ROOT_USERNAME` is `app`). Its
+image also declares a second volume, at `/data/configdb`. A single server
+leaves it empty, and Docker gives it a volume with no name.
+
+Redis has no variable for its password. Its template starts it with one short
+line, run inside the container, that writes the password from the secret into
+a file only Redis can read, then starts Redis with that file. The password is
+on no command line.
+
+#### Exit status of zekno add
+
+| Status | When |
+| --- | --- |
+| `0` | Added; listed; shown; the hand-written lines printed and their secrets stored |
+| `1` | No settings file; a fault in the settings file; no terminal without `--yes`; "no", Esc or Ctrl-C; the file or the app's secrets changed while it was open; the secrets could not be stored; more secrets than a deploy carries or this machine keeps; a refusal of the keychain or of signing; a question of the app or server left |
+| `2` | A word or an option it does not take; a `--name` that is not a service name; no template of that name; no server yet; a secret, service, volume or variable that is there already; several services and no `--for` with no terminal; a `--for` that is no service of the file; settings that would break a rule of the file; a template that asks a question |
 
 ### zekno doctor
 
@@ -1619,7 +1942,9 @@ never stored.
 Changing a setting, with `zekno settings set`, `unset` or `init` or on the
 settings screen, writes `zekno.app.json` and nothing else, and contacts no
 server. The change runs after the next deploy, whose signed text is in the
-deploy history like any other.
+deploy history like any other. `zekno add` writes `zekno.app.json` and stores
+the app's new secrets, and contacts no server. A Compose file written by hand
+is never written: only the secrets are stored.
 
 The file you give `zekno secret import` is read once and never copied: its
 values are kept only as the encrypted records above. `zekno doctor` itself
