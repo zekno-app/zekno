@@ -58,8 +58,8 @@ const refuse = (
   sentence: string
 ): AdditionRefused => ({ id, sentence, status: 2 })
 
-/** The template's services as they go into the app: the first under `name`, each volume `<service>-<volume>`. */
-function servicesInApp(
+/** The template's services as they go into the app: the first under `name`, each volume `<service>-<volume>`. `--show` shows them so, with no name (D1). */
+export function servicesInApp(
   template: Template,
   name: string | undefined
 ): (readonly [string, ServiceSettings])[] {

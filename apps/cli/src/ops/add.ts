@@ -125,14 +125,19 @@ export function checkTemplate(
   return found
 }
 
-/** AU8 and AU9 for `--name` given to `template`: also for one picked from the list. */
+/**
+ * AU8 and AU9 for `--name` given to `template`: also for one picked from the
+ * list. With no template yet (the picker is still to come), AU8 alone, so a
+ * name that is no service name is said before anything is asked.
+ */
 export function checkName(
-  template: Template,
+  template: Template | undefined,
   nameFlag: string | undefined
 ): void {
   if (nameFlag === undefined) return
   if (checkServiceName(nameFlag) !== undefined) throw new WrongInput(AU8)
-  if (template.services.length > 1) throw new WrongInput(AU9(template.name))
+  if (template !== undefined && template.services.length > 1)
+    throw new WrongInput(AU9(template.name))
 }
 
 /**

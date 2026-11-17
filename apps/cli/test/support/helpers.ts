@@ -161,7 +161,7 @@ export type Answer =
   | "skip"
   | "leave"
 
-/** A question as `answering` saw it: its kind, its words, the rows it offered (label and detail joined by a tab) and the value filled in. */
+/** A question as `answering` saw it: its kind, its words, the rows it offered (label, middle column and detail joined by tabs) and the value filled in. */
 export type Asked = {
   kind: "choose" | "chooseSeveral" | "ask" | "confirm" | "askValue"
   question: string
@@ -177,7 +177,7 @@ export type Asked = {
  * reason, and the next answer is tried. `"leave"` is Esc: it leaves a list, a
  * typed answer, the hidden prompt and a yes-or-no question asked with
  * `leave`, and answers no to one asked without. Every question is kept in
- * `asked`, and what `note`, `code`, `groups`, `gap`, `doctorReport`, `settingsReport`, `settingChange`, `addition` and `added` were given in `lines`;
+ * `asked`, and what `note`, `code`, `groups`, `gap`, `doctorReport`, `settingsReport`, `settingChange`, `addition`, `added`, `templateList` and `templateView` were given in `lines`;
  * the plain interface still writes them, so `m.out` keeps them in order with
  * everything else. A question with no answer left fails the test.
  */
@@ -203,7 +203,9 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
         kind: "choose",
         question: question.question,
         rows: question.rows.map((row) =>
-          row.detail === undefined ? row.label : `${row.label}\t${row.detail}`
+          [row.label, row.column, row.detail]
+            .filter((part) => part !== undefined)
+            .join("\t")
         ),
       })
       const answer = next(question.question)
@@ -336,6 +338,18 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
         done.server,
       ])
       plain.added(done)
+    },
+    templateList(rows) {
+      lines.push(["templateList", ...rows.map((row) => row.name)])
+      plain.templateList(rows)
+    },
+    templateView(view) {
+      lines.push([
+        "templateView",
+        `${view.title} ${view.software}`,
+        ...view.services.map((service) => service.name),
+      ])
+      plain.templateView(view)
     },
   }
   m.deps.ui = ui

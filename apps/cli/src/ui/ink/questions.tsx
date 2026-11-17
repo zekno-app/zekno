@@ -188,12 +188,91 @@ type QuestionKey = {
 export const isCtrlC = (input: string, key: QuestionKey): boolean =>
   key.ctrl === true && input === "c"
 
+/** A column as wide as its longest text plus two (specs/012-templates, the picker's columns). */
+const columnWidth = (texts: readonly string[]): number =>
+  Math.max(0, ...texts.map((text) => [...text].length)) + 2
+
 /**
- * A list to pick one row from (mock-ups 1 and 2): the question, a row per
- * line with the marker on the selected one, and the keys. ↑ and ↓ move and
- * stop at the ends; Enter chooses; Esc and Ctrl-C leave. The selected row's
- * label is bold; a row with no detail, such as `+ a new app`, is dim until it
- * is selected (board "Questions in single commands").
+ * What a list looks like (mock-ups 1 and 2): the question, the rows in view,
+ * the marker on the selected one, and the keys. The selected row's label is
+ * bold; a row with no detail, such as `+ a new app`, is dim until it is
+ * selected (board "Questions in single commands"). Rows with a middle column
+ * (`column`, the picker of `zekno add`, board `AddLook`) have the label, the
+ * column in the text colour and the detail dim, each padded to its longest
+ * plus two (specs/012-templates, D12). `height` is the window's.
+ */
+export function ListView<T>({
+  question,
+  rows,
+  selected,
+  columns,
+  height,
+}: {
+  question: string
+  rows: readonly ListRow<T>[]
+  selected: number
+  columns: number
+  height: number
+}) {
+  const middle = rows.flatMap((row) =>
+    row.column === undefined ? [] : [row.column]
+  )
+  const width =
+    middle.length > 0
+      ? columnWidth(rows.map((row) => row.label))
+      : labelWidth(rows)
+  const middleWidth = columnWidth(middle)
+  const shown = listWindow(
+    rows.length,
+    selected,
+    Math.max(FEWEST_ROWS, height - LIST_SPARE_LINES)
+  )
+  return (
+    <Box flexDirection="column">
+      <QuestionLine pieces={questionPieces(question)} columns={columns} />
+      {shown.above > 0 ? (
+        <Text dimColor>{moreLine("↑", shown.above)}</Text>
+      ) : null}
+      {rows.slice(shown.from, shown.to).map((row, offset) => {
+        const at = shown.from + offset === selected
+        const bare = row.detail === undefined && row.column === undefined
+        return (
+          <Box key={shown.from + offset} width={columns}>
+            <Text wrap="truncate-end">
+              {"  "}
+              <Text color={BRAND}>{at ? `${MARKER} ` : "  "}</Text>
+              <Text bold={at} dimColor={!at && bare}>
+                {bare ? row.label : row.label.padEnd(width)}
+              </Text>
+              {row.column === undefined ? null : (
+                <Text>
+                  {row.detail === undefined
+                    ? row.column
+                    : row.column.padEnd(middleWidth)}
+                </Text>
+              )}
+              {row.detail === undefined ? null : (
+                <Text dimColor>{row.detail}</Text>
+              )}
+            </Text>
+          </Box>
+        )
+      })}
+      {shown.below > 0 ? (
+        <Text dimColor>{moreLine("↓", shown.below)}</Text>
+      ) : null}
+      <Text>
+        {"  "}↑↓ <Text dimColor>move</Text>
+        {"   "}enter <Text dimColor>choose</Text>
+        {"   "}esc <Text dimColor>leave</Text>
+      </Text>
+    </Box>
+  )
+}
+
+/**
+ * A list to pick one row from (mock-ups 1 and 2), drawn by `ListView`. ↑ and
+ * ↓ move and stop at the ends; Enter chooses; Esc and Ctrl-C leave.
  */
 export function ListPrompt<T>({
   question,
@@ -224,44 +303,14 @@ export function ListPrompt<T>({
     } else if (result.kind === "chosen") end({ answer: result.index })
     else if (result.kind === "cancelled") end({ left: true })
   })
-  const width = labelWidth(rows)
-  const shown = listWindow(
-    rows.length,
-    selected,
-    Math.max(FEWEST_ROWS, height - LIST_SPARE_LINES)
-  )
   return (
-    <Box flexDirection="column">
-      <QuestionLine pieces={questionPieces(question)} columns={columns} />
-      {shown.above > 0 ? (
-        <Text dimColor>{moreLine("↑", shown.above)}</Text>
-      ) : null}
-      {rows.slice(shown.from, shown.to).map((row, offset) => {
-        const at = shown.from + offset === selected
-        return (
-          <Box key={shown.from + offset} width={columns}>
-            <Text wrap="truncate-end">
-              {"  "}
-              <Text color={BRAND}>{at ? `${MARKER} ` : "  "}</Text>
-              <Text bold={at} dimColor={!at && row.detail === undefined}>
-                {row.detail === undefined ? row.label : row.label.padEnd(width)}
-              </Text>
-              {row.detail === undefined ? null : (
-                <Text dimColor>{row.detail}</Text>
-              )}
-            </Text>
-          </Box>
-        )
-      })}
-      {shown.below > 0 ? (
-        <Text dimColor>{moreLine("↓", shown.below)}</Text>
-      ) : null}
-      <Text>
-        {"  "}↑↓ <Text dimColor>move</Text>
-        {"   "}enter <Text dimColor>choose</Text>
-        {"   "}esc <Text dimColor>leave</Text>
-      </Text>
-    </Box>
+    <ListView
+      question={question}
+      rows={rows}
+      selected={selected}
+      columns={columns}
+      height={height}
+    />
   )
 }
 

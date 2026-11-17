@@ -1,20 +1,23 @@
 /**
  * `zekno add <template>` (specs/012-templates, contracts/commands.md; boards
- * `AddTemplate` and `AddOther`): what it shows and asks. What it reads and
- * checks is ops/add.ts, what it writes ops/add-commit.ts, its words
- * templates/add-words.ts. It contacts no server and no network, deploys
+ * `AddTemplate`, `AddLook` and `AddOther`): what it shows and asks. What it
+ * reads and checks is ops/add.ts, what it writes ops/add-commit.ts, its
+ * words templates/add-words.ts. It contacts no server and no network, deploys
  * nothing and signs no deploy (FR-010, SC-005).
  *
- * The order (contracts/commands.md, "The order of checks"): the template and
- * `--name`, then a server to seal for (AD1), before anything is asked or any
- * file is read; then the file, the app and the server (asked for at a
- * terminal only now), the store and the addition; who reads each connection
- * secret (AD10 at a terminal, AD12 without one); the summary; AD3, `--yes`
- * or AD4; then adding, whole or not at all.
+ * The order (contracts/commands.md, "The order of checks"): the words and
+ * the options (AU1 to AU6); `--list` and `--show`, which read only the
+ * catalogue and end there; the template and `--name`, then a server to seal
+ * for (AD1), before anything is asked or any file is read; the picker, when
+ * no template was named, at a terminal; then the file, the app and the
+ * server (asked for at a terminal only now), the store and the addition; who
+ * reads each connection secret (AD10 at a terminal, AD12 without one); the
+ * summary; AD3, `--yes` or AD4; then adding, whole or not at all.
  */
 import type { Deps } from "../cli/context"
 import { Left, UsageError, WrongInput } from "../cli/errors"
 import {
+  checkName,
   checkTemplate,
   hasServer,
   prepareAdd,
@@ -32,25 +35,134 @@ import {
   AD22,
   AD3,
   AD4,
+  AL1,
+  AL2,
   AU1,
+  AU2,
+  AU3,
+  AU4,
+  AU5,
+  AU6,
   READ_BY,
 } from "../templates/add-words"
+import { catalogue } from "../templates/catalogue"
+import {
+  listObject,
+  templateObject,
+  templateRows,
+  templateView,
+} from "../templates/shown"
+import type { Template } from "../templates/types"
 import { quiet } from "../ui/types"
 
-/** What `zekno add` was given: the template's name, `--name`, `--for`, `--yes`, and how to find the app and the server. */
+/** The options `zekno add` takes; any other given to it is refused (contracts/commands.md, AU7). */
+export const ADD_OPTIONS: readonly string[] = [
+  "name",
+  "for",
+  "app",
+  "server",
+  "yes",
+  "json",
+  "list",
+  "show",
+]
+
+/** The options `--list` and `--show` take beside themselves (AU6). */
+const LOOKING_TAKES = ["list", "show", "json"]
+
+/** What `zekno add` was given: the template's name, the options, and how to find the app and the server. */
 export type AddInput = {
   template: string | undefined
   name: string | undefined
   for: readonly string[] | undefined
   yes: boolean
+  /**
+   * Every option given, as the arguments were read: one key for each, in
+   * the order given (AU6 names the first `--list` or `--show` does not
+   * take), with `--list`, `--show` and `--json` among them.
+   */
+  options?: { list?: boolean; show?: boolean; json?: boolean }
   /** The flags, the folder's link, then at a terminal a question for each detail still missing; called once the file was read. */
   details: () => Promise<Where>
+}
+
+/**
+ * Step 1 of contracts/commands.md, "The order of checks": the words and the
+ * options, each refusal with the help line (status 2). `--list` and `--show`
+ * not both (AU4); `--list` with no template (AU2); `--show` with one (AU3);
+ * neither with an option of adding (AU6); `--json` with one of them only
+ * (AU5); and no template with no terminal to pick one on (AU1).
+ */
+function checkUsage(input: AddInput, asks: boolean): void {
+  const { list, show, json } = input.options ?? {}
+  const looking = list ? "list" : show ? "show" : undefined
+  if (list && show) throw new UsageError(AU4)
+  if (list && input.template !== undefined) throw new UsageError(AU2)
+  if (show && input.template === undefined) throw new UsageError(AU3)
+  const other = Object.keys(input.options ?? {}).find(
+    (option) => !LOOKING_TAKES.includes(option)
+  )
+  if (looking !== undefined && other !== undefined)
+    throw new UsageError(AU6(looking, other))
+  if (looking === undefined && json) throw new UsageError(AU5)
+  if (looking === undefined && input.template === undefined && !asks)
+    throw new UsageError(AU1)
 }
 
 /** AD22, dim from column 0 (board `AddTemplate`): a no, Esc or Ctrl-C at `zekno add`'s own questions. Status 1. */
 function nothingAdded(deps: Deps): number {
   deps.ui.line(undefined, [quiet(AD22)])
   return 1
+}
+
+/**
+ * Step 2: `--list` and `--show` (FR-013; board `AddLook`), from the
+ * catalogue alone: no team, keychain, profile, file, server or network. With
+ * `--json`, one object (D18). `--show` of a name that is no template's says
+ * AL3 or AL4, as adding it would. Status 0; nothing is changed.
+ */
+function look(deps: Deps, input: AddInput): number {
+  const json = input.options?.json === true
+  if (input.options?.list) {
+    const list = catalogue()
+    if (json) deps.ui.json(listObject(list))
+    else deps.ui.templateList(templateRows(list))
+    return 0
+  }
+  const template = checkTemplate(input.template!, undefined)
+  if (json) deps.ui.json(templateObject(template))
+  else deps.ui.templateView(templateView(template))
+  return 0
+}
+
+/**
+ * Step 5: the picker, at a terminal, when no template was named (board
+ * `AddLook`, left column; D12): the catalogue's rows, the middle column
+ * `<title> <software>`, the about dim; it leaves `✔ Template  <name>`. Then
+ * AD28 and AU9 for the one picked. Undefined when the person left it.
+ */
+async function pick(
+  deps: Deps,
+  nameFlag: string | undefined
+): Promise<Template | undefined> {
+  let name: string
+  try {
+    name = await deps.ui.choose({
+      question: AL1,
+      rows: templateRows(catalogue()).map((row) => ({
+        value: row.name,
+        label: row.name,
+        column: `${row.title} ${row.software}`,
+        detail: row.about,
+      })),
+      collapsed: AL2,
+      missing: new UsageError(AU1),
+    })
+  } catch (error) {
+    if (error instanceof Left) return undefined
+    throw error
+  }
+  return checkTemplate(name, nameFlag)
 }
 
 /**
@@ -88,16 +200,25 @@ async function askReaders(
 }
 
 /**
- * `zekno add <template> [--name <service>] [--for <service>] [--app <app>]
- * [--server <name>] [--yes]`: the template's services written into the
+ * `zekno add [<template>] [--name <service>] [--for <service>] [--app <app>]
+ * [--server <name>] [--yes]`, `zekno add --list [--json]` and `zekno add
+ * <template> --show [--json]`: the template's services written into the
  * settings file a deploy here would sign, and its secrets made here, sealed
- * and stored, whole or not at all. Status 0 once added; 1 for a no (AD22);
- * a refusal throws its sentence.
+ * and stored, whole or not at all; or the templates this zekno carries, or
+ * what one would add. Status 0 once added, listed or shown; 1 for a no
+ * (AD22); a refusal throws its sentence.
  */
 export async function add(deps: Deps, input: AddInput): Promise<number> {
-  if (input.template === undefined) throw new UsageError(AU1)
-  const template = checkTemplate(input.template, input.name)
+  checkUsage(input, deps.ui.asks)
+  if (input.options?.list || input.options?.show) return look(deps, input)
+  if (input.template === undefined) checkName(undefined, input.name)
+  const named =
+    input.template === undefined
+      ? undefined
+      : checkTemplate(input.template, input.name)
   hasServer(deps)
+  const template = named ?? (await pick(deps, input.name))
+  if (template === undefined) return nothingAdded(deps)
   const prepared = await prepareAdd(deps, {
     template,
     ...(input.name === undefined ? {} : { name: input.name }),

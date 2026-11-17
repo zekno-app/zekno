@@ -4,8 +4,9 @@
  * errors after their marks, notes, fields, tables, lines of cells, a
  * server's lines, the lines of `zekno logs`, codes, groups, a deploy that
  * ended, `zekno doctor`'s report, `zekno settings`' report and the change
- * `set` and `unset` show, `zekno add`'s summary (addition-report.tsx), and
- * what a question leaves behind (left-behind.ts).
+ * `set` and `unset` show, `zekno add`'s summary (addition-report.tsx), its
+ * list and `--show` (templates.tsx), and what a question leaves behind
+ * (left-behind.ts).
  */
 import { Box, Text } from "ink"
 
@@ -24,8 +25,13 @@ import { CellText, drawnCell, linePieces } from "./cells"
 import { DoctorBlock } from "./doctor-report"
 import { ChangeLine, SettingsBlock } from "./settings-report"
 import type { SettingsReport } from "../../settings/types"
-import type { AdditionReport } from "../../templates/types"
+import type {
+  AdditionReport,
+  TemplateRow,
+  TemplateView,
+} from "../../templates/types"
 import { AdditionBlock } from "./addition-report"
+import { TemplateListBlock, TemplateViewBlock } from "./templates"
 import { hiddenPieces } from "./hidden-prompts"
 import { COLOR, inside, MARK, MarkedLine, withoutBackticks } from "./marks"
 import { yesOrNoPieces } from "./yes-or-no"
@@ -75,6 +81,8 @@ export type Item =
   | { id: number; kind: "settings"; report: SettingsReport }
   | { id: number; kind: "change"; change: SettingChangeShown }
   | { id: number; kind: "addition"; report: AdditionReport }
+  | { id: number; kind: "templates"; rows: readonly TemplateRow[] }
+  | { id: number; kind: "template"; view: TemplateView }
 
 /** A sentence's end: a full stop before a space or a line break. */
 const SENTENCE_END = /\.(?=\s)/
@@ -300,6 +308,10 @@ export function Line({ item, columns }: { item: Item; columns: number }) {
     return <ChangeLine change={item.change} columns={columns} />
   if (item.kind === "addition")
     return <AdditionBlock report={item.report} columns={columns} />
+  if (item.kind === "templates")
+    return <TemplateListBlock rows={item.rows} columns={columns} />
+  if (item.kind === "template")
+    return <TemplateViewBlock view={item.view} columns={columns} />
   if (item.kind === "note") {
     return (
       <Box paddingLeft={2} width={columns}>

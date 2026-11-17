@@ -3,7 +3,7 @@ import { parseArgs } from "node:util"
 
 import { NO_TEAM_AT_TERMINAL, whichApp, whichServer } from "../asking/asking"
 import { deployAtTerminal } from "../asking/first-deploy"
-import { add } from "../commands/add"
+import { add, ADD_OPTIONS } from "../commands/add"
 import { deploy, rollback } from "../commands/deploy"
 import { doctor } from "../commands/doctor"
 import { init } from "../commands/init"
@@ -69,6 +69,8 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno settings compose
   zekno settings init
   zekno add [<template>] [--name <service>] [--for <service>] [--app <app>] [--server <name>] [--yes]
+  zekno add --list [--json]
+  zekno add <template> --show [--json]
   zekno doctor [--server <name>] [--json]
   zekno version [--json]
   zekno --version [--json]
@@ -150,9 +152,6 @@ const SETTINGS_OPTIONS: Record<string, readonly string[]> = {
   "settings init": [],
 }
 
-/** The options `zekno add` takes; any other given to it is refused (specs/012-templates, AU7). */
-const ADD_OPTIONS = ["name", "for", "app", "server", "yes", "json"]
-
 /** The options every command read before feature 012, as `parseArgs` takes them. */
 const OPTIONS = {
   name: { type: "string" },
@@ -176,7 +175,11 @@ const OPTIONS = {
 } as const
 
 /** The options only `zekno add` reads (specs/012-templates). */
-const ADD_ONLY = { for: { type: "string", multiple: true } } as const
+const ADD_ONLY = {
+  for: { type: "string", multiple: true },
+  list: { type: "boolean" },
+  show: { type: "boolean" },
+} as const
 
 /**
  * The words and options of a run. Every command but `zekno add` is parsed
@@ -455,6 +458,7 @@ export async function run(argv: string[], given: Deps): Promise<number> {
           name: values.name,
           for: values.for,
           yes: values.yes === true,
+          options: values,
           details: () => details(["app", "server"], { offline: true }),
         })
       case "doctor":

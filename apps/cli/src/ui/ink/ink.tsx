@@ -4,7 +4,8 @@
  *
  * - what is on the screen: store.ts;
  * - the lines written once: lines.tsx, with cells.tsx, marks.tsx,
- *   doctor-report.tsx, settings-report.tsx and deploy-view.tsx;
+ *   doctor-report.tsx, settings-report.tsx, addition-report.tsx,
+ *   templates.tsx and deploy-view.tsx;
  * - a deploy as it runs: deploy-live.ts; work in progress: spinner.tsx;
  * - the questions: questions.tsx (a list, a typed answer), several.tsx (a
  *   list to pick several from), yes-or-no.tsx, hidden-prompts.tsx; what each
@@ -175,6 +176,8 @@ export function inkUi(
       })
       if (done.file !== undefined) add({ kind: "note", text: AD18 })
     },
+    templateList: (rows) => add({ kind: "templates", rows }),
+    templateView: (view) => add({ kind: "template", view }),
     settingsReport(report) {
       add({ kind: "settings", report })
       // SH3 after the services, as a warning, an empty line apart as each service is.

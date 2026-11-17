@@ -140,6 +140,13 @@ export function plainUi(
       for (const secret of done.stored)
         out(AD23.stored(secret.name, secret.version))
     },
+    // contracts/commands.md, "`zekno add --list`", piped: the name, the title, the version and the author, with tabs.
+    templateList: (rows) =>
+      rows.forEach((row) =>
+        out([row.name, row.title, row.software, row.author].join("\t"))
+      ),
+    // "`zekno add <template> --show`", piped: the services as `zekno settings` prints them, then made and built.
+    templateView: (view) => view.piped.forEach((line) => out(line.join("\t"))),
     close: async () => {},
   }
   return ui

@@ -9,10 +9,17 @@ import { describe, expect, test } from "bun:test"
 
 import { DESIGN_SETTINGS } from "../support/settings-files"
 import { planAddition } from "../../src/templates/addition"
-import { additionReport } from "../../src/templates/shown"
+import { catalogue } from "../../src/templates/catalogue"
+import {
+  additionReport,
+  listObject,
+  templateObject,
+  templateRows,
+  templateView,
+} from "../../src/templates/shown"
 import type { Addition, Template } from "../../src/templates/types"
 import { BEFORE_SETTINGS } from "../support/add-files"
-import { FIRST_TEMPLATES } from "../support/template-files"
+import { FIRST_SET, FIRST_TEMPLATES } from "../support/template-files"
 
 const FILE = "zekno.app.json"
 const PROD = { name: "prod", where: "deploy@203.0.113.7" }
@@ -171,5 +178,134 @@ describe("the summary of an addition (data-model.md, AdditionReport)", () => {
     report(FIRST_TEMPLATES.postgres!)
     expect(JSON.stringify(BEFORE_SETTINGS)).toBe(before)
     expect(DESIGN_SETTINGS.services.length).toBe(2)
+  })
+})
+
+describe("what --list and --show show (data-model.md, TemplateRow and TemplateView; contracts/commands.md, D18, D24)", () => {
+  test("the rows of the list: the catalogue's order, the about without its full stop", () => {
+    expect(templateRows(catalogue())).toEqual([
+      {
+        name: "postgres",
+        title: "PostgreSQL",
+        software: "18.7",
+        about: "A relational database",
+        author: "zekno",
+      },
+      {
+        name: "mysql",
+        title: "MySQL",
+        software: "9.7",
+        about: "A relational database",
+        author: "zekno",
+      },
+      {
+        name: "mongodb",
+        title: "MongoDB",
+        software: "9.0",
+        about: "A document database",
+        author: "zekno",
+      },
+      {
+        name: "redis",
+        title: "Redis",
+        software: "8.10",
+        about: "A cache and key-value store",
+        author: "zekno",
+      },
+    ])
+  })
+
+  test("--list --json: one object, each template's fields in the contract's order, the about whole", () => {
+    expect(JSON.stringify(listObject(catalogue()))).toBe(
+      JSON.stringify({
+        templates: [
+          ["postgres", "PostgreSQL", "A relational database.", "18.7", []],
+          ["mysql", "MySQL", "A relational database.", "9.7", []],
+          ["mongodb", "MongoDB", "A document database.", "9.0", ["mongo"]],
+          ["redis", "Redis", "A cache and key-value store.", "8.10", []],
+        ].map(([name, title, about, software, also]) => ({
+          name,
+          title,
+          about,
+          software,
+          author: "zekno",
+          also,
+        })),
+      })
+    )
+  })
+
+  test("the view of postgres: the service as added by default, the plain variables on one row, Secrets, Good to know (AV3, AV4, no backup note twice), the piped lines", () => {
+    const view = templateView(FIRST_TEMPLATES.postgres!)
+    expect(view.title).toBe("PostgreSQL")
+    expect(view.about).toBe("A relational database.")
+    expect(view.services.map((service) => service.name)).toEqual(["postgres"])
+    expect(
+      view.services[0]!.rows.map((row) => [row.section, row.label, row.shown])
+    ).toEqual([
+      ["Source", "image", FIRST_TEMPLATES.postgres!.services[0]![1].image],
+      ["Deploy", "restart", "always"],
+      ["Networking", "port", "5432, not published"],
+      ["Variables", "secrets", "POSTGRES_PASSWORD"],
+      ["Variables", "plain", "POSTGRES_USER=app, POSTGRES_DB=app"],
+      ["Volumes", "postgres-data", "/var/lib/postgresql"],
+    ])
+    expect(view.made).toEqual([{ name: "POSTGRES_PASSWORD", length: 32 }])
+    expect(view.offers).toEqual([{ name: "DATABASE_URL", usesSeveral: false }])
+    expect(view.good).toEqual([
+      "Zekno does not back up this data. It is kept in a Docker volume on your server.",
+      "The image is the official one, pinned by digest. A newer one comes with a newer zekno.",
+    ])
+    expect(view.piped.slice(-2)).toEqual([
+      ["made", "POSTGRES_PASSWORD", "32"],
+      [
+        "built",
+        "DATABASE_URL",
+        "postgres://app:{POSTGRES_PASSWORD}@{service}:5432/app",
+      ],
+    ])
+  })
+
+  test("a template with no volume: no AV3, and its backup note, if it has one, kept among the notes", () => {
+    const base = FIRST_TEMPLATES.redis!
+    const [own, service] = base.services[0]!
+    const { volumes: _volumes, ...noVolume } = service
+    const view = templateView({
+      ...base,
+      services: [[own, noVolume]],
+      notes: ["Zekno does not back up this data.", "Something to know."],
+    })
+    expect(view.good).toEqual([
+      "The image is the official one, pinned by digest. A newer one comes with a newer zekno.",
+      "Zekno does not back up this data.",
+      "Something to know.",
+    ])
+    expect(
+      view.services[0]!.rows.some((row) => row.section === "Volumes")
+    ).toBe(false)
+  })
+
+  test("--show --json: the template's data as read, its keys in the format's order, each service's keys as zekno settings --json writes them", () => {
+    const object = templateObject(FIRST_TEMPLATES.postgres!)
+    expect(Object.keys(object)).toEqual([
+      "template",
+      "name",
+      "title",
+      "about",
+      "software",
+      "author",
+      "also",
+      "services",
+      "makes",
+      "offers",
+      "notes",
+    ])
+    expect(JSON.stringify(object)).toBe(
+      JSON.stringify(JSON.parse(FIRST_SET.postgres!))
+    )
+    const redis = templateObject(FIRST_TEMPLATES.redis!)
+    expect(JSON.stringify(redis)).toBe(
+      JSON.stringify(JSON.parse(FIRST_SET.redis!))
+    )
   })
 })

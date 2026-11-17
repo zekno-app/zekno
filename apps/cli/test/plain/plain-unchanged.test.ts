@@ -31,6 +31,8 @@ const ADDED_TO_HELP = [
   "  zekno settings init",
   // feature 012
   "  zekno add [<template>] [--name <service>] [--for <service>] [--app <app>] [--server <name>] [--yes]",
+  "  zekno add --list [--json]",
+  "  zekno add <template> --show [--json]",
 ]
 
 describe("with no terminal, every command does what it did before feature 006 (FR-028)", () => {
@@ -75,6 +77,25 @@ describe("an option only zekno add reads, given to another command (specs/012-te
         code: 2,
         out: [],
         err: [unknown("--for")],
+      })
+    }
+  })
+
+  test("zekno deploy --list and zekno logs --show: today's sentence, status 2, nothing else done", async () => {
+    for (const [argv, option] of [
+      [["deploy", "--list"], "--list"],
+      [["logs", "--show"], "--show"],
+      [["status", "--list", "--json"], "--list"],
+      [["--list"], "--list"],
+      [["settings", "--show"], "--show"],
+    ] as const) {
+      const m = machine()
+      const code = await m.zekno(...argv)
+      expect({ argv, code, out: m.out, err: m.err }).toEqual({
+        argv,
+        code: 2,
+        out: [],
+        err: [unknown(option)],
       })
     }
   })

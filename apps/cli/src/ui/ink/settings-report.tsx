@@ -11,7 +11,7 @@
 import { Box, Text } from "ink"
 
 import { sanitize } from "../../server/sanitize"
-import type { SettingsReport } from "../../settings/types"
+import type { SettingRow, SettingsReport } from "../../settings/types"
 import { AS3, AS8 } from "../../settings/words"
 import { useTheme } from "../terminal/theme"
 import type { SettingChangeShown } from "../types"
@@ -24,8 +24,8 @@ export const SECTION_WIDTH = 14
 /** The narrowest label column (contracts/commands.md: `max(10, longest label + 2)`). */
 const LABEL_LEAST = 10
 
-/** The label column of a report: `max(10, longest label of the report + 2)`. */
-export function labelWidth(report: SettingsReport): number {
+/** The label column of a report: `max(10, longest label of the report + 2)`. `zekno add --show` uses it for a template's services. */
+export function labelWidth(report: Pick<SettingsReport, "services">): number {
   const longest = Math.max(
     0,
     ...report.services.flatMap((service) =>
@@ -80,36 +80,17 @@ export function SettingsBlock({
               {sanitize(service.name)}
             </Text>
           </Box>
-          {service.rows.map((row, index) => {
-            const first =
-              index === 0 || service.rows[index - 1]!.section !== row.section
-            // A setting no longer set reads as the words of one left out, dim, as on the screen.
-            const pieces: Piece[] = [{ text: row.shown, dim: !row.set }]
-            if (row.changed !== undefined)
-              pieces.push(
-                { text: "  " },
-                { text: AS3(row.changed.was), color: theme.warning }
-              )
-            if (row.removed !== undefined)
-              pieces.push(
-                { text: "  " },
-                {
-                  text: AS8(row.removed.was, row.path.key === "volume"),
-                  color: theme.warning,
-                }
-              )
-            return (
-              <Box key={`row-${index}`} paddingLeft={INDENT}>
-                <Box width={SECTION_WIDTH} flexShrink={0}>
-                  <Text bold>{first ? row.section : ""}</Text>
-                </Box>
-                <Box width={label} flexShrink={0}>
-                  <Text dimColor>{sanitize(row.label)}</Text>
-                </Box>
-                <Wrapped pieces={pieces} columns={value} />
-              </Box>
-            )
-          })}
+          {service.rows.map((row, index) => (
+            <SettingRowLine
+              key={`row-${index}`}
+              row={row}
+              first={
+                index === 0 || service.rows[index - 1]!.section !== row.section
+              }
+              label={label}
+              value={value}
+            />
+          ))}
         </Box>
       ))}
       {(report.removed ?? []).map((service, at) => (
@@ -132,6 +113,55 @@ export function SettingsBlock({
           </Box>
         </Box>
       ))}
+    </Box>
+  )
+}
+
+/**
+ * One row of a service's sections (board `CmdSettings`), from column 2: its
+ * section bold on the section's first row (`first`), its label dim in a
+ * column `label` wide, its value in the text colour, going on under itself
+ * in a column `value` wide; after it, two spaces apart, a mark in the
+ * warning colour when it changed or was removed since this machine's last
+ * deploy. `zekno add --show` draws a template's services with it too
+ * (specs/012-templates, templates.tsx).
+ */
+export function SettingRowLine({
+  row,
+  first,
+  label,
+  value,
+}: {
+  row: SettingRow
+  first: boolean
+  label: number
+  value: number
+}) {
+  const theme = useTheme()
+  // A setting no longer set reads as the words of one left out, dim, as on the screen.
+  const pieces: Piece[] = [{ text: row.shown, dim: !row.set }]
+  if (row.changed !== undefined)
+    pieces.push(
+      { text: "  " },
+      { text: AS3(row.changed.was), color: theme.warning }
+    )
+  if (row.removed !== undefined)
+    pieces.push(
+      { text: "  " },
+      {
+        text: AS8(row.removed.was, row.path.key === "volume"),
+        color: theme.warning,
+      }
+    )
+  return (
+    <Box paddingLeft={INDENT}>
+      <Box width={SECTION_WIDTH} flexShrink={0}>
+        <Text bold>{first ? row.section : ""}</Text>
+      </Box>
+      <Box width={label} flexShrink={0}>
+        <Text dimColor>{sanitize(row.label)}</Text>
+      </Box>
+      <Wrapped pieces={pieces} columns={value} />
     </Box>
   )
 }

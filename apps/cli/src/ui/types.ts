@@ -1,6 +1,11 @@
 import type { DoctorReport } from "../ops/doctor"
 import type { SettingsReport } from "../settings/types"
-import type { AddDone, AdditionReport } from "../templates/types"
+import type {
+  AddDone,
+  AdditionReport,
+  TemplateRow,
+  TemplateView,
+} from "../templates/types"
 import type { DeployStart, DeployView } from "../shared/deploy"
 
 /**
@@ -64,11 +69,15 @@ export const plainCell = (text: string): StyledCell => ({
  * whoever builds a row cleans anything that came from a file or a server.
  * `asksNext`: choosing it asks a question of its own, such as `+ a new app`,
  * so at a terminal it leaves no line behind and that question is drawn in
- * the list's place (mock-up 2).
+ * the list's place (mock-up 2). `column`: a middle column between the label
+ * and the detail, in the text colour, such as the picker's `PostgreSQL
+ * 18.7` (specs/012-templates, D12); with it each column is padded to its
+ * longest plus two.
  */
 export type ListRow<T> = {
   value: T
   label: string
+  column?: string
   detail?: string
   asksNext?: boolean
 }
@@ -335,6 +344,22 @@ export interface Ui {
    * `added` (with a file) and one `stored` per secret, with tabs.
    */
   added(done: AddDone): void
+  /**
+   * `zekno add --list` (specs/012-templates, contracts/commands.md; board
+   * `AddLook`): at a terminal one line per template from column 2, the name
+   * bold, `<title> <software>`, the about dim and `by <author>` dim, each
+   * column padded to its longest plus two; plain output prints `<name>
+   * <title> <software> <author>` with tabs, one line each.
+   */
+  templateList(rows: readonly TemplateRow[]): void
+  /**
+   * `zekno add <template> --show` (board `AddLook`, middle column): at a
+   * terminal the title line, each service in the sections of `zekno
+   * settings`, the secrets, Good to know and `Nothing was changed.`; plain
+   * output prints `view.piped`, its cells separated by tabs. Nothing in it
+   * is a secret's value: it names secrets and the text they are built from.
+   */
+  templateView(view: TemplateView): void
   /** Finishes drawing. Call once, before the process exits. */
   close(): Promise<void>
 }

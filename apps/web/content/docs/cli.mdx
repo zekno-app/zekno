@@ -351,6 +351,8 @@ zekno settings unset <service>.<setting> [--yes]
 zekno settings compose
 zekno settings init
 zekno add [<template>] [--name <service>] [--for <service>] [--app <app>] [--server <name>] [--yes]
+zekno add --list [--json]
+zekno add <template> --show [--json]
 zekno doctor [--server <name>] [--json]
 zekno version [--json]
 zekno --version [--json]
@@ -1139,6 +1141,12 @@ $ zekno settings init
 
 Adds a ready-made service, such as a database, to this folder's
 `zekno.app.json`, with the secrets it needs made on your machine.
+
+`zekno add --list` lists the templates this `zekno` carries. It needs no team,
+server or file.
+
+`zekno add <template> --show` shows what a template would add, before you add
+it. It changes nothing.
 
 ### zekno doctor
 
