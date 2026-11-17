@@ -95,6 +95,11 @@ Builds a secret from it
   `Add <service> to <app>?` bold, ` Nothing is deployed until you deploy.` in the text colour,
   `(y/N)` dim; `yes` or `no` left after it. `<service>` is the service's name in the app.
 - With `--yes` the question is not asked, and the summary is still drawn.
+- **compose.yaml beside the file** (security review T3): when the settings file is this folder's own
+  `zekno.app.json`, `compose.yaml` is here too and nothing decides (no zekno.json in use here
+  names a file for the app), IN6 of feature 010, unchanged, as a warning before the summary, as `zekno settings set`
+  says it: `! This folder has compose.yaml too. zekno deploy asks which to deploy, or takes -f
+  <file>.` A deploy here then asks which file (DP1), or stops with DP2.
 
 ### Who reads the connection secret
 
@@ -155,6 +160,9 @@ Board `AddOther`, right column.
   ```
 
   `<file>` as a sentence names it; the number is the version each secret got. Exit status 0.
+  With compose.yaml beside the settings file and nothing that decides, IN6 follows on standard
+  error, as `zekno settings set` says it once it wrote (security review T3); without `--yes` AD4
+  stays the only line.
 - Anything the command needs and does not have (the app, the server) stops it with the sentence
   the other commands use (`MISSING_APP`, `MISSING_SERVER`; FR-012).
 - Every refusal is one line on standard error, its two sentences joined by a space.
@@ -363,7 +371,8 @@ gives for the same cases (D27); AD21 is of AD8's kind and is 1 too.
     stays. So the summary's `read by` names every service the Compose text gives each new secret.
 12. The settings with the services added, as `checkSettings` reads the text `settingsText` would
     write: AD15 with the settings sentence's place and rule (status 2).
-13. The summary; then AD3, `--yes`, or AD4 (status 1). A no: AD22 (status 1).
+13. The summary, after IN6 at a terminal when compose.yaml is beside the file (security review
+    T3); then AD3, `--yes`, or AD4 (status 1). A no: AD22 (status 1).
 14. The file and the store unchanged since steps 6 and 8: AD8, AD21 (status 1, as CS12).
 15. Adding, whole or not at all (below).
 

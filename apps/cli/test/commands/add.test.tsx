@@ -8,10 +8,11 @@
  * and the usage sentences are add-refusals.test.tsx.
  */
 import { beforeAll, describe, expect, test } from "bun:test"
-import { existsSync, readFileSync, rmSync } from "node:fs"
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { checkSettings } from "../../src/settings/schema"
+import { IN6 } from "../../src/settings/words"
 import type { Settings } from "../../src/settings/types"
 import { BEFORE_FILE, BEFORE_SETTINGS } from "../support/add-files"
 import { atTerminal, folder } from "../support/add-terminal"
@@ -86,6 +87,28 @@ const settingsIn = (cwd: string) =>
     readFileSync(join(cwd, "zekno.app.json"), "utf8"),
     "zekno.app.json"
   ) as Settings
+
+describe("compose.yaml beside the settings file, and nothing that decides (security review T3)", () => {
+  test("IN6 as a warning before the summary, as zekno settings set says it; then the summary, the question and the result as ever", async () => {
+    const cwd = folder()
+    writeFileSync(join(cwd, "compose.yaml"), "services: {}\n")
+    const run = await onTerminal(
+      cwd,
+      ["add", "postgres", "--app", "in6", "--server", "dev", "--for", "web"],
+      async (t) => {
+        await shows(t, question("in6"))
+        t.keys("y")
+      }
+    )
+    expect(run.lines).toEqual([
+      `! ${IN6}`,
+      ...summary("web", "in6"),
+      `${question("in6")} yes`,
+      ...added,
+    ])
+    expect(run.code).toBe(0)
+  })
+})
 
 describe("adding to a settings file (board `AddTemplate`)", () => {
   test("at 100 columns: the board's left column line by line, AD3 answered y, the three result lines, status 0; the file and the store written; nothing contacted, nothing deployed", async () => {

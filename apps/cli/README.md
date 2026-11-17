@@ -1059,9 +1059,13 @@ exit status 2, before any file of the folder is read. It adds to the file `zekno
 folder would use, found by the rule of [`zekno settings`](#zekno-settings): a settings file is
 read whole and checked; a Compose file written by hand gets the lines to add instead (below). With
 neither it says `This folder has no settings file.` and
-`Run zekno settings init to start one, then add the template.`, exit status 1. The app and the
-server come from `--app` and `--server`, the folder's link, or a question at a terminal, as for
-`zekno secret set`. It contacts no server and deploys nothing.
+`Run zekno settings init to start one, then add the template.`, exit status 1. With `--app`
+naming another app than the folder's link, the file is this folder's own, as for
+`zekno deploy --app`. With `compose.yaml` beside `zekno.app.json` and nothing that decides, it adds
+to `zekno.app.json` and warns `This folder has compose.yaml too. zekno deploy asks which to deploy, or takes -f <file>.`,
+as `zekno settings set` does: at a terminal before the summary, in a script on standard error. The
+app and the server come from `--app` and `--server`, the folder's link, or a question at a
+terminal, as for `zekno secret set`. It contacts no server and deploys nothing.
 
 At a terminal it shows what it will add, then asks once. In this folder `zekno.app.json` has two
 services, so the question of who reads `DATABASE_URL` (below) came first:

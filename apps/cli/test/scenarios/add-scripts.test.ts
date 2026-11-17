@@ -39,7 +39,7 @@ import {
   AU1,
   AU8,
 } from "../../src/templates/add-words"
-import { SH4 } from "../../src/settings/words"
+import { IN6, SH4 } from "../../src/settings/words"
 import {
   BEFORE_FILE,
   BEFORE_SETTINGS,
@@ -184,6 +184,22 @@ describe("no terminal: it never asks (board `AddOther`, right column)", () => {
       `Say which app with \`--app <name>\`, or link this folder to it with \`zekno link\`, which keeps it in zekno.json.\n${HELP_LINE}`,
     ])
     expect(fileOf(cwd)).toBe(ONE_FILE)
+  })
+
+  test("compose.yaml beside the file and nothing that decides: AD4 alone without --yes; with it, AD23's lines and IN6 on standard error, as zekno settings set says it (security review T3)", async () => {
+    const cwd = folder(ONE_FILE)
+    writeFileSync(join(cwd, "compose.yaml"), "services: {}\n")
+    const where = ["--app", "in6", "--server", "dev"]
+    expect(await piped(cwd, ["add", "postgres", ...where])).toEqual({
+      code: 1,
+      out: [],
+      err: [AD4("zekno.app.json")],
+    })
+    expect(await piped(cwd, ["add", "postgres", "--yes", ...where])).toEqual({
+      code: 0,
+      out: ADDED,
+      err: [IN6],
+    })
   })
 
   test("zekno add alone: AU1, with the help line, status 2", async () => {

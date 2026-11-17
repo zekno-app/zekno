@@ -34,6 +34,7 @@ import {
 } from "../ops/add"
 import { commitAdd, commitHand } from "../ops/add-commit"
 import type { Where } from "../ops/deploy"
+import { IN6 } from "../settings/words"
 import {
   AD10,
   AD11,
@@ -267,6 +268,10 @@ export async function add(deps: Deps, input: AddInput): Promise<number> {
   const plan =
     "addition" in prepared ? prepared : await askReaders(deps, prepared)
   if (plan === undefined) return nothingAdded(deps)
+  // compose.yaml beside the file and nothing that decides: a deploy here asks which, or takes -f (IN6, security review
+  // T3). At a terminal a warning before the summary; in a script on standard error once added, as `settings set` says it.
+  const both = plan.target.both
+  if (both && deps.ui.asks) deps.ui.warn(IN6)
   deps.ui.addition(summaryOf(plan))
   if (
     !input.yes &&
@@ -277,5 +282,6 @@ export async function add(deps: Deps, input: AddInput): Promise<number> {
   )
     return nothingAdded(deps)
   deps.ui.added(await commitAdd(plan))
+  if (both && !deps.ui.asks) deps.ui.warn(IN6)
   return 0
 }
