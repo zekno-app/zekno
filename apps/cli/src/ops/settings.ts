@@ -117,7 +117,7 @@ type Placed = {
 }
 
 /** SH3's folder: where the zekno.json is, when it is in a folder above this one. */
-const aboveOf = (cwd: string, link?: ProjectLink): string | undefined =>
+export const aboveOf = (cwd: string, link?: ProjectLink): string | undefined =>
   link === undefined || isHere(link, cwd) ? undefined : shownPath(link.folder)
 
 /** Where a deploy in this folder would take its file from: a settings file read, a Compose file written by hand, or neither. */
@@ -274,7 +274,7 @@ export type SettingPlan = {
  * change is never written through it (research R5), not even to a file
  * inside the folder.
  */
-function refuseLink(named: string, read: SettingsRead): void {
+export function refuseLink(named: string, read: SettingsRead): void {
   let link: boolean
   try {
     link = lstatSync(named).isSymbolicLink()

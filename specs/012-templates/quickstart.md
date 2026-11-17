@@ -91,7 +91,26 @@ _Not run yet._
 
 `bun test test/scenarios/templates-real-docker.test.ts` with the four images pulled (T031). Results:
 
-_Not run yet._
+Run on 2026-11-17 on macOS (Apple silicon), Docker Engine 29.6.1, Bun 1.4.4. The four pinned
+images were already in the local image store (`docker image inspect` of each pinned reference
+answered), so nothing was pulled: no registry was contacted. For each template, in a temporary
+folder whose `zekno.app.json` has one service `app` (the template's own image, start command
+`sleep infinity`): `zekno add <name> --yes --app probe-<name>-<pid> --server dev`, then `zekno
+deploy` through the local runner with real Docker (Compose project `zekno-probe-<name>-<pid>`),
+then the client of research R4 run in `app` with the connection secret from its environment
+until it connected, a wrong password tried, and the database's container inspected.
+
+| Template | Client connected (from `zekno add` to the first answer) | Client said | Wrong password | Published ports | Data |
+|---|---|---|---|---|---|
+| postgres | 2.7 s | `app app` | refused | none | volume `zekno-probe-postgres-<pid>_postgres-data` at `/var/lib/postgresql` |
+| mysql | 6.9 s | `app@%  app` | refused | none | volume `zekno-probe-mysql-<pid>_mysql-data` at `/var/lib/mysql` |
+| mongodb | 3.3 s | `app@admin app` | refused; no password refused too | none | volume `zekno-probe-mongodb-<pid>_mongodb-data` at `/data/db`, and the image's anonymous volume at `/data/configdb` (D33) |
+| redis | 0.4 s | `PONG` | refused; no password refused too | none | volume `zekno-probe-redis-<pid>_redis-data` at `/data` |
+
+The whole file took 20.9 s. `afterAll` ran `docker compose -p <project> down --volumes
+--remove-orphans` for each; `docker ps -a`, `docker volume ls` and `docker network ls` afterwards
+listed exactly what they listed before the run (nothing of a `probe` project left; the containers
+that were there before, `sessora-redis` among them, untouched).
 
 ## One file and one line
 

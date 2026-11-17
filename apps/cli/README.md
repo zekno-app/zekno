@@ -315,6 +315,7 @@ zekno settings set <service>.<setting> <value> [--yes]
 zekno settings unset <service>.<setting> [--yes]
 zekno settings compose
 zekno settings init
+zekno add [<template>] [--name <service>] [--for <service>] [--app <app>] [--server <name>] [--yes]
 zekno doctor [--server <name>] [--json]
 zekno version [--json]
 zekno --version [--json]
@@ -1024,6 +1025,11 @@ $ zekno settings init
 | `0` | Shown, written or printed; a value the same as now; `unset` of a setting not set |
 | `1` | No settings file, or a deploy here would use a Compose file, or a `zekno.json` not in use here yet names another file; a fault in the file; "no", Esc or Ctrl-C; no terminal without `--yes`; `init` with no terminal or with a file here; the file changed since it was read, is a symbolic link, or could not be written |
 | `2` | A word missing or one too many; an option the command does not take; a setting this zekno does not know or does not have yet; a service the file does not have; a value not allowed; a change that breaks a rule of the file; `unset` of the image |
+
+### `zekno add`
+
+Adds a ready-made service, such as a database, to this folder's `zekno.app.json`, with the
+secrets it needs made on your machine.
 
 ### `zekno doctor`
 

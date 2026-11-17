@@ -1,4 +1,5 @@
 import { CliError } from "../../cli/errors"
+import { AD23 } from "../../templates/add-words"
 import { plainDeployView } from "../../shared/deploy"
 import { standardOutput, writeStandardError } from "../../shared/streams"
 import {
@@ -91,6 +92,9 @@ export function plainUi(
     async choose(question) {
       throw question.missing
     },
+    async chooseSeveral(question) {
+      throw question.missing
+    },
     async ask(question) {
       throw question.missing
     },
@@ -129,6 +133,13 @@ export function plainUi(
       out(
         `${change.service} · ${change.label}  ${change.now} → ${change.next}`
       ),
+    // specs/012-templates, contracts/commands.md, "With no terminal": nothing before, AD23's lines once done.
+    addition: () => {},
+    added(done) {
+      if (done.file !== undefined) out(AD23.added(done.service, done.file))
+      for (const secret of done.stored)
+        out(AD23.stored(secret.name, secret.version))
+    },
     close: async () => {},
   }
   return ui

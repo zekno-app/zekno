@@ -55,6 +55,8 @@ export const AD9 = (file: string, volume: string): string =>
   `${file} already has a volume named ${volume}. Give this one another name with --name <service>.`
 /** AD10 (board; the question) */
 export const AD10 = (secret: string): string => `Which services read ${secret}?`
+/** AD10's collapsed word: the line the readers question leaves behind, `✔ Read by  web, worker` (new, D13). */
+export const READ_BY = "Read by"
 /** AD11 (new, D13; the reason under the rows) */
 export const AD11 = "Pick at least one service."
 /** AD12 (new, D14; `<service>` is written as is) [2] */

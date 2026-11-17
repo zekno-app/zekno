@@ -151,7 +151,7 @@ type Expected = {
  * bytes that were read, a regular file of this user's with one name, never a
  * link. Putting a file back uses the same checks, against what was written.
  */
-function checkUnchanged(read: Expected): void {
+export function checkUnchanged(read: Expected): void {
   const changed = new CliError(CS12(read.shown))
   let entry: Stats
   try {

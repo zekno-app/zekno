@@ -3,6 +3,7 @@ import { parseArgs } from "node:util"
 
 import { NO_TEAM_AT_TERMINAL, whichApp, whichServer } from "../asking/asking"
 import { deployAtTerminal } from "../asking/first-deploy"
+import { add } from "../commands/add"
 import { deploy, rollback } from "../commands/deploy"
 import { doctor } from "../commands/doctor"
 import { init } from "../commands/init"
@@ -67,6 +68,7 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno settings unset <service>.<setting> [--yes]
   zekno settings compose
   zekno settings init
+  zekno add [<template>] [--name <service>] [--for <service>] [--app <app>] [--server <name>] [--yes]
   zekno doctor [--server <name>] [--json]
   zekno version [--json]
   zekno --version [--json]
@@ -94,6 +96,7 @@ const WORDS: Record<string, number> = {
   "settings unset": 3,
   "settings compose": 2,
   "settings init": 2,
+  add: 2,
   doctor: 1,
   version: 1,
 }
@@ -125,6 +128,8 @@ const WITHOUT_TEAM = new Set([
   "settings unset",
   "settings compose",
   "settings init",
+  // specs/012-templates: with no server it says AD1 (contracts/commands.md).
+  "add",
 ])
 
 /** The project file that applies to `cwd`, or undefined, also when it cannot be read: for a check that may only stop a command early. */
@@ -145,6 +150,48 @@ const SETTINGS_OPTIONS: Record<string, readonly string[]> = {
   "settings init": [],
 }
 
+/** The options `zekno add` takes; any other given to it is refused (specs/012-templates, AU7). */
+const ADD_OPTIONS = ["name", "for", "app", "server", "yes", "json"]
+
+/** The options every command read before feature 012, as `parseArgs` takes them. */
+const OPTIONS = {
+  name: { type: "string" },
+  ssh: { type: "string" },
+  local: { type: "boolean" },
+  home: { type: "string" },
+  "runner-path": { type: "string" },
+  "runner-file": { type: "string" },
+  yes: { type: "boolean" },
+  app: { type: "string" },
+  server: { type: "string" },
+  stdin: { type: "boolean" },
+  file: { type: "string", short: "f" },
+  to: { type: "string" },
+  tail: { type: "string" },
+  "no-follow": { type: "boolean" },
+  force: { type: "boolean" },
+  json: { type: "boolean" },
+  help: { type: "boolean", short: "h" },
+  version: { type: "boolean" },
+} as const
+
+/** The options only `zekno add` reads (specs/012-templates). */
+const ADD_ONLY = { for: { type: "string", multiple: true } } as const
+
+/**
+ * The words and options of a run. Every command but `zekno add` is parsed
+ * first with the option table it had before, so an option only `zekno add`
+ * reads, or anything else wrong, fails exactly as it did: the same sentence,
+ * status 2 (specs/012-templates, research R9; FR-019).
+ */
+function parsed(args: string[]) {
+  const options = { ...OPTIONS, ...ADD_ONLY }
+  const at = { args, allowPositionals: true } as const
+  if (parseArgs({ ...at, strict: false, options }).positionals[0] !== "add")
+    parseArgs({ ...at, strict: true, options: OPTIONS })
+  return parseArgs({ ...at, strict: true, options })
+}
+
 /** Said when a settings command is given an option it does not take. `-f` is the short form of `--file`. */
 export const optionNotTaken = (name: string, option: string): string =>
   `\`zekno ${name}\` does not take ${option === "file" ? "`-f`" : `\`--${option}\``}.`
@@ -158,31 +205,7 @@ export async function run(argv: string[], given: Deps): Promise<number> {
   const team = teamOnce(given)
   const deps: Deps = { ...given, team: team.take }
   try {
-    const { values, positionals } = parseArgs({
-      args: argv,
-      allowPositionals: true,
-      strict: true,
-      options: {
-        name: { type: "string" },
-        ssh: { type: "string" },
-        local: { type: "boolean" },
-        home: { type: "string" },
-        "runner-path": { type: "string" },
-        "runner-file": { type: "string" },
-        yes: { type: "boolean" },
-        app: { type: "string" },
-        server: { type: "string" },
-        stdin: { type: "boolean" },
-        file: { type: "string", short: "f" },
-        to: { type: "string" },
-        tail: { type: "string" },
-        "no-follow": { type: "boolean" },
-        force: { type: "boolean" },
-        json: { type: "boolean" },
-        help: { type: "boolean", short: "h" },
-        version: { type: "boolean" },
-      },
-    })
+    const { values, positionals } = parsed(argv)
     const [command, second, third] = positionals
     // `--help` wins over everything, `--version` included (contracts/version.md).
     if (values.help || (!command && !values.version) || command === "help") {
@@ -204,11 +227,16 @@ export async function run(argv: string[], given: Deps): Promise<number> {
     }
     // The settings commands take only their own options: `--app`, `--server` or `-f` would look like a deploy's and change
     // nothing here (specs/010-app-settings, security review S7). Every other command reads its arguments as before.
-    const unused = Object.hasOwn(SETTINGS_OPTIONS, name)
-      ? Object.keys(values).find(
-          (option) => !SETTINGS_OPTIONS[name]!.includes(option)
-        )
-      : undefined
+    // `zekno add` too (specs/012-templates, AU7).
+    const own = Object.hasOwn(SETTINGS_OPTIONS, name)
+      ? SETTINGS_OPTIONS[name]!
+      : name === "add"
+        ? ADD_OPTIONS
+        : undefined
+    const unused =
+      own === undefined
+        ? undefined
+        : Object.keys(values).find((option) => !own.includes(option))
     if (unused !== undefined) throw new UsageError(optionNotTaken(name, unused))
 
     // The two versions built into the program, before anything opens the team: no keychain, no profile, no connection, no file.
@@ -260,7 +288,10 @@ export async function run(argv: string[], given: Deps): Promise<number> {
      * (`whichApp`, the server's apps). What is asked is handed on as if it
      * had been typed. Given everything, nothing is read and nothing is asked.
      */
-    const details = async (wanted: readonly ("app" | "server")[]) => {
+    const details = async (
+      wanted: readonly ("app" | "server")[],
+      options: { offline?: boolean } = {}
+    ) => {
       const given = await project(wanted)
       if (!atTerminal || wanted.every((detail) => given[detail] !== undefined))
         return given
@@ -273,7 +304,7 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         opened,
         server,
         { app: given.app, linked },
-        { offerNew: false, folder: deps.cwd }
+        { offerNew: false, folder: deps.cwd, ...options }
       )
       return { ...given, server: server.name, app }
     }
@@ -417,6 +448,15 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         return 0
       case "settings init":
         return await settingsInit(deps)
+      case "add":
+        // It contacts no server: the app is asked for from this machine's own history (specs/012-templates, SC-005).
+        return await add(deps, {
+          template: second,
+          name: values.name,
+          for: values.for,
+          yes: values.yes === true,
+          details: () => details(["app", "server"], { offline: true }),
+        })
       case "doctor":
         // It never asks and takes nothing from zekno.json: no `withProject`, no asking step (contracts/doctor.md).
         return await doctor(deps, { server: values.server, json: values.json })

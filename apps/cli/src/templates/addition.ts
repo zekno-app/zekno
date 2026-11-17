@@ -40,9 +40,18 @@ export type AdditionInput = {
   file: string
   /** `--name`: the name of the template's first service in the app. */
   name?: string
-  /** `--for`, or the answer to the question: the services that read each connection secret. Undefined: decide from the file, or ask. */
-  readers?: readonly string[]
+  /**
+   * Who reads the connection secrets: `--for`, the same services for each;
+   * or the answers to the question, by connection secret. Undefined: decide
+   * from the file, or ask.
+   */
+  readers?: readonly string[] | ReadonlyMap<string, readonly string[]>
 }
+
+/** Whether readers are one list for every connection secret (`--for`), not the answers by connection secret. */
+const isList = (
+  readers: readonly string[] | ReadonlyMap<string, readonly string[]>
+): readers is readonly string[] => Array.isArray(readers)
 
 const refuse = (
   id: AdditionRefused["id"],
@@ -110,7 +119,10 @@ export function planAddition(
       if (volumes.has(volume)) return refuse("AD9", words.AD9(file, volume))
 
   // 10. Who reads each connection secret: those named, the one other service, or a question.
-  for (const reader of input.readers ?? [])
+  const given = input.readers
+  const named = (offer: string): readonly string[] =>
+    given === undefined ? [] : isList(given) ? given : (given.get(offer) ?? [])
+  for (const reader of template.offers.flatMap((offer) => named(offer.name)))
     if (!inFile.includes(reader))
       return refuse(
         "AD14",
@@ -120,12 +132,7 @@ export function planAddition(
           inFile
         )
       )
-  let readers: readonly string[]
-  if (input.readers !== undefined)
-    readers = inFile.filter((name) => input.readers!.includes(name))
-  else if (template.offers.length === 0 || inFile.length === 1)
-    readers = template.offers.length === 0 ? [] : inFile
-  else
+  if (given === undefined && template.offers.length > 0 && inFile.length > 1)
     return {
       ask: template.offers.map((offer) => ({
         offer: offer.name,
@@ -134,7 +141,10 @@ export function planAddition(
     }
   const readBy = template.offers.map((offer) => ({
     offer: offer.name,
-    services: readers,
+    services:
+      given === undefined
+        ? inFile
+        : inFile.filter((name) => named(offer.name).includes(name)),
   }))
 
   // 11. No reader has a variable of the connection secret's name already.

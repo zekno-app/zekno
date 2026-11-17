@@ -6,8 +6,9 @@
  * - the lines written once: lines.tsx, with cells.tsx, marks.tsx,
  *   doctor-report.tsx, settings-report.tsx and deploy-view.tsx;
  * - a deploy as it runs: deploy-live.ts; work in progress: spinner.tsx;
- * - the questions: questions.tsx (a list, a typed answer), yes-or-no.tsx,
- *   hidden-prompts.tsx; what each leaves behind: left-behind.ts;
+ * - the questions: questions.tsx (a list, a typed answer), several.tsx (a
+ *   list to pick several from), yes-or-no.tsx, hidden-prompts.tsx; what each
+ *   leaves behind: left-behind.ts;
  * - raw mode, keys typed before a question, and raw mode kept on between two
  *   hidden values: raw-mode.tsx.
  */
@@ -22,6 +23,7 @@ import {
 import { useLayoutEffect, useSyncExternalStore } from "react"
 
 import { CliError, Left } from "../../cli/errors"
+import { AD16, AD17, AD18 } from "../../templates/add-words"
 import { DeployBlock } from "./deploy-view"
 import { NO_TERMINAL_FOR_VALUE, readStdin } from "../plain/plain"
 import { ListPrompt, TypedPrompt } from "./questions"
@@ -33,6 +35,7 @@ import { Line } from "./lines"
 import { HeldInput, rawMode } from "./raw-mode"
 import { Spinner } from "./spinner"
 import { createStore } from "./store"
+import { SeveralPrompt } from "./several"
 import { QuestionPrompt } from "./yes-or-no"
 
 /** The widest service column `zekno logs` lines up to; a longer name is cut. */
@@ -69,6 +72,14 @@ function App({
           question={state.list.question}
           rows={state.list.rows}
           settle={state.list.settle}
+        />
+      ) : state.several ? (
+        <SeveralPrompt
+          key={`several-${state.several.id}`}
+          question={state.several.question}
+          labels={state.several.labels}
+          atLeastOne={state.several.atLeastOne}
+          settle={state.several.settle}
         />
       ) : state.typed ? (
         <TypedPrompt
@@ -151,6 +162,19 @@ export function inkUi(
     gap: () => add({ kind: "gap" }),
     doctorReport: (report) => add({ kind: "doctor", report }),
     settingChange: (change) => add({ kind: "change", change }),
+    addition: (report) => add({ kind: "addition", report }),
+    added(done) {
+      if (done.file !== undefined)
+        add({ kind: "success", text: AD16(done.service, done.file) })
+      add({
+        kind: "success",
+        text: AD17(
+          done.stored.map((secret) => secret.name),
+          done.server
+        ),
+      })
+      if (done.file !== undefined) add({ kind: "note", text: AD18 })
+    },
     settingsReport(report) {
       add({ kind: "settings", report })
       // SH3 after the services, as a warning, an empty line apart as each service is.
@@ -276,6 +300,34 @@ export function inkUi(
               if (row.asksNext !== true)
                 add(LEFT_BEHIND.choose(question.collapsed, row.label))
               resolve(row.value)
+            },
+          },
+        })
+      )
+    },
+    async chooseSeveral(question) {
+      if (!input.isTTY) throw question.missing
+      return asking((resolve, reject) =>
+        showQuestion({
+          several: {
+            id: questions++,
+            question: question.question,
+            labels: question.rows.map((row) => row.label),
+            atLeastOne: question.atLeastOne,
+            settle(result) {
+              store.set({ several: undefined })
+              if ("left" in result) {
+                add(LEFT_BEHIND.left(question.question, "list"))
+                return reject(new Left())
+              }
+              const rows = result.answer.map((index) => question.rows[index]!)
+              add(
+                LEFT_BEHIND.chooseSeveral(
+                  question.collapsed,
+                  rows.map((row) => row.label)
+                )
+              )
+              resolve(rows.map((row) => row.value))
             },
           },
         })

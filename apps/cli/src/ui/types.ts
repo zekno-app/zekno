@@ -1,5 +1,6 @@
 import type { DoctorReport } from "../ops/doctor"
 import type { SettingsReport } from "../settings/types"
+import type { AddDone, AdditionReport } from "../templates/types"
 import type { DeployStart, DeployView } from "../shared/deploy"
 
 /**
@@ -82,6 +83,21 @@ export type ListQuestion<T> = {
   question: string
   rows: readonly ListRow<T>[]
   collapsed: string
+  missing: Error
+}
+
+/**
+ * A list to pick several rows from (specs/012-templates, contracts/commands.md,
+ * "Who reads the connection secret"; D13). It opens with the first row
+ * picked. `collapsed` is the word of the line left behind (`✔ Read by  web,
+ * worker`); `atLeastOne` is the reason said under the rows when Enter is
+ * pressed with none picked; `missing` is what the plain interface throws.
+ */
+export type SeveralQuestion<T> = {
+  question: string
+  rows: readonly ListRow<T>[]
+  collapsed: string
+  atLeastOne: string
   missing: Error
 }
 
@@ -251,6 +267,12 @@ export interface Ui {
    */
   choose<T>(question: ListQuestion<T>): Promise<T>
   /**
+   * Asks the person to pick one or more rows of a list, and resolves with
+   * their values in the rows' order (specs/012-templates, D13). Esc and
+   * Ctrl-C throw `Left`. The plain interface throws `question.missing`.
+   */
+  chooseSeveral<T>(question: SeveralQuestion<T>): Promise<T[]>
+  /**
    * Asks for a one-line answer, checked with `question.check` where it is
    * typed: a wrong one is asked again with its reason. Esc and Ctrl-C throw
    * `Left`. The plain interface throws `question.missing`.
@@ -296,6 +318,23 @@ export interface Ui {
    * prints `<svc> · <label>  <old> → <new>` on standard output.
    */
   settingChange(change: SettingChangeShown): void
+  /**
+   * What `zekno add` is about to add, before it asks (specs/012-templates,
+   * contracts/commands.md, "a settings file, at a terminal"; board
+   * `AddTemplate`): at a terminal the title line, the box of the app, the
+   * server and the file, the services, the made secrets, the connection
+   * secrets and the notes; plain output prints nothing, its lines come once
+   * it is done (`added`). The report holds no secret value.
+   */
+  addition(report: AdditionReport): void
+  /**
+   * What `zekno add` did (contracts/commands.md, "After a yes"): at a
+   * terminal `✔ Added <service> to <file>` when a file was written, `✔
+   * Stored <names>, sealed for <server>`, then `Run zekno deploy to start
+   * it.` dim when a file was written; plain output prints AD23's lines,
+   * `added` (with a file) and one `stored` per secret, with tabs.
+   */
+  added(done: AddDone): void
   /** Finishes drawing. Call once, before the process exits. */
   close(): Promise<void>
 }

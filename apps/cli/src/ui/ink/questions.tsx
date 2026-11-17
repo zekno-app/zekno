@@ -46,7 +46,7 @@ export function labelWidth(
 }
 
 /** The fewest rows a list ever shows, however small the window. */
-const FEWEST_ROWS = 3
+export const FEWEST_ROWS = 3
 
 /** Which rows of a list are drawn, and how many are hidden above and below them. */
 export type ListWindow = {
@@ -88,7 +88,7 @@ export const moreLine = (direction: "↑" | "↓", count: number): string =>
  * The lines of the window a list may not use: its question, its hint, and two
  * more, so that the list stays inside the window and what is above it shows.
  */
-const LIST_SPARE_LINES = 4
+export const LIST_SPARE_LINES = 4
 
 /** Where a question's first sentence ends: a full stop or a question mark before a space. */
 const FIRST_SENTENCE = /[.?](?=\s)/

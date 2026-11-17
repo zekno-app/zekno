@@ -125,20 +125,24 @@ async function readApps(
 /**
  * The apps on `server` to choose from: read from its runner, under the step
  * `Asking <server>`, as `deploy <n>, <state>` (`deploy <n>` when the state is
- * unknown); when it cannot be read, this machine's verified history for that
- * server, as `deploy <n>`. This machine's latest deploy first, then by name.
+ * unknown); when it cannot be read, or `offline` says no server is to be
+ * contacted, this machine's verified history for that server, as `deploy
+ * <n>`. This machine's latest deploy first, then by name.
  */
 export async function appRows(
   deps: Deps,
   team: Team,
   server: Server,
-  options: { limitMs?: number } = {}
+  options: { limitMs?: number; offline?: boolean } = {}
 ): Promise<ListRow<string>[]> {
   const known = appsOf(team, server, deps.home)
   const at = new Map(known.map((row) => [row.name, row.at]))
-  const read = await deps.ui.step(`Asking ${server.name}`, () =>
-    readApps(deps, team, server, options.limitMs ?? READ_LIMIT_MS)
-  )
+  // A command that contacts no server (`zekno add`, specs/012-templates SC-005) offers this machine's history only.
+  const read = options.offline
+    ? undefined
+    : await deps.ui.step(`Asking ${server.name}`, () =>
+        readApps(deps, team, server, options.limitMs ?? READ_LIMIT_MS)
+      )
   const apps =
     read ??
     known.map((row) => ({
@@ -225,7 +229,12 @@ export async function whichApp(
   team: Team,
   server: Server,
   given: { app?: string; linked?: boolean },
-  options: { offerNew: boolean; folder: string; limitMs?: number }
+  options: {
+    offerNew: boolean
+    folder: string
+    limitMs?: number
+    offline?: boolean
+  }
 ): Promise<{ app: string; how: How; fresh: boolean }> {
   if (given.app !== undefined)
     return {

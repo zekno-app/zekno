@@ -7,7 +7,9 @@ import type { Item } from "./lines"
 /**
  * What each question leaves on the screen once it is answered, above
  * whatever comes next. A list collapses to `✔ Server  prod` (mock-ups 1 and
- * 2), except for a row that asks a question of its own (`+ a new app`). A
+ * 2), except for a row that asks a question of its own (`+ a new app`); a
+ * list to pick several from to `✔ Read by  web, worker` (specs/012-templates,
+ * D13). A
  * question left with Esc or Ctrl-C keeps its line as it was drawn, above
  * `✖ Nothing was done.` (board "Questions in single commands"): a typed
  * answer with what was typed and no cursor, the hidden prompt with nothing of
@@ -23,6 +25,11 @@ export const LEFT_BEHIND = {
     kind: "chosen",
     collapsed,
     label,
+  }),
+  chooseSeveral: (collapsed: string, labels: readonly string[]) => ({
+    kind: "chosen",
+    collapsed,
+    label: labels.join(", "),
   }),
   left: (
     question: string,

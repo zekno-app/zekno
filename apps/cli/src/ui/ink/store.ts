@@ -18,6 +18,14 @@ export type ListOpen = {
   rows: readonly ListRow<unknown>[]
   settle(result: Settled<number>): void
 }
+/** A list to pick several rows from, open on the screen (several.tsx). */
+export type SeveralOpen = {
+  id: number
+  question: string
+  labels: readonly string[]
+  atLeastOne: string
+  settle(result: Settled<number[]>): void
+}
 /** A one-line answer being typed. */
 export type TypedOpen = {
   id: number
@@ -41,6 +49,7 @@ export type State = {
   prompt?: Prompt
   question?: Question
   list?: ListOpen
+  several?: SeveralOpen
   typed?: TypedOpen
   value?: ValueOpen
   deploy?: DeployShown

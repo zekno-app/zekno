@@ -12,6 +12,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { HELP } from "../../src/cli/cli"
+import { machine } from "../support/helpers"
 import { AT_HEAD, HELP_AT_HEAD } from "./plain-at-head"
 import { SCENES } from "./plain-scenes"
 
@@ -28,6 +29,8 @@ const ADDED_TO_HELP = [
   "  zekno settings unset <service>.<setting> [--yes]",
   "  zekno settings compose",
   "  zekno settings init",
+  // feature 012
+  "  zekno add [<template>] [--name <service>] [--for <service>] [--app <app>] [--server <name>] [--yes]",
 ]
 
 describe("with no terminal, every command does what it did before feature 006 (FR-028)", () => {
@@ -49,4 +52,30 @@ describe("with no terminal, every command does what it did before feature 006 (F
       ).toEqual(AT_HEAD[name]!)
     }, 60_000)
   }
+})
+
+describe("an option only zekno add reads, given to another command (specs/012-templates, research R9)", () => {
+  /** What parsing the arguments said before feature 012 for an option it did not know, with the help line. */
+  const unknown = (option: string) =>
+    `Unknown option '${option}'. To specify a positional argument starting with a '-', place it at the end of the command after '--', as in '-- "${option}"\nRun \`zekno --help\` for the list of commands.`
+
+  test("zekno deploy --for web and zekno status --for web: today's sentence, status 2, nothing else done", async () => {
+    for (const argv of [
+      ["deploy", "--for", "web"],
+      ["status", "--for", "web"],
+      ["deploy", "--for=web"],
+      ["deploy", "--for"],
+      ["--help", "--for", "web"],
+      ["secret", "ls", "--app", "demo", "--for", "web"],
+    ]) {
+      const m = machine()
+      const code = await m.zekno(...argv)
+      expect({ argv, code, out: m.out, err: m.err }).toEqual({
+        argv,
+        code: 2,
+        out: [],
+        err: [unknown("--for")],
+      })
+    }
+  })
 })

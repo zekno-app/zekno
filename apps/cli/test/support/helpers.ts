@@ -154,6 +154,7 @@ export async function ready(options: { realDocker?: boolean } = {}) {
 /** One answer `answering` gives to the next question, in the order they are asked. */
 export type Answer =
   | { choose: string }
+  | { pick: string[] }
   | { type: string }
   | { yes: boolean }
   | { value: string }
@@ -162,7 +163,7 @@ export type Answer =
 
 /** A question as `answering` saw it: its kind, its words, the rows it offered (label and detail joined by a tab) and the value filled in. */
 export type Asked = {
-  kind: "choose" | "ask" | "confirm" | "askValue"
+  kind: "choose" | "chooseSeveral" | "ask" | "confirm" | "askValue"
   question: string
   rows?: string[]
   fill?: string
@@ -176,7 +177,7 @@ export type Asked = {
  * reason, and the next answer is tried. `"leave"` is Esc: it leaves a list, a
  * typed answer, the hidden prompt and a yes-or-no question asked with
  * `leave`, and answers no to one asked without. Every question is kept in
- * `asked`, and what `note`, `code`, `groups`, `gap`, `doctorReport`, `settingsReport` and `settingChange` were given in `lines`;
+ * `asked`, and what `note`, `code`, `groups`, `gap`, `doctorReport`, `settingsReport`, `settingChange`, `addition` and `added` were given in `lines`;
  * the plain interface still writes them, so `m.out` keeps them in order with
  * everything else. A question with no answer left fails the test.
  */
@@ -213,6 +214,23 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
       if (!row)
         throw new Error(`"${question.question}" offers no row ${answer.choose}`)
       return row.value
+    },
+    async chooseSeveral(question) {
+      asked.push({
+        kind: "chooseSeveral",
+        question: question.question,
+        rows: question.rows.map((row) => row.label),
+      })
+      const answer = next(question.question)
+      if (answer === "leave") throw new Left()
+      if (typeof answer !== "object" || !("pick" in answer))
+        throw wrong(question.question, answer)
+      for (const label of answer.pick)
+        if (!question.rows.some((row) => row.label === label))
+          throw new Error(`"${question.question}" offers no row ${label}`)
+      return question.rows
+        .filter((row) => answer.pick.includes(row.label))
+        .map((row) => row.value)
     },
     async ask(question) {
       asked.push({
@@ -294,6 +312,30 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
         change.next,
       ])
       plain.settingChange(change)
+    },
+    addition(report) {
+      lines.push([
+        "addition",
+        `${report.title} ${report.software}`,
+        report.app,
+        report.server.name,
+        report.file.shown,
+        ...report.services.map((service) => service.name),
+        ...report.offers.map(
+          (offer) => `${offer.name} read by ${offer.readBy.join(", ")}`
+        ),
+      ])
+      plain.addition(report)
+    },
+    added(done) {
+      lines.push([
+        "added",
+        done.service,
+        done.file ?? "",
+        ...done.stored.map((secret) => `${secret.name} ${secret.version}`),
+        done.server,
+      ])
+      plain.added(done)
     },
   }
   m.deps.ui = ui

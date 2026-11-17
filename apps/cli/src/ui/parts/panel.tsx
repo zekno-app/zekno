@@ -16,7 +16,9 @@ const RULE = "─".repeat(512)
 /**
  * A box with its title on the top line, as on the boards "A deploy in
  * progress" and "Set a secret". Ink's border has no title, so the top line is
- * drawn here and the box below it has no top border.
+ * drawn here and the box below it has no top border. Without a title the top
+ * line is the border alone, as the board `AddTemplate` of specs/012-templates
+ * draws `zekno add`'s box.
  */
 export function Panel({
   title,
@@ -25,7 +27,7 @@ export function Panel({
   flexGrow,
   children,
 }: {
-  title: string
+  title?: string
   tone?: PanelTone
   width?: number
   flexGrow?: number
@@ -55,17 +57,21 @@ export function Panel({
     >
       <Box>
         <Text color={border} dimColor={faint}>
-          {"╭─ "}
+          {title === undefined ? "╭" : "╭─ "}
         </Text>
-        <Text
-          bold
-          color={titleColor}
-          dimColor={tone === "quiet"}
-          wrap="truncate-end"
-        >
-          {title}
-        </Text>
-        <Text> </Text>
+        {title === undefined ? null : (
+          <>
+            <Text
+              bold
+              color={titleColor}
+              dimColor={tone === "quiet"}
+              wrap="truncate-end"
+            >
+              {title}
+            </Text>
+            <Text> </Text>
+          </>
+        )}
         <Box
           flexGrow={1}
           flexShrink={1}

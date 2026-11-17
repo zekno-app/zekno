@@ -137,6 +137,50 @@ describe("an addition", () => {
     )
   })
 
+  test("readers answered for each connection secret: each its own services, in the file's order (contracts/commands.md, 'Who reads the connection secret')", () => {
+    const two: Template = {
+      ...redis,
+      offers: [
+        ...redis.offers,
+        { name: "CACHE_URL", text: "redis://{REDIS_PASSWORD}@{service}" },
+      ],
+    }
+    const plan = added({
+      template: two,
+      settings: DESIGN_SETTINGS,
+      file: FILE,
+      readers: new Map([
+        ["REDIS_URL", ["worker"]],
+        ["CACHE_URL", ["worker", "web"]],
+      ]),
+    })
+    expect(plan.readers).toEqual([
+      { offer: "REDIS_URL", services: ["worker"] },
+      { offer: "CACHE_URL", services: ["web", "worker"] },
+    ])
+    expect(
+      plan.settings.services.map(([name, service]) => [name, service.secrets])
+    ).toEqual([
+      ["web", ["DATABASE_URL", "SESSION_KEY", "CACHE_URL"]],
+      ["worker", ["DATABASE_URL", "REDIS_URL", "CACHE_URL"]],
+      ["redis", ["REDIS_PASSWORD"]],
+    ])
+    expect(
+      refused({
+        template: two,
+        settings: DESIGN_SETTINGS,
+        file: FILE,
+        readers: new Map([
+          ["REDIS_URL", ["worker"]],
+          ["CACHE_URL", ["nope"]],
+        ]),
+      })
+    ).toEqual([
+      "AD14",
+      "zekno.app.json has no service named nope. Its services are web, worker.",
+    ])
+  })
+
   test("a template with no connection secret asks nothing and reads nothing into the file's services", () => {
     const quiet: Template = { ...postgres, offers: [] }
     const plan = added({

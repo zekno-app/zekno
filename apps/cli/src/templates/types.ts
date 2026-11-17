@@ -105,9 +105,23 @@ export type AdditionReport = {
   offers: readonly {
     name: string
     pieces: readonly { text: string; hidden: boolean }[]
+    /** Built from more than one made secret: `Builds a secret from them`. */
+    usesSeveral: boolean
     readBy: readonly string[]
   }[]
   notes: readonly string[]
+}
+
+/** What one run of `zekno add` did, for the result lines and the plain lines (AD16, AD17, AD23). Names and versions only. */
+export type AddDone = {
+  /** The template's first service, by its name in the app. */
+  service: string
+  /** The settings file written, as a sentence names it; left out when none was (a hand-written Compose file). */
+  file?: string
+  /** Each secret stored and the version it got: the made secrets, then the connection secrets, in the template's order. */
+  stored: readonly { name: string; version: number }[]
+  /** The server the secrets were sealed for. */
+  server: string
 }
 
 /** `zekno add <template> --show` (board `AddLook`). */

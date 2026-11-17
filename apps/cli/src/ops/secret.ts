@@ -35,7 +35,7 @@ async function locate(deps: OpDeps, where: Where) {
 }
 
 /** The highest version this machine has seen for each name, set or removed: `latestVersion` for every name at once, in one pass. */
-function latestVersions(
+export function latestVersions(
   trust: TeamTrust,
   serverId: string,
   app: string,
@@ -81,7 +81,8 @@ function latestVersion(
 const BAD_NAME =
   "A secret name uses letters, digits and underscore, and does not start with a digit."
 
-function asCliError(error: unknown): never {
+/** A refusal of the core library as the sentence a person reads; anything else thrown on as it was. */
+export function asCliError(error: unknown): never {
   if (error instanceof CoreError) {
     const messages: Partial<Record<CoreError["code"], string>> = {
       invalid_name: BAD_NAME,

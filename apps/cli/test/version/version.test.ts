@@ -443,6 +443,7 @@ const NEVER_FETCHES: { [command: string]: string[] } = {
   "settings unset": ["settings", "unset", "web.memory", "--yes"],
   "settings compose": ["settings", "compose"],
   "settings init": ["settings", "init"],
+  add: ["add", "postgres", "--yes", "--app", "demo", "--server", "dev"],
 }
 
 /** The commands of the help, by their words, as docs.test.ts reads them. */
