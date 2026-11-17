@@ -676,6 +676,8 @@ about first ("Use it here?"), and a yes deploys the file it names: when that is 
 own `zekno.app.json`, each command says so in one sentence and shows or changes nothing, exit
 status 1:
 `This folder's zekno.json names deploy/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys deploy/zekno.app.json, not the zekno.app.json here.`
+When the file here is a Compose file written by hand, the sentence names it in place of
+`zekno.app.json`: `..., and a yes deploys deploy/zekno.app.json, not the compose.yaml here.`
 Nothing is asked or recorded: answer the question with `zekno link` or `zekno deploy`. Any
 other `zekno.json` is left aside, as `zekno deploy` leaves it. When the deploy would use a
 Compose file while a `zekno.app.json` lies here, each command says so in one sentence and shows

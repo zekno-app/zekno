@@ -328,7 +328,10 @@ In the environment: of each service that uses it
 - A no, Esc or Ctrl-C at AH6: AH9 dim, status 1 (new, D17).
 - `--for` is refused here (AU10): the person adds the lines to the services they choose.
 - A zekno.json not in use on this machine yet that names another file than this Compose file: SH4,
-  status 1, before any line or question (step 6; security review T4), as for a settings file.
+  status 1, before any line or question (step 6; security review T4), as for a settings file. Its
+  end names the Compose file in place of `zekno.app.json` (2026-11-18): `This folder's zekno.json
+  names deploy/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it
+  first, and a yes deploys deploy/zekno.app.json, not the compose.yaml here.`
 
 With no terminal (board: "Piped, the lines are printed as they are and no secret is made without
 `--yes`"): the service's lines, then the connection secrets' lines, on standard output exactly as
@@ -354,7 +357,7 @@ gives for the same cases (D27); AD21 is of AD8's kind and is 1 too.
    and AU9 for the one picked.
 6. Which file (research R8): SH4 (status 1), when a zekno.json not in use on this machine yet
    names another file than the one here, a settings file or, since the security review (T4), a
-   Compose file written by hand: a yes to the deploy's first-use question deploys that file; no file: AD13 (status 1, as SH1); a Compose file: the
+   Compose file written by hand (which SH4 then names in place of `zekno.app.json`): a yes to the deploy's first-use question deploys that file; no file: AD13 (status 1, as SH1); a Compose file: the
    hand-written path from step 7, with AU10 for `--for`; a settings file: read whole and checked
    (the reader's sentences, status 1). The file is the one a deploy here signs for the app the
    command uses: a zekno.json in use here gives its file only to its own app, so with `--app`

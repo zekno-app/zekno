@@ -41,6 +41,9 @@ Changed again on 2026-11-17, after the plan (`../plan.md`), with the maintainer'
   `no code`; the guide no longer does, since a template's start command and plain values are what
   runs on the user's server. CONTRIBUTING.md says so, and that a reviewer reads them as code
   (contracts/contributing.md, CG1 and CG9). No line of the CLI changes.
+- 2026-11-18: SH4, said since T4 also when the file here is a Compose file written by hand, names
+  that file in its last words (`not the compose.yaml here.`) where it said `not the zekno.app.json
+  here.`; for a settings file it is unchanged (contracts/commands.md, step 6).
 
 The right column of `AddLook` still says "The numbers here are examples"; since this change they
 are the real ones, and only the shortened digests differ from what zekno prints.

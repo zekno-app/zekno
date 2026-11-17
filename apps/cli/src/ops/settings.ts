@@ -163,9 +163,14 @@ export function findPlace(
         : place.link === undefined
           ? join(deps.cwd, place.file)
           : resolve(place.link.folder, place.link.compose)
+    // The sentence names the file that is here: a Compose file as the other sentences show it, else zekno.app.json.
     if (realFile(named) !== realFile(here))
       throw new CliError(
-        SH4(shownFile(deps.cwd, named), aboveOf(deps.cwd, pending))
+        SH4(
+          shownFile(deps.cwd, named),
+          aboveOf(deps.cwd, pending),
+          place.kind === "compose" ? place.file : undefined
+        )
       )
   }
   if (place.kind === "none") return { kind: "none" }

@@ -185,8 +185,9 @@ describe("findPlace: the file a deploy here would use, as an answer (specs/012-t
     ).toBe(0)
     const other = await twin(m)
     other.deps.cwd = m.project
+    // The sentence names the file that is here, compose.yaml, not a zekno.app.json there is none of.
     expect(() => findPlace(untouched(other.deps))).toThrow(
-      SH4("deploy/zekno.app.json")
+      "This folder's zekno.json names deploy/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys deploy/zekno.app.json, not the compose.yaml here."
     )
 
     const same = await folderWith({ "compose.yaml": COMPOSE_V1 })

@@ -330,11 +330,17 @@ export const SH3 = (file: string, folder?: string): string =>
 /**
  * SH4 (security review S6): a zekno.json that applies here carries a
  * signature but is not in use on this machine yet, and names another file
- * than this folder's `zekno.app.json`: a deploy asks about it first, and a
- * yes deploys that file. `folder` as for SH3.
+ * than the one here: a deploy asks about it first, and a yes deploys that
+ * file. `folder` as for SH3. `here`: the file a deploy here uses today, as a
+ * sentence shows it, this folder's `zekno.app.json` unless it is a Compose
+ * file written by hand (specs/012-templates, security review T4).
  */
-export const SH4 = (file: string, folder?: string): string =>
-  `${folder === undefined ? "This folder's zekno.json" : `The zekno.json in ${folder}`} names ${file} and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys ${file}, not the zekno.app.json here.`
+export const SH4 = (
+  file: string,
+  folder?: string,
+  here = "zekno.app.json"
+): string =>
+  `${folder === undefined ? "This folder's zekno.json" : `The zekno.json in ${folder}`} names ${file} and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys ${file}, not the ${here} here.`
 /** CS1, for `set` or `unset`. */
 export const CS1 = (verb: "set" | "unset"): string =>
   verb === "set"

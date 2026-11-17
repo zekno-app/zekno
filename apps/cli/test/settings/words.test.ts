@@ -54,6 +54,7 @@ import {
   SH1,
   SH2,
   SH3,
+  SH4,
   SJ1,
   SJ2,
   SJ3,
@@ -323,6 +324,21 @@ describe("contracts/commands.md", () => {
     // A zekno.json in a folder above names its folder (security review S1).
     expect(SH3("~/app/zekno.app.json", "~/app")).toBe(
       "The zekno.json in ~/app names ~/app/zekno.app.json, so zekno deploy uses it, not the zekno.app.json here."
+    )
+  })
+
+  test("SH4 names the file that is here: the settings file as before, or a Compose file written by hand (specs/012-templates, security review T4)", () => {
+    expect(SH4("deploy/zekno.app.json")).toBe(
+      "This folder's zekno.json names deploy/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys deploy/zekno.app.json, not the zekno.app.json here."
+    )
+    expect(SH4("~/app/zekno.app.json", "~/app")).toBe(
+      "The zekno.json in ~/app names ~/app/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys ~/app/zekno.app.json, not the zekno.app.json here."
+    )
+    expect(SH4("deploy/zekno.app.json", undefined, "compose.yaml")).toBe(
+      "This folder's zekno.json names deploy/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys deploy/zekno.app.json, not the compose.yaml here."
+    )
+    expect(SH4("~/app/zekno.app.json", "~/app", "compose.yaml")).toBe(
+      "The zekno.json in ~/app names ~/app/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys ~/app/zekno.app.json, not the compose.yaml here."
     )
   })
 

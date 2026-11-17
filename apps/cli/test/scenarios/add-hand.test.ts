@@ -150,7 +150,10 @@ describe("a zekno.json not in use on this machine yet that names another file th
     }
     const other = await twin(m)
     other.deps.cwd = linked
-    const said = SH4("deploy/zekno.app.json")
+    // SH4 names the file that is here: compose.yaml.
+    const said =
+      "This folder's zekno.json names deploy/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys deploy/zekno.app.json, not the compose.yaml here."
+    expect(said).toBe(SH4("deploy/zekno.app.json", undefined, "compose.yaml"))
     const run = async (...args: string[]) => {
       other.out.length = 0
       other.err.length = 0

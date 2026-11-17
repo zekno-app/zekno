@@ -465,7 +465,7 @@ signature is the team's cannot be known without the keychain, so any signature c
 
 | Id | Sentence |
 |----|----------|
-| SH4 | `This folder's zekno.json names <file> and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys <file>, not the zekno.app.json here.`; for one in a folder above, `The zekno.json in <folder> names <file> and ...` [1] |
+| SH4 | `This folder's zekno.json names <file> and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys <file>, not the zekno.app.json here.`; for one in a folder above, `The zekno.json in <folder> names <file> and ...`; when the file here is a Compose file written by hand (specs/012-templates, security review T4), it is named in place of `zekno.app.json`, as the other sentences show it: `..., not the compose.yaml here.` (2026-11-18) [1] |
 
 **Options (S7).** Each settings command takes only its own option: `--json` for `zekno settings`,
 `--yes` for `set` and `unset`, none for `compose` and `init`. Any other option given to one of
