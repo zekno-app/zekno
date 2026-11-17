@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>As built: a Compose file beside the settings file</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 891px; height: 404px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 18px; padding: 22px 24px; white-space: pre; overflow: hidden">$ zekno add postgres --app demo --server prod --for web
+<span style="color: #d29922">!</span> This folder has compose.yaml too. zekno deploy asks which to deploy, or takes -f &lt;file&gt;.
+<span style="color: #ffffff; font-weight: 600">PostgreSQL 18.7</span>  <span style="color: #8b949e">A relational database.</span>                                 <span style="color: #8b949e">by zekno</span>
+<span style="color: #8b949e">╭──────────────────────────────────────────────────────────────────────────────╮</span>
+<span style="color: #8b949e">│</span> <span style="color: #8b949e">app</span>     <span style="color: #ffffff; font-weight: 600">demo</span>                                                                 <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span> <span style="color: #8b949e">server</span>  prod<span style="color: #8b949e"> deploy@203.0.113.7</span>                                              <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span> <span style="color: #8b949e">file</span>    zekno.app.json<span style="color: #8b949e">  2 services: web, worker</span>                              <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">╰──────────────────────────────────────────────────────────────────────────────╯</span>
+<span style="color: #ffffff; font-weight: 600">Adds a service</span>
+  <span style="color: #2383e2; font-weight: 600">postgres</span>                postgres:18.7<span style="color: #8b949e">  pinned by digest</span>
+                          restart always<span style="color: #8b949e"> · </span>port 5432, not published
+                          data kept in volume postgres-data
+<span style="color: #ffffff; font-weight: 600">Makes a secret on this machine</span><span style="color: #8b949e">  never shown</span>
+  POSTGRES_PASSWORD       32 random characters
+                          <span style="color: #8b949e">read by postgres</span>
+<span style="color: #ffffff; font-weight: 600">Builds a secret from it</span>
+  DATABASE_URL            postgres://app:<span style="color: #8b949e">••••</span>@postgres:5432/app
+                          <span style="color: #8b949e">read by web</span>
+<span style="color: #d29922">!</span> <span style="color: #d29922">Zekno does not back up this data.</span>
+<span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Add postgres to demo?</span> Nothing is deployed until you deploy. <span style="color: #8b949e">(y/N)</span></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":891,"height":404}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

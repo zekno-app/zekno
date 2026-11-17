@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>As built: a long secret name takes its own line</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 891px; height: 422px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 18px; padding: 22px 24px; white-space: pre; overflow: hidden">$ zekno add mongodb
+<span style="color: #ffffff; font-weight: 600">MongoDB 9.0</span>  <span style="color: #8b949e">A document database.</span>                                       <span style="color: #8b949e">by zekno</span>
+<span style="color: #8b949e">╭──────────────────────────────────────────────────────────────────────────────╮</span>
+<span style="color: #8b949e">│</span> <span style="color: #8b949e">app</span>     <span style="color: #ffffff; font-weight: 600">demo</span>                                                                 <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span> <span style="color: #8b949e">server</span>  prod<span style="color: #8b949e"> deploy@203.0.113.7</span>                                              <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span> <span style="color: #8b949e">file</span>    zekno.app.json<span style="color: #8b949e">  1 service: web</span>                                       <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">╰──────────────────────────────────────────────────────────────────────────────╯</span>
+<span style="color: #ffffff; font-weight: 600">Adds a service</span>
+  <span style="color: #2383e2; font-weight: 600">mongodb</span>                 mongo:9.0.8<span style="color: #8b949e">  pinned by digest</span>
+                          restart always<span style="color: #8b949e"> · </span>port 27017, not published
+                          data kept in volume mongodb-data
+<span style="color: #ffffff; font-weight: 600">Makes a secret on this machine</span><span style="color: #8b949e">  never shown</span>
+  MONGO_INITDB_ROOT_PASSWORD
+                          32 random characters
+                          <span style="color: #8b949e">read by mongodb</span>
+<span style="color: #ffffff; font-weight: 600">Builds a secret from it</span>
+  MONGODB_URI             mongodb://app:<span style="color: #8b949e">••••</span>@mongodb:27017/app?authSource=admin
+                          <span style="color: #8b949e">read by web</span>
+<span style="color: #d29922">!</span> <span style="color: #d29922">Zekno does not back up this data.</span>
+<span style="color: #d29922">!</span> <span style="color: #d29922">Your app connects as the database's administrator.</span>
+<span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Add mongodb to demo?</span> Nothing is deployed until you deploy. <span style="color: #8b949e">(y/N)</span></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":891,"height":422}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

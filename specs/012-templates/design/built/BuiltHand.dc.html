@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>As built: lines for a hand-written Compose file</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 891px; height: 440px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 18px; padding: 22px 24px; white-space: pre; overflow: hidden">$ zekno add postgres
+This folder deploys from <span style="color: #ffffff; font-weight: 600">compose.yaml</span>, a file written by hand.
+<span style="color: #8b949e">Zekno does not edit it. Add these lines yourself.</span>
+<span style="color: #8b949e">Under </span>services:
+<span style="color: #8b949e">╭──────────────────────────────────────────────────────────────────────────────────────────────────╮</span>
+<span style="color: #8b949e">│</span>   postgres:                                                                                      <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>     image: postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>     restart: always                                                                              <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>     environment:                                                                                 <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>       POSTGRES_USER: app                                                                         <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>       POSTGRES_DB: app                                                                           <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}                                                    <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>     volumes:                                                                                     <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>       - postgres-data:/var/lib/postgresql                                                        <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">╰──────────────────────────────────────────────────────────────────────────────────────────────────╯</span>
+<span style="color: #8b949e">Under </span>volumes:  postgres-data:
+<span style="color: #8b949e">In the </span>environment:<span style="color: #8b949e"> of each service that uses it</span>
+<span style="color: #8b949e">╭──────────────────────────────────────╮</span>
+<span style="color: #8b949e">│</span>       DATABASE_URL: ${DATABASE_URL}  <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">╰──────────────────────────────────────╯</span>
+<span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Make and store its two secrets for demo on prod?</span> <span style="color: #8b949e">(y/N)</span> yes
+<span style="color: #3fb950">✔</span> Stored POSTGRES_PASSWORD and DATABASE_URL, sealed for prod</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":891,"height":440}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

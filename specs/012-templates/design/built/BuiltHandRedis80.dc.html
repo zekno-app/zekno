@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>As built: Redis lines at 80 columns, wrapped inside the box</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 722px; height: 458px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 18px; padding: 22px 24px; white-space: pre; overflow: hidden">$ zekno add redis
+This folder deploys from <span style="color: #ffffff; font-weight: 600">compose.yaml</span>, a file written by hand.
+<span style="color: #8b949e">Zekno does not edit it. Add these lines yourself.</span>
+<span style="color: #8b949e">Under </span>services:
+<span style="color: #8b949e">╭──────────────────────────────────────────────────────────────────────────────╮</span>
+<span style="color: #8b949e">│</span>   redis:                                                                     <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>     image: redis:8.10.3@sha256:1f88291b4c57bdf249f02eb085a8669889b2d2954e91d <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span> 4de5118a5da6b78dd53                                                          <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>     command: ["sh", "-c", "umask 077 &amp;&amp; printf \"requirepass %s\\n\"         <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span> \"$$REDIS_PASSWORD\" &gt; /tmp/auth.conf &amp;&amp; chown redis /tmp/auth.conf &amp;&amp; exec  <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span> docker-entrypoint.sh redis-server /tmp/auth.conf"]                           <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>     restart: always                                                          <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>     environment:                                                             <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>       REDIS_PASSWORD: ${REDIS_PASSWORD}                                      <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>     volumes:                                                                 <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">│</span>       - redis-data:/data                                                     <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">╰──────────────────────────────────────────────────────────────────────────────╯</span>
+<span style="color: #8b949e">Under </span>volumes:  redis-data:
+<span style="color: #8b949e">In the </span>environment:<span style="color: #8b949e"> of each service that uses it</span>
+<span style="color: #8b949e">╭────────────────────────────────╮</span>
+<span style="color: #8b949e">│</span>       REDIS_URL: ${REDIS_URL}  <span style="color: #8b949e">│</span>
+<span style="color: #8b949e">╰────────────────────────────────╯</span>
+<span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Make and store its two secrets for demo on prod?</span> <span style="color: #8b949e">(y/N)</span></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":722,"height":458}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

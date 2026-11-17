@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>As built: the picker</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 891px; height: 170px; box-sizing: border-box; background: #0b0d10; color: #d7dde4; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; line-height: 18px; padding: 22px 24px; white-space: pre; overflow: hidden">$ zekno add
+<span style="color: #2383e2">?</span> <span style="color: #ffffff; font-weight: 600">Add which template?</span>
+  <span style="color: #2383e2">❯ </span><span style="color: #ffffff; font-weight: 600">postgres  </span>PostgreSQL 18.7  <span style="color: #8b949e">A relational database</span>
+  <span style="color: #2383e2">  </span>mysql     MySQL 9.7        <span style="color: #8b949e">A relational database</span>
+  <span style="color: #2383e2">  </span>mongodb   MongoDB 9.0      <span style="color: #8b949e">A document database</span>
+  <span style="color: #2383e2">  </span>redis     Redis 8.10       <span style="color: #8b949e">A cache and key-value store</span>
+  ↑↓ <span style="color: #8b949e">move</span>   enter <span style="color: #8b949e">choose</span>   esc <span style="color: #8b949e">leave</span></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":891,"height":170}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
