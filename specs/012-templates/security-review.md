@@ -116,20 +116,20 @@ the reviews of features 003 to 006.
 
 ## 2. Findings
 
-| Id | Severity | Finding | Confirmed |
-|----|----------|---------|-----------|
-| T1 | Medium | A service of the file that already lists a made secret's name, or the connection secret's name, reads it after `zekno add` without being named; the summary's "read by" and AD7's advice say otherwise | Yes, by a probe |
-| T2 | Low | `zekno add --app <other>` under a link in use writes the linked app's file and stores the other app's secrets (P2 of feature 004, for `zekno add`) | Yes, by a probe |
-| T3 | Low | With compose.yaml beside zekno.app.json and nothing that decides, `zekno add` writes the settings file with no IN6 (`AddTarget.both` is never read) | Yes, by a probe |
-| T4 | Low | The hand-written path skips SH4: on a machine where a team-signed `zekno.json` naming a settings file is not in use yet, `zekno add` prints lines for compose.yaml, then records the link that makes the deploy sign the other file | Yes, by a probe |
-| T5 | Low | No rule holds a connection secret to `{service}`: a template can send the app, with the made password, to any host | Yes, by a probe |
-| T6 | Low | The index test does not hold `index.ts` to "nothing else", and the index runs at every start of `zekno` | Yes, by a probe |
-| T7 | Low | `CONTRIBUTING.md` calls a template "never code", and does not tell a reviewer what in a template runs, nor where not to run a pull request's tests | Read only |
-| T8 | Informational | Redis's start command: a password holding a line break adds lines to Redis's configuration | Yes, by a probe |
-| T9 | Informational | The window of research R7, and the store's write | Yes for the images; read for the rest |
-| T10 | Informational | The docs page's reader | Yes, by a probe and reading |
-| T11 | Informational | The pull-request workflow: what a hostile pull request can still do | Read only |
-| T12 | Informational | The summary before the question shows neither plain values nor a start command | Read, and seen in probe 2 |
+| Id | Severity | Finding | Confirmed | State |
+|----|----------|---------|-----------|-------|
+| T1 | Medium | A service of the file that already lists a made secret's name, or the connection secret's name, reads it after `zekno add` without being named; the summary's "read by" and AD7's advice say otherwise | Yes, by a probe | Fixed in `325ebb2` |
+| T2 | Low | `zekno add --app <other>` under a link in use writes the linked app's file and stores the other app's secrets (P2 of feature 004, for `zekno add`) | Yes, by a probe | Fixed in `f4956c2` |
+| T3 | Low | With compose.yaml beside zekno.app.json and nothing that decides, `zekno add` writes the settings file with no IN6 (`AddTarget.both` is never read) | Yes, by a probe | Fixed in `d6e4676` |
+| T4 | Low | The hand-written path skips SH4: on a machine where a team-signed `zekno.json` naming a settings file is not in use yet, `zekno add` prints lines for compose.yaml, then records the link that makes the deploy sign the other file | Yes, by a probe | Fixed in `65c085d` |
+| T5 | Low | No rule holds a connection secret to `{service}`: a template can send the app, with the made password, to any host | Yes, by a probe | Fixed in `8028557` |
+| T6 | Low | The index test does not hold `index.ts` to "nothing else", and the index runs at every start of `zekno` | Yes, by a probe | Fixed in `8028557` |
+| T7 | Low | `CONTRIBUTING.md` calls a template "never code", and does not tell a reviewer what in a template runs, nor where not to run a pull request's tests | Read only | Fixed in `dd517bc` |
+| T8 | Informational | Redis's start command: a password holding a line break adds lines to Redis's configuration | Yes, by a probe |  |
+| T9 | Informational | The window of research R7, and the store's write | Yes for the images; read for the rest |  |
+| T10 | Informational | The docs page's reader | Yes, by a probe and reading |  |
+| T11 | Informational | The pull-request workflow: what a hostile pull request can still do | Read only |  |
+| T12 | Informational | The summary before the question shows neither plain values nor a start command | Read, and seen in probe 2 |  |
 
 No finding is rated high or critical. No way was found to make a made value appear anywhere but in
 its sealed record, to make the hand-written lines ask Compose for a variable that is not a secret's,
@@ -178,6 +178,13 @@ whose `worker` lists `DATABASE_URL`), `readers: ["web"]`: today an `Addition`, a
 refusal naming `worker`; and B's two runs in `test/scenarios/add-scripts.test.ts`, whose second
 gives status 0 today.
 
+**State**: Fixed in `325ebb2`. `planAddition` (step 11) refuses any service of the file, reader or
+not, that lists in its `secrets` a name the template makes or builds, with a new sentence, AD29
+(`<svc> already reads a secret named <NAME>. Remove it from <svc>.`, status 2), and keeps AD7 for a
+plain variable of a reader; `test/templates/addition-readers.test.ts` holds it (for 2,000
+generated files, every addition accepted gives each new secret to exactly the services the
+summary names), with `addition.test.ts` and `test/scenarios/add-readers.test.ts` (probes A and B).
+
 ### T2. `--app` chooses the secrets' app, the link chooses the file (Low)
 
 **Why low**: the person typed `--app`; nothing runs open (the linked app's next deploy has a
@@ -206,6 +213,13 @@ that names both. The test that fails today: the probe's folders in
 `test/scenarios/add-settings.test.ts`, expecting `sub/zekno.app.json` to gain the service (or a
 refusal) and the root's file unchanged.
 
+**State**: Fixed in `f4956c2`. `findPlace` takes the app given with `--app`, and a link's file goes
+only with its own app, as `withProject` gives it, so with another app the file is this folder's own
+(`--server` does not change it, as it does not for the deploy); `test/scenarios/add-settings.test.ts`
+holds it with the probe's folders (the sub-folder's file gains the service, the root's is
+unchanged, and `zekno deploy --app billing` there signs that very file), with
+`test/ops/settings-place.test.ts`.
+
 ### T3. compose.yaml beside the settings file: written, with no note (Low)
 
 **Why low**: nothing is unsafe. The deploy in that folder asks which file (DP1) at a terminal, and
@@ -225,6 +239,12 @@ standard error. `zekno settings set web.memory 1g --yes`: IN6 on standard error.
 **Smallest fix**: say IN6 as a warning when `plan.target.both`, before the summary at a terminal
 and on standard error in a script, as `settings set` does. The test that fails today: the probe's
 first run in `test/scenarios/add-scripts.test.ts`, expecting IN6 on standard error.
+
+**State**: Fixed in `d6e4676`. `zekno add` says IN6, unchanged, when compose.yaml is beside the file
+and nothing decides: at a terminal as a warning before the summary, in a script on standard error
+once added, so that AD4 stays the one line without `--yes`; `test/scenarios/add-scripts.test.ts`
+(the probe's run) and `test/commands/add.test.tsx` hold it, and `plain-unchanged.test.ts` passes
+untouched.
 
 ### T4. The hand-written path does not say SH4 (Low)
 
@@ -251,6 +271,12 @@ secrets for demo on dev?`, yes; status 0. Afterwards `zekno settings compose` th
 link names another file than that one. The test that fails today: the probe's folder in
 `test/scenarios/add-hand.test.ts` on a `twin`, expecting SH4 and status 1 before any question.
 
+**State**: Fixed in `65c085d`. `findPlace` says SH4, unchanged, whenever a zekno.json not in use here
+yet names another file than the one here, a Compose file included (the settings commands, which
+share it, now say SH4 there instead of SH2); `test/scenarios/add-hand.test.ts` holds it on a `twin`
+(SH4 and status 1 before any question, in a script and at a terminal, nothing stored), with
+`test/ops/settings-place.test.ts`.
+
 ### T5. A connection secret may point at any host (Low)
 
 **Why low**: templates are reviewed, and the summary shows the host (`@db.evil.example`) with the
@@ -271,6 +297,14 @@ ask about it.
 followed by `:`, `/` or the end. Add "the connection secret points at `{service}` and nowhere
 else" to the reviewer's list. The test that fails today: a faulty fixture in
 `test/support/template-files.ts` for each of the two offers above.
+
+**State**: Fixed in `8028557`. A new rule of the reader, TF34 (`a connection secret points at
+{service} and nowhere else.`), after TF29: `{service}` exactly once, as the whole host (after `//`
+or `@`, followed by `:`, `/`, `?` or the end, inside the authority, with no `@` after it); the four
+first templates pass unchanged and the reviewer's list gains the line; six faulty fixtures of
+`test/support/template-files.ts` (the review's two offers among them) and
+`test/templates/read-offers.test.ts` hold it. A query that a client reads as a host (libpq's
+`?host=`) is still the reviewer's to catch.
 
 ### T6. The index is code, held to its lines only (Low)
 
@@ -293,6 +327,12 @@ problem, every line as the contract writes it, 4 lines found.
 **Smallest fix**: in `index.test.ts`, the index's text must equal the contract's header comment,
 `export const TEMPLATE_FILES = [`, `lineFor(name)` for each file in the order of the names, and
 `] as const`, nothing more. The test that fails today: that comparison on the index above.
+
+**State**: Fixed in `8028557`. `index.test.ts` holds the index's whole text to the contract's form
+(the contract's own comment, the list, one line per file in the order of the names, nothing else);
+`files/index.ts` already matched and is unchanged; the test "nothing else" holds it: the probe's
+index with a statement more after the list, and the same before it, inside it, with another
+comment or with none, each passes TI1 to TI5 and the line check and fails the whole text.
 
 ### T7. The guide does not say what in a template runs (Low)
 
@@ -323,6 +363,13 @@ to read every changed line before running anything of a pull request, and to run
 connect by hand only on a machine that holds no Zekno key and no `.env.local` (a throwaway virtual
 machine), with `bun install --ignore-scripts`. Add T5's line and the `also` line to the reviewer's
 list. A test: `test/docs` gains a check that `CONTRIBUTING.md` no longer says "never code".
+
+**State**: Fixed in `dd517bc`. CONTRIBUTING.md says a template configures and starts software on the
+user's server, its start command and plain values read as code; that a reviewer reads every line a
+pull request changes before running anything of it, and runs its tests, install and client check,
+and connects by hand, only on a machine with no Zekno key and no `apps/cli/.env.local`, with
+`bun install --ignore-scripts`; and the reviewer's list gains the `{service}` and `also` lines;
+`test/docs/contributing.test.ts` holds it.
 
 ### T8. Redis's start command and a password of other characters (Informational)
 
