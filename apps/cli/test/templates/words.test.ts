@@ -104,7 +104,7 @@ describe("file-words.ts: contracts/template-file.md", () => {
     )
   })
 
-  test("TF21 to TF32", () => {
+  test("TF21 to TF33", () => {
     expect(said(file.TF21("db"))).toBe(
       "services.db.source.image: pin the image by digest."
     )
@@ -140,6 +140,9 @@ describe("file-words.ts: contracts/template-file.md", () => {
     )
     expect(said(file.TF32("db", "data"))).toBe(
       "services.db.volumes.data: it is added as db-data, which must be a volume name of at most 63 characters."
+    )
+    expect(said(file.TF33("a-b", "c", "a"))).toBe(
+      "services.a-b.volumes.c: it is added as a-b-c, as a volume of a is."
     )
   })
 

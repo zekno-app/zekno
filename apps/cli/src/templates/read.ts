@@ -13,9 +13,10 @@
  * to every rule of a settings file (settings/schema.ts, `checkSettingsValue`),
  * then the rules a settings file does not have: the image pinned by digest,
  * with a tag, from an allowed source (publishers.ts); no published port;
- * every secret a service reads made by the template, every made secret read;
- * connection secrets built only from made secrets and `{service}`; the backup
- * note; the version its image's tag names.
+ * every secret a service reads made by the template; no two volumes added
+ * under one name; every made secret read; connection secrets built only
+ * from made secrets and `{service}`; the backup note; the version its
+ * image's tag names.
  *
  * A fault never holds content of the file: it is a place built from names
  * that passed their rule, a line number, and fixed words (file-words.ts).
@@ -284,6 +285,14 @@ function ownRules(
     for (const [volume] of service.volumes ?? [])
       if (checkVolumeName(`${svc}-${volume}`) !== undefined)
         throw stop(words.TF32(svc, volume))
+  // Two services' volumes added under one name would be one volume of the app, shared (research R5): `a` with `b-c`, `a-b` with `c`.
+  const added = new Map<string, string>()
+  for (const [svc, service] of services)
+    for (const [volume] of service.volumes ?? []) {
+      const other = added.get(`${svc}-${volume}`)
+      if (other !== undefined) throw stop(words.TF33(svc, volume, other))
+      added.set(`${svc}-${volume}`, svc)
+    }
   const read = new Set(services.flatMap(([, service]) => service.secrets ?? []))
   for (const name of made) if (!read.has(name)) throw stop(words.TF26(name))
   for (const [offer] of offers)

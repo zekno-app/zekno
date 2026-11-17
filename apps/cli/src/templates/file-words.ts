@@ -1,7 +1,7 @@
 /**
  * Every sentence about a template file (specs/012-templates,
  * contracts/template-file.md, "Sentences" and "The services, by the settings
- * rules"), each with its id there: TR1 to TR4, TF1 to TF32, TC1 and TC2.
+ * rules"), each with its id there: TR1 to TR4, TF1 to TF33, TC1 and TC2.
  * Copied from the contract; a change here is a change to the contract.
  *
  * A fault is said as `<name> <place>: <rule>`, `<name>` being the file's
@@ -219,6 +219,12 @@ export const TF32 = (svc: string, volume: string): PlaceRule =>
   at(
     `services.${svc}.volumes.${volume}`,
     `it is added as ${svc}-${volume}, which must be a volume name of at most 63 characters.`
+  )
+/** TF33: `other` is the service before `svc` whose volume is added under the same name. */
+export const TF33 = (svc: string, volume: string, other: string): PlaceRule =>
+  at(
+    `services.${svc}.volumes.${volume}`,
+    `it is added as ${svc}-${volume}, as a volume of ${other} is.`
   )
 
 // Across the catalogue.

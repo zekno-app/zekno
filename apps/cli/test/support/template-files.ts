@@ -361,7 +361,7 @@ function faulty(): BadFile[] {
     "services.db.networking.domains: Domains are not in this version of zekno yet."
   )
 
-  // The template's own rules (TF21 to TF32).
+  // The template's own rules (TF21 to TF33).
   fault(ACME_DB_BOARD, "services.db.source.image: pin the image by digest.")
   fault(
     db({ source: { image: `acme@sha256:${HEX}` } }),
@@ -406,6 +406,15 @@ function faulty(): BadFile[] {
   fault(
     acme({ services: { [LONG]: DB_SERVICE } }),
     `services.${LONG}.volumes.data: it is added as ${LONG}-data, which must be a volume name of at most 63 characters.`
+  )
+  fault(
+    acme({
+      services: {
+        a: { ...DB_SERVICE, volumes: { "b-c": "/var/lib/db" } },
+        "a-b": { source: { image: IMAGE }, volumes: { c: "/data" } },
+      },
+    }),
+    "services.a-b.volumes.c: it is added as a-b-c, as a volume of a is."
   )
 
   // Across the catalogue (TC1, TC2): this file read after `before`.

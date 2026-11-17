@@ -97,7 +97,7 @@ describe("the test set", () => {
       "nested deeper than templates go.",
       "a text longer than 4096 characters.",
       "a template is one JSON object.",
-      ...Array.from({ length: 32 }, (_, at) => `TF${at + 1}`),
+      ...Array.from({ length: 33 }, (_, at) => `TF${at + 1}`),
       "SV2",
       "SV6",
       "SV8",
@@ -151,6 +151,7 @@ const MARKERS: Record<string, string> = {
   TF30: "use the version the first service's image tag names",
   TF31: 'say "Zekno does not back up this data."',
   TF32: "which must be a volume name of at most 63 characters.",
+  TF33: ", as a volume of ",
   SV2: 'services: name at least one service, such as "web".',
   SV6: "services.db.deploy: a setting this zekno does not know",
   SV8: "use an image reference",
@@ -357,6 +358,79 @@ describe("the order of checks (contracts/template-file.md)", () => {
     ).toBe(
       "acme-db offers.DB_PASSWORD: it is the name of a made secret, or of one a service of this template reads."
     )
+  })
+
+  test("8: TF32 before TF33, and TF33 before TF26; the second service whose volume takes a name is said, naming the first", () => {
+    const db = GOOD_FIELDS.services.db
+    const LONG = `a${"b".repeat(58)}`
+    const twice = (first: string, second: string) => ({
+      [first]: { ...db, volumes: { "b-c": "/var/lib/db" } },
+      [second]: { source: { image: IMAGE }, volumes: { c: "/data" } },
+    })
+    // Each added name is fine alone (a-b-c), and the two services' are one name.
+    expect(
+      sentence(file({ ...GOOD_FIELDS, services: twice("a", "a-b") }))
+    ).toBe(
+      "acme-db services.a-b.volumes.c: it is added as a-b-c, as a volume of a is."
+    )
+    // In the order of the text: the service written second is said.
+    expect(
+      sentence(
+        file({
+          ...GOOD_FIELDS,
+          services: {
+            "a-b": { ...db, volumes: { c: "/var/lib/db" } },
+            a: { source: { image: IMAGE }, volumes: { "b-c": "/data" } },
+          },
+        })
+      )
+    ).toBe(
+      "acme-db services.a.volumes.b-c: it is added as a-b-c, as a volume of a-b is."
+    )
+    // TF32 first: a name too long, though another clash follows.
+    expect(
+      sentence(
+        file({
+          ...GOOD_FIELDS,
+          services: {
+            ...twice("a", "a-b"),
+            [LONG]: { source: { image: IMAGE }, volumes: { data: "/d" } },
+          },
+        })
+      )
+    ).toBe(
+      `acme-db services.${LONG}.volumes.data: it is added as ${LONG}-data, which must be a volume name of at most 63 characters.`
+    )
+    // TF33 before TF26: a made secret no service reads comes after.
+    expect(
+      sentence(
+        file({
+          ...GOOD_FIELDS,
+          services: twice("a", "a-b"),
+          makes: {
+            DB_PASSWORD: { kind: "password", length: 32 },
+            EXTRA_PASSWORD: { kind: "password", length: 32 },
+          },
+        })
+      )
+    ).toBe(
+      "acme-db services.a-b.volumes.c: it is added as a-b-c, as a volume of a is."
+    )
+    // Two services whose volumes take other names read.
+    expect(
+      isTemplate(
+        readTemplate(
+          "acme-db.json",
+          file({
+            ...GOOD_FIELDS,
+            services: {
+              a: { ...db, volumes: { "b-c": "/var/lib/db" } },
+              b: { source: { image: IMAGE }, volumes: { c: "/data" } },
+            },
+          })
+        )
+      )
+    ).toBe(true)
   })
 
   test("a settings fault names the template file's own line", () => {

@@ -243,7 +243,6 @@ describe("putting a file back (specs/012-templates, research R7, step f; tasks T
     const before = readSettingsFile({ kind: "default", folder }, folder)
     writeSettings(before, changed())
     const { bytes } = before
-    if (bytes === undefined) throw new Error("the read kept no bytes")
     return {
       folder,
       path: before.path,

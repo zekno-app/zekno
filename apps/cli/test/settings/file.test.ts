@@ -77,6 +77,7 @@ describe("what a read gives", () => {
       path: realpathSync(join(folder, SETTINGS_FILE)),
       shown: "zekno.app.json",
       sha256: createHash("sha256").update(DESIGN_FILE).digest("hex"),
+      bytes: Buffer.from(DESIGN_FILE),
       dev: stat.dev,
       ino: stat.ino,
       mode: stat.mode,
@@ -90,7 +91,6 @@ describe("what a read gives", () => {
     const read = readSettingsFile({ kind: "default", folder }, folder)
     const onDisk = readFileSync(join(folder, SETTINGS_FILE))
     const { bytes } = read
-    if (bytes === undefined) throw new Error("the read kept no bytes")
     expect(bytes).toBeInstanceOf(Uint8Array)
     expect(Buffer.from(bytes).equals(onDisk)).toBe(true)
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(read.sha256)

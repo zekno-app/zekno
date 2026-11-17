@@ -23,7 +23,7 @@ written out there.
 | `software` | string | the version as people name it; the first service's image tag is it or starts with it and a dot | refused |
 | `author` | string | a GitHub user name's shape, at most 39 | refused |
 | `also` | string[] | 0 to 8 names, none twice, not its own | none |
-| `services` | object | 1 to 8 services of `zekno.app.json`, plus TF21 to TF25, TF32 | refused |
+| `services` | object | 1 to 8 services of `zekno.app.json`, plus TF21 to TF25, TF32, TF33 | refused |
 | `makes` | object | 1 to 16 `NAME: { kind: "password", length: 24..64 }`, each read by a service | refused |
 | `offers` | object | 0 to 4 `NAME: text` with `{service}` and `{MADE}` | none |
 | `notes` | string[] | 1 to 8 sentences, the backup note when a volume is kept | refused |

@@ -50,7 +50,7 @@ above, two spaces of indent.
 | `software` | The software's version as people name it: `18.7`, `9.7`. Shown after the title. | `^[0-9A-Za-z][0-9A-Za-z._-]{0,31}$` (TF10); the first service's image tag is it, or starts with it and a dot (`9.7` for `mysql:9.7.4`) (TF30). |
 | `author` | Who wrote the file, credited in the list, `--show` and the docs page: `by zekno`. | `^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$`, the shape of a GitHub user name (TF11). |
 | `also` | Names people may type instead, such as `mongo` for `mongodb`. Typing one is refused with a pointer to the right name (contracts/commands.md, AL3). | A list of 0 to 8 names, each held to the name rule, none twice, not the template's own name (TF12), and none another template's name or other name (TC2). |
-| `services` | What goes into `zekno.app.json`: the same format, the same checks. Its volume `data` becomes `postgres-data` in the app, so no two services share one (board). Several are allowed. | 1 to 8 services (TF13), each passing every rule of feature 010's settings file (TS), and the rules TF21 to TF25 and TF32. |
+| `services` | What goes into `zekno.app.json`: the same format, the same checks. Its volume `data` becomes `postgres-data` in the app, so no two services share one (board). Several are allowed. | 1 to 8 services (TF13), each passing every rule of feature 010's settings file (TS), and the rules TF21 to TF25, TF32 and TF33. |
 | `makes` | Secrets made at random on the user's machine. | 1 to 16 names (TF14, TF15), each `{ "kind": "password", "length": <24 to 64> }` (TF16), each read by a service of the template (TF26). |
 | `offers` | Connection secrets for the user's own services, built from the made secrets. | 0 to 4 names (TF17, TF18), each a text of at most 512 characters with placeholders (TF19, TF28, TF29), not a made name nor one the template's services read (TF27). |
 | `notes` | Sentences shown before adding, each after `!` in the warning colour. | 1 to 8 sentences of at most 200 printable ASCII characters, each ending with `.` (TF20); `Zekno does not back up this data.` among them when a service keeps data in a volume (TF31). |
@@ -67,7 +67,7 @@ that contract, its later settings refused as there. On top of those, a template'
 - reads only secrets the template makes (TF25), and its plain values are fixed text;
 - keeps its data in named volumes only, as every service of a settings file does; each volume is
   added to the app as `<service>-<volume>` (research R5), which must fit the volume name rule
-  (TF32).
+  (TF32) and be no other volume's name in the app (TF33).
 
 ### Made secrets
 
@@ -135,7 +135,7 @@ The first fault stops the reader; tests name one sentence per file.
    missing (TF5), in the order of the format.
 7. `services` by the settings file's steps 3 to 6 (TS), then TF13's count.
 8. The template's own rules, in this order: TF21, TF22, TF23 for each service's image in the order
-   of the text; TF24; TF25; TF32; TF26; TF27; TF28; TF29; TF30; TF31.
+   of the text; TF24; TF25; TF32; TF33; TF26; TF27; TF28; TF29; TF30; TF31.
 9. Across the catalogue (the tests and the catalogue's first read): TC1, TC2.
 
 ## Sentences
@@ -210,6 +210,7 @@ its rule is the settings rule's own words. A later setting is said with its seco
 | TF30 | `software` | `use the version the first service's image tag names, <tag>, or its start before a dot, such as 9.7 for 9.7.4.` |
 | TF31 | `notes` | `say "Zekno does not back up this data." when a service keeps data in a volume.` |
 | TF32 | `services.<svc>.volumes.<vol>` | `it is added as <svc>-<vol>, which must be a volume name of at most 63 characters.` |
+| TF33 | `services.<svc>.volumes.<vol>` | `it is added as <svc>-<vol>, as a volume of <other> is.` (`<other>` the service before it, in the order of the text, whose volume is added under that name) |
 
 ### Across the catalogue
 
