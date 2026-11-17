@@ -22,13 +22,16 @@
  * process ended between d's rename and e's (research R7): each image then
  * refuses to start without its password (research R4).
  *
+ * For a Compose file written by hand (`commitHand`), no file is written: the
+ * steps are b, c and e, and f never runs (FR-015).
+ *
  * Where a made value goes (research R6): it is made in step c, inside the
- * one function given to `withSigner`, from the system's random source, kept
- * in that function's local map, and handed to `createSecret` and nowhere
- * else: not returned, not in the plan, an error, a line, a log, an argument
- * or a file but its sealed record. The map is cleared once the records are
- * sealed; a JavaScript string cannot be wiped, and nothing keeps a reference
- * to one after that function returns.
+ * one function given to `withSigner` (`sealRecords`), from the system's
+ * random source, kept in that function's local map, and handed to
+ * `createSecret` and nowhere else: not returned, not in the plan, an error, a
+ * line, a log, an argument or a file but its sealed record. The map is
+ * cleared once the records are sealed; a JavaScript string cannot be wiped,
+ * and nothing keeps a reference to one after that function returns.
  */
 import { createSecret, type SecretRecord } from "@workspace/core"
 
@@ -42,7 +45,7 @@ import {
 } from "../settings/write"
 import { AD19, AD20, AD21, AD8 } from "../templates/add-words"
 import { fillOffer, makePassword } from "../templates/made"
-import { storedNames, type AddDone, type AddPlan } from "./add"
+import { storedNames, type AddDone, type AddPlan, type HandPlan } from "./add"
 import { asCliError } from "./secret"
 import { refuseLink } from "./settings"
 
@@ -55,52 +58,45 @@ export type CommitOptions = {
   before?: Partial<Record<Step, () => void>>
 }
 
-/**
- * Adds what `plan` holds, as the steps above say, and gives what was done:
- * names and versions only. Every failure is a `CliError` with the step's
- * sentence; the settings file and the store are then as they were, but
- * after AD19, which says what is left.
- */
-export async function commitAdd(
-  plan: AddPlan,
-  options: CommitOptions = {}
-): Promise<AddDone> {
-  const { team, server, app, template, addition, versions } = plan
-  const { read, named } = plan.target
-  const changed = () => new CliError(AD8(read.shown, template.name))
-  const storeChanged = () => new CliError(AD21(app, server.name, template.name))
-  /** Whether the app's store is the one read before the question. A store that cannot be read is not. */
-  const storeAsRead = (): boolean => {
-    try {
-      return (
-        JSON.stringify(team.store.secrets(server.serverId, app)) ===
-        JSON.stringify(plan.store)
-      )
-    } catch {
-      return false
-    }
-  }
+/** What both commits read and seal for: the team, the server, the app, the template, the store as read and each secret's version. */
+type Sealing = Pick<
+  AddPlan,
+  "team" | "server" | "app" | "template" | "store" | "versions"
+>
 
-  // a. The settings file as it was read, before any value is made.
-  options.before?.a?.()
+/** Whether the app's store is the one read before the question. A store that cannot be read is not. */
+function storeAsRead(plan: Sealing): boolean {
   try {
-    checkUnchanged(read)
+    return (
+      JSON.stringify(
+        plan.team.store.secrets(plan.server.serverId, plan.app)
+      ) === JSON.stringify(plan.store)
+    )
   } catch {
-    throw changed()
+    return false
   }
+}
 
-  // b. The store as it was read.
-  options.before?.b?.()
-  if (!storeAsRead()) throw storeChanged()
-
-  // c. The values made and sealed: they exist only inside this function.
-  options.before?.c?.()
-  const records = await team
+/**
+ * Step c: the values made and every record sealed and signed in one
+ * `withSigner` (the keychain is read here), `service` in place of each
+ * connection secret's `{service}`. The values exist only inside the function
+ * given to `withSigner`, in its local map, cleared once the records are
+ * sealed; only the sealed records leave it (research R6). A refusal of the
+ * keychain or of signing is its own sentence.
+ */
+async function sealRecords(
+  plan: Sealing,
+  service: string,
+  random: CommitOptions["random"]
+): Promise<SecretRecord[]> {
+  const { team, server, app, template, versions } = plan
+  return team
     .withSigner(async (signer) => {
       const made = new Map<string, string>()
       try {
         for (const secret of template.makes)
-          made.set(secret.name, makePassword(secret.length, options.random))
+          made.set(secret.name, makePassword(secret.length, random))
         const sealed: SecretRecord[] = []
         const seal = async (name: string, value: string) =>
           sealed.push(
@@ -117,13 +113,52 @@ export async function commitAdd(
         for (const secret of template.makes)
           await seal(secret.name, made.get(secret.name)!)
         for (const offer of template.offers)
-          await seal(offer.name, fillOffer(offer, addition.service, made))
+          await seal(offer.name, fillOffer(offer, service, made))
         return sealed
       } finally {
         made.clear()
       }
     })
     .catch(asCliError)
+}
+
+/** Each secret stored and the version it got: the made secrets, then the connection secrets, in the template's order. */
+const storedOf = (plan: Sealing): AddDone["stored"] =>
+  storedNames(plan.template).map((name) => ({
+    name,
+    version: plan.versions.get(name)!,
+  }))
+
+/**
+ * Adds what `plan` holds, as the steps above say, and gives what was done:
+ * names and versions only. Every failure is a `CliError` with the step's
+ * sentence; the settings file and the store are then as they were, but
+ * after AD19, which says what is left.
+ */
+export async function commitAdd(
+  plan: AddPlan,
+  options: CommitOptions = {}
+): Promise<AddDone> {
+  const { team, server, app, template, addition } = plan
+  const { read, named } = plan.target
+  const changed = () => new CliError(AD8(read.shown, template.name))
+  const storeChanged = () => new CliError(AD21(app, server.name, template.name))
+
+  // a. The settings file as it was read, before any value is made.
+  options.before?.a?.()
+  try {
+    checkUnchanged(read)
+  } catch {
+    throw changed()
+  }
+
+  // b. The store as it was read.
+  options.before?.b?.()
+  if (!storeAsRead(plan)) throw storeChanged()
+
+  // c. The values made and sealed: they exist only inside `sealRecords`.
+  options.before?.c?.()
+  const records = await sealRecords(plan, addition.service, options.random)
 
   // d. The settings file, never through a link, never over a file changed since.
   options.before?.d?.()
@@ -140,7 +175,7 @@ export async function commitAdd(
   options.before?.e?.()
   let failed: CliError | undefined
   try {
-    if (!storeAsRead()) failed = storeChanged()
+    if (!storeAsRead(plan)) failed = storeChanged()
     else
       team.store.saveSecrets(server.serverId, app, {
         ...plan.store,
@@ -168,10 +203,43 @@ export async function commitAdd(
   return {
     service: addition.service,
     file: read.shown,
-    stored: storedNames(template).map((name) => ({
-      name,
-      version: versions.get(name)!,
-    })),
+    stored: storedOf(plan),
     server: server.name,
   }
+}
+
+/**
+ * Stores the secrets of a template added to a Compose file written by hand
+ * (contracts/commands.md, "A hand-written Compose file"): steps b, c and e,
+ * the store written once with every new record. No file is written, so
+ * nothing is put back (no f). Gives the names and versions stored; every
+ * failure is a `CliError` with the step's sentence, the store then as it was.
+ */
+export async function commitHand(
+  plan: HandPlan,
+  options: CommitOptions = {}
+): Promise<AddDone> {
+  const { team, server, app, template } = plan
+  const storeChanged = () => new CliError(AD21(app, server.name, template.name))
+
+  // b. The store as it was read.
+  options.before?.b?.()
+  if (!storeAsRead(plan)) throw storeChanged()
+
+  // c. The values made and sealed: they exist only inside `sealRecords`.
+  options.before?.c?.()
+  const records = await sealRecords(plan, plan.service, options.random)
+
+  // e. The store, once, with every new record.
+  options.before?.e?.()
+  if (!storeAsRead(plan)) throw storeChanged()
+  try {
+    team.store.saveSecrets(server.serverId, app, {
+      ...plan.store,
+      records: [...plan.store.records, ...records],
+    })
+  } catch {
+    throw new CliError(AD20)
+  }
+  return { service: plan.service, stored: storedOf(plan), server: server.name }
 }

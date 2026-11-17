@@ -176,6 +176,7 @@ export function inkUi(
       })
       if (done.file !== undefined) add({ kind: "note", text: AD18 })
     },
+    handLines: (lines) => add({ kind: "hand", lines }),
     templateList: (rows) => add({ kind: "templates", rows }),
     templateView: (view) => add({ kind: "template", view }),
     settingsReport(report) {

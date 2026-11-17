@@ -11,6 +11,10 @@
  * secret set` opens it (the keychain read once, for the run), and the app's
  * secret store is read once and kept, to be compared before it is written
  * (research R7). Writing is ops/add-commit.ts.
+ *
+ * Where the deploy here uses a Compose file written by hand, nothing of that
+ * file is read or written (FR-015): the plan names it, and the lines for it
+ * are made from the template alone (templates/hand.ts).
  */
 import { currentSecrets, LIMITS } from "@workspace/core"
 
@@ -26,8 +30,7 @@ import { sanitize } from "../server/sanitize"
 import { namedPath } from "../settings/source"
 import type { SettingsRead } from "../settings/types"
 import { checkServiceName } from "../settings/values"
-import { SH2, SH3 } from "../settings/words"
-import { planAddition } from "../templates/addition"
+import { planAddition, servicesInApp } from "../templates/addition"
 import {
   AD1,
   AD13,
@@ -37,6 +40,7 @@ import {
   AD5,
   AL3,
   AL4,
+  AU10,
   AU8,
   AU9,
 } from "../templates/add-words"
@@ -46,31 +50,37 @@ import {
   findTemplate,
   TEMPLATE_TEXTS,
 } from "../templates/catalogue"
+import { handLines } from "../templates/hand"
 import { TEMPLATE_NAME } from "../templates/shape"
 import { additionReport } from "../templates/shown"
 import type {
   AddDone,
   Addition,
   AdditionReport,
+  HandLines,
   Template,
 } from "../templates/types"
 import { checkApp, type Where } from "./deploy"
 import { latestVersions } from "./secret"
-import { aboveOf, findPlace } from "./settings"
+import { findPlace } from "./settings"
 
 export type { AddDone }
 
-/** Where the template goes: the settings file a deploy here would sign, read whole (`named`: where its folder names it; `both`: compose.yaml beside it). */
-export type AddTarget = {
-  kind: "settings"
-  read: SettingsRead
-  named: string
-  both: boolean
-}
+/**
+ * Where the template goes: the settings file a deploy here would sign, read
+ * whole (`named`: where its folder names it; `both`: compose.yaml beside
+ * it); or a Compose file written by hand, as a sentence names it, never read.
+ */
+export type AddTarget =
+  | { kind: "settings"; read: SettingsRead; named: string; both: boolean }
+  | { kind: "hand"; file: string }
+
+type SettingsTarget = Extract<AddTarget, { kind: "settings" }>
+type HandTarget = Extract<AddTarget, { kind: "hand" }>
 
 /** Everything read and checked up to the readers of the connection secrets. Holds no secret value. */
-type Prepared = {
-  target: AddTarget
+type Prepared<Target extends AddTarget = SettingsTarget> = {
+  target: Target
   template: Template
   /** `--name`, held to the service-name rule. */
   name?: string
@@ -90,6 +100,19 @@ export type AddPlan = Prepared & { addition: Addition }
 export type AddQuestion = Prepared & {
   ask: readonly { offer: string; services: readonly string[] }[]
 }
+
+/**
+ * A Compose file written by hand, everything read and checked up to AH6
+ * (contracts/commands.md, "A hand-written Compose file"): the template's
+ * first service's name in the app (`--name`, or its own), for the lines and
+ * the connection secrets' `{service}`. Holds no secret value.
+ */
+export type HandPlan = Prepared<HandTarget> & { service: string }
+
+/** Whether a plan is for a Compose file written by hand. */
+export const isHand = (
+  plan: AddPlan | AddQuestion | HandPlan
+): plan is HandPlan => plan.target.kind === "hand"
 
 /** What `prepareAdd` is given: the template, `--name`, `--for`, and the app and server, or how to find them once the file was read. */
 export type AddInput = {
@@ -153,20 +176,15 @@ export function hasServer(deps: Pick<OpDeps, "home">): void {
 
 /**
  * Step 6: the file a deploy here would sign (research R8): a settings file,
- * read once and checked whole (the reader's sentences, status 1); none is
- * AD13. SH4 as the settings commands say it. A Compose file written by hand
- * is said as `zekno settings` says it until `zekno add` gives its lines
- * (specs/012-templates, tasks T048).
+ * read once and checked whole (the reader's sentences, status 1); a Compose
+ * file written by hand, named as the deploy names it and never read, also
+ * when a `zekno.app.json` lies here that the deploy does not use; none is
+ * AD13. SH4 as the settings commands say it.
  */
 function targetOf(deps: Pick<OpDeps, "cwd" | "home">): AddTarget {
   const found = findPlace(deps)
   if (found.kind === "none") throw new CliError(AD13)
-  if (found.kind === "compose")
-    throw new CliError(
-      found.settingsHere
-        ? SH3(found.file, aboveOf(deps.cwd, found.link))
-        : SH2(found.file)
-    )
+  if (found.kind === "compose") return { kind: "hand", file: found.file }
   return {
     kind: "settings",
     read: found.read,
@@ -221,7 +239,7 @@ function checkStore(
   }
 }
 
-/** Steps 9 to 12 on what was prepared: the addition, or the question; a refusal is `WrongInput` (status 2). */
+/** Steps 9 to 12 on what was prepared for a settings file: the addition, or the question; a refusal is `WrongInput` (status 2). */
 function planned(
   prepared: Prepared,
   readers?: readonly string[] | ReadonlyMap<string, readonly string[]>
@@ -244,33 +262,41 @@ function planned(
  * checked: the file, the app and the server (asked for only now, at a
  * terminal), the store, then the addition. A plan to show and commit, or the
  * question of who reads the connection secrets (`withReaders` once it is
- * answered). Refusals of status 2 are `WrongInput`, of status 1 `CliError`;
- * a missing app or server is the sentence the other commands say.
+ * answered). For a Compose file written by hand: AU10 for `--for` (the
+ * person adds the line to the services they choose), then the app, the
+ * server and the store, and a plan with nothing of the file in it.
+ * Refusals of status 2 are `WrongInput`, of status 1 `CliError`; a missing
+ * app or server is the sentence the other commands say.
  */
 export async function prepareAdd(
   deps: OpDeps,
   input: AddInput
-): Promise<AddPlan | AddQuestion> {
+): Promise<AddPlan | AddQuestion | HandPlan> {
   const target = targetOf(deps)
+  if (target.kind === "hand" && input.for !== undefined)
+    throw new WrongInput(AU10(target.file))
   const where =
     typeof input.where === "function" ? await input.where() : input.where
   const team = await teamOf(deps)
   const server = findServer(team.profile, where.server, where.serverFrom)
   const app = checkApp(where.app)
   const { store, versions } = checkStore(team, server, app, input.template)
-  return planned(
-    {
+  const prepared = {
+    template: input.template,
+    ...(input.name === undefined ? {} : { name: input.name }),
+    team,
+    server,
+    app,
+    store,
+    versions,
+  }
+  if (target.kind === "hand")
+    return {
+      ...prepared,
       target,
-      template: input.template,
-      ...(input.name === undefined ? {} : { name: input.name }),
-      team,
-      server,
-      app,
-      store,
-      versions,
-    },
-    input.for
-  )
+      service: servicesInApp(input.template, input.name)[0]![0],
+    }
+  return planned({ ...prepared, target }, input.for)
 }
 
 /** The plan once the question is answered: the services that read each connection secret. AD7 and AD15 as before it. */
@@ -290,6 +316,10 @@ export const serverWhere = (server: Server): string =>
   server.target.kind === "ssh"
     ? sanitize(server.target.destination)
     : "this machine"
+
+/** The lines for the Compose file written by hand (board `AddOther`, left column): names and `${NAME}` only. */
+export const linesOf = (plan: HandPlan): HandLines =>
+  handLines(plan.template, plan.service, plan.target.file)
 
 /** The summary before the question (board `AddTemplate`): names and fixed words only. */
 export const summaryOf = (plan: AddPlan): AdditionReport =>

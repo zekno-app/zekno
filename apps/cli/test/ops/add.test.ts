@@ -241,7 +241,7 @@ describe("prepared: the file, the app and the server, the store, the addition (s
       template: postgres,
       where: where("demo"),
     })
-    if ("addition" in prepared) throw new Error("no question")
+    if (!("ask" in prepared)) throw new Error("no question")
     expect(prepared.ask).toEqual([
       { offer: "DATABASE_URL", services: ["web", "worker"] },
     ])
@@ -284,7 +284,7 @@ describe("prepared: the file, the app and the server, the store, the addition (s
       template: postgres,
       where: where("demo"),
     })
-    if ("addition" in prepared) throw new Error("no question")
+    if (!("ask" in prepared)) throw new Error("no question")
     expect(
       await thrown(() =>
         withReaders(prepared, new Map([["DATABASE_URL", ["worker"]]]))

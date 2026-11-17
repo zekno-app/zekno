@@ -12,7 +12,9 @@
  * no template was named, at a terminal; then the file, the app and the
  * server (asked for at a terminal only now), the store and the addition; who
  * reads each connection secret (AD10 at a terminal, AD12 without one); the
- * summary; AD3, `--yes` or AD4; then adding, whole or not at all.
+ * summary; AD3, `--yes` or AD4; then adding, whole or not at all. Where the
+ * deploy here uses a Compose file written by hand: the lines to add, never
+ * written into it; AH6, `--yes` or AH8; then the secrets stored.
  */
 import type { Deps } from "../cli/context"
 import { Left, UsageError, WrongInput } from "../cli/errors"
@@ -20,13 +22,17 @@ import {
   checkName,
   checkTemplate,
   hasServer,
+  isHand,
+  linesOf,
   prepareAdd,
+  storedNames,
   summaryOf,
   withReaders,
   type AddPlan,
   type AddQuestion,
+  type HandPlan,
 } from "../ops/add"
-import { commitAdd } from "../ops/add-commit"
+import { commitAdd, commitHand } from "../ops/add-commit"
 import type { Where } from "../ops/deploy"
 import {
   AD10,
@@ -35,6 +41,9 @@ import {
   AD22,
   AD3,
   AD4,
+  AH6,
+  AH8,
+  AH9,
   AL1,
   AL2,
   AU1,
@@ -200,13 +209,40 @@ async function askReaders(
 }
 
 /**
+ * A Compose file written by hand (contracts/commands.md, "A hand-written
+ * Compose file"; board `AddOther`, left column; D17): the lines to add,
+ * which zekno never writes into it; then AH6 at a terminal, `--yes`, or AH8
+ * with no terminal (status 1, after the lines); a no, Esc or Ctrl-C is AH9,
+ * dim, status 1, no secret made; then the secrets made and stored (steps b,
+ * c and e) and what was stored.
+ */
+async function byHand(
+  deps: Deps,
+  plan: HandPlan,
+  yes: boolean
+): Promise<number> {
+  deps.ui.handLines(linesOf(plan))
+  const count = storedNames(plan.template).length
+  if (
+    !yes &&
+    !(await deps.ui.confirm(AH6(count, plan.app, plan.server.name), AH8))
+  ) {
+    deps.ui.line(undefined, [quiet(AH9)])
+    return 1
+  }
+  deps.ui.added(await commitHand(plan))
+  return 0
+}
+
+/**
  * `zekno add [<template>] [--name <service>] [--for <service>] [--app <app>]
  * [--server <name>] [--yes]`, `zekno add --list [--json]` and `zekno add
  * <template> --show [--json]`: the template's services written into the
  * settings file a deploy here would sign, and its secrets made here, sealed
- * and stored, whole or not at all; or the templates this zekno carries, or
- * what one would add. Status 0 once added, listed or shown; 1 for a no
- * (AD22); a refusal throws its sentence.
+ * and stored, whole or not at all; or, for a Compose file written by hand,
+ * the lines to add and its secrets stored; or the templates this zekno
+ * carries, or what one would add. Status 0 once added, listed or shown; 1
+ * for a no (AD22, AH9); a refusal throws its sentence.
  */
 export async function add(deps: Deps, input: AddInput): Promise<number> {
   checkUsage(input, deps.ui.asks)
@@ -225,6 +261,7 @@ export async function add(deps: Deps, input: AddInput): Promise<number> {
     ...(input.for === undefined ? {} : { for: input.for }),
     where: input.details,
   })
+  if (isHand(prepared)) return byHand(deps, prepared, input.yes)
   const plan =
     "addition" in prepared ? prepared : await askReaders(deps, prepared)
   if (plan === undefined) return nothingAdded(deps)

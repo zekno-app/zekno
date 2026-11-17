@@ -177,7 +177,7 @@ export type Asked = {
  * reason, and the next answer is tried. `"leave"` is Esc: it leaves a list, a
  * typed answer, the hidden prompt and a yes-or-no question asked with
  * `leave`, and answers no to one asked without. Every question is kept in
- * `asked`, and what `note`, `code`, `groups`, `gap`, `doctorReport`, `settingsReport`, `settingChange`, `addition`, `added`, `templateList` and `templateView` were given in `lines`;
+ * `asked`, and what `note`, `code`, `groups`, `gap`, `doctorReport`, `settingsReport`, `settingChange`, `addition`, `added`, `handLines`, `templateList` and `templateView` were given in `lines`;
  * the plain interface still writes them, so `m.out` keeps them in order with
  * everything else. A question with no answer left fails the test.
  */
@@ -338,6 +338,16 @@ export function answering(m: ReturnType<typeof machine>, answers: Answer[]) {
         done.server,
       ])
       plain.added(done)
+    },
+    handLines(hand) {
+      lines.push([
+        "handLines",
+        hand.file,
+        ...hand.service,
+        ...hand.volumes,
+        ...hand.offers,
+      ])
+      plain.handLines(hand)
     },
     templateList(rows) {
       lines.push(["templateList", ...rows.map((row) => row.name)])

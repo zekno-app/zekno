@@ -8,11 +8,16 @@
  * column 26, no empty line between blocks, then the notes in the warning
  * colour. Every value is a name that passed its rule or fixed words; a made
  * value is `••••`, dim.
+ *
+ * Then the lines for a Compose file written by hand (contracts/commands.md,
+ * "A hand-written Compose file"; board `AddOther`, left column): AH1 to AH5,
+ * the service's lines and the connection secrets' lines each in a box with a
+ * faint border, in the text colour. They name secrets, never a value.
  */
 import { Box, Text } from "ink"
 
-import { SUMMARY } from "../../templates/add-words"
-import type { AdditionReport } from "../../templates/types"
+import { AH1, AH2, AH3, AH4, AH5, SUMMARY } from "../../templates/add-words"
+import type { AdditionReport, HandLines } from "../../templates/types"
 import { Fields } from "../parts/fields"
 import { Panel } from "../parts/panel"
 import { BRAND } from "../terminal/theme"
@@ -212,6 +217,83 @@ export function AdditionBlock({
           columns={columns}
         />
       ))}
+    </Box>
+  )
+}
+
+/**
+ * Lines a person copies, in a box with a faint border, in the text colour,
+ * each from the box's second column (board `AddOther`): the box two columns
+ * wider than the longest line, as the contract draws the connection
+ * secret's, or as wide as the window. A line wider than the box goes on
+ * under itself, inside it.
+ */
+function LinesBox({
+  lines,
+  columns,
+}: {
+  lines: readonly string[]
+  columns: number
+}) {
+  const longest = Math.max(0, ...lines.map((line) => Bun.stringWidth(line)))
+  const width = Math.max(5, Math.min(columns, longest + 5))
+  return (
+    <Box width={width}>
+      <Panel tone="plain" flexGrow={1}>
+        {lines.map((line, index) => (
+          <Wrapped key={index} pieces={[{ text: line }]} columns={width - 4} />
+        ))}
+      </Panel>
+    </Box>
+  )
+}
+
+/** A sentence that starts with `Under `, dim, and goes on in the text colour (AH3, AH4). */
+const under = (sentence: string): Piece[] => [
+  { text: "Under ", dim: true },
+  { text: sentence.slice("Under ".length) },
+]
+
+/** The lines for a Compose file written by hand, drawn `columns` wide (board `AddOther`, left column). */
+export function HandBlock({
+  lines,
+  columns,
+}: {
+  lines: HandLines
+  columns: number
+}) {
+  // AH1 with the file bold: the sentence split where the file goes, never by looking for the file's name in it.
+  const [before = "", after = ""] = AH1("\0").split("\0")
+  const [inThe = "", ofEach = ""] = AH5.split("environment:")
+  return (
+    <Box flexDirection="column" width={Math.max(5, columns)}>
+      <Wrapped
+        pieces={[
+          { text: before },
+          { text: lines.file, bold: true },
+          { text: after },
+        ]}
+        columns={columns}
+      />
+      <Wrapped pieces={[{ text: AH2, dim: true }]} columns={columns} />
+      <Wrapped pieces={under(AH3)} columns={columns} />
+      <LinesBox lines={lines.service} columns={columns} />
+      {lines.volumes.length === 0 ? null : (
+        <Wrapped pieces={under(AH4(lines.volumes))} columns={columns} />
+      )}
+      {lines.offers.length === 0 ? null : (
+        <>
+          <Wrapped
+            pieces={[
+              { text: inThe, dim: true },
+              { text: "environment:" },
+              { text: ofEach, dim: true },
+            ]}
+            columns={columns}
+          />
+          <LinesBox lines={lines.offers} columns={columns} />
+        </>
+      )}
     </Box>
   )
 }

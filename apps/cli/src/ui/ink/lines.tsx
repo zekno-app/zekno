@@ -4,8 +4,9 @@
  * errors after their marks, notes, fields, tables, lines of cells, a
  * server's lines, the lines of `zekno logs`, codes, groups, a deploy that
  * ended, `zekno doctor`'s report, `zekno settings`' report and the change
- * `set` and `unset` show, `zekno add`'s summary (addition-report.tsx), its
- * list and `--show` (templates.tsx), and what a question leaves behind
+ * `set` and `unset` show, `zekno add`'s summary and the lines for a Compose
+ * file written by hand (addition-report.tsx), its list and `--show`
+ * (templates.tsx), and what a question leaves behind
  * (left-behind.ts).
  */
 import { Box, Text } from "ink"
@@ -27,10 +28,11 @@ import { ChangeLine, SettingsBlock } from "./settings-report"
 import type { SettingsReport } from "../../settings/types"
 import type {
   AdditionReport,
+  HandLines,
   TemplateRow,
   TemplateView,
 } from "../../templates/types"
-import { AdditionBlock } from "./addition-report"
+import { AdditionBlock, HandBlock } from "./addition-report"
 import { TemplateListBlock, TemplateViewBlock } from "./templates"
 import { hiddenPieces } from "./hidden-prompts"
 import { COLOR, inside, MARK, MarkedLine, withoutBackticks } from "./marks"
@@ -81,6 +83,7 @@ export type Item =
   | { id: number; kind: "settings"; report: SettingsReport }
   | { id: number; kind: "change"; change: SettingChangeShown }
   | { id: number; kind: "addition"; report: AdditionReport }
+  | { id: number; kind: "hand"; lines: HandLines }
   | { id: number; kind: "templates"; rows: readonly TemplateRow[] }
   | { id: number; kind: "template"; view: TemplateView }
 
@@ -308,6 +311,8 @@ export function Line({ item, columns }: { item: Item; columns: number }) {
     return <ChangeLine change={item.change} columns={columns} />
   if (item.kind === "addition")
     return <AdditionBlock report={item.report} columns={columns} />
+  if (item.kind === "hand")
+    return <HandBlock lines={item.lines} columns={columns} />
   if (item.kind === "templates")
     return <TemplateListBlock rows={item.rows} columns={columns} />
   if (item.kind === "template")

@@ -3,14 +3,21 @@
  * contracts/commands.md, "a settings file, at a terminal" and "After a yes";
  * board `AddTemplate`, left column; plan.md, D24, D26, D30, D31, D32; tasks
  * T022): every line, its columns, colours and weights, at 100 and at 80
- * columns and in a narrower window; and the plain interface's lines.
+ * columns and in a narrower window; and the plain interface's lines. Then
+ * the lines for a Compose file written by hand (contracts/commands.md, "A
+ * hand-written Compose file"; board `AddOther`, left column; tasks T045).
  */
 import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
 
 import { planAddition } from "../../../src/templates/addition"
+import { handLines } from "../../../src/templates/hand"
 import { additionReport } from "../../../src/templates/shown"
-import type { AdditionReport, Template } from "../../../src/templates/types"
+import type {
+  AdditionReport,
+  HandLines,
+  Template,
+} from "../../../src/templates/types"
 import { BRAND } from "../../../src/ui/terminal/theme"
 import { plainUi } from "../../../src/ui/plain/plain"
 import { BEFORE_SETTINGS } from "../../support/add-files"
@@ -318,5 +325,145 @@ describe("after a yes (board `AddTemplate`, right column)", () => {
       "stored\tPOSTGRES_PASSWORD\t1",
       "stored\tDATABASE_URL\t1",
     ])
+  })
+})
+
+describe("hand-written lines (board `AddOther`, left column)", () => {
+  const LINES = handLines(FIRST_TEMPLATES.postgres!, undefined, "compose.yaml")
+
+  /** A box as the lines are drawn in: a faint border, `width` columns, each line from its second column. */
+  const box = (lines: readonly string[], width: number) => [
+    `╭${"─".repeat(width - 2)}╮`,
+    ...lines.map((line) => `│ ${line.padEnd(width - 4)} │`),
+    `╰${"─".repeat(width - 2)}╯`,
+  ]
+
+  /** What a stand-in terminal `columns` wide shows for the lines, every line. */
+  async function drawn(lines: HandLines, columns = 100) {
+    const t = terminal(columns, 40)
+    t.ui.handLines(lines)
+    await until(() => t.lines().length > 0, "the lines")
+    await Bun.sleep(30)
+    await t.ui.close()
+    return t.lines()
+  }
+
+  test("at 100 columns: AH1 to AH5, the service's lines in a box, the connection secret's in a second; each box two columns wider than its longest line, or as wide as the window", async () => {
+    // The image line, 96 columns, fills the box the window allows; the connection secret's box is 40 wide, as the contract draws it.
+    expect(await drawn(LINES)).toEqual([
+      "This folder deploys from compose.yaml, a file written by hand.",
+      "Zekno does not edit it. Add these lines yourself.",
+      "Under services:",
+      ...box(LINES.service, 100),
+      "Under volumes:  postgres-data:",
+      "In the environment: of each service that uses it",
+      ...box(LINES.offers, 40),
+    ])
+    expect(LINES.offers[0]!.length + 5).toBe(40)
+  })
+
+  test("at 80 columns: every line fits; the image line goes on under itself, inside the box, its digest whole", async () => {
+    const lines = await drawn(LINES, 80)
+    for (const line of lines) expect([...line].length).toBeLessThanOrEqual(80)
+    const top = lines.indexOf(`╭${"─".repeat(78)}╮`)
+    expect(top).toBe(3)
+    // The box is 80 wide and 76 inside: the image line fills its first row and goes on under it.
+    const image = LINES.service[1]!.slice("    image: ".length)
+    expect(lines.slice(top + 2, top + 4)).toEqual([
+      `│     image: ${image.slice(0, 65)} │`,
+      `│ ${image.slice(65).padEnd(76)} │`,
+    ])
+    expect(image.slice(65)).toHaveLength(20)
+    expect(lines.slice(-3)).toEqual(box(LINES.offers, 40))
+  })
+
+  test("several volumes on one line, two spaces apart; no volume and no connection secret: neither line, no second box", async () => {
+    const several = await drawn({
+      ...LINES,
+      volumes: ["postgres-data", "postgres-logs"],
+    })
+    expect(several).toContain("Under volumes:  postgres-data:  postgres-logs:")
+    const bare = await drawn({ ...LINES, volumes: [], offers: [] })
+    expect(bare.slice(-1)).toEqual([`╰${"─".repeat(98)}╯`])
+    expect(bare.join("\n")).not.toContain("Under volumes")
+    expect(bare.join("\n")).not.toContain("In the environment")
+  })
+
+  describe("its looks", () => {
+    const lines = drawnInColour(REPORT_FILE, "HandBlock", {
+      lines: LINES,
+      columns: 100,
+    }).split("\n")
+    const line = (start: string) =>
+      lines.find((each) => plainOf(each).startsWith(start))!
+
+    test("AH1 with the file bold; AH2 dim; AH3 dim with services: in the text colour", () => {
+      expect(wordRuns(line("This folder"))).toEqual([
+        { text: "This folder deploys from", bold: false, dim: false },
+        { text: "compose.yaml", bold: true, dim: false },
+        { text: ", a file written by hand.", bold: false, dim: false },
+      ])
+      expect(wordRuns(line("Zekno does not edit it."))).toEqual([
+        {
+          text: "Zekno does not edit it. Add these lines yourself.",
+          bold: false,
+          dim: true,
+        },
+      ])
+      expect(wordRuns(line("Under services:"))).toEqual([
+        { text: "Under", bold: false, dim: true },
+        { text: "services:", bold: false, dim: false },
+      ])
+    })
+
+    test("the boxes: a faint border, the lines in the text colour", () => {
+      for (const top of lines.filter((each) => plainOf(each).startsWith("╭")))
+        expect(wordRuns(top).every((run) => run.dim)).toBe(true)
+      expect(wordRuns(line("│   postgres:"))).toEqual([
+        { text: "│", bold: false, dim: true },
+        { text: "postgres:", bold: false, dim: false },
+        { text: "│", bold: false, dim: true },
+      ])
+      expect(wordRuns(line("│       DATABASE_URL"))).toEqual([
+        { text: "│", bold: false, dim: true },
+        { text: "DATABASE_URL: ${DATABASE_URL}", bold: false, dim: false },
+        { text: "│", bold: false, dim: true },
+      ])
+    })
+
+    test("AH4 dim with volumes: and each volume in the text colour; AH5 dim with environment: in the text colour", () => {
+      expect(wordRuns(line("Under volumes:"))).toEqual([
+        { text: "Under", bold: false, dim: true },
+        { text: "volumes:  postgres-data:", bold: false, dim: false },
+      ])
+      expect(wordRuns(line("In the environment:"))).toEqual([
+        { text: "In the", bold: false, dim: true },
+        { text: "environment:", bold: false, dim: false },
+        { text: "of each service that uses it", bold: false, dim: true },
+      ])
+    })
+  })
+
+  test("the plain interface: the lines bare, the service's then the connection secret's, on standard output, and nothing else", () => {
+    const out: string[] = []
+    const err: string[] = []
+    plainUi(
+      (text) => out.push(text),
+      (text) => err.push(text)
+    ).handLines(LINES)
+    expect(out).toEqual([...LINES.service, ...LINES.offers])
+    expect(out).toEqual([
+      "  postgres:",
+      "    image: postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc",
+      "    restart: always",
+      "    environment:",
+      "      POSTGRES_USER: app",
+      "      POSTGRES_DB: app",
+      "      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}",
+      "    volumes:",
+      "      - postgres-data:/var/lib/postgresql",
+      "      DATABASE_URL: ${DATABASE_URL}",
+    ])
+    expect(err).toEqual([])
   })
 })

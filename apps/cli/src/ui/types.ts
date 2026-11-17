@@ -3,6 +3,7 @@ import type { SettingsReport } from "../settings/types"
 import type {
   AddDone,
   AdditionReport,
+  HandLines,
   TemplateRow,
   TemplateView,
 } from "../templates/types"
@@ -344,6 +345,16 @@ export interface Ui {
    * `added` (with a file) and one `stored` per secret, with tabs.
    */
   added(done: AddDone): void
+  /**
+   * The lines `zekno add` gives for a Compose file written by hand, which it
+   * never edits (specs/012-templates, contracts/commands.md, "A hand-written
+   * Compose file"; board `AddOther`, left column): at a terminal AH1 to AH5
+   * around the service's lines and the connection secrets' lines, each in a
+   * box with a faint border; plain output prints the lines bare, the
+   * service's then the connection secrets', on standard output, as they
+   * would be typed into the file. They name secrets, never a value.
+   */
+  handLines(lines: HandLines): void
   /**
    * `zekno add --list` (specs/012-templates, contracts/commands.md; board
    * `AddLook`): at a terminal one line per template from column 2, the name

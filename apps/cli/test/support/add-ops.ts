@@ -9,7 +9,12 @@ import { join } from "node:path"
 import { filesUnder, tempDir } from "../../../runner/test/support/helpers"
 import type { OpDeps } from "../../src/cli/context"
 import { CliError, UsageError, WrongInput } from "../../src/cli/errors"
-import type { AddPlan, AddQuestion } from "../../src/ops/add"
+import {
+  isHand,
+  type AddPlan,
+  type AddQuestion,
+  type HandPlan,
+} from "../../src/ops/add"
 import type { machine } from "./helpers"
 
 /** A thrown error, with its class: what `run` prints, and with which status. */
@@ -37,8 +42,9 @@ export async function thrown(work: () => unknown): Promise<{
 /** The app and the server, as flags give them. */
 export const where = (app: string) => ({ app, server: "dev" })
 
-/** A plan that must be one to write. */
-export function plan(prepared: AddPlan | AddQuestion): AddPlan {
+/** A plan that must be one to write into a settings file. */
+export function plan(prepared: AddPlan | AddQuestion | HandPlan): AddPlan {
+  if (isHand(prepared)) throw new Error("a Compose file written by hand")
   if (!("addition" in prepared))
     throw new Error(`a question: ${JSON.stringify(prepared.ask)}`)
   return prepared

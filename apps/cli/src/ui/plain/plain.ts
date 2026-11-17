@@ -140,6 +140,10 @@ export function plainUi(
       for (const secret of done.stored)
         out(AD23.stored(secret.name, secret.version))
     },
+    // "A hand-written Compose file", with no terminal: the lines as they would be typed into the file, no box, no words around them.
+    handLines(lines) {
+      for (const line of [...lines.service, ...lines.offers]) out(line)
+    },
     // contracts/commands.md, "`zekno add --list`", piped: the name, the title, the version and the author, with tabs.
     templateList: (rows) =>
       rows.forEach((row) =>
