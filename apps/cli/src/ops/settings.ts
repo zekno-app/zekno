@@ -133,7 +133,8 @@ export type FoundPlace =
  * the deploy names it, with the zekno.json that names it and whether a
  * `zekno.app.json` lies here all the same (nothing of either file is read:
  * FR-018); or neither. SH4 when a zekno.json not in use here yet names
- * another settings file than this folder's (security review S6). Nothing
+ * another file than the one here, a settings file (security review S6) or
+ * a Compose file (specs/012-templates, security review T4). Nothing
  * else is thrown: `zekno add` takes the Compose file as an answer
  * (specs/012-templates, research R8), and `readPlaced` makes SH1 to SH3 of
  * the other two.
@@ -151,11 +152,18 @@ export function findPlace(
   const { inUse, pending } = linkOf(deps)
   const ownApp = app === undefined || inUse?.app === app
   const place = settingsPlace(deps.cwd, ownApp ? inUse : undefined)
-  // A zekno.json not in use here yet that names another file than this folder's settings: a yes to the deploy's question
-  // deploys that file, so this one is not shown or changed as if it were the one deployed (S6).
-  if (pending !== undefined && place.kind === "settings") {
+  // A zekno.json not in use here yet that names another file than the one here: a yes to the deploy's question deploys
+  // that file, so this one is not shown, changed or added to as if it were the one deployed (S6), a Compose file written
+  // by hand included (specs/012-templates, security review T4).
+  if (pending !== undefined && place.kind !== "none") {
     const named = resolve(pending.folder, pending.compose)
-    if (realFile(named) !== realFile(namedPath(place.source)))
+    const here =
+      place.kind === "settings"
+        ? namedPath(place.source)
+        : place.link === undefined
+          ? join(deps.cwd, place.file)
+          : resolve(place.link.folder, place.link.compose)
+    if (realFile(named) !== realFile(here))
       throw new CliError(
         SH4(shownFile(deps.cwd, named), aboveOf(deps.cwd, pending))
       )

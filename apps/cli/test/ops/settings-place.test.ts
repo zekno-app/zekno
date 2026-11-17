@@ -167,4 +167,36 @@ describe("findPlace: the file a deploy here would use, as an answer (specs/012-t
       SH4("deploy/zekno.app.json")
     )
   }, 60_000)
+
+  test("SH4 also when the file here is a Compose file and the zekno.json not in use here yet names another file; none when it names that very Compose file (security review T4)", async () => {
+    const m = await folderWith({ "compose.yaml": COMPOSE_V1 })
+    mkdirSync(join(m.project, "deploy"))
+    writeFileSync(join(m.project, "deploy", "zekno.app.json"), DESIGN_FILE)
+    expect(
+      await m.zekno(
+        "link",
+        "--app",
+        "demo",
+        "--server",
+        "dev",
+        "-f",
+        "deploy/zekno.app.json"
+      )
+    ).toBe(0)
+    const other = await twin(m)
+    other.deps.cwd = m.project
+    expect(() => findPlace(untouched(other.deps))).toThrow(
+      SH4("deploy/zekno.app.json")
+    )
+
+    const same = await folderWith({ "compose.yaml": COMPOSE_V1 })
+    expect(await same.zekno("link", "--app", "demo", "--server", "dev")).toBe(0)
+    const twinOfSame = await twin(same)
+    twinOfSame.deps.cwd = same.project
+    expect(findPlace(untouched(twinOfSame.deps))).toEqual({
+      kind: "compose",
+      file: "compose.yaml",
+      settingsHere: false,
+    })
+  }, 60_000)
 })

@@ -1326,7 +1326,7 @@ starts Redis with that file. The password is on no command line.
 | Status | When |
 |--------|------|
 | `0` | Added; listed; shown; the hand-written lines printed and their secrets stored |
-| `1` | No settings file; a fault in the settings file; no terminal without `--yes`; "no", Esc or Ctrl-C; the file or the app's secrets changed while it was open; the secrets could not be stored; more secrets than a deploy carries or this machine keeps; a refusal of the keychain or of signing; a question of the app or server left |
+| `1` | No settings file; a `zekno.json` not in use here yet names another file; a fault in the settings file; no terminal without `--yes`; "no", Esc or Ctrl-C; the file or the app's secrets changed while it was open; the secrets could not be stored; more secrets than a deploy carries or this machine keeps; a refusal of the keychain or of signing; a question of the app or server left |
 | `2` | A word or an option it does not take; a `--name` that is not a service name; no template of that name; no server yet; a secret, service, volume or variable that is there already; several services and no `--for` with no terminal; a `--for` that is no service of the file; settings that would break a rule of the file; a template that asks a question |
 
 ### `zekno doctor`

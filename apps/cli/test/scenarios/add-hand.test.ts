@@ -10,14 +10,16 @@
  * and no Compose text holds a value. zekno never writes the Compose file.
  */
 import { beforeAll, describe, expect, test } from "bun:test"
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { tempDir } from "../../../runner/test/support/helpers"
 import { listSecrets } from "../../src/ops/secret"
+import { SH4 } from "../../src/settings/words"
 import { AH8, AU10 } from "../../src/templates/add-words"
 import { handLines } from "../../src/templates/hand"
-import { machine, ready } from "../support/helpers"
+import { BEFORE_FILE } from "../support/add-files"
+import { answering, machine, ready, twin } from "../support/helpers"
 import { FIRST_TEMPLATES } from "../support/template-files"
 
 type Machine = ReturnType<typeof machine>
@@ -122,4 +124,57 @@ describe("zekno add postgres in a folder that deploys compose.yaml, with no term
     expect(sent).toBe(edited)
     expect(sent).not.toContain(password)
   })
+})
+
+describe("a zekno.json not in use on this machine yet that names another file than compose.yaml (security review T4)", () => {
+  test("on the member's second machine: SH4, status 1, before any question or line, in a script and at a terminal; nothing stored; zekno settings says SH4 too", async () => {
+    const linked = tempDir("add-hand-pending")
+    writeFileSync(join(linked, "compose.yaml"), COMPOSE)
+    mkdirSync(join(linked, "deploy"))
+    writeFileSync(join(linked, "deploy", "zekno.app.json"), BEFORE_FILE)
+    m.deps.cwd = linked
+    try {
+      expect(
+        await m.zekno(
+          "link",
+          "--app",
+          "pending",
+          "--server",
+          "dev",
+          "-f",
+          "deploy/zekno.app.json"
+        )
+      ).toBe(0)
+    } finally {
+      m.deps.cwd = m.project
+    }
+    const other = await twin(m)
+    other.deps.cwd = linked
+    const said = SH4("deploy/zekno.app.json")
+    const run = async (...args: string[]) => {
+      other.out.length = 0
+      other.err.length = 0
+      const code = await other.zekno(...args)
+      return { code, out: [...other.out], err: [...other.err] }
+    }
+    for (const args of [
+      ["add", "postgres", "--yes"],
+      ["add", "postgres", "--yes", "--app", "pending", "--server", "dev"],
+      ["settings"],
+    ])
+      expect({ args, run: await run(...args) }).toEqual({
+        args,
+        run: { code: 1, out: [], err: [said] },
+      })
+    const person = answering(other, [{ yes: true }, { yes: true }])
+    expect(await run("add", "postgres")).toEqual({
+      code: 1,
+      out: [],
+      err: [said],
+    })
+    expect(person.asked).toEqual([])
+    expect(stores("pending")).toBe(false)
+    expect(readFileSync(join(linked, "compose.yaml"), "utf8")).toBe(COMPOSE)
+    expect(() => readFileSync(join(other.home, "links.json"))).toThrow()
+  }, 60_000)
 })
