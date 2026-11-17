@@ -109,7 +109,7 @@ const temporaryBeside = (path: string): string =>
  */
 function writeNew(
   temporary: string,
-  text: string,
+  content: string | Uint8Array,
   mode: number,
   made: () => void
 ): void {
@@ -117,7 +117,8 @@ function writeNew(
   made()
   try {
     fchmodSync(fd, mode)
-    const bytes = Buffer.from(text, "utf8")
+    const bytes =
+      typeof content === "string" ? Buffer.from(content, "utf8") : content
     let written = 0
     while (written < bytes.length)
       written += writeSync(fd, bytes, written, bytes.length - written)
@@ -133,8 +134,24 @@ function ownedByMe(stat: Stats): boolean {
   return uid === undefined || stat.uid === uid
 }
 
-/** Step 3 of a change: the file at `read.path` is still the very file and bytes that were read. */
-function checkUnchanged(read: SettingsRead): void {
+/**
+ * The file a check expects at `path`: the bytes of SHA-256 `sha256` and,
+ * when they are given, the identity (`dev`, `ino`) of the file that was read.
+ */
+type Expected = {
+  path: string
+  shown: string
+  sha256: string
+  dev?: number
+  ino?: number
+}
+
+/**
+ * Step 3 of a change: the file at `read.path` is still the very file and
+ * bytes that were read, a regular file of this user's with one name, never a
+ * link. Putting a file back uses the same checks, against what was written.
+ */
+function checkUnchanged(read: Expected): void {
   const changed = new CliError(CS12(read.shown))
   let entry: Stats
   try {
@@ -147,8 +164,8 @@ function checkUnchanged(read: SettingsRead): void {
     !entry.isFile() ||
     entry.nlink !== 1 ||
     !ownedByMe(entry) ||
-    entry.dev !== read.dev ||
-    entry.ino !== read.ino
+    (read.dev !== undefined && entry.dev !== read.dev) ||
+    (read.ino !== undefined && entry.ino !== read.ino)
   )
     throw changed
   let fd: number
@@ -164,7 +181,12 @@ function checkUnchanged(read: SettingsRead): void {
   }
   try {
     const opened = fstatSync(fd)
-    if (!opened.isFile() || opened.dev !== read.dev || opened.ino !== read.ino)
+    // The file opened is the one looked at (and so, when given, the one read).
+    if (
+      !opened.isFile() ||
+      opened.dev !== entry.dev ||
+      opened.ino !== entry.ino
+    )
       throw changed
     const buffer = Buffer.alloc(SETTINGS_BYTES + 1)
     let length = 0
@@ -207,6 +229,60 @@ export function writeSettings(
     throw new CliError(CS14(read.shown))
   } finally {
     // Only a file this made is removed: `wx` failing means the name was someone else's.
+    if (made) rmSync(temporary, { force: true })
+  }
+}
+
+/** What putting a settings file back needs (specs/012-templates, research R7, step f). */
+export type Restore = {
+  /** The file's path, as the reader opened it. */
+  path: string
+  /** The file as a sentence names it. */
+  shown: string
+  /** What the write that is undone wrote: the file is put back only while it holds exactly these bytes (their SHA-256). */
+  wrote: string | Uint8Array
+  /** The bytes to put back: the file as it was read (`SettingsRead.bytes`). */
+  bytes: Uint8Array
+  /** The file's mode as it was read; its permission bits are kept. */
+  mode: number
+}
+
+/**
+ * Puts a settings file back as it was read (specs/012-templates, research
+ * R7, step f), after a write of it that must be undone: `zekno add` wrote the
+ * file and then could not store its secrets. The same steps as a write: the
+ * bytes into a new file beside it under a name nobody can predict, flushed,
+ * then the file checked with `checkUnchanged`'s checks against the SHA-256 of
+ * what was written (a regular file of this user's with one name, never a
+ * link, with exactly those bytes), then a rename. A file that is not exactly
+ * the one written (changed, removed, a link, a second name, another user's)
+ * is never replaced: CS12. One that cannot be written: CS14. The temporary
+ * file is removed in every case.
+ */
+export function restoreSettings(restore: Restore): void {
+  const sha256 = createHash("sha256").update(restore.wrote).digest("hex")
+  const temporary = temporaryBeside(restore.path)
+  let made = false
+  try {
+    writeNew(
+      temporary,
+      restore.bytes,
+      restore.mode & 0o777,
+      () => (made = true)
+    )
+    try {
+      checkUnchanged({ path: restore.path, shown: restore.shown, sha256 })
+    } catch (error) {
+      // A link in its place is a file that is no longer the one written, as any other change is.
+      if (error instanceof CliError) throw new CliError(CS12(restore.shown))
+      throw error
+    }
+    renameSync(temporary, restore.path)
+    made = false
+  } catch (error) {
+    if (error instanceof CliError) throw error
+    throw new CliError(CS14(restore.shown))
+  } finally {
     if (made) rmSync(temporary, { force: true })
   }
 }

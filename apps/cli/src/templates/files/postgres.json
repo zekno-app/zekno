@@ -1,0 +1,28 @@
+{
+  "template": 1,
+  "name": "postgres",
+  "title": "PostgreSQL",
+  "about": "A relational database.",
+  "software": "18.7",
+  "author": "zekno",
+  "also": [],
+  "services": {
+    "postgres": {
+      "source": { "image": "postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc" },
+      "deploy": { "restart": "always" },
+      "networking": { "port": 5432 },
+      "variables": {
+        "secrets": ["POSTGRES_PASSWORD"],
+        "plain": { "POSTGRES_USER": "app", "POSTGRES_DB": "app" }
+      },
+      "volumes": { "data": "/var/lib/postgresql" }
+    }
+  },
+  "makes": {
+    "POSTGRES_PASSWORD": { "kind": "password", "length": 32 }
+  },
+  "offers": {
+    "DATABASE_URL": "postgres://app:{POSTGRES_PASSWORD}@{service}:5432/app"
+  },
+  "notes": ["Zekno does not back up this data."]
+}

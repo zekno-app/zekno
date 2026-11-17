@@ -1,0 +1,29 @@
+{
+  "template": 1,
+  "name": "mysql",
+  "title": "MySQL",
+  "about": "A relational database.",
+  "software": "9.7",
+  "author": "zekno",
+  "also": [],
+  "services": {
+    "mysql": {
+      "source": { "image": "mysql:9.7.4@sha256:df90258da46f6e7ff8574ff84f17618aba0765cac749928299c69fd4e7cb8ad8" },
+      "deploy": { "restart": "always" },
+      "networking": { "port": 3306 },
+      "variables": {
+        "secrets": ["MYSQL_ROOT_PASSWORD", "MYSQL_PASSWORD"],
+        "plain": { "MYSQL_USER": "app", "MYSQL_DATABASE": "app" }
+      },
+      "volumes": { "data": "/var/lib/mysql" }
+    }
+  },
+  "makes": {
+    "MYSQL_ROOT_PASSWORD": { "kind": "password", "length": 32 },
+    "MYSQL_PASSWORD": { "kind": "password", "length": 32 }
+  },
+  "offers": {
+    "DATABASE_URL": "mysql://app:{MYSQL_PASSWORD}@{service}:3306/app"
+  },
+  "notes": ["Zekno does not back up this data."]
+}

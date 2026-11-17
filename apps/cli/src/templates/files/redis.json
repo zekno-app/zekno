@@ -1,0 +1,28 @@
+{
+  "template": 1,
+  "name": "redis",
+  "title": "Redis",
+  "about": "A cache and key-value store.",
+  "software": "8.10",
+  "author": "zekno",
+  "also": [],
+  "services": {
+    "redis": {
+      "source": { "image": "redis:8.10.3@sha256:1f88291b4c57bdf249f02eb085a8669889b2d2954e91d4de5118a5da6b78dd53" },
+      "deploy": {
+        "start": "sh -c 'umask 077 && printf \"requirepass %s\\n\" \"$REDIS_PASSWORD\" > /tmp/auth.conf && chown redis /tmp/auth.conf && exec docker-entrypoint.sh redis-server /tmp/auth.conf'",
+        "restart": "always"
+      },
+      "networking": { "port": 6379 },
+      "variables": { "secrets": ["REDIS_PASSWORD"] },
+      "volumes": { "data": "/data" }
+    }
+  },
+  "makes": {
+    "REDIS_PASSWORD": { "kind": "password", "length": 32 }
+  },
+  "offers": {
+    "REDIS_URL": "redis://default:{REDIS_PASSWORD}@{service}:6379"
+  },
+  "notes": ["Zekno does not back up this data."]
+}

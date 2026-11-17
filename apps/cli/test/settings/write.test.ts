@@ -25,7 +25,11 @@ import { applyChange } from "../../src/settings/change"
 import { readSettingsFile, SETTINGS_FILE } from "../../src/settings/file"
 import { settingsText } from "../../src/settings/text"
 import type { Settings, SettingsRead } from "../../src/settings/types"
-import { createSettings, writeSettings } from "../../src/settings/write"
+import {
+  createSettings,
+  restoreSettings,
+  writeSettings,
+} from "../../src/settings/write"
 import { DESIGN_FILE, DESIGN_SETTINGS } from "../support/settings-files"
 
 /** A folder holding design.md's file, read as a command reads it. */
@@ -228,6 +232,138 @@ describe("writeSettings", () => {
     })
     // Research R5, Known limit: the write in that window is lost; the file is the change, whole.
     expect(readFileSync(read.path, "utf8")).toBe(settingsText(changed()))
+  })
+})
+
+describe("putting a file back (specs/012-templates, research R7, step f; tasks T017)", () => {
+  /** design.md's file read, then written with web's memory changed: what step d of adding leaves. */
+  function written() {
+    const { folder, read } = readDesign()
+    chmodSync(read.path, 0o640)
+    const before = readSettingsFile({ kind: "default", folder }, folder)
+    writeSettings(before, changed())
+    const { bytes } = before
+    if (bytes === undefined) throw new Error("the read kept no bytes")
+    return {
+      folder,
+      path: before.path,
+      back: {
+        path: before.path,
+        shown: before.shown,
+        wrote: settingsText(changed()),
+        bytes,
+        mode: before.mode,
+      },
+    }
+  }
+
+  const CHANGED =
+    "zekno.app.json changed since zekno read it, so nothing was written. Try again."
+
+  test("the bytes read are put back, with the mode, through a new file and a rename, while the file is the one written", () => {
+    const { folder, path, back } = written()
+    const inode = statSync(path).ino
+    const order: string[] = []
+    const fsync = fs.fsyncSync
+    const rename = fs.renameSync
+    const syncs = spyOn(fs, "fsyncSync").mockImplementation((fd) => {
+      order.push("fsync")
+      fsync(fd)
+    })
+    const renames = spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      order.push("rename")
+      rename(from, to)
+    })
+    try {
+      restoreSettings(back)
+    } finally {
+      syncs.mockRestore()
+      renames.mockRestore()
+    }
+    expect(order).toEqual(["fsync", "rename"])
+    expect(readFileSync(path, "utf8")).toBe(DESIGN_FILE)
+    expect(statSync(path).mode & 0o777).toBe(0o640)
+    expect(statSync(path).ino).not.toBe(inode)
+    onlyFiles(folder, [SETTINGS_FILE])
+  })
+
+  test("CS12: the file changed since it was written", () => {
+    const { folder, path, back } = written()
+    writeFileSync(path, DESIGN_FILE.replace('"1g"', '"2g"'))
+    expect(refused(() => restoreSettings(back))).toBe(CHANGED)
+    expect(readFileSync(path, "utf8")).toBe(DESIGN_FILE.replace('"1g"', '"2g"'))
+    onlyFiles(folder, [SETTINGS_FILE])
+  })
+
+  test("CS12: the file removed since it was written", () => {
+    const { folder, path, back } = written()
+    fs.rmSync(path)
+    expect(refused(() => restoreSettings(back))).toBe(CHANGED)
+    onlyFiles(folder, [])
+  })
+
+  test("CS12: a symbolic link in its place, to a copy of what was written", () => {
+    const { folder, path, back } = written()
+    const copy = join(folder, "copy.json")
+    writeFileSync(copy, back.wrote)
+    fs.rmSync(path)
+    symlinkSync(copy, path)
+    expect(refused(() => restoreSettings(back))).toBe(CHANGED)
+    expect(lstatSync(path).isSymbolicLink()).toBe(true)
+    expect(readFileSync(copy, "utf8")).toBe(back.wrote)
+    onlyFiles(folder, [SETTINGS_FILE, "copy.json"])
+  })
+
+  test("CS12: a second name given to the file (a hard link)", () => {
+    const { folder, path, back } = written()
+    linkSync(path, join(tempDir("settings-write"), "second"))
+    expect(refused(() => restoreSettings(back))).toBe(CHANGED)
+    expect(readFileSync(path, "utf8")).toBe(back.wrote)
+    onlyFiles(folder, [SETTINGS_FILE])
+  })
+
+  test("CS12: a file that belongs to another user", () => {
+    const { folder, path, back } = written()
+    const uid = process.getuid?.() ?? 0
+    const other = spyOn(process, "getuid").mockImplementation(() => uid + 1)
+    try {
+      expect(refused(() => restoreSettings(back))).toBe(CHANGED)
+    } finally {
+      other.mockRestore()
+    }
+    expect(readFileSync(path, "utf8")).toBe(back.wrote)
+    onlyFiles(folder, [SETTINGS_FILE])
+  })
+
+  test("CS14: a folder made read-only, and the file as it was", () => {
+    if (process.getuid?.() === 0) return
+    const { folder, path, back } = written()
+    chmodSync(folder, 0o555)
+    try {
+      expect(refused(() => restoreSettings(back))).toBe(
+        "Could not write zekno.app.json."
+      )
+    } finally {
+      chmodSync(folder, 0o755)
+    }
+    expect(readFileSync(path, "utf8")).toBe(back.wrote)
+    onlyFiles(folder, [SETTINGS_FILE])
+  })
+
+  test("a failure after the new file was made leaves no temporary file", () => {
+    const { folder, path, back } = written()
+    const fail = spyOn(fs, "fsyncSync").mockImplementation(() => {
+      throw Object.assign(new Error("disk full"), { code: "ENOSPC" })
+    })
+    try {
+      expect(refused(() => restoreSettings(back))).toBe(
+        "Could not write zekno.app.json."
+      )
+    } finally {
+      fail.mockRestore()
+    }
+    expect(readFileSync(path, "utf8")).toBe(back.wrote)
+    onlyFiles(folder, [SETTINGS_FILE])
   })
 })
 

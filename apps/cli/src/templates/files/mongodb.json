@@ -1,0 +1,31 @@
+{
+  "template": 1,
+  "name": "mongodb",
+  "title": "MongoDB",
+  "about": "A document database.",
+  "software": "9.0",
+  "author": "zekno",
+  "also": ["mongo"],
+  "services": {
+    "mongodb": {
+      "source": { "image": "mongo:9.0.8@sha256:b0c835c26e5997413e985000f1013c275377cd9607761c1784d486f6dd620b7f" },
+      "deploy": { "restart": "always" },
+      "networking": { "port": 27017 },
+      "variables": {
+        "secrets": ["MONGO_INITDB_ROOT_PASSWORD"],
+        "plain": { "MONGO_INITDB_ROOT_USERNAME": "app" }
+      },
+      "volumes": { "data": "/data/db" }
+    }
+  },
+  "makes": {
+    "MONGO_INITDB_ROOT_PASSWORD": { "kind": "password", "length": 32 }
+  },
+  "offers": {
+    "MONGODB_URI": "mongodb://app:{MONGO_INITDB_ROOT_PASSWORD}@{service}:27017/app?authSource=admin"
+  },
+  "notes": [
+    "Zekno does not back up this data.",
+    "Your app connects as the database's administrator."
+  ]
+}

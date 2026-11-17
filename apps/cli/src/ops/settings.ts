@@ -120,15 +120,25 @@ type Placed = {
 const aboveOf = (cwd: string, link?: ProjectLink): string | undefined =>
   link === undefined || isHere(link, cwd) ? undefined : shownPath(link.folder)
 
+/** Where a deploy in this folder would take its file from: a settings file read, a Compose file written by hand, or neither. */
+export type FoundPlace =
+  | (Placed & { kind: "settings" })
+  | { kind: "compose"; file: string; link?: ProjectLink; settingsHere: boolean }
+  | { kind: "none" }
+
 /**
- * The settings file a deploy in this folder would sign, read once and
- * checked whole; every problem is the reader's sentence. In its place: SH3
- * when the deploy would use a Compose file while a `zekno.app.json` lies
- * here (nothing of it is shown or changed: the next deploy does not use
- * it), SH2 when it would use a Compose file and none lies here, SH1 with
- * neither. Nothing is read from a Compose file (FR-018).
+ * The file a deploy in this folder would use, by the deploy's own rule
+ * (`settingsPlace`): a settings file, read once and checked whole (every
+ * problem the reader's sentence); a Compose file written by hand, named as
+ * the deploy names it, with the zekno.json that names it and whether a
+ * `zekno.app.json` lies here all the same (nothing of either file is read:
+ * FR-018); or neither. SH4 when a zekno.json not in use here yet names
+ * another settings file than this folder's (security review S6). Nothing
+ * else is thrown: `zekno add` takes the Compose file as an answer
+ * (specs/012-templates, research R8), and `readPlaced` makes SH1 to SH3 of
+ * the other two.
  */
-function readPlaced(deps: Pick<OpDeps, "cwd" | "home">): Placed {
+export function findPlace(deps: Pick<OpDeps, "cwd" | "home">): FoundPlace {
   const { inUse, pending } = linkOf(deps)
   const place = settingsPlace(deps.cwd, inUse)
   // A zekno.json not in use here yet that names another file than this folder's settings: a yes to the deploy's question
@@ -140,14 +150,39 @@ function readPlaced(deps: Pick<OpDeps, "cwd" | "home">): Placed {
         SH4(shownFile(deps.cwd, named), aboveOf(deps.cwd, pending))
       )
   }
-  if (place.kind === "none") throw new CliError(SH1)
+  if (place.kind === "none") return { kind: "none" }
   if (place.kind === "compose")
+    return {
+      kind: "compose",
+      file: place.file,
+      ...(place.link === undefined ? {} : { link: place.link }),
+      settingsHere: place.settingsHere,
+    }
+  return {
+    kind: "settings",
+    place,
+    read: readSettingsFile(place.source, deps.cwd),
+  }
+}
+
+/**
+ * The settings file a deploy in this folder would sign, read once and
+ * checked whole; every problem is the reader's sentence. In its place: SH3
+ * when the deploy would use a Compose file while a `zekno.app.json` lies
+ * here (nothing of it is shown or changed: the next deploy does not use
+ * it), SH2 when it would use a Compose file and none lies here, SH1 with
+ * neither. Nothing is read from a Compose file (FR-018).
+ */
+function readPlaced(deps: Pick<OpDeps, "cwd" | "home">): Placed {
+  const found = findPlace(deps)
+  if (found.kind === "none") throw new CliError(SH1)
+  if (found.kind === "compose")
     throw new CliError(
-      place.settingsHere
-        ? SH3(place.file, aboveOf(deps.cwd, place.link))
-        : SH2(place.file)
+      found.settingsHere
+        ? SH3(found.file, aboveOf(deps.cwd, found.link))
+        : SH2(found.file)
     )
-  return { place, read: readSettingsFile(place.source, deps.cwd) }
+  return { place: found.place, read: found.read }
 }
 
 /**
