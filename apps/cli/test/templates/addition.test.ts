@@ -309,86 +309,6 @@ describe("refusals, each with status 2", () => {
     expect(plan.settings.services[0]).toEqual(plain.services[0])
   })
 
-  test("AD29: a service of the file that lists in its secrets a secret the template makes or builds, reader or not (security review T1)", () => {
-    const worker = (secrets: string[]) =>
-      settingsOf(["web", WEB], ["worker", { ...WEB, secrets }])
-    expect(
-      refused({
-        template: postgres,
-        settings: worker(["POSTGRES_PASSWORD"]),
-        file: FILE,
-        readers: ["web"],
-      })
-    ).toEqual([
-      "AD29",
-      "worker already reads a secret named POSTGRES_PASSWORD. Remove it from worker.",
-    ])
-    expect(
-      refused({
-        template: postgres,
-        settings: worker(["DATABASE_URL"]),
-        file: FILE,
-        readers: ["web"],
-      })
-    ).toEqual([
-      "AD29",
-      "worker already reads a secret named DATABASE_URL. Remove it from worker.",
-    ])
-    // A reader that lists it: AD29, not AD7, also with a plain variable of that name.
-    expect(
-      refused({
-        template: postgres,
-        settings: settingsOf([
-          "web",
-          { ...WEB, secrets: ["DATABASE_URL"], plain: [["DATABASE_URL", "x"]] },
-        ]),
-        file: FILE,
-      })
-    ).toEqual([
-      "AD29",
-      "web already reads a secret named DATABASE_URL. Remove it from web.",
-    ])
-    // AD7's advice followed: web left out with --for, and still refused, since web would read it.
-    expect(
-      refused({
-        template: postgres,
-        settings: settingsOf(
-          ["web", { ...WEB, secrets: ["DATABASE_URL"] }],
-          ["worker", WEB]
-        ),
-        file: FILE,
-        readers: ["worker"],
-      })
-    ).toEqual([
-      "AD29",
-      "web already reads a secret named DATABASE_URL. Remove it from web.",
-    ])
-    // design.md's file: both services list DATABASE_URL; the first in the file's order is said, whoever reads it.
-    for (const readers of [["web"], ["worker"], ["web", "worker"]])
-      expect(
-        refused({
-          template: postgres,
-          settings: DESIGN_SETTINGS,
-          file: FILE,
-          readers,
-        })
-      ).toEqual([
-        "AD29",
-        "web already reads a secret named DATABASE_URL. Remove it from web.",
-      ])
-    // A template with no connection secret: its made secrets all the same.
-    expect(
-      refused({
-        template: { ...postgres, offers: [] },
-        settings: worker(["OTHER", "POSTGRES_PASSWORD"]),
-        file: FILE,
-      })
-    ).toEqual([
-      "AD29",
-      "worker already reads a secret named POSTGRES_PASSWORD. Remove it from worker.",
-    ])
-  })
-
   test("AU9: --name with a template of several services", () => {
     const pair = GOOD.find((good) => good.template.services.length === 2)!
     expect(
@@ -478,32 +398,5 @@ describe("refusals, each with status 2", () => {
         readers: ["nope"],
       })[0]
     ).toBe("AD9")
-  })
-
-  test("the order: AD14 before AD29, AD29 before AD7; the first service of the file, and in it the template's names, made secrets first", () => {
-    const listing = settingsOf(
-      ["web", { ...WEB, plain: [["DATABASE_URL", "x"]] }],
-      ["worker", { ...WEB, secrets: ["DATABASE_URL", "POSTGRES_PASSWORD"] }],
-      ["cron", { ...WEB, secrets: ["POSTGRES_PASSWORD"] }]
-    )
-    expect(
-      refused({
-        template: postgres,
-        settings: listing,
-        file: FILE,
-        readers: ["nope"],
-      })[0]
-    ).toBe("AD14")
-    expect(
-      refused({
-        template: postgres,
-        settings: listing,
-        file: FILE,
-        readers: ["web"],
-      })
-    ).toEqual([
-      "AD29",
-      "worker already reads a secret named POSTGRES_PASSWORD. Remove it from worker.",
-    ])
   })
 })
