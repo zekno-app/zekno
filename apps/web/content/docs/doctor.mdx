@@ -100,12 +100,12 @@ runner 0.1.0, the runner release this zekno installs
 ```
 
 When a newer release exists, the last line is a warning instead: "! A newer
-release exists: 0.2.0. Update zekno to get it." When it could not find out, it
+release exists: 0.1.1. Update zekno to get it." When it could not find out, it
 is a dim `Could not check for a newer release.`: no network, no answer within 3
 seconds, or an answer that is not a version. The exit status is 0 in each case.
 With `--json` the answer is the field `latest`, whose `state` is `newest`,
 `newer` (with the `version`) or `not_checked`:
-`{"zekno":"0.1.0","runner":"0.1.0","latest":{"state":"newer","version":"0.2.0"}}`.
+`{"zekno":"0.1.0","runner":"0.1.0","latest":{"state":"newer","version":"0.1.1"}}`.
 
 - It reads one small file from `raw.githubusercontent.com`, GitHub's host for
   files in a repository: the runner release file on the `main` branch of
