@@ -43,6 +43,7 @@ export function deployStage(
   event: EventOf<"deploy-stage">
 ): Step {
   if (!state.deploy) return stay(state)
+  // From Checked on, the panel names what the deploy lists, not what this machine holds (research R20).
   return stay({
     ...state,
     deploy: {
@@ -50,6 +51,8 @@ export function deployStage(
       stage: event.stage,
       sequence: event.sequence,
       secrets: event.secrets,
+      format: event.format ?? state.deploy.format,
+      secretNames: event.secretNames ?? state.deploy.secretNames,
     },
   })
 }

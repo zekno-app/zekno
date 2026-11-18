@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test"
-import { readSignedDeploy, RunnerStatusSchema } from "@workspace/core"
+import { RunnerStatusSchema } from "@workspace/core"
 import {
   existsSync,
   readFileSync,
@@ -25,6 +25,7 @@ import {
   type Target,
 } from "../../src/server/transport"
 import { DP5, DP6 } from "../../src/settings/words"
+import { readDeployEntry } from "../../src/shared/history"
 import { COMPOSE_V1, machine, ready } from "../support/helpers"
 import {
   DESIGN_COMPOSE,
@@ -447,12 +448,9 @@ async function signed(m: Machine): Promise<string[]> {
   const team = await openTeam(m.deps)
   const server = team.profile.servers[0]!
   return team.store.history(server.serverId, "demo").map((entry) => {
-    const read = readSignedDeploy({
-      envelope: entry.envelope,
-      trust: team.trust,
-    })
-    if (!read.ok) throw new Error("a history entry did not verify")
-    return read.value.deploy.compose
+    const read = readDeployEntry(entry.envelope, team.trust)
+    if (!read) throw new Error("a history entry did not verify")
+    return read.deploy.compose
   })
 }
 

@@ -58,11 +58,13 @@ export function liveDeploy(
         since: Date.now(),
         ...fromOf(start),
       }
+      // The format is kept for how the deploy ended (research R19); the names are not drawn here (R20).
       show({
         ...deploy,
         stage,
         sequence: info.sequence,
         secrets: info.secrets,
+        format: info.format,
         lines: latest(),
       })
     },

@@ -152,11 +152,19 @@ export type AppEvent =
       replaces?: number
       secretNames?: string[]
     }
+  /**
+   * `format` and `secretNames`: the message format and the names of the
+   * secrets the deploy lists, a secret only the server holds included
+   * (specs/014-deploy-v2, research R19 and R20). effects/deploys.ts gives
+   * them with every stage; a stage without them keeps what the deploy had.
+   */
   | {
       type: "deploy-stage"
       stage: DeployStage
       sequence: number
       secrets: number
+      format?: 1 | 2
+      secretNames?: string[]
     }
   /** Docker's lines during the deploy, cleaned, in the order it printed them. */
   | { type: "deploy-progress"; lines: readonly string[] }

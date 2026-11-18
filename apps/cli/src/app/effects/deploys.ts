@@ -405,6 +405,8 @@ export function createDeploys(context: Context) {
               stage,
               sequence: info.sequence,
               secrets: info.secrets,
+              format: info.format,
+              secretNames: info.secretNames,
             }),
           progress: (line) => lines.add(line),
           warning: (text) => notice("warning", text),

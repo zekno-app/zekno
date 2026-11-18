@@ -47,11 +47,18 @@ export function stagesOf(deploy: DeployProgress): Stage[] {
   })
 }
 
-/** The number is used once the deploy was signed, whatever happened after. */
+/**
+ * The number is used once the deploy was signed, whatever happened after;
+ * but a version-2 deploy that ended in error, refused or without an answer,
+ * used none: the next number is the runner's, so it cannot be said
+ * (specs/014-deploy-v2, research R19, C8). Kept when the app did not start,
+ * and for version 1.
+ */
 export function numberUsed(deploy: DeployProgress): boolean {
   return (
     !deploy.running &&
     deploy.outcome !== "started" &&
+    !(deploy.format === 2 && deploy.outcome === "error") &&
     deploy.sequence !== undefined &&
     deploy.stage !== undefined &&
     deploy.stage !== "checked"

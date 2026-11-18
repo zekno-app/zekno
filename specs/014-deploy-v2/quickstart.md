@@ -190,3 +190,5 @@ Added by the tasks: the base (T004), each scenario above, the walkthrough (T075)
 - **T004, 2026-11-18**: both older programs are in this clone's history. Runner 0.1.0 (the tag `runner-v0.1.0`) answers `version` with `{"version":"0.1.0","protocol":2}`; the zekno from `e7b0146` prints its two version lines and exits 0.
 - **T041, 2026-11-18, real Docker** (`caddy:2.11.9` already on this machine): one pass, eight assertions. The first deploy took 272 ms; the second deploy sent no record, and the container still had `GREETING`.
 - **After the CLI was wired (T032 to T055)**: core 283 pass; runner 217 pass, 1 skip; cli 2,345 pass, 4 skip, 6 fail. The six are in `apps/cli/test/app/app-effects.test.ts`, whose helper still reads the history with the version-1 reader; it is fixed with the lines on screen (Part D).
+- **After the lines on screen (T033 to T060), 2026-11-18**: cli 2,391 pass, 4 skip, 0 fail. `bun run screens --check`: all twelve stored screens in step; none shows a changed line, so none was redrawn (T035, T056).
+- **T070, the independent review, 2026-11-18**: nothing critical or high; one medium (S1), four low, four notes. `security-review.md`.
