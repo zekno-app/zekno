@@ -61,8 +61,21 @@ How a runner release is checked, and the limits of that route, are on
 this version are in [Status and limits](/docs#status-and-limits).
 
 <Callout title="Metadata">
-  The control plane still sees metadata: server addresses, app names, deploy
-  times and team membership.
+  **The control plane, when it exists, will never see a secret's value.** It
+  will see:
+
+  - Server addresses and team membership
+  - App names, deploy numbers and times
+  - Each deploy's Compose text with its plain variables, and image names with
+    their digests
+  - Each secret's name, version, size and who set it
+
+  With domains, building from source and health checks, it will also see:
+
+  - Domains
+  - Build recipes and their arguments, pre-deploy commands, health-check paths
+  - The size and fingerprint of each source pack: enough to confirm a guess of
+    the exact source (a public repository at a known commit), not to read it
 </Callout>
 
 ## What is open

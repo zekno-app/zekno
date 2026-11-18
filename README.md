@@ -169,7 +169,18 @@ The mechanism is end-to-end encryption plus digital signatures. Zekno does not u
 | A Zekno release (the CLI or the runner) is tampered with | The client is the trust anchor. A server installs a runner only when it matches the checksum the CLI holds, recorded after a second build of the same source gave the same file. Runner releases are not signed |
 
 > [!NOTE]
-> The control plane still sees metadata: server addresses, app names, deploy times and team membership.
+> **The control plane, when it exists, will never see a secret's value.** It will see:
+>
+> - Server addresses and team membership
+> - App names, deploy numbers and times
+> - Each deploy's Compose text with its plain variables, and image names with their digests
+> - Each secret's name, version, size and who set it
+>
+> With domains, building from source and health checks, it will also see:
+>
+> - Domains
+> - Build recipes and their arguments, pre-deploy commands, health-check paths
+> - The size and fingerprint of each source pack: enough to confirm a guess of the exact source (a public repository at a known commit), not to read it
 
 ### Open-source boundary
 
