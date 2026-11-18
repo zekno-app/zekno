@@ -4,6 +4,7 @@ import {
   RunnerAppStatesSchema,
   RunnerReportSchema,
   RunnerStatusSchema,
+  RUNNER_PROTOCOL,
   RunnerVersionSchema,
   SESSION_FRAME_BYTES,
   type SessionEvent,
@@ -34,11 +35,12 @@ import {
   type Transport,
 } from "../../src/server/transport"
 import runnerPackage from "../../../runner/package.json"
+import { olderState } from "../../../runner/test/support/deploy-v2"
 import { COMPOSE_V1, COMPOSE_V2, machine, ready } from "../support/helpers"
 
 const where = ["--app", "web", "--server", "dev"]
 /** What the repository's runner answers to `version`; the scripted runners below answer the same. */
-const VERSION = { version: runnerPackage.version, protocol: 2 }
+const VERSION = { version: runnerPackage.version, protocol: RUNNER_PROTOCOL }
 
 /**
  * A runner command that notes its process id and command word in `log`
@@ -540,10 +542,12 @@ describe("a runner that does not speak sessions gets the one-shot commands", () 
     expect(words(log)).toEqual(["session", "status"])
 
     // Deploys work exactly as they did with that runner, and the operation reports how it got there.
+    // Such a runner held its apps in a state from before version 2 (specs/014-deploy-v2, research R23 (c)): web at 1 here.
+    olderState(m.runnerHome, { web: 1 })
     m.deps.localRunner = older(log, m.docker.path)
     expect(await m.zekno("deploy", ...where)).toBe(0)
     expect(m.lastOut()).toBe(
-      "Deploy 1 of web is running on dev with no secrets."
+      "Deploy 2 of web is running on dev with no secrets."
     )
     const result = await sendDeploy(
       m.deps,
@@ -551,7 +555,8 @@ describe("a runner that does not speak sessions gets the one-shot commands", () 
     )
     expect(result).toMatchObject({
       outcome: "started",
-      sequence: 2,
+      sequence: 3,
+      format: 1,
       mode: "one-shot",
     })
     expect(words(log).slice(2)).toEqual([

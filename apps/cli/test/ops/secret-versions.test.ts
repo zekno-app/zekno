@@ -286,6 +286,31 @@ describe("zekno secret rm: a name this machine holds or remembers (CL19)", () =>
     expect(storeOf("rm-neither")).toEqual({ records: [], removals: [] })
   })
 
+  test("a name this machine removed, which held/ names only at or below that removal: today's sentence; above it, signed", async () => {
+    await set("rm-again", "DATABASE_URL")
+    const statement = storeOf("rm-again").records[0]!.envelope
+    expect((await rm("rm-again", "DATABASE_URL")).code).toBe(0)
+    // The deploy that carried the removal read the server before it: the secret still live there at version 1.
+    remember("rm-again", {
+      statements: [statement],
+      versions: [{ name: "DATABASE_URL", version: 1, removed: false }],
+    })
+    expect(await rm("rm-again", "DATABASE_URL")).toEqual({
+      code: 1,
+      said: "rm-again on dev has no secret named DATABASE_URL.",
+    })
+    expect(storeOf("rm-again").removals).toHaveLength(1)
+    // Remembered above this machine's removal (set again elsewhere since): signed above it.
+    remember("rm-again", {
+      versions: [{ name: "DATABASE_URL", version: 3, removed: false }],
+    })
+    expect(await rm("rm-again", "DATABASE_URL")).toEqual({
+      code: 0,
+      said: S1("DATABASE_URL", "rm-again"),
+    })
+    expect(lastRemoval("rm-again").version).toBe(4)
+  })
+
   test("a held/ version of 2^53 - 1: `That could not be done (invalid_argument).`, and nothing stored", async () => {
     remember("rm-max", {
       versions: [

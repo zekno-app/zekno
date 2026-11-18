@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from "bun:test"
 
 import { ready } from "../support/helpers"
+import { wire } from "../support/wire"
 
 /**
  * One run with real Docker and a real container. It only uses an image that
@@ -81,6 +82,27 @@ test.skipIf(!available)(
       "GREETING"
     )
     expect(printed.out).toBe("hello from a real container")
+
+    // A second deploy with nothing changed (specs/014-deploy-v2, tasks T041): no record is sent again,
+    // and the container is started with the secret from the record the runner keeps.
+    const w = wire(m.deps)
+    expect(await m.zekno("deploy", "--app", app, "--server", "dev")).toBe(0)
+    expect(m.lastOut()).toBe(
+      `Deploy 2 of ${app} is running on dev with 1 secret.`
+    )
+    const [again] = w.requests("deploy") as { input: { records: unknown[] } }[]
+    expect(again!.input.records).toEqual([])
+    const printedAgain = await docker(
+      "compose",
+      "-p",
+      `zekno-${app}`,
+      "exec",
+      "-T",
+      "web",
+      "printenv",
+      "GREETING"
+    )
+    expect(printedAgain.out).toBe("hello from a real container")
   },
   120_000
 )

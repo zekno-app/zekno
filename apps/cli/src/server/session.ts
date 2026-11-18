@@ -105,6 +105,8 @@ export function namedUnreachable(error: unknown, server: string): unknown {
 /** The one kind of event each request may send before its result. */
 const EVENTS: Partial<Record<SessionCommand, SessionEvent["event"]>> = {
   apply: "progress",
+  // A version-2 deploy sends Docker's lines as `apply` does (specs/014-deploy-v2, contracts/protocol.md P9); `records` sends none.
+  deploy: "progress",
   logs: "log",
 }
 

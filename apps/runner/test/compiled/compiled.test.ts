@@ -10,6 +10,7 @@
  * script, into a temporary folder.
  */
 import { beforeAll, describe, expect, test } from "bun:test"
+import { RUNNER_PROTOCOL } from "@workspace/core"
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -114,7 +115,7 @@ describe("the compiled runner reads no configuration from the folder it starts i
     const run = await inFolder(dir, [binary, "version"])
     expect(run).toEqual({
       code: 0,
-      stdout: `${JSON.stringify({ version: pkg.version, protocol: 2 })}\n`,
+      stdout: `${JSON.stringify({ version: pkg.version, protocol: RUNNER_PROTOCOL })}\n`,
       stderr: "",
     })
     expect(existsSync(marker)).toBe(false)

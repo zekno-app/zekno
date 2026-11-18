@@ -1,11 +1,4 @@
-import {
-  CoreError,
-  createDeploy,
-  currentSecrets,
-  RunnerReportSchema,
-  RunnerStatusSchema,
-  type RunnerReport,
-} from "@workspace/core"
+import { RunnerStatusSchema, type RunnerReport } from "@workspace/core"
 import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
 import { CliError, MISSING_APP, UsageError, WrongInput } from "../cli/errors"
 import { findServer, NAME, type History, type Server } from "../profile/profile"
@@ -22,6 +15,9 @@ import {
 import { appTaken } from "../shared/app-names"
 import type { DeployInfo, DeployStage } from "../shared/deploy"
 import { readDeployEntry } from "../shared/history"
+import { RUNNER_RELEASE } from "../version/runner-release"
+import { chooseFormat } from "./deploy-format"
+import { deployVersionOne, deployVersionTwo } from "./deploy-send"
 import { checkIdentity } from "./status"
 
 export type DeployCallbacks = {
@@ -42,7 +38,8 @@ export type DeployCallbacks = {
  * A deploy that has passed every check made on this machine, and has not been
  * signed or sent. `fresh`: the app's name was typed at a terminal as a new
  * one (asking/first-deploy.ts), so the deploy stops before anything is signed
- * when the runner says it holds that app already (`AppTaken`).
+ * when the runner says it holds that app already (`AppTaken`). `rollback`:
+ * made by `prepareRollback`, so what it says names `zekno rollback` (C1).
  */
 export type DeployPlan = {
   team: Team
@@ -50,6 +47,7 @@ export type DeployPlan = {
   app: string
   compose: string
   fresh?: boolean
+  rollback?: true
 }
 
 /**
@@ -71,13 +69,6 @@ export type DeployResult = DeployInfo & {
   /** How the runner was reached. `one-shot` is a runner that does not speak sessions. */
   mode: SessionMode
 }
-
-/**
- * How far a runner's last deploy number may be ahead of the highest one this
- * machine signed. A runner far beyond that is not one this machine has been
- * deploying to, and its word is not a reason to sign a far higher number.
- */
-const MAX_AHEAD = 1000
 
 /**
  * Where a command acts: an app on a server. `serverFrom` is set when the
@@ -252,125 +243,58 @@ export async function prepareRollback(
         "There is only one deploy in the history, so there is nothing to roll back to."
       )
   }
-  return { ...where, compose: entry.compose, from: entry.sequence }
+  return {
+    ...where,
+    compose: entry.compose,
+    from: entry.sequence,
+    rollback: true,
+  }
 }
 
 /**
- * Signs a deploy of the plan's service definition with the next number and
- * delivers it, over one session: `status`, then `apply`.
+ * Signs a deploy of the plan's service definition and delivers it, over one
+ * session (specs/014-deploy-v2, contracts/cli.md CL1 to CL11): the format
+ * first, from the runner's answer to `version` (C7 stops here, before
+ * anything is read or signed); then `status`, checked; then the deploy in
+ * that format (deploy-send.ts).
  */
 export async function sendDeploy(
   deps: OpDeps,
   plan: DeployPlan,
   callbacks: DeployCallbacks = {}
 ): Promise<DeployResult> {
-  const { team, server, app, compose } = plan
-  const { trust, store } = team
+  const { team, server, app } = plan
+  const carried = (deps.release ?? RUNNER_RELEASE).version
 
   return withSession(reach(deps, server.target), async (session) => {
+    // CL1. Nothing is signed in a format the runner does not carry out, and nothing is downgraded unsaid.
+    const chosen = chooseFormat({
+      server: server.name,
+      mode: session.mode,
+      runner: session.runner,
+      carried,
+    })
+
+    // CL2. Who answers, and the number it holds for the app.
     const status = await session.request("status", RunnerStatusSchema)
     checkIdentity(team, server, status)
-
-    // The next number is above both what the runner accepted and what this
-    // machine signed, so a number is never signed twice, whatever the runner says.
-    const history = store.history(server.serverId, app)
-    const signed =
-      sentDeploys(team, server, app, history, callbacks.warning).at(-1)
-        ?.sequence ?? 0
+    const history = team.store.history(server.serverId, app)
+    const sent = sentDeploys(team, server, app, history, callbacks.warning)
     const accepted = Object.hasOwn(status.lastSequence, app)
       ? status.lastSequence[app]!
       : 0
     // Read on this connection, which the person's answers already made: a name typed as new is never one the runner holds.
     if (plan.fresh === true && accepted >= 1)
       throw new AppTaken(server.name, app)
-    if (accepted > signed + MAX_AHEAD) {
-      throw new CliError(
-        `${server.name} says it has accepted deploy ${accepted} of ${app}, far beyond the ${signed} this machine has signed. Nothing was signed.`
-      )
-    }
-    const sequence = Math.max(accepted, signed) + 1
 
-    const held = store.secrets(server.serverId, app)
-    const current = currentSecrets({
-      trust,
-      serverId: server.serverId,
-      app,
-      ...held,
+    const going = { session, plan, status, accepted, history, callbacks }
+    if (chosen.format === 2) return deployVersionTwo(going)
+    return deployVersionOne({
+      ...going,
+      signed: sent.at(-1)?.sequence ?? 0,
+      ...(chosen.older === undefined ? {} : { older: chosen.older }),
+      carried,
     })
-    for (const ignored of current.ignored) {
-      callbacks.warning?.(
-        `Left out a ${ignored.kind}${ignored.name ? ` for ${ignored.name}` : ""}: ${ignored.reason}.`
-      )
-    }
-    const info: DeployInfo = {
-      app,
-      server: server.name,
-      sequence,
-      secrets: current.secrets.length,
-    }
-    callbacks.stage?.("checked", info)
-
-    const deploy = await team
-      .withSigner((signer) =>
-        createDeploy({
-          trust,
-          serverId: server.serverId,
-          app,
-          sequence,
-          compose,
-          secrets: current.secrets,
-          removals: current.removals,
-          signer,
-        })
-      )
-      .catch((error: unknown) => {
-        if (error instanceof CoreError)
-          throw new CliError(`The deploy could not be signed (${error.code}).`)
-        throw error
-      })
-
-    // Recorded before it leaves: once signed, the number is used, whatever comes back.
-    const at = new Date().toISOString()
-    store.saveHistory(server.serverId, app, [
-      ...history,
-      { envelope: deploy.envelope, at, outcome: "sent" },
-    ])
-    callbacks.stage?.("signed", info)
-
-    let starting = false
-    const start = () => {
-      if (starting) return
-      starting = true
-      callbacks.stage?.("starting", info)
-    }
-    const answer = session.request("apply", RunnerReportSchema, {
-      input: { rosters: team.profile.rosters, deploy },
-      onEvent: (event) => {
-        if (event.event !== "progress") return
-        start()
-        return callbacks.progress?.(event.line)
-      },
-    })
-    callbacks.stage?.("sent", info)
-    const report = await answer
-
-    const outcome = report.outcome
-    if (
-      (outcome !== "started" && outcome !== "start_failed") ||
-      report.app !== app ||
-      report.sequence !== sequence
-    ) {
-      throw new CliError(
-        "The runner did not answer as expected, so it is not known whether the deploy was accepted."
-      )
-    }
-    start()
-    store.saveHistory(server.serverId, app, [
-      ...history,
-      { envelope: deploy.envelope, at, outcome },
-    ])
-    callbacks.stage?.(outcome === "started" ? "started" : "failed", info)
-    return { ...info, outcome, report, mode: session.mode }
   }).catch((error: unknown) => {
     throw namedUnreachable(error, server.name)
   })

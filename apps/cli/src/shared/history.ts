@@ -13,9 +13,17 @@ import {
   readSignedDeploy,
   readSignedDeployV2,
   type Deploy,
+  type Envelope,
   type Member,
   type TeamTrust,
 } from "@workspace/core"
+
+/** Whether two envelopes are the same signed bytes: how an entry of the history, or a record, is found again. */
+export const sameEnvelope = (a: Envelope, b: Envelope): boolean =>
+  a.payloadType === b.payloadType &&
+  a.payload === b.payload &&
+  a.signature.keyId === b.signature.keyId &&
+  a.signature.sig === b.signature.sig
 
 /** What both kinds of deploy say, read from under the signature. `previous`: the deploy a version-2 deploy was made after. */
 export type HistoryDeploy = Omit<Deploy, "v"> & { previous?: number }

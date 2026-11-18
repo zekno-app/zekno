@@ -175,8 +175,8 @@ describe("P2: the session's commands and the bound of each answer", () => {
       expect(limit).toBeLessThanOrEqual(LIMITS.messageBytes / 8)
   })
 
-  test("protocol 3 is not claimed yet", () => {
-    expect(core.RUNNER_PROTOCOL).toBe(2)
+  test("P1: this library speaks protocol 3", () => {
+    expect(core.RUNNER_PROTOCOL).toBe(3)
   })
 })
 

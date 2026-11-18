@@ -10,6 +10,7 @@ import { renderToString } from "ink"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
+import { olderState } from "../../../runner/test/support/deploy-v2"
 import { runner, waitFor } from "../../../runner/test/support/helpers"
 import { AppView, createStore } from "../../src/app/app"
 import { THIS_MACHINE } from "../../src/app/effects/add-server"
@@ -1355,7 +1356,8 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
       expect(
         await m.zekno("server", "add", "prod", "--ssh", "deploy@example.test")
       ).toBe(0)
-      // The older runner holds a team, a deploy and a secret.
+      // The older runner holds a team, a deploy and a secret, in a state from before version 2 (research R23 (c)).
+      olderState(server.folder, { web: 1 })
       m.typing("hello")
       expect(await m.zekno("secret", "set", "GREETING", ...where)).toBe(0)
       expect(await m.zekno("deploy", ...where)).toBe(0)

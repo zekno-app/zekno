@@ -10,6 +10,7 @@
  * command with `sh -c` in that home folder, as a server would, and can fail
  * in batch mode the way SSH does when it would have to ask a question.
  */
+import { RUNNER_PROTOCOL } from "@workspace/core"
 import {
   chmodSync,
   copyFileSync,
@@ -71,12 +72,12 @@ const write = (path: string, text: string, mode = 0o755) => {
   chmodSync(path, mode)
 }
 
-/** A stand-in runner: answers `version` with `version`, and in `session` echoes each line it reads after saying `session`. */
+/** A stand-in runner: answers `version` with `version` and this zekno's protocol, and in `session` echoes each line it reads after saying `session`. */
 export function fakeRunner(version: string | undefined): string {
   const versionLine =
     version === undefined
       ? "exit 2"
-      : `printf '%s\\n' '{"version":"${version}","protocol":2}'`
+      : `printf '%s\\n' '{"version":"${version}","protocol":${RUNNER_PROTOCOL}}'`
   return `#!/bin/sh
 case $1 in
   version) ${versionLine} ;;
@@ -93,12 +94,12 @@ export function realRunner(docker: string): string {
 
 /**
  * The real runner, as a release of `version` would be: it answers `version`
- * with that version, and does everything else as the runner of this
- * repository does.
+ * with that version and this zekno's protocol, and does everything else as
+ * the runner of this repository does.
  */
 export function releasedRunner(docker: string, version: string): string {
   return `#!/bin/sh
-if [ "$1" = version ]; then printf '%s\\n' '{"version":"${version}","protocol":2}'; exit 0; fi
+if [ "$1" = version ]; then printf '%s\\n' '{"version":"${version}","protocol":${RUNNER_PROTOCOL}}'; exit 0; fi
 exec env ZEKNO_DOCKER="${docker}" "${process.execPath}" "${RUNNER_MAIN}" "$@"
 `
 }

@@ -12,6 +12,7 @@
  * every connection was a read in SSH's batch mode.
  */
 import { describe, expect, test } from "bun:test"
+import { RUNNER_PROTOCOL } from "@workspace/core"
 import {
   appendFileSync,
   chmodSync,
@@ -474,7 +475,7 @@ describe("everything in order, and the broken setups of quickstart.md (SC-004)",
         brk: () => {
           writeFileSync(
             prod.server.runnerPath,
-            reportingRunner(m.docker.path, "0.0.9", 2)
+            reportingRunner(m.docker.path, "0.0.9", RUNNER_PROTOCOL)
           )
           return restore(prod.server.runnerPath, runner)
         },
@@ -525,7 +526,7 @@ describe("everything in order, and the broken setups of quickstart.md (SC-004)",
         brk: () => {
           writeFileSync(
             prod.server.runnerPath,
-            reportingRunner(m.docker.path, "0.2.0", 3)
+            reportingRunner(m.docker.path, "0.2.0", RUNNER_PROTOCOL + 1)
           )
           return restore(prod.server.runnerPath, runner)
         },
@@ -737,7 +738,7 @@ describe("each check, and each result (contracts/doctor.md, The checks)", () => 
     })
     writeFileSync(
       prod.server.runnerPath,
-      reportingRunner(m.docker.path, "0.2.0", 2)
+      reportingRunner(m.docker.path, "0.2.0", RUNNER_PROTOCOL)
     )
     done = await report(f)
     expect(done.servers[0]!.checks[2]).toMatchObject({
@@ -954,7 +955,7 @@ function mockUp5(): Promise<Fleet> {
     prod.server.composeVersion("5.6.0")
     writeFileSync(
       prod.server.runnerPath,
-      reportingRunner(f.m.docker.path, "0.1.0-dev.1", 2)
+      reportingRunner(f.m.docker.path, "0.1.0-dev.1", RUNNER_PROTOCOL)
     )
     staging.stand.ask()
     f.m.compose(COMPOSE)

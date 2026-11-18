@@ -8,6 +8,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import {
+  PAYLOAD_TYPES,
   RunnerReportSchema,
   type Envelope,
   type RunnerStatus,
@@ -18,6 +19,8 @@ import { deployAnswer } from "../../src/ops/deploy-answer"
 import type { History } from "../../src/profile/profile"
 import { ENDED, UNEXPECTED, type Session } from "../../src/server/session"
 import { C1, C2 } from "../../src/shared/deploy-words"
+import { historyOf, payloadOf } from "../support/deploys"
+import { COMPOSE_V2, ready } from "../support/helpers"
 import { signingTeam } from "../support/signing-team"
 
 const A = "services:\n  web:\n    image: example/web:1\n"
@@ -295,5 +298,40 @@ describe("every refusal of a version-2 deploy", () => {
     const { session } = standIn([report])
     expect(await d.answer(session)).toEqual(report)
     expect(d.history()).toEqual(before)
+  })
+})
+
+describe("what `sendDeploy` signs in version 2 (tasks T058)", () => {
+  test("never a later field: every deploy and rollback it signs has no build, pre-deploy command, health check or route", async () => {
+    const m = await ready()
+    const where = ["--app", "web", "--server", "dev"]
+    m.typing("hello")
+    expect(await m.zekno("secret", "set", "GREETING", ...where)).toBe(0)
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    m.compose(COMPOSE_V2)
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    expect(await m.zekno("rollback", ...where)).toBe(0)
+    const signed = historyOf(m, "web").map((entry) => entry.envelope)
+    expect(signed.map((envelope) => envelope.payloadType)).toEqual([
+      PAYLOAD_TYPES.deployV2,
+      PAYLOAD_TYPES.deployV2,
+      PAYLOAD_TYPES.deployV2,
+    ])
+    for (const envelope of signed) {
+      const payload = payloadOf(envelope)
+      expect({
+        builds: payload.builds,
+        predeploy: payload.predeploy,
+        health: payload.health,
+        routes: payload.routes,
+        expiresAt: payload.expiresAt,
+      }).toEqual({
+        builds: [],
+        predeploy: null,
+        health: null,
+        routes: [],
+        expiresAt: null,
+      })
+    }
   })
 })

@@ -250,8 +250,14 @@ export type RunnerStatus = z.infer<typeof RunnerStatusSchema>
  * event lines and exactly one result line.
  */
 
-/** The protocol this version of the messages belongs to. A runner reports it with its version. */
-export const RUNNER_PROTOCOL = 2
+/**
+ * The protocol this version of the messages belongs to. A runner reports it
+ * with its version. 3 (specs/014-deploy-v2, contracts/protocol.md P1): the
+ * runner carries out a version-2 deploy with `previous`, `expiresAt` and
+ * secrets by version, and answers `deploy` and `records`; it refuses every
+ * later field. Runner 0.1.0 speaks 2.
+ */
+export const RUNNER_PROTOCOL = 3
 
 /** Runner to CLI: which runner this is. */
 export const RunnerVersionSchema = z.strictObject({

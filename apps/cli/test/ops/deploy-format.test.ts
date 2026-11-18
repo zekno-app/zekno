@@ -54,14 +54,11 @@ describe("chooseFormat (contracts/cli.md, the format)", () => {
     })
   })
 
-  // Until T025 sets RUNNER_PROTOCOL to 3, a runner of protocol 3 speaks a newer protocol than this zekno: the case below.
-  test.skipIf(RUNNER_PROTOCOL < 3)(
-    "protocol 3 (RUNNER_PROTOCOL): version 2, nothing said",
-    () => {
-      expect(chooseFormat(at("0.1.0", 3))).toEqual({ format: 2 })
-      expect(chooseFormat(at("0.1.1", 3))).toEqual({ format: 2 })
-    }
-  )
+  test("protocol 3 (RUNNER_PROTOCOL): version 2, nothing said", () => {
+    expect(RUNNER_PROTOCOL).toBe(3)
+    expect(chooseFormat(at("0.1.0", 3))).toEqual({ format: 2 })
+    expect(chooseFormat(at("0.1.1", 3))).toEqual({ format: 2 })
+  })
 
   test("a protocol above this zekno's (RUNNER_PROTOCOL + 1): C7, thrown as a CliError", () => {
     const newer = () => chooseFormat(at("0.1.2", RUNNER_PROTOCOL + 1))

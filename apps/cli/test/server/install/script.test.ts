@@ -5,7 +5,7 @@
  * in it runs once under each shell, inside one loop.
  */
 import { describe, expect, test } from "bun:test"
-import { compareRunnerVersions } from "@workspace/core"
+import { compareRunnerVersions, RUNNER_PROTOCOL } from "@workspace/core"
 import {
   chmodSync,
   existsSync,
@@ -1203,7 +1203,7 @@ describe("the script, run with sh against stand-ins", () => {
           expect(readFileSync(server.runnerPath, "utf8")).toBe(working)
           expect(
             Bun.spawnSync([server.runnerPath, "version"]).stdout.toString()
-          ).toBe(`{"version":"${OLDER}","protocol":2}\n`)
+          ).toBe(`{"version":"${OLDER}","protocol":${RUNNER_PROTOCOL}}\n`)
           expect(server.leftovers()).toEqual([])
         }
       })

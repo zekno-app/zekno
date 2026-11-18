@@ -115,7 +115,12 @@ export function floorVersion(
  * CL19: whether `zekno secret rm` signs the removal of `name`: this machine
  * holds a current secret of the name (today's rule), or a record of it that
  * does not verify, or `held/` names it (a statement, or a version not
- * removed).
+ * removed). What does not verify, and what `held/` says, count only above
+ * the highest version this machine holds verified for the name: `held/` is
+ * the server as the last version-2 deploy read it, before that deploy ran,
+ * so after a deploy that carried this machine's removal it still names the
+ * secret as live, and removing it again is refused, as it was before
+ * feature 014.
  */
 export function remembersName(
   trust: TeamTrust,
@@ -126,9 +131,14 @@ export function remembersName(
   name: string
 ): boolean {
   const current = currentSecrets({ trust, serverId, app, ...store })
+  if (current.secrets.some((record) => record.sealed.name === name)) return true
+  const here = latestVersion(trust, serverId, app, store, name)
   return (
-    current.secrets.some((record) => record.sealed.name === name) ||
-    claimed({ trust, serverId, app }, store, held, name).length > 0 ||
-    held.versions.some((entry) => entry.name === name && !entry.removed)
+    claimed({ trust, serverId, app }, store, held, name).some(
+      (version) => version > here
+    ) ||
+    held.versions.some(
+      (entry) => entry.name === name && !entry.removed && entry.version > here
+    )
   )
 }

@@ -101,6 +101,40 @@ export async function twin(m: ReturnType<typeof machine>) {
 }
 
 /**
+ * A second terminal of the same machine: the same profile folder, key store,
+ * runner and Docker, with lines of its own, so that two commands can run at
+ * once and each says what it says. `deps` is its own, so a test can wrap
+ * its `connect` alone.
+ */
+export function secondTerminal(m: ReturnType<typeof machine>) {
+  const out: string[] = []
+  const err: string[] = []
+  const deps: Deps = {
+    ...m.deps,
+    ui: {
+      ...plainUi(
+        (line) => out.push(line),
+        (line) => err.push(line)
+      ),
+      askSecret: m.deps.ui.askSecret,
+    },
+  }
+  return {
+    deps,
+    out,
+    err,
+    zekno: (...args: string[]) => run(args, deps),
+    lastOut: () => out.at(-1) ?? "",
+    lastErr: () => err.at(-1) ?? "",
+  }
+}
+
+/** The server id of the machine's first server, as its profile names it. */
+export const serverIdOf = (m: ReturnType<typeof machine>): string =>
+  JSON.parse(readFileSync(join(m.home, "profile.json"), "utf8")).servers[0]
+    .serverId as string
+
+/**
  * The lines a terminal shows once it has received `raw`, as far as Ink writes
  * outside the full-screen app: text, line breaks, erasing a line, moving up a
  * line and back to the first column. Colours and other modes are left out.

@@ -104,7 +104,7 @@ const HistorySchema = z.array(
 export type History = z.infer<typeof HistorySchema>
 
 /** The longest payload of a statement kept in `held/`. A real statement is under 1 KiB. */
-const HELD_PAYLOAD_LENGTH = 4096
+export const HELD_PAYLOAD_LENGTH = 4096
 
 /**
  * What a server said it holds for one app, as the last version-2 deploy of

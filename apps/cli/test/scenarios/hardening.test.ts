@@ -16,7 +16,9 @@ import {
 import { join } from "node:path"
 
 import { runner } from "../../../runner/test/support/helpers"
+import { historyFile, payloadOf } from "../support/deploys"
 import { COMPOSE_V2, machine, ready } from "../support/helpers"
+import { asReleased } from "../support/older-runner"
 
 const where = ["--app", "web", "--server", "dev"]
 
@@ -220,7 +222,7 @@ describe("rollback only returns to a deploy the team signed", () => {
 })
 
 describe("the runner's answers are checked", () => {
-  test("a deploy number is never signed twice, even if the runner forgets what it accepted", async () => {
+  test("version 2: a deploy is made after the number the runner holds, even if the runner forgets what it accepted", async () => {
     const m = await ready()
     await m.zekno("deploy", ...where)
     await m.zekno("deploy", ...where)
@@ -233,7 +235,26 @@ describe("the runner's answers are checked", () => {
       { mode: 0o600 }
     )
     expect(await m.zekno("deploy", ...where)).toBe(0)
+    expect(m.lastOut()).toContain("Deploy 2 of web")
+    const last = JSON.parse(
+      readFileSync(join(m.home, historyFile(m, "web")), "utf8")
+    ).at(-1)
+    expect(payloadOf(last.envelope)).toMatchObject({ previous: 1, sequence: 2 })
+  })
+
+  test("version 1: a deploy number is never signed twice, even if the runner forgets what it accepted", async () => {
+    const m = await ready()
+    await m.zekno("deploy", ...where)
+    await m.zekno("deploy", ...where)
+    // The runner's memory goes back to before the second deploy, as runner 0.1.0 keeps it; this zekno signs version 1 for it.
+    asReleased(m, { web: 1 })
+    expect(await m.zekno("deploy", ...where)).toBe(0)
     expect(m.lastOut()).toContain("Deploy 3 of web")
+    const last = JSON.parse(
+      readFileSync(join(m.home, historyFile(m, "web")), "utf8")
+    ).at(-1)
+    expect(last.envelope.payloadType).toBe("zekno.deploy.v1")
+    expect(payloadOf(last.envelope).sequence).toBe(3)
   })
 
   test("a runner far ahead of anything this machine signed is not followed", async () => {

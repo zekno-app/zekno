@@ -26,6 +26,7 @@ import type { Team } from "../cli/context"
 import { CliError } from "../cli/errors"
 import type { SecretStore, Server } from "../profile/profile"
 import { blockedLines, type BlockedName } from "../shared/deploy-words"
+import { sameEnvelope } from "../shared/history"
 
 /** What a deploy lists and supplies. `names`: the listed secrets' names, in the order listed. */
 export type Listing = {
@@ -61,13 +62,6 @@ function liveOf(
       : []
   )
 }
-
-/** Whether two envelopes are the same signed bytes. */
-const same = (a: Envelope, b: Envelope): boolean =>
-  a.payloadType === b.payloadType &&
-  a.payload === b.payload &&
-  a.signature.keyId === b.signature.keyId &&
-  a.signature.sig === b.signature.sig
 
 /**
  * CL16b, C5b: the names whose listed statement is the runner's (not one of
@@ -113,7 +107,7 @@ function newerOnServer(
 
   const names: string[] = []
   for (const envelope of statements) {
-    if (store.records.some((record) => same(record.envelope, envelope)))
+    if (store.records.some((record) => sameEnvelope(record.envelope, envelope)))
       continue
     const listed = verifySecretStatement({ envelope, trust, serverId, app })
     if (!listed.ok) continue

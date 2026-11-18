@@ -23,7 +23,7 @@ import { CliError, explainDeploy, RunnerRefused } from "../cli/errors"
 import type { History, Server } from "../profile/profile"
 import type { Session } from "../server/session"
 import { C1, C2 } from "../shared/deploy-words"
-import { readDeployEntry } from "../shared/history"
+import { readDeployEntry, sameEnvelope } from "../shared/history"
 import { checkIdentity } from "./status"
 
 /** What a version-2 deploy's answer is read against. `previous`: the number it was made after; `rollback`: it was signed by `zekno rollback`. */
@@ -36,13 +36,6 @@ export type Answering = {
   envelope: Envelope
   rollback: boolean
 }
-
-/** Whether two envelopes are the same signed deploy. */
-const same = (a: Envelope, b: Envelope): boolean =>
-  a.payloadType === b.payloadType &&
-  a.payload === b.payload &&
-  a.signature.keyId === b.signature.keyId &&
-  a.signature.sig === b.signature.sig
 
 /**
  * Takes the refused deploy's entry out of the history as it is on disk now,
@@ -58,7 +51,9 @@ function forget(answering: Answering): History {
   } catch {
     return []
   }
-  const kept = history.filter((entry) => !same(entry.envelope, envelope))
+  const kept = history.filter(
+    (entry) => !sameEnvelope(entry.envelope, envelope)
+  )
   if (kept.length !== history.length)
     team.store.saveHistory(server.serverId, app, kept)
   return kept

@@ -21,7 +21,12 @@ export type DeployInfo = {
   app: string
   server: string
   sequence: number
+  /** How many secrets the deploy lists, a secret only the server holds included. */
   secrets: number
+  /** The names of the secrets it lists, in the order listed (specs/014-deploy-v2, research R20). */
+  secretNames: string[]
+  /** The message format it is signed in: 2 for a runner that carries out version 2, 1 for an older one (contracts/cli.md, "The format"). */
+  format: 1 | 2
 }
 
 /** What a deploy view is told before anything is sent. */
@@ -84,6 +89,8 @@ export type DeployProgress = {
   /** Known from the "checked" stage on. */
   sequence?: number
   secrets?: number
+  /** The message format, known from the "checked" stage on. On version 2 a deploy that ended in error used no number (research R19). */
+  format?: 1 | 2
   stage?: DeployStage
   /** Docker's output, cleaned, the last `DEPLOY_LINES` in the app (app/state/types.ts). */
   lines: string[]
