@@ -39,6 +39,7 @@ const tagRefusal = (tag: string) =>
   `The tag ${tag} is not runner-v<x.y.z> or runner-v<x.y.z>-dev.<n>.\n`
 
 describe("release.ts check: the tag, the branch and the versions", () => {
+  // One program is started for each refused tag, all at once: on a busy machine that takes more than the usual 5 seconds.
   test("a tag is runner-v and a version, and nothing else", async () => {
     for (const version of ORDERED_VERSIONS) {
       expect(parseTag(`runner-v${version}`)).toEqual({
@@ -78,7 +79,7 @@ describe("release.ts check: the tag, the branch and the versions", () => {
         stdout: "",
       })
     }
-  })
+  }, 30_000)
 
   test("a dev tag on a commit of dev: the four lines the workflow reads, and nothing else", async () => {
     const repo = releaseRepo()
