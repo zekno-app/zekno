@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src=".github/assets/logo-mark.png" alt="zekno.app" width="280">
+
 # Zekno
 
 **Deploy to your own servers through a service that can't read your secrets<br>and can't push code to your machines.**
