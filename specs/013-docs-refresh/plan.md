@@ -140,3 +140,34 @@ apps/web/
 ## Complexity Tracking
 
 Nothing to justify.
+
+## As built
+
+Written on 2026-11-18 by the cloud session that carried on from `HANDOFF.md`. The details, with the checks' numbers, are in [PROGRESS.md](PROGRESS.md); every moved, reworded and dropped sentence is in [move-list.md](move-list.md).
+
+**As planned**
+
+- Seventeen pages in three groups, `meta.json` as `research.md` §6 found the installed Fumadocs to need. No page over 500 lines (the longest, `templates.mdx`, is 402). The old CLI page's 1,756 lines, with the old templates page's: every one is on a page as it was, reworded with the reason, or dropped with the reason; 0 unexplained.
+- Screens: `bun run screens` in `apps/cli` draws all eleven of `contracts/screens.md` (none had to be left out), from recipes on the tests' stand-ins, the same bytes on every run; `--check` and `test/screens` name a screen that drifted. The README's picture is `.github/assets/screen-home.svg`, made from `home.json`.
+- The frame, `<Screen>`, a server component with no client JavaScript.
+- The root README with what works today first and the planned design labelled as planned; the security model whole, with only the sentences of `contracts/readme.md` changed. The CLI's README cut from 1,854 to 171 lines.
+- The desktop app is named in no page and no README; the page test refuses it.
+- No file under `apps/cli/src`, `apps/runner/src`, `packages/core`, `apps/cli/tests` or `apps/cli/e2e.config.ts` changed. No package was added.
+
+**What differs from the plan**
+
+- **The stand-in runner's home.** The environment the work was done in runs as root, where the runner keeps its files in `/var/lib/zekno` unless `ZEKNO_RUNNER_HOME` says otherwise. The recipes set `ZEKNO_RUNNER_HOME` inside the stand-in server's own folder, so a capture never writes there and gives the same bytes as root and as an ordinary user. Many existing tests fail under root for this reason; they are not part of this feature (PROGRESS.md, "Starting numbers").
+- **Hand-written screens removed.** Three code blocks moved from the old page drew by hand the same screen a `<Screen>` now shows (the first deploy, `zekno add postgres`, the settings screen). Rule 8 of `contracts/pages.md` forbids that, and one said "52 MB" for the runner, which no real run prints; they are under "Dropped" in the move list.
+- **Rule 1 of the security model** says it is a rule for any interface and how far the CLI meets it today, because `apps/cli/test/layers/layers.test.ts` does not cover the full-screen app's screens (the contract's fallback).
+- **One status row reworded**: "Control plane | Hosted by Zekno, closed source" stood under "What works today" in the introduction; it now begins "Not built yet."
+- **Links from the READMEs to the docs** are full `https://zekno.app/docs/…` addresses, checked by the page test against the pages and their headings.
+
+**Screens that could not be drawn**: none.
+
+**Left for the maintainer's computer**
+
+- Pushing: every push from the cloud session was refused (GitHub 403, no access for the session), so the branch's commits are only in that session until the access is fixed.
+- Looking at the running site: the sidebar's three groups, a frame at a wide and a narrow window, and whether Geist Mono on the built site joins the box-drawing lines. The frame and the SVG were looked at in Chromium from static previews only.
+- The README on GitHub, in the dark and the light theme.
+- T041, the road map and the feature map; T042, merging into `dev`.
+- The decisions under "Needs the maintainer" in PROGRESS.md.

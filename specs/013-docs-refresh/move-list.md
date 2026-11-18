@@ -620,6 +620,22 @@ what replaced it (`contracts/readme.md`, "Today (docs introduction)").
 - quick-start.mdx: the whole page.
 - A caption for each `<Screen>` placed on a page (T028).
 
+### The control plane's status row (changed by the cloud session in part F)
+
+Under "What works today" the row read as if the control plane existed (SC-007).
+
+Old:
+
+```text
+| Control plane | Hosted by Zekno, closed source |
+```
+
+New:
+
+```text
+| Control plane | Not built yet. When built, hosted by Zekno, closed source |
+```
+
 ## From the CLI's README
 
 `apps/cli/README.md` (1,854 lines at `9ad84d3`) was cut to the five parts of `contracts/readme.md`:
