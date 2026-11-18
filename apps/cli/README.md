@@ -166,6 +166,6 @@ when the SVG differs from what `home.json` gives. The stored file's format is in
 [`specs/013-docs-refresh/contracts/screens.md`](../../specs/013-docs-refresh/contracts/screens.md).
 
 To add a screen: write `test/screens/recipes/<name>.ts` beside a recipe close to it, with example
-values only (the app `shop`, the server `prod-1` at `203.0.113.10`), run `bun run screens <name>`,
+values only (the app `shop`, the server `prod-1` at `203.0.113.7`), run `bun run screens <name>`,
 read the stored file, and show it on its page with `<Screen name="<name>" />`. The page test in
 `apps/web` fails while a stored screen is shown by no page.

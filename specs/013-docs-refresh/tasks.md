@@ -89,8 +89,8 @@
 - [x] T038 Compare the changed files with `dev`: nothing under the paths of "Rules for every task"
 - [x] T039 Read every new page once from top to bottom as a newcomer: a link that goes nowhere useful, a "see above" that points at nothing, a claim that something planned exists
 - [x] T040 Write "As built" at the end of `specs/013-docs-refresh/plan.md`: what differs from the plan, the screens that could not be drawn, what is left
-- [ ] T041 Update the road map and the feature map (013 before domains, which becomes 014)
-- [ ] T042 Merge into `dev` locally after the checks pass. Push nothing
+- [x] T041 Update the road map and the feature map (013 before domains, which becomes 014)
+- [x] T042 Merge into `dev` locally after the checks pass. Push nothing
 
 ## Maintainer steps (not tasks for the implementer)
 

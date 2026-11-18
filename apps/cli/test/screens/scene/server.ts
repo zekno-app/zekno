@@ -2,7 +2,7 @@
  * The example world every screen is drawn in (contracts/screens.md, "The
  * screens"): a developer's machine from test/support/helpers.ts, a project
  * folder named for the app `shop`, and the server `prod-1` at
- * `203.0.113.10`, user `deploy`, which is the stand-in server of
+ * `203.0.113.7`, user `deploy`, which is the stand-in server of
  * test/support/stand-in-server.ts reached over its stand-in `ssh`. Nothing
  * reaches a real server, the network, the keychain or the person's profile.
  */
@@ -27,7 +27,7 @@ export const EXAMPLE = {
   member: "Ada",
   app: "shop",
   server: "prod-1",
-  destination: "deploy@203.0.113.10",
+  destination: "deploy@203.0.113.7",
 } as const
 
 /** The example app's Compose file: a web service that reads one secret. */

@@ -20,7 +20,7 @@
     [["","  "],["dim","Team code  "],["","  "],["bold","7KQ2-M4XD-9WTA-3HPE-R8NC"]],
     [["","  "],["dim","Identifies your team. A server checks it before it agrees to obey your team."]],
     [],
-    [["brand","?"],[""," "],["bold","Where is the server?"],[""," "],["dim","›"],[""," deploy@203.0.113.10"]],
+    [["brand","?"],[""," "],["bold","Where is the server?"],[""," "],["dim","›"],[""," deploy@203.0.113.7"]],
     [["brand","?"],[""," "],["bold","A name for it"],[""," "],["dim","›"],[""," prod-1"]],
     [["green","✔"],[""," Connected over SSH"]],
     [["green","✔"],[""," Docker with Compose found"]],

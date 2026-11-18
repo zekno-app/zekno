@@ -91,7 +91,7 @@ GitHub's API through the session's GitHub connector was tried too: it can read t
 
 ## Needs the maintainer
 
-- **The address on Home is cut.** The servers pane of `home` shows `deploy@203.0.113.…`: `deploy@203.0.113.10` is one cell too long for the pane, and the program cuts it. That is what the program really draws. The contract's example address is kept; a shorter one (such as `203.0.113.7`, as in the walkthroughs) would show whole. Yours to choose.
+- **The address on Home was cut** (`deploy@203.0.113.…`, one cell too long for the pane). Settled on the maintainer's computer: the example address is now `203.0.113.7`, as on the approved boards and in the docs' other examples, and it shows whole.
 - **Values chosen for the screens**: `in 4.2s`, `2 min ago`, and an hour between the two deploys of `app-detail`. The runner's size is `110 MB` from `apps/runner/README.md`.
 - **Is `https://zekno.app/docs` live?** The runner's README now links there (the address in `config/site.ts`). This session cannot check that the docs are served there; if not, a relative link to `../web/content/docs/servers.mdx#…` would do.
 - **`templates.mdx` has two openings and two "does not do" lists**, one from the old templates page and one from `zekno add`. Merging them is a rewording, so it is left to you.
@@ -101,7 +101,7 @@ GitHub's API through the session's GitHub connector was tried too: it can read t
 - **Rule 1 could be stated as checked** if a test kept `src/app/screens/` and `src/ui/` from importing `profile/` and `@workspace/core`. That would be a test-only change, for a later feature.
 - **`help` wraps** at 100 columns (the `zekno add` line and the last notes), because that is what the program prints there.
 
-- **GitHub access for the cloud session.** Reconnect GitHub at claude.ai and check that the Claude GitHub App is installed on `zekno-app`; then the commits of this session can be pushed.
+- **GitHub access for the cloud session**: settled. The maintainer installed the Claude GitHub App on `zekno-app`, and the cloud session pushed its eleven commits (`352ed2f..80ab3a5`).
 
 ## For the maintainer
 
@@ -109,10 +109,24 @@ GitHub's API through the session's GitHub connector was tried too: it can read t
 
 **Open**:
 
-- **Nothing is on GitHub.** Every push was refused (403, no GitHub access for the cloud session; the GitHub connector was refused writes too). All the commits are on the local `013-docs-refresh` of the cloud session only. Fix the access, then push from that session, or the work must be redone.
+- Everything of the cloud session is on GitHub's `013-docs-refresh` since the access was fixed.
 - T041 (the road map and the feature map) and T042 (merging into `dev`): for your computer, as `HANDOFF.md` says.
 - The eye checks on the running site and on GitHub (see "As built" in `plan.md`).
 
 **The reworded security rules**: in `specs/013-docs-refresh/move-list.md`, under "The security model's wording", each with the old and the new sentence: the trust-boundaries row, the threat row, the open-source row removed, and rules 1, 3, 6 and 8. The rest of the model is unchanged, line for line.
 
 **To decide**: the items under "Needs the maintainer" above.
+
+## Checked on the maintainer's computer (2026-11-18, after the cloud session)
+
+The session that planned the feature pulled the branch and checked the work itself before merging.
+
+- **Protected paths**: `git diff 9ad84d3 --stat` over `apps/cli/src`, `apps/runner/src`, `packages/core`, `apps/cli/tests`, `apps/cli/e2e.config.ts` and the landing page prints nothing. The only `package.json` change is the script `screens`. No lockfile change.
+- **Checks, as an ordinary user**: `bun run typecheck --force` and `bun run lint --force` pass. Tests: web 52 pass; core 102 pass; cli **2,210 pass, 4 skip, 0 fail** across 108 files (the cloud's 66 failures were its running as root, as it said); runner 146 pass, 1 skip, 1 fail: `release.test.ts`, "a tag is runner-v and a version, and nothing else", which runs out of its 5 seconds on this machine and passes with a longer limit. It is the known timing noise; no file of the runner changed but three links in its README. Prettier clean in `apps/cli`; `bun run screens --check`: every screen in step.
+- **The security model**, compared again with a script of this session: 44 lines before, 43 after; the only lines that differ are the trust row, the threat row, the removed open-source row and rules 1, 3, 6 and 8.
+- **Nothing private** in what was added: no home folder, user name, host name or temporary path. The screens hold only example values.
+- **By eye**, in Chrome: all eleven stored screens drawn with the frame's colours and font, and the README's SVG. Lines join, the logo and the panes are as the real program draws them.
+- **One change made here**: the example address (see "Needs the maintainer"). Five screens and the SVG were redrawn by `bun run screens`; two captions no longer say the address is cut.
+- **T041 and T042**: the road map and the feature map updated, and the branch merged into `dev` on this computer.
+
+Still for the maintainer's eye: the running site (the sidebar's three groups, a frame at a narrow window, whether the site's Geist Mono joins the box lines) and the README on GitHub.

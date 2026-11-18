@@ -4,7 +4,7 @@ How a screen of the CLI gets into the docs and the README, and how it is kept tr
 
 ## The screens
 
-Example values in every screen: the app `shop`, the server `prod-1` at `203.0.113.10` (user `deploy`), a team and keys made for the capture. No value from a real machine.
+Example values in every screen: the app `shop`, the server `prod-1` at `203.0.113.7` (user `deploy`), a team and keys made for the capture. No value from a real machine.
 
 | Name | Shows | Size | Used on | Needed |
 |---|---|---|---|---|

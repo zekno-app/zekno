@@ -14,7 +14,7 @@
     [["green","✔"],[""," Profile        verified, team list v2"]],
     [["green","✔"],[""," This folder    linked to shop on prod-1, compose.yaml is readable"]],
     [],
-    [["","  "],["bold","prod-1"],["","  "],["dim","deploy@203.0.113.10"]],
+    [["","  "],["bold","prod-1"],["","  "],["dim","deploy@203.0.113.7"]],
     [["green","✔"],[""," Reachable      over SSH"]],
     [["green","✔"],[""," Docker         Compose 2.40.3"]],
     [["green","✔"],[""," Runner         0.1.0"]],
