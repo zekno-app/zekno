@@ -1,0 +1,43 @@
+{
+  "name": "app-detail",
+  "title": "The app: shop",
+  "command": "zekno",
+  "columns": 100,
+  "rows": 30,
+  "alt": "The full-screen app's screen for shop on prod-1, which is running. Its deploys, newest first, each with its number, result and time, the latest selected with its details; and its secrets by name and version. The keys of the screen are on the last line.",
+  "fixed": [
+    {"what":"the time of each deploy, read in UTC against the clock","shown":"today 10:28 and today 09:28"}
+  ],
+  "lines": [
+    [[""," ▀▀▀█ ▄▀▀▄ █ ▄▀ █▀▀▄ ▄▀▀▄ "],["brand","   ▀▀▄ █▀▀▄ █▀▀▄"]],
+    [[""," ▄▀▀  █▀▀▀ █▀▄  █  █ █  █ "],["brand","  ▄▀▀█ █▀▀  █▀▀"]],
+    [[""," ▀▀▀▀  ▀▀▀ ▀  ▀ ▀  ▀  ▀▀  "],["brand","▀  ▀▀▀ ▀    ▀   "],[""," "],["dim","›"],[""," "],["dim","prod-1"],[""," "],["dim","›"],[""," "],["bold","shop"],["","                       "],["green","● running"],[""," "],["dim","deploy 2"]],
+    [],
+    [[""," "],["brand","╭───────────────────────────────────────────────────────────╮"],[""," "],["dim","╭──────────────────────────────────╮"]],
+    [[""," "],["brand","│"],[""," "],["bold","Deploys"],["","                                  "],["dim","last 50 are kept"],[""," "],["brand","│"],[""," "],["dim","│"],[""," "],["bold,dim","Secrets"],["","                          "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","   "],["dim","no."],["","   "],["dim","result"],["","                             "],["dim","when"],["","           "],["brand","│"],[""," "],["dim","│"],[""," "],["brand"," "],[""," DATABASE_URL       "],["dim","version 1"],["","   "],["dim","│"]],
+    [[""," "],["brand","│"],[""," "],["brand","❯"],[""," "],["bold","2"],["","     "],["green","● running now"],["","                      "],["dim","today 10:28"],["","    "],["brand","│"],[""," "],["dim","│"],[""," "],["brand"," "],[""," SESSION_KEY        "],["dim","version 1"],["","   "],["dim","│"]],
+    [[""," "],["brand","│"],[""," "],["brand"," "],[""," 1     ✔ started                          "],["dim","today 09:28"],["","    "],["brand","│"],[""," "],["dim","│"],[""," "],["brand"," "],[""," "],["dim","+ set a secret"],["","                 "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],["","                                                           "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],[""," "],["dim","─────────────────────────────────────────────────────────"],[""," "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],[""," "],["dim","deploy 2"],["","  signed by Ada, from team list v2                "],["brand","│"],[""," "],["dim","│"],["","                                  "],["dim","│"]],
+    [[""," "],["brand","│"],[""," "],["dim","services"],["","  web (ghcr.io/example/shop-web:1.4.2)            "],["brand","│"],[""," "],["dim","│"],[""," "],["dim","Values are never shown. To "],["","      "],["dim","│"]],
+    [[""," "],["brand","│"],[""," "],["dim","secrets"],["","   DATABASE_URL v1, SESSION_KEY v1                 "],["brand","│"],[""," "],["dim","│"],[""," "],["dim","change one, set it again."],["","        "],["dim","│"]],
+    [[""," "],["brand","╰───────────────────────────────────────────────────────────╯"],[""," "],["dim","╰──────────────────────────────────╯"]],
+    [],
+    [],
+    [[""," d "],["dim","deploy"],["","  r "],["dim","roll back to selected"],["","  l "],["dim","logs"],["","  s "],["dim","set secret"],["","  x "],["dim","remove secret"],["","  e "],["dim","settings"],["","  tab "],["dim","pane"]],
+    [[""," esc "],["dim","back"]]
+  ]
+}

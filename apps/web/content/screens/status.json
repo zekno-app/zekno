@@ -1,0 +1,16 @@
+{
+  "name": "status",
+  "title": "What is running",
+  "command": "zekno status",
+  "columns": 100,
+  "rows": null,
+  "alt": "zekno status, which uses prod-1 as the only server: prod-1 is reachable and holds team list version 2, shop is at deploy 1 and running, and shop's secret DATABASE_URL is at version 1.",
+  "fixed": [],
+  "lines": [
+    [["dim","$ zekno status"]],
+    [["","  "],["dim","Using prod-1, your only server."]],
+    [["bold","prod-1"],[""," "],["green","● reachable"],[""," "],["dim","team list v2"]],
+    [["","shop  deploy 1  "],["green","● running"]],
+    [["","shop/DATABASE_URL  "],["dim","version 1"]]
+  ]
+}

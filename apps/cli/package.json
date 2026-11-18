@@ -14,6 +14,7 @@
     "test": "bun test",
     "test:templates": "ZEKNO_TEMPLATES_DOCKER=1 bun test test/templates",
     "compile": "bun build.ts",
+    "screens": "bun test/screens/capture.ts",
     "test:e2e": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 bun --bun --env-file=.env.local e2e run --exclude-tag docker",
     "test:e2e:docker": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 ZEKNO_E2E_REAL_DOCKER=1 bun --bun --env-file=.env.local e2e run --tag docker"
   },

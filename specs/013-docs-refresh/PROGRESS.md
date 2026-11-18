@@ -21,7 +21,7 @@ These numbers are the baseline: a failure is new only if it is not in this list.
 
 | Part | Tasks | State |
 |---|---|---|
-| A, the screens | T003, T005 to T013 | open |
+| A, the screens | T003, T005 to T013 | done |
 | B, the frame | T001, T004, T014, T015 | done |
 | C, the split | T016 to T024 | open |
 | D, the new pages | T025 to T028 | open |
@@ -29,6 +29,14 @@ These numbers are the baseline: a failure is new only if it is not in this list.
 | F, the end | T037 to T040 | open |
 
 T002 is done: the old pages are kept outside the repository for the comparisons (from `9ad84d3`, since GitHub's `dev` does not hold that commit).
+
+## Part A, the screens (T003, T005 to T013): done
+
+- `bun run screens` in `apps/cli` (`apps/cli/test/screens/capture.ts`) draws every screen from a recipe in `test/screens/recipes/`, each in a child process with `FORCE_COLOR=3`, `TZ=UTC` and a temporary folder of its own, and writes `apps/web/content/screens/<name>.json` and `.github/assets/screen-home.svg`. `--check` writes nothing and names each screen that differs, with its first differing row. Shared pieces are in `test/screens/scene/`. No file of `test/support` changed.
+- **All eleven screens are drawn**: the four required (`first-deploy`, `home`, `settings-screen`, `add-postgres`), the four wanted (`settings`, `status`, `doctor`, `help`) and the three "if they can be drawn" (`secrets`, `server-add`, `app-detail`). None needed a change under `apps/cli/src`.
+- **Root**: the stand-in server's release in the recipes is the real runner with `ZEKNO_RUNNER_HOME` set inside the stand-in server's own folder, so a capture never writes `/var/lib/zekno` and gives the same bytes as root and as an ordinary user (checked once as uid 65534).
+- **Values fixed by a rule, each listed under `fixed` in its file**: in `first-deploy` the team code (`7KQ2-M4XD-9WTA-3HPE-R8NC`) and the server code (`C5VJ-2PRX-8DQM-K7TW-4NHA`), which come from keys made on each run; the runner's size, shown as `110 MB, checksum verified` (the stand-in release is a small script; 110 MB is what `apps/runner/README.md` says, "The file is about 110 MB"; `runner-release.json` holds no size); the deploy's time, `in 4.2s`. In `server-add` the server code. In `home` the latest deploy's age, `2 min ago`. In `app-detail` the times of the two deploys, `today 10:28` and `today 09:28`. A rule that finds nothing to replace fails the capture.
+- **Checked by this session**: `bun run screens --check` exits 0 with every screen "in step"; two runs of `bun run screens` give byte-identical files (sha256 of all twelve); a word changed by hand in `first-deploy.json` makes `bun test test/screens` fail with `first-deploy  differs at row 13`, and `bun run screens` restores it. No stored screen holds a path, user or host name of this machine. All eleven files pass the docs site's loader. The SVG has a `<title>`, no script, no font, no outside file, and looked right in Chromium (lines join). `tsc`, ESLint and Prettier in `apps/cli` are clean. The whole `bun test` in `apps/cli` (run by part A's agent): 2107 pass, 9 skip, 66 fail across 108 files; every failure is in the root-caused files of the baseline, none in `test/screens`.
 
 ## Part B, the frame (T001, T004, T014, T015): done
 
@@ -47,5 +55,9 @@ Every push from this session is refused by GitHub with 403: "Claude doesn't have
 GitHub's API through the session's GitHub connector was tried too: it can read the repository (it lists the branches) but refuses to write ("403 Resource not accessible by integration" when it makes a tree). So nothing of this session reaches GitHub until the access is fixed; all of it is in the local branch's commits.
 
 ## Needs the maintainer
+
+- **The address on Home is cut.** The servers pane of `home` shows `deploy@203.0.113.…`: `deploy@203.0.113.10` is one cell too long for the pane, and the program cuts it. That is what the program really draws. The contract's example address is kept; a shorter one (such as `203.0.113.7`, as in the walkthroughs) would show whole. Yours to choose.
+- **Values chosen for the screens**: `in 4.2s`, `2 min ago`, and an hour between the two deploys of `app-detail`. The runner's size is `110 MB` from `apps/runner/README.md`.
+- **`help` wraps** at 100 columns (the `zekno add` line and the last notes), because that is what the program prints there.
 
 - **GitHub access for the cloud session.** Reconnect GitHub at claude.ai and check that the Claude GitHub App is installed on `zekno-app`; then the commits of this session can be pushed.

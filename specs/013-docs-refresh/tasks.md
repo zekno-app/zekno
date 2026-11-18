@@ -13,7 +13,7 @@
 
 ## Phase 2: Foundational (the file format both sides share)
 
-- [ ] T003 [P] Write `apps/cli/test/screens/format.ts`: the terminal's text to rows of runs with the looks of `contracts/screens.md` (bold, dim, brand, green, yellow, red; an unknown colour throws with its name), trailing spaces removed, and the stored file written one row per line; with `apps/cli/test/screens/format.test.ts`
+- [x] T003 [P] Write `apps/cli/test/screens/format.ts`: the terminal's text to rows of runs with the looks of `contracts/screens.md` (bold, dim, brand, green, yellow, red; an unknown colour throws with its name), trailing spaces removed, and the stored file written one row per line; with `apps/cli/test/screens/format.test.ts`
 - [x] T004 [P] Write `apps/web/modules/docs/lib/screens.ts`: reads `apps/web/content/screens/<name>.json`, checks every field of `contracts/screens.md` by hand (no package), throws with the screen's name when the file is missing or unsound; with `apps/web/modules/docs/lib/screens.test.ts` on files made in a temporary folder
 
 ## Phase 3: User Story 4 - See the CLI before installing it (P2, built first because US1 and US2 show its screens)
@@ -22,15 +22,15 @@
 
 **Independent test**: change a word a screen prints; `bun test test/screens` names the screen.
 
-- [ ] T005 [US4] Write `apps/cli/test/screens/capture.ts`: finds the recipes, runs each in a child process with `FORCE_COLOR=3`, writes `apps/web/content/screens/<name>.json`, or with `--check` writes nothing and names each screen that differs with its first differing row; add the script `"screens": "bun test/screens/capture.ts"` to `apps/cli/package.json`
-- [ ] T006 [US4] Recipe `apps/cli/test/screens/recipes/first-deploy.ts`: `zekno deploy` from nothing against the stand-in server, example values only, every value that differs between runs fixed and listed under `fixed` (the stand-in runner's size and the times must not show a value no real run shows)
-- [ ] T007 [P] [US4] Recipe `apps/cli/test/screens/recipes/home.ts`: the app's Home, 100 × 30, one server and one deployed app
-- [ ] T008 [P] [US4] Recipe `apps/cli/test/screens/recipes/settings-screen.ts`: the app's settings screen for `shop`, 100 × 30
-- [ ] T009 [P] [US4] Recipe `apps/cli/test/screens/recipes/add-postgres.ts`: `zekno add postgres` at a terminal, after the service is added
-- [ ] T010 [P] [US4] Recipes for the wanted screens `settings`, `status`, `doctor`, `help`, and for `secrets`, `server-add`, `app-detail` where they can be drawn without touching `apps/cli/src`; report each that cannot, with the reason
-- [ ] T011 [US4] Write `apps/cli/test/screens/svg.ts` and have the command write `.github/assets/screen-home.svg` from `home.json`: cells placed by column, box-drawing characters as lines, a `<title>` with the description
-- [ ] T012 [US4] Write `apps/cli/test/screens/screens.test.ts`: runs the check in a child process, fails naming each screen that drifted, and fails when the SVG differs from what `home.json` gives
-- [ ] T013 [US4] Run `bun run screens` twice; the second run changes no file (SC-005). Read every stored screen: example values only, nothing from this machine (no home folder, no user name, no temporary path)
+- [x] T005 [US4] Write `apps/cli/test/screens/capture.ts`: finds the recipes, runs each in a child process with `FORCE_COLOR=3`, writes `apps/web/content/screens/<name>.json`, or with `--check` writes nothing and names each screen that differs with its first differing row; add the script `"screens": "bun test/screens/capture.ts"` to `apps/cli/package.json`
+- [x] T006 [US4] Recipe `apps/cli/test/screens/recipes/first-deploy.ts`: `zekno deploy` from nothing against the stand-in server, example values only, every value that differs between runs fixed and listed under `fixed` (the stand-in runner's size and the times must not show a value no real run shows)
+- [x] T007 [P] [US4] Recipe `apps/cli/test/screens/recipes/home.ts`: the app's Home, 100 × 30, one server and one deployed app
+- [x] T008 [P] [US4] Recipe `apps/cli/test/screens/recipes/settings-screen.ts`: the app's settings screen for `shop`, 100 × 30
+- [x] T009 [P] [US4] Recipe `apps/cli/test/screens/recipes/add-postgres.ts`: `zekno add postgres` at a terminal, after the service is added
+- [x] T010 [P] [US4] Recipes for the wanted screens `settings`, `status`, `doctor`, `help`, and for `secrets`, `server-add`, `app-detail` where they can be drawn without touching `apps/cli/src`; report each that cannot, with the reason
+- [x] T011 [US4] Write `apps/cli/test/screens/svg.ts` and have the command write `.github/assets/screen-home.svg` from `home.json`: cells placed by column, box-drawing characters as lines, a `<title>` with the description
+- [x] T012 [US4] Write `apps/cli/test/screens/screens.test.ts`: runs the check in a child process, fails naming each screen that drifted, and fails when the SVG differs from what `home.json` gives
+- [x] T013 [US4] Run `bun run screens` twice; the second run changes no file (SC-005). Read every stored screen: example values only, nothing from this machine (no home folder, no user name, no temporary path)
 - [x] T014 [P] [US4] Write `apps/web/modules/docs/components/screen.tsx` as on the board `DocsFrame` and in `contracts/screens.md`, "The frame in the docs"; register `Screen` in `apps/web/modules/docs/components/mdx.tsx`
 - [x] T015 [US4] Check the frame by eye: a static preview of the component's markup with the site's fonts and tokens, in headless Chrome at a wide and at a 390px window, beside the board; fix what differs
 

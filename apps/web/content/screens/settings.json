@@ -1,0 +1,24 @@
+{
+  "name": "settings",
+  "title": "An app's settings",
+  "command": "zekno settings",
+  "columns": 100,
+  "rows": null,
+  "alt": "zekno settings in shop's folder: the app, shop, read from zekno.app.json, and its one service, web, with its settings by section: its image, how it starts and restarts, its memory and cpus, its port, not published, the secrets and plain variables it reads, and its volume.",
+  "fixed": [],
+  "lines": [
+    [["dim","$ zekno settings"]],
+    [["","  "],["bold","shop"],["dim","  from zekno.app.json"]],
+    [],
+    [["","  "],["bold,brand","web"]],
+    [["","  "],["bold","Source"],["","        "],["dim","image"],["","     ghcr.io/example/shop-web:1.4.2"]],
+    [["","  "],["bold","Deploy"],["","        "],["dim","start"],["","     bun run start"]],
+    [["","                "],["dim","restart"],["","   on failure"]],
+    [["","                "],["dim","memory"],["","    512m"]],
+    [["","                "],["dim","cpus"],["","      1"]],
+    [["","  "],["bold","Networking"],["","    "],["dim","port"],["","      3000, not published"]],
+    [["","  "],["bold","Variables"],["","     "],["dim","secrets"],["","   DATABASE_URL, SESSION_KEY"]],
+    [["","                "],["dim","plain"],["","     NODE_ENV=production"]],
+    [["","  "],["bold","Volumes"],["","       "],["dim","uploads"],["","   /data/uploads"]]
+  ]
+}
