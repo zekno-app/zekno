@@ -78,7 +78,25 @@ cd apps/cli && bun test test/scenarios/removed-member.test.ts test/ops/deploy-se
 - A deploy signed anyway (the test calls `createDeployV2` with the old statement): the runner
   refuses `untrusted_secret`, R5, no number used.
 - `zekno secret set DATABASE_URL` then `zekno deploy`: starts. `zekno secret rm DATABASE_URL`
-  instead: starts without it, and the deploy lists the removal.
+  instead: starts without it, and the deploy lists the removal. Neither command connects (the test
+  makes `deps.connect` throw for them).
+
+```bash
+cd apps/cli && bun test test/scenarios/held.test.ts test/profile/held.test.ts test/ops/secret-versions.test.ts
+```
+
+- The chain of decision B: a deploy stops with C5 (a secret only the server holds; a version-1
+  secret with no statement), and `held/<serverId>/<app>.json` now holds the server's statements and
+  versions and no value; `zekno secret set NAME`, offline, signs a version above them, and the next
+  deploy goes through; the same with `zekno secret rm NAME`, and the deploy lists the removal.
+- C5b: a twin machine sets a new value (version 3) and deploys; this machine, holding version 2,
+  deploys: it stops with C5b, nothing signed; `zekno secret set NAME` gives version 4 and the deploy
+  goes through. The ordinary case (this machine set versions 1 and 2, the server holds 2) deploys
+  without a word.
+- The plain transcripts of `secret set` and `rm` (`bun test test/plain`) are unchanged.
+
+**Try what must fail.** A `held/` file edited to say version `9007199254740991`: `zekno secret set`
+says `That could not be done (invalid_argument).` and stores nothing.
 
 ## 4. Old and new programs (US4, SC-005, SC-006, SC-007)
 
@@ -125,6 +143,7 @@ cd apps/cli && bun test test/scenarios/pairing.test.ts
 - Runner 0.1.0 put back on a state this runner wrote: every request is `invalid_state`; this zekno
   says `The runner's stored state is damaged or incomplete, so it refuses to act.`
 - In a shallow clone each prints `Skipping the pairing tests: … is not in this clone's history.`
+  The pull-request check fetches the whole history (`fetch-depth: 0`), so they run there.
 
 ## 7. Real Docker (where today's test runs)
 

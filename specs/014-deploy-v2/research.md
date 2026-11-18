@@ -122,7 +122,9 @@ Nothing else was run; no server, no network, no file of the repository but these
   removals, not versions, and verifies each itself, so FR-021 is enforced by the library.
   **The first version-2 deploy of an app with version-1 secrets** (FR-024): those live names have
   no statement on the runner, so this machine's own records are chosen and supplied; a machine
-  without them gets C5.
+  without them gets C5, then `zekno secret set` or `rm` fixes it offline (R9). C5b (R8) is worked
+  out in the CLI from `secretsForDeploy`'s `statements` and this machine's own items, so the core
+  function is as T016 and T017 write it.
 - **Rationale.** Today's behaviour for one developer is the version-1 result, unchanged; the new
   rules are additions, each with its reason.
 - **Alternatives.** Writing the listing in the CLI: a later CI client would have to copy it.
@@ -139,33 +141,70 @@ Nothing else was run; no server, no network, no file of the repository but these
   `SECRET_NAME`, so it prints safely. Several blocked names: one line per name in name order (its
   C4 or C5 sentence without `Nothing was signed.`), then `Nothing was signed.` once at the end of
   the last line, as lines.md's C4 says ("One line per secret, then the last sentence once").
+- **C5b** (version 2 only; proposed sentence, to be confirmed; decision B). After
+  `secretsForDeploy`, in `ops/deploy-secrets.ts`: for each listed statement that is the runner's
+  (its envelope is not one of this machine's records), take this machine's highest verified item
+  for the name (`verifySecret`, `verifySecretRemoval`); when that item is a record, its version is
+  lower than the listed statement's, and its hash differs, the name is blocked with C5b. A removal
+  never trips it (this machine has no value to lose), nor does a name with no item here (a lost
+  copy, US2 scenario 5), nor the ordinary case (this machine set versions 1 and 2 and the server
+  holds 2: the listed statement is this machine's own, or the same statement). Two items at one
+  version are already a conflict (CL12) and end in C5 when the server holds the name.
 - **Rationale.** A removed member's statement that is the newest is the case decision 8 is about;
   an older one is harmless and keeps today's warning. `status`'s word can only stop a deploy, never
   choose what is signed.
 - **Alternatives.** Any `unknown_signer` as C4: a key that was never a member would be called
   "someone who is no longer in the team".
 
-## R9. `zekno secret set` and `rm` and the server **(maintainer: decision 6 (a); N1)**
+## R9. `zekno secret set` and `rm` never connect **(maintainer: decision B, 2026-11-18, replacing 6 (a))**
 
 - **Fact.** `setSecret` and `removeSecret` (`ops/secret.ts`) take the version from this machine's
-  verified records and removals (`latestVersion`) and never connect. `plain-unchanged.test.ts`
-  freezes their calls for `secret set GREETING` (new), `OTHER`, `MULTI` and `secret rm NEVER`.
-- **Decision.** Offline, as today, when this machine holds a record or removal of the name that
-  verifies. Otherwise `prepareSecretSet` and `removeSecret` read the server first, before a value
-  is asked, on one session (`status`, then `records` when the runner speaks protocol 3): the next
-  version is one above the highest of this machine's versions, the runner's verified statements
-  for the name, and the version `status` reports for it (a floor only: it is never signed as a
-  secret's version or hash). `rm` signs the removal when the server holds the name live and says
-  S1; with neither, today's `<A> on <S> has no secret named <NAME>.` An unreachable server gives
-  today's unreachable sentence and stores nothing. `secret import`, `zekno add` and `secret ls`
-  stay offline: decision 6 names set and rm. Known limit: a machine that holds an older record of
-  its own while the server holds a newer one by a removed member needs one more set for each
-  version it is behind (teammates are not built). With N1's no, the server read is dropped for a
-  name this machine holds nothing of, and FR-028 is not met for a secret only the server holds or
-  one a removed member set from another machine.
-- **Rationale.** FR-028 and decision 6 (a) as written; reading before the value is asked means a
-  person never types a value that is then not stored.
-- **Alternatives.** Always reading the server: every set and rm needs SSH, against the decision.
+  verified records and removals (`latestVersion`) and never connect; `plain-unchanged.test.ts`
+  freezes that for `secret set GREETING`, `OTHER`, `MULTI` and `secret rm NEVER`. The profile's files
+  are written by `profileStore`'s `write` (a new file under a name nobody can predict, mode 0600,
+  folder 0700, then a rename) and read strictly by its `read`.
+- **Decision: what this machine remembers of the server.** A new profile file,
+  `held/<serverId>/<app>.json` (`profile/profile.ts`, `profileStore().held` and `saveHeld`),
+  `{ statements: Envelope[], versions: { name, version, removed }[] }`: the statements of the
+  runner's `records` answer and the app's entries of its `status` answer, both read on the same
+  connection by a version-2 deploy (CL3, CL3b). Written by `write`, like every profile file, and
+  replaced whole at each such read, so it never grows or goes stale in pieces; written even when
+  the deploy then stops (C4, C5, C5b), since that is when it is needed. Kept: at most 256
+  statements, each one `peekSecretStatement` reads and whose `payload` is at most 4,096 characters
+  (a real statement is under 1 KiB); at most 8,192 versions (`LIMITS.secretsPerServer`), names held
+  to `SECRET_NAME`. No value and no sealed value is ever in it. A file that is missing, unreadable
+  or does not match its schema reads as empty: it is only a floor, and the next version-2 deploy
+  writes it again. Version-1 deploys read no statements and leave it as it is.
+- **Decision: the version.** `zekno secret set NAME` and `zekno secret rm NAME` take the next
+  version as one above the highest of: this machine's records and removals of the name that verify
+  (today's rule); this machine's records of the name that do not verify, read with
+  `peekSecretStatement` (without this, a removed member's record on this machine would make C4
+  say itself again after `secret set`); the remembered statements of the name, read with
+  `peekSecretStatement`; the remembered version of the name. These are floors only: a remembered
+  statement never gives a hash and never decides what a deploy lists, which still comes only from
+  statements verified at deploy time (FR-021).
+- **Decision: `rm`.** It signs the removal when this machine holds a current secret of the name
+  (today), or holds a record of it that does not verify, or remembers it from the server (a
+  statement, or a version that is not removed), and says S1. With none of these, today's
+  `<A> on <S> has no secret named <NAME>.` Nothing connects in any case; the frozen scenes stay as
+  they are (a scene's profile holds no `held/` file).
+- **The chain (FR-028).** A deploy that finds a secret this machine cannot account for stops before
+  signing with C4, C5 or C5b, after it has written `held/`. `zekno secret set NAME` then signs a
+  version above what the server holds, offline, and the next deploy lists and supplies it;
+  `zekno secret rm NAME` signs a removal above it, and the next deploy lists the removal. This holds
+  for a secret only the server holds, for one a removed member set (from this machine or another),
+  and for a version-1 secret with no statement (its version comes from `status`).
+- **Known and accepted** (for the review): a lying runner, or attacker B editing `held/`, can report
+  any version, which only raises this machine's next version for that name. `secretVersion` allows
+  1 to `Number.MAX_SAFE_INTEGER` (2^53 - 1); at that floor `createSecret` and
+  `createSecretRemoval` refuse (`invalid_argument`), the CLI says today's
+  `That could not be done (invalid_argument).` and stores nothing, and the name cannot be set or
+  removed from this machine until a later version-2 deploy replaces `held/` with an honest answer.
+  Denial only, from the server SSH checked, which already holds every value. The same floor risk
+  as `status`'s version. `secret import` and `zekno add` keep today's rule (decision B names set
+  and rm).
+- **Alternatives.** Reading the server in set and rm (6 (a)): changes the frozen scenes and makes a
+  new name need SSH. Taking a hash from the memory: would let a runner choose what is signed.
 
 ## R10. The later fields without a new package (FR-002, FR-036, FR-046)
 
@@ -240,11 +279,11 @@ Nothing else was run; no server, no network, no file of the repository but these
 |---|---|---|
 | R1 to R8 | `cli/errors.ts`, `explainDeploy` | `RunnerRefused` from `ops/deploy-answer.ts` (v2) or `ops/deploy.ts` (v1) |
 | C1, C2 | `shared/deploy-words.ts`; chosen in `ops/deploy-answer.ts` | `CliError` after `sent` |
-| C4, C5 | `shared/deploy-words.ts`; chosen in `ops/deploy-secrets.ts` | `CliError` before `checked` |
+| C4, C5, C5b | `shared/deploy-words.ts`; chosen in `ops/deploy-secrets.ts` (C5b from `secretsForDeploy`'s result) | `CliError` before `checked`, after `held/` is written |
 | C6 | `shared/deploy-words.ts`; condition in `ops/deploy-format.ts` | `callbacks.warning`, right after signing |
 | C7 | `shared/deploy-words.ts`; `chooseFormat` | `CliError` before `status` |
 | C8 | `ui/parts/deploy-summary.tsx`, `numberUsed` | the app's `Outcome`; the terminal's failed block |
-| S1 to S3 | unchanged (`commands/secret.ts`, `ops/secret.ts`) | |
+| S1 to S3 | unchanged words (`commands/secret.ts`, `ops/secret.ts`); S2's case and S3's version from R9 | |
 | M1, M2 | `README.md`, `apps/web/content/docs/security.mdx` | |
 
 A warning said during a deploy is drawn above the deploy's block at a terminal, because the block
@@ -257,7 +296,7 @@ after signing, is drawn above the panel as the board shows.
   terminal), and `end({ outcome: "error" })` with nothing drawn draws nothing: today a stop before
   Checked (the 1,000 bound, `AppTaken`) is the sentence alone. The app dispatches `deploy-started`
   before `sendDeploy`, so its screen shows the panel and `✖ Checked ○ Signed ○ Sent ○ Starting`.
-- **Decision.** Follow today: C4, C5 and C7 are the sentence alone at a terminal and in plain
+- **Decision.** Follow today: C4, C5, C5b and C7 are the sentence alone at a terminal and in plain
   output; the app shows the panel as the boards draw it.
 
 ## R18. C6 when this zekno carries the same version as the runner
@@ -308,7 +347,8 @@ after signing, is drawn above the panel as the board shows.
   the older zekno runs in the test's process through the copy's `run` (`apps/cli/src/cli/cli.ts`),
   with the copy's `plainUi`, `connect` and `memoryKeyStore`, never the keychain. When
   `git cat-file -e <ref>^{commit}` fails, the pairing tests skip with
-  `Skipping the pairing tests: <ref> is not in this clone's history.` (N2).
+  `Skipping the pairing tests: <ref> is not in this clone's history.` The pull-request check
+  fetches the whole history (`fetch-depth: 0`, N2, decided yes), so they run on GitHub too.
 - **Alternatives.** A runner 0.1.0 rebuilt from today's version-1 functions: it would prove
   today's code, not the release's. Release binaries: need the network.
 
@@ -324,8 +364,11 @@ after signing, is drawn above the panel as the board shows.
   answers protocol 2 on a state from before version 2 (`olderState`):
   `test/scenarios/hardening.test.ts` ("The runner's memory goes back", now signed `previous` 1 on
   version 2, and its version-1 twin). (d) Runner tests that `apply` to a new app move onto
-  `deploy`, or onto `olderState` when their subject is `apply` (T050). No asserted sentence changes
-  but these.
+  `deploy`, or onto `olderState` when their subject is `apply` (T050). (e) `secret set` and `rm`
+  never connect (R9), so `apps/cli/test/plain/plain-unchanged.test.ts`, the first-deploy tests and
+  the app's set-secret tests keep their calls; a test that lists the profile folder's files sees
+  `held/` after a version-2 deploy. (f) `apps/cli/test/templates/workflow.test.ts`'s CW4 expects the
+  checkout's `with` to gain `fetch-depth: 0` (N2). No asserted sentence changes but these.
 
 ## R24. What SC-005's "every end-to-end deploy test of today" is run as
 
@@ -385,7 +428,8 @@ after signing, is drawn above the panel as the board shows.
 ## R31. What `secretsForDeploy` reads from `status`
 
 - **Decision.** The live names (`status.secrets` keys `<app>/<NAME>` with `removed: false`) and
-  their versions, only to stop (C5); never as a listed version or hash.
+  their versions, only to stop (C5); never as a listed version or hash. The app's entries are also
+  remembered in `held/` as a floor for set and rm (R9).
 
 ## R32. `readDeployEntry`
 

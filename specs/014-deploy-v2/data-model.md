@@ -93,6 +93,35 @@ signed: name, version, hash and the signer's key id, never a value.
 | `blocked` | `{ name, why: "former_member" \| "cannot_check" }[]`, in name order: C4 and C5 |
 | `ignored` | what was left out and blocks nothing, as `currentSecrets`'s `ignored` (today's warning) |
 
+C5b is not in `blocked`: the CLI works it out from `statements` and this machine's own items
+(`listForDeploy` in `apps/cli/src/ops/deploy-secrets.ts`; research R8), so the core result is as
+above.
+
+## What this machine remembers of the server (`held/<serverId>/<app>.json`)
+
+A file of the profile folder (`apps/cli/src/profile/profile.ts`, `profileStore().held(serverId,
+app)` and `saveHeld(serverId, app, held)`), written by the profile's `write` (mode 0600, folder
+0700, a new file then a rename):
+
+```json
+{
+  "statements": [{ "payloadType": "zekno.secret.v1", "payload": "…", "signature": { "keyId": "…", "sig": "…" } }],
+  "versions": [{ "name": "DATABASE_URL", "version": 3, "removed": false }]
+}
+```
+
+| Part | Rule |
+|---|---|
+| `statements` | the envelopes of the runner's `records` answer that `peekSecretStatement` reads, each `payload` at most 4,096 characters; at most 256 (`HeldSchema`, strict) |
+| `versions` | the app's entries of the runner's `status` answer: `name` (`SECRET_NAME`, at most 128), `version` (1 to 2^53 - 1), `removed`; at most 8,192 |
+
+- Written by every version-2 deploy right after its `records` read (CL3b), before anything can stop
+  it, and replaced whole each time. Not written by a version-1 deploy, `status`, or any other
+  command.
+- Read by `zekno secret set` and `zekno secret rm` only, as a floor for the next version and to know
+  a name the server holds (research R9). Missing, unreadable or not matching: read as empty.
+- Never holds a value or a sealed value; never gives a hash or a listing (FR-021).
+
 ## History entries
 
 Unchanged schema (`HistorySchema`, `apps/cli/src/profile/profile.ts`): `{ envelope, at, outcome }`,

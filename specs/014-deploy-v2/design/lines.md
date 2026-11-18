@@ -1,6 +1,6 @@
 # Lines: what a person newly sees in feature 014
 
-**Feature**: [014-deploy-v2](../spec.md) · **Date**: 2026-11-18 · **Status**: the boards made from this file were approved by the maintainer on 2026-11-18. The wordings below are the approved ones, except C3, which is not built (spec, "Decided with the maintainer", item 7). The four boards beside this file (`Deploy2Overtaken`, `Deploy2Secrets`, `Deploy2Versions`, `Deploy2Refusals`) draw them with the program's real components; where a board and this file differ, the board is the later one.
+**Feature**: [014-deploy-v2](../spec.md) · **Date**: 2026-11-18 · **Status**: the boards made from this file were approved by the maintainer on 2026-11-18. The wordings below are the approved ones, except C3, which is not built (spec, "Decided with the maintainer", item 7), and C5b, added after the plan (item 6, decision B), which is proposed and waits for the maintainer. The four boards beside this file (`Deploy2Overtaken`, `Deploy2Secrets`, `Deploy2Versions`, `Deploy2Refusals`) draw them with the program's real components; where a board and this file differ, the board is the later one.
 
 **How to read it.** Each entry says where the line appears, when, today's line when one changes (quoted exactly, with its file and line), the closest sentences the CLI already prints, used as the model, and one proposed wording. Layout is not designed here: these are the words and the places. In the sentences, `<S>` is a server's name, `<A>` an app's name, `<N>` a deploy number, `<NAME>` a secret's name, `<F>` the runner's version, `<C>` the version this zekno carries.
 
@@ -116,6 +116,13 @@ One sentence per reason (`REASONS` in `apps/cli/src/cli/errors.ts`). A refusal i
 - **Today**: the same warning template as C4, with that reason, and the deploy goes on.
 - **Proposed**: ``<S> holds <NAME> for <A>, and this machine cannot check who set it. Set it again with `zekno secret set <NAME>`, or remove it with `zekno secret rm <NAME>`. Nothing was signed.``
 
+### C5b. The server holds a newer secret than the one set on this machine (new; proposed, to be confirmed)
+
+- **Where**: as C4.
+- **When**: a version-2 deploy, and this machine's latest item for `<NAME>` is a record that is older than a statement the server holds for it and that verifies here, with another hash: another machine set it since. Today's rule would quietly deploy the server's newer value and drop this machine's.
+- **Today**: none; the deploy goes on with the server's newer value.
+- **Proposed**: ``<S> holds a newer <NAME> for <A> than the one set on this machine. Set it again with `zekno secret set <NAME>` to replace it, or remove it with `zekno secret rm <NAME>`. Nothing was signed.``
+
 ### C6. Signed in the older format (new)
 
 - **Where**: `zekno deploy` and `zekno rollback` as a warning, before the result; the app's deploy screen as a warning notice. Plain output: one line on standard error. Not in `--json` output.
@@ -152,16 +159,16 @@ One sentence per reason (`REASONS` in `apps/cli/src/cli/errors.ts`). A refusal i
 
 - **Today** (`apps/cli/src/commands/secret.ts:46`): `Removed <NAME> from <A> on <S>. It takes effect on the next deploy.` Removal is already a signed act today; version 2 keeps it so. No change proposed.
 
-### S2. A secret this machine has no record of (changed; depends on Needs the maintainer, item 6)
+### S2. A secret this machine has no record of (changed words: none; item 6, decision B)
 
-- **Where**: `zekno secret rm <NAME>`.
-- **When**: the server holds `<NAME>`, and this machine has no record of it it can verify (another machine set it, this machine lost its copy, or its setter was removed).
+- **Where**: `zekno secret rm <NAME>`, which never connects.
+- **When**: this machine has no record of `<NAME>` it can verify (another machine set it, this machine lost its copy, or its setter was removed), and it remembers `<NAME>` from the server: its last version-2 deploy of the app read it among the server's statements or versions, or this machine holds a record of it whose signer it cannot check.
 - **Today** (`apps/cli/src/ops/secret.ts:350`): `<A> on <S> has no secret named <NAME>.`
-- **Proposed**, if `zekno secret rm` asks the server: the removal goes ahead and S1 is said. `<A> on <S> has no secret named <NAME>.` stays for a name neither this machine nor the server holds.
+- **Decided**: the removal is signed, one version above the highest this machine holds or remembers, and S1 is said. `<A> on <S> has no secret named <NAME>.` stays, unchanged, for a name this machine neither holds nor remembers.
 
 ### S3. `zekno secret set` (unchanged words)
 
-- **Today** (`apps/cli/src/commands/secret.ts:35`): `Set <NAME> (version <V>) for <A> on <S>. It takes effect on the next deploy.` The version shown may come from the server's record (item 6). No change proposed.
+- **Today** (`apps/cli/src/commands/secret.ts:35`): `Set <NAME> (version <V>) for <A> on <S>. It takes effect on the next deploy.` The version shown may come from what this machine remembers of the server (item 6, decision B): one above the highest it holds or remembers. It never connects. No change proposed.
 
 ## V. Versions of the runner and of zekno
 
@@ -201,7 +208,7 @@ These cannot change: they are in releases already out. They are listed so the bo
 
 - **Deploy screen** (`app/screens/deploy.tsx`): the result line carries the R- and C-lines on a refusal; C6 shows as a warning notice; C8 changes when the "Number is used" line shows; the summary's `secrets` row may name a secret only the server held. No new stage.
 - **Home, the servers pane, the add-server screen**: no change (part V).
-- **Secrets on an app's screen**: no change in words. Whether the list shows a secret only the server holds depends on item 6.
+- **Secrets on an app's screen**: no change. The list shows this machine's secrets, as `zekno secret ls` does; what this machine remembers of the server is not listed (item 6, decision B).
 
 ## Places that may want a line (not proposed; the maintainer decides)
 

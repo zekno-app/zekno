@@ -21,37 +21,35 @@ held before its first version-2 write, and writes the whole marked state back (V
 the runner's protocol on the deploy's own connection, signs version 2 for protocol 3, version 1 with
 C6 for an older runner, and stops with C7 before a newer one; it signs one above the runner's number,
 lists every secret the server holds, sends a sealed record only when the server lacks it, and stops
-with C4 or C5 before signing when a secret cannot be used. Every new refusal has its own sentence.
+with C4, C5 or C5b before signing when a secret cannot be used. Each version-2 deploy remembers what
+the server said it holds (`held/`, never a value), so `zekno secret set` and `rm`, which never
+connect, then fix it offline. Every new refusal has its own sentence.
 The README and the docs say what the hosted service would read (M1, M2). No release is made and no
 real server is used: the new runner is proven by tests that run the real runner program, the real
 programs of `runner-v0.1.0` and of `e7b0146` taken from git, and real Docker where today's tests do.
 
 ## Needs the maintainer
 
-Neither blocks a task but the one named.
+- **C5b's words.** Decision B (below) adds one stop, C5b, for a secret the server holds that is
+  newer than this machine's own record of it. Its wording in `design/lines.md` is proposed and
+  waits for the maintainer's yes (FR-048). Only T079's words wait; with other words, only
+  `apps/cli/src/shared/deploy-words.ts` and its test change.
 
-- **N1. `zekno secret set` and `zekno secret rm` for a name this machine holds nothing of.**
-  Decision 6 (a) says they ask the server "only when [this machine holds no record of the secret it
-  can verify]", and FR-028 says they must fix "a secret only the server holds". A machine cannot
-  tell offline whether a name it has never seen is held by the server, so both mean that
-  `zekno secret set NEW` and `zekno secret rm NEVER` now read the server. That changes the calls of
-  four scenes of `apps/cli/test/plain/plain-unchanged.test.ts`, whose transcripts are frozen by
-  feature 006 (`secret set GREETING`, `secret set OTHER`, `secret set MULTI`, `secret rm NEVER`
-  each gain one `connect local`), and it means a brand-new secret name needs its server reachable
-  and reads it once: `zekno deploy`'s first run and the app's missing values read it once per value
-  they ask (with password SSH, one more prompt each). The decision's note "which is always the
-  case for one developer" does not hold for a brand-new name. **Recommended: yes**, build it as
-  FR-028 says, and let `plain-unchanged.test.ts` allow exactly that one call in those four scenes
-  (research R9). With a no, set and rm read the server only when this machine holds an item of the
-  name it cannot verify, and a secret this machine holds nothing of (only the server holds it, or a
-  removed member set it from another machine) cannot be fixed by them: FR-028 is not met for it and
-  the spec needs a change. Task T047's last step waits for this answer; everything else proceeds.
-- **N2. The pairing tests need git history.** They take runner 0.1.0 from the tag `runner-v0.1.0`
-  and the zekno from before this feature from commit `e7b0146` (research R22). The pull-request
-  check clones one commit, so there they skip with a printed reason, as the real-Docker test skips
-  without Docker. **Optional yes**: `fetch-depth: 0` on the checkout of
-  `.github/workflows/pull-request-checks.yml` would run them on GitHub too. Without it nothing
-  changes in CI, and the pairing tests run in every full clone (quickstart.md, step 6).
+## Decided with the maintainer after the plan (2026-11-18)
+
+- **N1, decision B: `zekno secret set` and `zekno secret rm` never connect.** They stay offline in
+  every case, and the four scenes `apps/cli/test/plain/plain-unchanged.test.ts` froze stay as they
+  are. FR-028 is met another way (research R9): each version-2 deploy keeps on this machine what the
+  server said it holds for the app (`held/<serverId>/<app>.json`: its statements and its versions,
+  never a value, replaced whole at each read); set and rm take the next version as one above the
+  highest of this machine's records and that memory, read as a floor and never for a hash or a
+  listing; `rm` signs the removal of a name this machine only remembers. A deploy that finds the
+  server holding something this machine cannot account for stops before signing (C4, C5, C5b), and
+  the two commands its sentence names then work offline (contracts/cli.md, CL21).
+- **N2: yes.** The checkout of `.github/workflows/pull-request-checks.yml` gets `fetch-depth: 0`
+  (T082), so the pairing tests run on GitHub. The workflow still runs on `pull_request` only, with a
+  read-only token, `persist-credentials: false` and no secret; the whole history it fetches is the
+  repository's own, public one.
 
 ## Technical Context
 
@@ -62,6 +60,8 @@ Neither blocks a task but the one named.
 `domainToASCII` for the A-label rule (research R10, probed on Bun 1.4.4). **No new package.**
 
 **Storage**: the runner's `state.json` gains a mark and each app's format (contracts/state.md);
+the CLI's profile folder gains `held/<serverId>/<app>.json`, what the server said it holds for an app
+(statements and versions, never a value; data-model.md);
 `records/<app>/<hash>.json` holds each live secret's latest record, sealed and signed, mode 0600.
 The CLI's files keep their shapes: the history holds envelopes of both kinds.
 
@@ -84,10 +84,11 @@ deploy.
 **Constraints**: the runner opens no port and makes no connection (FR-043); the version-1 verifier
 and today's answers keep their behaviour and shape (FR-003, FR-033); no code file over 500 lines;
 the CLI's import rules; no new package; no release, no real server; `apps/cli/tests/` and
-`apps/cli/e2e.config.ts` neither edited nor run; `apps/cli/test/plain/plain-at-head.ts` not edited.
+`apps/cli/e2e.config.ts` neither edited nor run; `apps/cli/test/plain/plain-at-head.ts` and
+`apps/cli/test/plain/plain-unchanged.test.ts` not edited.
 
 **Scale/Scope**: 7 new and 9 changed files in `packages/core/src`, 3 new and 4 changed in
-`apps/runner/src`, 6 new and 11 changed in `apps/cli/src`, about 30 new or extended test files, 7
+`apps/runner/src`, 6 new and 12 changed in `apps/cli/src`, about 32 new or extended test files, 7
 docs pages and READMEs.
 
 ## Constitution Check
@@ -96,7 +97,7 @@ docs pages and READMEs.
 
 | Principle | How this plan complies | Status |
 |---|---|---|
-| I. Security Promise First | Nothing new reaches the hosted service; no key is held anywhere new. A version-2 deploy is signed whole with its kind inside the signature, so neither version verifies as the other (FR-003). The order rule makes a deploy overtaken by another unrunnable (V1). Every secret statement is checked again at each use on the runner and before signing on the CLI, which takes versions and hashes only from statements it verified (FR-020, FR-021; `createDeployV2` verifies them itself). Stored records are sealed and signed, never decrypted on disk (FR-018). The version-1 path keeps the marked state (V21) and takes only apps held at the upgrade (FR-031). The runner's code makes no connection; a test reads its source and its open sockets (SC-010). An independent review is a task (FR-045). | Pass |
+| I. Security Promise First | Nothing new reaches the hosted service; no key is held anywhere new. A version-2 deploy is signed whole with its kind inside the signature, so neither version verifies as the other (FR-003). The order rule makes a deploy overtaken by another unrunnable (V1). Every secret statement is checked again at each use on the runner and before signing on the CLI, which takes versions and hashes only from statements it verified (FR-020, FR-021; `createDeployV2` verifies them itself). Stored records are sealed and signed, never decrypted on disk (FR-018). What the CLI remembers of the server (`held/`) is signed statements and versions only, never a value, and gives no hash or listing; `secret set` and `rm` connect to nothing. The version-1 path keeps the marked state (V21) and takes only apps held at the upgrade (FR-031). The runner's code makes no connection; a test reads its source and its open sockets (SC-010). An independent review is a task (FR-045). | Pass |
 | II. Honest Surface | "Runner" everywhere. Every new line is an approved line of `design/lines.md` or a board; where the two differ the board is used (research R25). Every refusal has its own sentence (FR-039). The README and the security page say what the hosted service would read, including what arrives with later features, and that it never reads a value (M1, M2). The docs keep "Pre-alpha and unaudited", say that restoring a runner's folder is not supported, and that putting runner 0.1.0 back fails closed. C6 is said only when its words are true (research R18). | Pass |
 | III. Read the Installed Docs First | No framework code changes. Bun's `node:url` IDNA functions were probed before they were chosen (research R10). Ink and React are used only as the existing parts use them. | Pass |
 | IV. One Design System | No new component or colour: refusals and warnings are drawn by the existing `ErrorLine`, `MarkedLine`, `NoticeLine`, `Summary` and `Stages`. | Pass |
@@ -185,8 +186,9 @@ apps/cli/
 │   ├── ops/deploy-format.ts       # new: chooseFormat, C6's condition, C7
 │   ├── ops/deploy-secrets.ts      # new: the listing of a deploy, C4 and C5, the former members' key ids
 │   ├── ops/deploy-answer.ts       # new: the runner's answer to deploy: C1, C2, the R-lines, the history entry
-│   ├── ops/secret.ts              # set and rm read the server when they must; deployedSecrets reads both kinds
-│   ├── ops/secret-versions.ts     # new: latestVersions (moved), the server read, the next version
+│   ├── ops/secret.ts              # set and rm take floorVersion; rm of a name only remembered; deployedSecrets reads both kinds
+│   ├── ops/secret-versions.ts     # new: latestVersions (moved), floorVersion, remembersName: offline, from the store and held/
+│   ├── profile/profile.ts         # held(serverId, app) and saveHeld: what the server said it holds, never a value
 │   ├── ui/parts/deploy-summary.tsx  # numberUsed is false once a version-2 deploy ended in error (C8)
 │   ├── ui/ink/deploy-live.ts      # keeps the format from the stage
 │   ├── app/state/events.ts        # deploy-stage carries format and secretNames
@@ -196,17 +198,20 @@ apps/cli/
     ├── cli/errors.test.ts                       # new: every reason's sentence (SC-011)
     ├── shared/deploy-words.test.ts, shared/history.test.ts   # new; shared/views.test.ts extended
     ├── ops/deploy-format.test.ts, deploy-secrets.test.ts, deploy-answer.test.ts, secret-versions.test.ts   # new
+    ├── profile/held.test.ts                     # new: the held/ file
     ├── support/team-of-two.ts                   # new: a second member, a record they set, their removal
     ├── scenarios/deploy-v2.test.ts, secrets-v2.test.ts, removed-member.test.ts, deploy-versions.test.ts, pairing.test.ts   # new
     ├── scenarios/real-docker.test.ts            # extended: a second deploy with nothing changed
     ├── ui/ink/single-commands.test.tsx, app/app-operate.test.tsx, app/app-state.test.ts   # extended: the lines
-    ├── plain/plain-unchanged.test.ts            # with N1's yes: one connect in four scenes
+    ├── scenarios/held.test.ts                   # new: a stop, then set or rm offline, then the deploy goes through
+    ├── templates/workflow.test.ts               # CW4: the checkout's `with` gains fetch-depth: 0
     ├── docs/metadata-note.test.ts               # new: M1 and M2 say the same
     └── (protocol literals, history readers)     # ops/doctor.test.ts, scenarios/first-run.test.tsx, support/stand-in-server.ts,
                                                  # scenarios/hardening.test.ts, add-settings, settings-compose, settings-deploy,
                                                  # settings-which-file (T025, T027, T032)
 
-apps/web/content/docs/   security.mdx (M2), deploying.mdx, secrets.mdx, runner.mdx, servers.mdx
+apps/web/content/docs/   security.mdx (M2), deploying.mdx, secrets.mdx, runner.mdx, servers.mdx, storage.mdx
+.github/workflows/pull-request-checks.yml   fetch-depth: 0 on the checkout (N2)
 apps/web/content/screens/*.json   redrawn only if `bun run screens --check` names one (research R21)
 README.md (M1), apps/runner/README.md, packages/core/README.md
 ```
@@ -261,21 +266,23 @@ A checklist for the review (T070) and the end checks (T073). The base is `e7b014
 - [ ] The hosted service's messages: `StatusReportSchema`, `PendingDeploysResponseSchema`,
       `PublishDeployRequestSchema`, `SecretsResponseSchema`; `DEPLOY_REFUSALS` (15 reasons).
 - [ ] The team list's format (version 1) and `applyRosterUpdate`.
-- [ ] The CLI's files: `profile.json`, the secret store and the history keep their schemas
+- [ ] The CLI's files: `profile.json`, the secret store and the history keep their schemas (the
+      profile folder gains `held/`, a file of its own)
       (`HistorySchema`'s outcomes stay `sent`, `started`, `start_failed`); 50 entries per app.
 - [ ] `zekno rollback`'s lines (`Rolling back <A> to what deploy <N> ran.`, the history lines of
       `prepareRollback`), the result lines (`startedSentence`, `failedSentence`), the stage row
       (Checked, Signed, Sent, Starting), W1 to W5, D1, D2, `zekno doctor`'s lines,
       `zekno server update`'s lines, Home's `! older runner` and `! newer runner`.
 - [ ] The bound of 1,000 (`MAX_AHEAD`) on the version-1 path; `--json` output shapes; plain output
-      of every command but the four scenes of N1.
+      of every command, `zekno secret set` and `rm` included (`plain-unchanged.test.ts` unedited).
 - [ ] `apps/cli/src/version/runner-release.json` (0.1.0) and `apps/runner/package.json` (0.1.0):
       no release (decision 1).
 - [ ] One deploy lock and no time limit on `docker compose up` (decision 5); the runner's
       one-shot commands (`main.ts` `COMMANDS`).
-- [ ] `INSTALL_SCRIPT`, `CHECK_SCRIPT`, every workflow (unless N2's yes), `apps/cli/tests/`,
+- [ ] `INSTALL_SCRIPT`, `CHECK_SCRIPT`, every workflow but the one line of N2, `apps/cli/tests/`,
       `apps/cli/e2e.config.ts`, `apps/cli/test/plain/plain-at-head.ts`.
-- [ ] `secret ls`, `secret import`, `zekno add`: offline, as today (research R9).
+- [ ] `secret set`, `secret rm`, `secret ls`, `secret import`, `zekno add`: offline, as today, with
+      the same calls (research R9).
 
 ## Phases
 
@@ -290,7 +297,8 @@ A checklist for the review (T070) and the end checks (T073). The base is `e7b014
 4. **US2, secrets by version** (P1): record files and the `records` read; the listing; supply only
    what is missing; C5, R3, R4; SC-004 and SC-008.
 5. **US3, a removed member** (P1): `untrusted_secret` on the runner; C4 before signing on both
-   paths; `secret set` and `rm` that read the server (N1); R5.
+   paths; what this machine remembers of the server; offline `secret set` and `rm` that fix C4,
+   C5 and C5b; R5.
 6. **US4, old and new programs** (P1): the version-1 gate; the existing runner tests moved; C6 and
    C7; the pairing scenarios from git.
 7. **US5, later fields refused** (P2): each later field alone; R7, R8.
@@ -313,16 +321,22 @@ Each phase leaves `bun test` green in every package it touched, `bun run lint` c
 - **The version-1 gate breaks every runner test that applies to a new app.** Mitigation: those tests
   move onto `deploy` or onto an older state first (T050), and the gate lands after (T051).
 - **Pairing with the real older programs needs git history**, absent in a shallow clone.
-  Mitigation: the helper skips with a printed reason; quickstart step 6 runs them; N2.
+  Mitigation: the pull-request check fetches the whole history (N2, T082); elsewhere the helper
+  skips with a printed reason, and quickstart step 6 runs them in a full clone.
 - **A runner built from this branch says version 0.1.0 with protocol 3**, as runner 0.1.0 says 0.1.0
   with protocol 2 (decision 1: no release). Mitigation: nothing ships it; `zekno server update`
   compares versions and never installs it; C6 is said only when the versions differ (research R18);
   015 makes 0.1.1.
 - **The first version-2 write is one way**: runner 0.1.0 then refuses everything (`invalid_state`).
   Mitigation: no real server is used; the docs say so; the pairing test proves it fails closed.
-- **A removed member's secret where this machine also holds an older record of its own**: one
-  `zekno secret set` gives a version the server already has, so C4 is said again until a second set
-  passes it (research R9). Teammates are not built; recorded for the feature that adds them.
+- **A remembered version that lies.** A runner, or attacker B editing `held/`, can report any
+  version, which only raises this machine's next version for that name; at 2^53 - 1 the name cannot
+  be set or removed from this machine until a later deploy reads an honest answer. Mitigation:
+  accepted as the same floor risk as `status`'s, denial only, named for the review (T070; research
+  R9).
+- **`held/` goes stale between deploys.** It is what the last version-2 deploy read. Mitigation: it
+  is only a floor and a hint; every deploy reads the server again, verifies what it lists, and stops
+  with C4, C5 or C5b when this machine's view is behind, after writing `held/` anew.
 - **Records on disk.** A crash between a record's write and the state's leaves a file no state
   names. Mitigation: written and synced before the state, and every file of the app no state names
   is deleted at its next version-2 deploy (research R13).

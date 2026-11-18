@@ -2,8 +2,8 @@
 
 FR-005, FR-006, FR-008, FR-010 to FR-012, FR-015, FR-017, FR-021, FR-022, FR-027 to FR-030,
 FR-035, FR-039. The words are `design/lines.md`'s and the boards', copied exactly; where they
-differ the board is used. Commands are written as lines.md writes them: in backticks inside C4, C5
-and C6, without them in the R-lines, C1, C2 and C7. At a terminal `ErrorLine` drops backticks and
+differ the board is used. Commands are written as lines.md writes them: in backticks inside C4, C5,
+C5b and C6, without them in the R-lines, C1, C2 and C7. At a terminal `ErrorLine` drops backticks and
 draws the first sentence bold; plain output prints the text as it is.
 
 ## The format (`chooseFormat`, `apps/cli/src/ops/deploy-format.ts`)
@@ -36,7 +36,12 @@ chooseFormat(input: { server: string; mode: SessionMode; runner: RunnerVersion |
    `AppTaken` (unchanged, US1 scenario 4).
 3. **CL3.** Version 2 only: `records` for the app. A refusal or an answer that does not read ends the
    deploy with its sentence, as `status` would; nothing is signed.
-4. **CL4.** What the deploy lists (below). A blocked name stops with C4 or C5; nothing is signed,
+   **CL3b.** Version 2 only: keep what the server said, before anything can stop the deploy:
+   `team.store.saveHeld(serverId, app, { statements, versions })` with the statements of the
+   `records` answer that `peekSecretStatement` reads (each `payload` at most 4,096 characters, at
+   most 256) and the app's entries of the `status` answer as `{ name, version, removed }`. The file
+   is replaced whole (research R9; data-model.md).
+4. **CL4.** What the deploy lists (below). A blocked name stops with C4, C5 or C5b; nothing is signed,
    the history is unchanged. Each item left out that blocks nothing is warned with today's template
    ``Left out a ${kind}${name ? ` for ${name}` : ""}: ${reason}.``
 5. **CL5.** The number. Version 2: `previous` is `status.lastSequence[app]` (0 if absent),
@@ -96,23 +101,39 @@ lacks), the format.
   (`peekSecretStatement`) is at least `chosen`'s, or there is no `chosen`.
 - **CL16. C5** (version 2 only, not C4). The name is live in `status`, and there is no `chosen`, or
   `chosen`'s version is below the version `status` reports.
+- **CL16b. C5b** (version 2 only; in `ops/deploy-secrets.ts`, from `secretsForDeploy`'s result and
+  this machine's own items, so the core function does not change). For each listed statement that
+  is not one of this machine's records' envelopes: when this machine's highest verified item for
+  the name (`verifySecret`, `verifySecretRemoval`) is a record, its version is below the listed
+  statement's, and its hash differs. A removal, no item here, or the listed statement being this
+  machine's own never trips it. Its sentence is proposed and waits for the maintainer.
 - **CL17.** Every other item that did not verify is left out with today's warning (CL4). `status`'s
   versions decide only CL16; they are never signed (FR-021).
 
 ## `zekno secret set` and `zekno secret rm` (`ops/secret.ts`, `ops/secret-versions.ts`)
 
-- **CL18.** When this machine holds a record or removal of the name that verifies, they work offline
-  exactly as today.
-- **CL19.** Otherwise (N1) they read the server once before anything is asked or signed: a session,
-  `status` with `checkIdentity`, and `records` when the runner speaks protocol 3. The server's
-  highest version for the name is the highest of its verified statements and of the version
-  `status` reports.
-  - `set`: version = 1 + the highest of this machine's version and the server's. S3's words.
-  - `rm`: when the server holds the name live, the removal is signed at 1 + that highest, and S1 is
-    said; with the name neither here nor live there, today's
-    `<A> on <S> has no secret named <NAME>.`
-  - The server cannot be reached: today's unreachable sentence; nothing stored.
-- **CL20.** `secret ls`, `secret import` and `zekno add` do not change: offline.
+Both never connect, in any case (decision B): the frozen scenes of
+`apps/cli/test/plain/plain-unchanged.test.ts` stay as they are.
+
+- **CL18. The version.** One above the highest of: this machine's records and removals of the name
+  that verify (today's `latestVersion`); this machine's records of the name that do not verify,
+  read with `peekSecretStatement`; the statements of the name in `held/`, read with
+  `peekSecretStatement`; the version of the name in `held/`'s `versions` (`floorVersion` in
+  `ops/secret-versions.ts`). A floor only: nothing of `held/` is signed as a hash or listed.
+  - `set`: S3's words, with that version.
+  - At `Number.MAX_SAFE_INTEGER` the core library refuses the next version: today's
+    `That could not be done (invalid_argument).`, nothing stored (research R9).
+- **CL19. `rm`.** Signs the removal at that version and says S1 when this machine holds a current
+  secret of the name (today), or a record of it that does not verify, or `held/` names it (a
+  statement, or a version not removed). Otherwise today's `<A> on <S> has no secret named <NAME>.`
+- **CL20.** `secret ls`, `secret import` and `zekno add` do not change.
+- **CL21. The chain** (FR-028). A version-2 deploy that stops with C4, C5 or C5b has written
+  `held/` (CL3b); `zekno secret set <NAME>` then signs a version above everything the server
+  reported, offline, and the next deploy lists it and supplies its record; `zekno secret rm <NAME>`
+  signs a removal above it, and the next deploy lists the removal. Tested by
+  `test/scenarios/removed-member.test.ts` (C4) and `test/scenarios/held.test.ts` (C5 for a
+  version-1 secret a second machine cannot account for; C5b), each with set and with rm, and with
+  `deps.connect` throwing for every `zekno secret` command.
 
 ## The history (`shared/history.ts`)
 
@@ -139,27 +160,28 @@ are offered for rollback, as today (FR-035).
 | C2 | `<S> holds deploy <N> of <A>, and this machine signed a deploy <N> whose answer never came. zekno cannot tell which of the two ran. Run zekno deploy again to settle it.` | `C2(app, server, n)` | after `replayed`, a `sent` entry `N` | deploy-words; deploy-answer; deploy-v2 |
 | C4 | ``<NAME> was set by someone who is no longer in the team, so <A> cannot be deployed with it. Set it again with `zekno secret set <NAME>`, or remove it with `zekno secret rm <NAME>`. Nothing was signed.`` | `C4(name, app)`; `ops/deploy-secrets.ts` | CL15 | deploy-words; `test/ops/deploy-secrets.test.ts`; removed-member |
 | C5 | ``<S> holds <NAME> for <A>, and this machine cannot check who set it. Set it again with `zekno secret set <NAME>`, or remove it with `zekno secret rm <NAME>`. Nothing was signed.`` | `C5(name, app, server)`; `ops/deploy-secrets.ts` | CL16 | deploy-words; deploy-secrets; secrets-v2 |
+| C5b | ``<S> holds a newer <NAME> for <A> than the one set on this machine. Set it again with `zekno secret set <NAME>` to replace it, or remove it with `zekno secret rm <NAME>`. Nothing was signed.`` (proposed, to be confirmed) | `C5b(name, app, server)`; `ops/deploy-secrets.ts` | CL16b | deploy-words; deploy-secrets; `test/scenarios/held.test.ts` |
 | C6 | ``The runner on <S> is version <F>, older than this zekno's <C>, so this deploy was signed in the older format. Run `zekno server update <S>` to bring it to <C>.`` | `C6(server, version, carried)`; warned by `ops/deploy.ts` | CL8 with `older` | deploy-words; `test/ops/deploy-format.test.ts`; deploy-versions; pairing |
 | C7 | `The runner on <S> is version <F>, newer than this zekno's <C>, and speaks a newer protocol. Update zekno to deploy to <S>. Nothing was signed.` | `C7(server, version, carried)`; `chooseFormat` | CL1 | deploy-words; deploy-format; deploy-versions |
 | C8 | `Number <N> is used, so the next deploy will be <N+1>.` left out | `ui/parts/deploy-summary.tsx` `numberUsed` | a version-2 deploy that ended in error | `test/app/app-operate.test.tsx`; `test/ui/ink/single-commands.test.tsx` |
-| S1 to S3 | unchanged | `commands/secret.ts`, `ops/secret.ts` | CL19 | `test/ops/secret-versions.test.ts` |
+| S1 to S3 | unchanged words | `commands/secret.ts`, `ops/secret.ts` | CL18, CL19 | `test/ops/secret-versions.test.ts`; `test/plain/plain-unchanged.test.ts` unchanged |
 | M1, M2 | the board `Deploy2Refusals`'s list | `README.md`, `apps/web/content/docs/security.mdx` | | `apps/cli/test/docs/metadata-note.test.ts` |
 
-**Several blocked names** (C4, C5): one line per name, in name order, each its sentence without the
+**Several blocked names** (C4, C5, C5b): one line per name, in name order, each its sentence without the
 last `Nothing was signed.`, joined by a line break; ` Nothing was signed.` ends the last line. With
 one name the text is exactly C4's or C5's.
 
 **How each is shown.**
 
 - At a terminal (`ui/ink`): a refusal and C1 to C7 as `ErrorLine` under the deploy's block when the
-  block was drawn (C1, C2 and the R-lines: after `✖ Starting`), alone when it was not (C4, C5, C7:
+  block was drawn (C1, C2 and the R-lines: after `✖ Starting`), alone when it was not (C4, C5, C5b, C7:
   nothing is drawn before the first stage, research R17); C6 as a warning (`!`), drawn above the
   block. C8 is not drawn by the single commands after an error (today they draw it only for
   `start_failed`).
 - Plain or `--json`: the sentence on standard error; `--json`'s object on standard output keeps its
   shape. C6 on standard error, not in the object.
 - The app's deploy screen: the R- and C-lines as the result line in the error colour (`deploy-ended`,
-  `notice.tone "error"`); C6 as `notice("warning", …)`; C4, C5 and C7 under the panel and
+  `notice.tone "error"`); C6 as `notice("warning", …)`; C4, C5, C5b and C7 under the panel and
   `✖ Checked ○ Signed ○ Sent ○ Starting` (the panel was drawn at `deploy-started`); C8 left out
   after a version-2 error; the panel's `secrets` row names the listed secrets from Checked on.
 
@@ -168,4 +190,4 @@ one name the text is exactly C4's or C5's.
 `zekno status`, `zekno server add`, `zekno server update`, `zekno doctor` and Home say what they say
 today for each runner (lines.md, V); with `RUNNER_PROTOCOL` 3 a protocol-2 runner older than
 `carried` now draws W3 instead of W2, as US4 scenario 1 says. Every other plain line and exit status
-is as at `e7b0146`, with N1's four scenes the only change of calls.
+is as at `e7b0146`; set and rm make the same calls as there.
