@@ -99,34 +99,10 @@ settings file is said next, before any other question.
    next run asks for it again.
 5. Then the deploy.
 
-```text
-$ zekno deploy
-  Nothing is set up on this machine yet. Three things first: your key, a server, this app.
-
-? Your name › ada
-✔ Key created. It is in your system keychain.
-  Team code    J4QF-AM29-F01W-PYWM-CS8P
-  Identifies your team. A server checks it before it agrees to obey your team.
-
-? Where is the server? › deploy@203.0.113.7
-? A name for it › prod
-✔ Connected over SSH
-✔ Docker with Compose found
-✔ Runner installed  52 MB, checksum verified
-✔ Added prod to the signed team list
-  Server code  MM4G-GPD7-M9VM-ACGJ-Y48R
-  Identifies this server's key. Teammates compare it before they trust the server.
-  You reached this server over SSH, so its identity rests on SSH's host verification.
-
-? Name for this app › demo
-? Remember this folder? It writes zekno.json, so it always deploys demo to prod. (y/N) yes
-
-! compose.yaml expects 1 value that has no secret yet.
-? Value for DATABASE_URL (demo on prod): (hidden)
-
-  (the deploy panel and stages, as for any deploy)
-✔ demo is live on prod in 6.1s
-```
+<Screen
+  name="first-deploy"
+  caption="A first deploy from nothing: your key, then the server prod-1 with the runner installed, then the app shop, one value asked for, and the deploy."
+/>
 
 Esc or Ctrl-C leaves any question. What was made before it is kept, and running
 `zekno deploy` again carries on from there. A detail given by a flag or by a
@@ -156,6 +132,11 @@ to update `zekno` first.
 ```bash
 zekno status --server prod
 ```
+
+<Screen
+  name="status"
+  caption="zekno status with one server: prod-1 is reachable at team list v2, shop is at deploy 1 and running, and its one secret is at version 1."
+/>
 
 ## zekno logs
 

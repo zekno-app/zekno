@@ -65,31 +65,10 @@ At a terminal it shows what it will add, then asks once. In this folder
 `zekno.app.json` has two services, so the question of who reads
 `DATABASE_URL` (below) came first:
 
-```text
-$ zekno add postgres
-✔ Read by  web
-PostgreSQL 18.7  A relational database.                                 by zekno
-╭──────────────────────────────────────────────────────────────────────────────╮
-│ app     demo                                                                 │
-│ server  prod deploy@203.0.113.7                                              │
-│ file    zekno.app.json  2 services: web, worker                              │
-╰──────────────────────────────────────────────────────────────────────────────╯
-Adds a service
-  postgres                postgres:18.7  pinned by digest
-                          restart always · port 5432, not published
-                          data kept in volume postgres-data
-Makes a secret on this machine  never shown
-  POSTGRES_PASSWORD       32 random characters
-                          read by postgres
-Builds a secret from it
-  DATABASE_URL            postgres://app:••••@postgres:5432/app
-                          read by web
-! Zekno does not back up this data.
-? Add postgres to demo? Nothing is deployed until you deploy. (y/N) yes
-✔ Added postgres to zekno.app.json
-✔ Stored POSTGRES_PASSWORD and DATABASE_URL, sealed for prod
-  Run zekno deploy to start it.
-```
+<Screen
+  name="add-postgres"
+  caption="zekno add postgres in shop's folder, as the program draws it: what it adds to zekno.app.json, the question, and the service added with both secrets stored, sealed for prod-1."
+/>
 
 - The box names the app, the server and where it is, and the file with the
   services it has now.

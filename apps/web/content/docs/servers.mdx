@@ -46,6 +46,11 @@ nothing is changed.
 zekno server add prod --ssh deploy@203.0.113.7
 ```
 
+<Screen
+  name="server-add"
+  caption="zekno server add over SSH, logged in as a user other than root: the runner installed in that user's ~/.local/bin after it matched the checksum, prod-1 added to the team list, and its server code."
+/>
+
 ## zekno server update
 
 Replaces the runner on a server with the version this `zekno` carries, by the
@@ -115,6 +120,8 @@ The script never uses `sudo`. The server needs `sh`, `uname`, `curl` or
 github.com over HTTPS. A runner release is a GitHub Release of the
 [repository](https://github.com/zekno-app/zekno), with one file for each kind
 of processor.
+The release address is
+`https://github.com/zekno-app/zekno/releases/download/runner-v<version>/zekno-runner-linux-<arch>.gz`.
 
 ### Which runner it installs
 

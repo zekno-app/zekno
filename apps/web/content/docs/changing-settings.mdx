@@ -236,30 +236,10 @@ of that folder, or the settings file its `zekno.json` names when the folder is
 linked to that app on that server. See [zekno settings](/docs/settings#zekno-settings) for
 the file.
 
-```text
-╭────────────────────╮ ╭─────────────────────────────────────────────────────────────────────────╮
-│ Services           │ │ web                                                      zekno.app.json │
-│ ❯ web              │ │ Source                                                                  │
-│   worker           │ │   image      ghcr.io/acme/demo-web:1.4.2                                │
-│                    │ │ Deploy                                                                  │
-│                    │ │   start      bun run start                                              │
-│                    │ │   restart    on failure                                                 │
-│                    │ │ ❯ memory     1g  ! changed, not deployed (was 512m)                     │
-│                    │ │   cpus       1                                                          │
-│                    │ │ Networking                                                              │
-│                    │ │   port       3000                                                       │
-│                    │ │   published  not published                                              │
-│                    │ │ Variables                                                               │
-│                    │ │   secrets    DATABASE_URL, SESSION_KEY                                  │
-│                    │ │   plain      NODE_ENV=production                                        │
-│                    │ │ Volumes                                                                 │
-│                    │ │   uploads    /data/uploads                                              │
-│ One app, one file: │ │ ─────────────────────────────────────────────────────────────────────── │
-│ zekno.app.json     │ │ A change is written to the file. It runs after the next deploy.         │
-╰────────────────────╯ ╰─────────────────────────────────────────────────────────────────────────╯
-
-↑↓ move  enter change  tab services  c Compose text  d deploy  esc back
-```
+<Screen
+  name="settings-screen"
+  caption="The settings screen of shop: its services on the left, web's settings by section on the right. Its memory was changed to 1g in the file and is not deployed yet."
+/>
 
 - The left pane lists the file's services. The right one shows one service in
   five sections: Source, Deploy, Networking, Variables, Volumes. Every setting

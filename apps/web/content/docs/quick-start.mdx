@@ -1,0 +1,100 @@
+---
+title: Quick start
+description: From a checkout to an app running on your own server.
+---
+
+<Callout type="warn" title="Pre-alpha and unaudited">
+  The command-line tool, the runner and the core library have had internal
+  reviews only. Do not use them for anything you could not afford to lose, and
+  do not rely on them in production before an external audit.
+</Callout>
+
+## You need
+
+- [Bun](https://bun.sh) 1.4.4, the version pinned in the repository.
+- macOS or Linux with a system keychain. Windows is not tested.
+- A Linux server you reach over SSH, on x86-64 or ARM64, with the GNU C
+  library (glibc) 2.17 or newer, and Docker with its Compose plugin on it. It
+  must reach github.com over HTTPS, to download the runner. Alpine and other
+  systems with the musl C library are not supported yet.
+  [Supported servers](/docs/servers#supported-servers) and
+  [Installing the runner](/docs/servers#installing-the-runner) say the rest.
+- A folder with a `compose.yaml` for the app you want to run.
+
+Zekno works today for one developer on one machine. Teammates arrive with the
+control plane, which is not written yet.
+
+## Build zekno
+
+`zekno` is not packaged for installation yet, so you build it from the
+repository. It becomes one file.
+
+```bash
+git clone --branch main https://github.com/zekno-app/zekno
+cd zekno && bun install
+cd apps/cli && bun run compile   # dist/zekno: one file, for the system you are on
+```
+
+Put `dist/zekno` in a folder on your `PATH`. Build it from `main`: a `zekno`
+built from `main` installs the published runner release on your server (see
+[Which runner it installs](/docs/servers#which-runner-it-installs)). To run
+`zekno` from the checkout instead, see [Install](/docs/install).
+
+## Deploy
+
+In your app's folder, run `zekno deploy`. With nothing set up yet, it sets up
+the three things it needs first: your key, a server and the app. It asks your
+name, where the server is and a name for it, and a name for the app.
+
+<Screen
+  name="first-deploy"
+  caption="A first deploy in a folder with a compose.yaml and nothing set up. The name, the address and the codes are example values."
+/>
+
+In those few lines:
+
+- Your key was made and stored in your system keychain. The team code
+  identifies your team: a server checks it before it agrees to obey your team.
+- The runner was installed on the server over SSH, after its checksum matched
+  the one your `zekno` holds, and the server was added to your signed team
+  list. The server code identifies the server's key.
+- `zekno.json` was written in the folder, signed with your key, so it always
+  deploys `shop` to `prod-1`.
+- The value the Compose file expects was asked for with nothing shown as you
+  typed. It was sealed for that server only, and the deploy was signed with
+  your key.
+- The runner checked the signature before it decrypted or started anything.
+
+Run `zekno deploy` again after a change to deploy the next version. Each step
+of a first deploy is on [zekno deploy](/docs/deploying#zekno-deploy). If
+something stops, [zekno doctor](/docs/doctor#zekno-doctor) checks your machine
+and the server and says what to do.
+
+## Look at it
+
+Run `zekno` alone to open the app: your servers, what is running on each, and
+what you can do next. The window must be at least 80 columns by 24 lines.
+
+<Screen
+  name="home"
+  caption="Home once shop has been deployed twice: the server prod-1, with its address cut to fit the pane; shop at deploy 2, running; and what you can do from here. Every screen lists its keys on its last line."
+/>
+
+`q` quits. Every screen and key is on [The terminal app](/docs/app).
+
+## Next
+
+<Cards>
+  <Card title="Add a database" href="/docs/templates#zekno-add">
+    zekno add postgres makes the passwords on your machine.
+  </Card>
+  <Card title="Describe the app by settings" href="/docs/settings">
+    zekno.app.json in place of a Compose file.
+  </Card>
+  <Card title="Secrets" href="/docs/secrets">
+    Set, import and remove the values your app reads.
+  </Card>
+  <Card title="Security model" href="/docs/security">
+    Who holds which key, and what it does not cover.
+  </Card>
+</Cards>

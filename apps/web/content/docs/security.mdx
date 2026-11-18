@@ -1,0 +1,75 @@
+---
+title: Security model
+description: Who holds which key, what a breach of Zekno gives and does not give, and what Zekno does not protect against.
+---
+
+<Callout type="warn" title="Pre-alpha and unaudited">
+  The command-line tool, the runner and the core library have had internal
+  reviews only. Do not use them for anything you could not afford to lose, and
+  do not rely on them in production before an external audit.
+</Callout>
+
+This page is the short form. The full model, with the open-source boundary
+and the design rules, is in the
+[repository's README](https://github.com/zekno-app/zekno#security-model).
+
+The control plane, Zekno's hosted service, is not built yet. Today `zekno`
+talks to the runner on your server directly, over SSH (see
+[A deploy today](/docs#a-deploy-today)). What this page says about the control
+plane is the design it will follow.
+
+## Who holds which key
+
+| Part | Runs on | Keys it holds | Sees plaintext secrets | Can authorize a deploy |
+| --- | --- | --- | --- | --- |
+| Command-line tool (`zekno`) | A team member's machine | Team signing key | Yes | Yes |
+| Control plane | Zekno's infrastructure | None | No | No |
+| Runner | Your server | Server decryption key | Yes | No, it only verifies |
+
+Where `zekno` keeps your key, and everything else, is on
+[What is kept where](/docs/storage).
+
+## How a deploy works
+
+1. **Encrypt.** `zekno` encrypts each secret for your server's public key before anything leaves your machine.
+2. **Sign.** `zekno` signs the deploy with your team's key.
+3. **Relay.** The control plane stores the sealed, signed packet. It has no key to open it. Your server's runner pulls it over an outbound connection.
+4. **Verify.** The runner checks the signature before doing anything, and refuses a deploy your team did not sign.
+5. **Run.** The server decrypts with its own key and starts your containers.
+
+Step 3 is the planned design. Today there is no relay: `zekno` sends the
+sealed, signed packet to the runner over SSH.
+
+## What it protects against
+
+| Scenario | Outcome | Why |
+| --- | --- | --- |
+| An attacker copies the Zekno database | No secrets exposed | It holds only ciphertext |
+| An attacker controls Zekno and pushes a deploy | Deploy rejected | Servers reject anything not signed by a team key |
+| Zekno goes down | Apps keep running | Servers don't depend on it at runtime |
+
+## What it does not protect against
+
+| Scenario | Why |
+| --- | --- |
+| A team member's machine is compromised | That machine holds a signing key |
+| One of your servers is compromised | Secrets are plaintext in memory where the app runs |
+| A Zekno release (the CLI or the runner) is tampered with | The client is the trust anchor. A server installs a runner only when it matches the checksum the command-line tool holds, recorded after a second build of the same source gave the same file. Runner releases are not signed |
+
+How a runner release is checked, and the limits of that route, are on
+[Your key and servers](/docs/servers#how-a-release-is-trusted). The limits of
+this version are in [Status and limits](/docs#status-and-limits).
+
+<Callout title="Metadata">
+  The control plane still sees metadata: server addresses, app names, deploy
+  times and team membership.
+</Callout>
+
+## What is open
+
+Everything that runs on your device or in your browser is open source under
+the MIT license. The control plane is closed because it is the hosted service
+Zekno sells; the design means you don't have to trust it.
+
+Security problems are reported privately, never in public issues: see
+[Reporting a vulnerability](https://github.com/zekno-app/zekno#reporting-a-vulnerability).
