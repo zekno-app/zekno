@@ -347,3 +347,27 @@ Each phase leaves `bun test` green in every package it touched, `bun run lint` c
 ## Complexity Tracking
 
 No principle is violated. Nothing to justify.
+
+## As built
+
+Written on 2026-11-19, when every task was done. The numbers and the details are in `quickstart.md` ("Results"), `security-review.md` (part 8) and `design/walkthrough.md`.
+
+**Done**: all 82 tasks. The core library signs and checks the new deploy format; the runner carries out the order, the expiry and secrets by version, keeps each secret's latest sealed record, and takes the older format only for apps it held before; `zekno deploy` and `zekno rollback` choose the format from the runner's protocol before signing; `zekno secret set` and `zekno secret rm` never connect. Tests: core 300, runner 227 (1 skipped: the real build), web 54, cli 2,404 (4 skipped), none failing; type check, lint and Prettier clean; the docs' stored screens in step.
+
+**No release, as decided.** A zekno built from this branch still installs runner 0.1.0, so against released servers it signs the older format. The new format is used with a runner that says protocol 3: the tests' runner, `--runner-file`, and the runner on this machine. Runner 0.1.1 and its proof on a real server belong to feature 015.
+
+**What differs from the approved boards** (the four `Built…` boards beside them show the real program):
+
+- At a terminal, the panel of `zekno deploy` shows the app, the server and the number of secrets, as it does today. The approved boards drew three more rows (the file, the secrets' names, "replaces deploy 41") that the command has never shown. The app's panel does show them.
+- A stop before signing (C4, C5, C5b, C7) prints the sentence alone at a terminal, as any stop at that point does today. The app shows the panel with `✖ Checked`.
+- When the Compose file reads the secret that stops the deploy, `zekno deploy` first asks for its value, as it does for any value it does not have. A typed value sets the secret again and the deploy goes on; skipping leads to the sentence.
+- The board's case "the server learned of the removal first" does not give the sentence for a secret set by someone no longer in the team: the real runner checks the team list before the secrets, so `zekno deploy` says today's sentence about the team list. That sentence of the runner is built and tested for a deploy made by another client.
+
+**Decided after the plan**: secrets stay offline (decision B) with the sentence C5b; the pull-request check fetches the whole history; and the review's fixes (a claimed version counts only 1,000 above a verified one; a statement is at most 4,096 characters; the runner checks its folder before the lock; the history is read again before it is written; a version-2 deploy has one spelling).
+
+**Left, on purpose**:
+
+- The runner's own bound on how far a secret's version may jump: with the feature that limits keys (it needs a new refusal sentence).
+- Two notes of the review on domain names (S7): to be decided in feature 015, before routes are carried out.
+- The app draws a long error with its backticks, without the bold first sentence, and with a row that can start one space in. It is how the app draws any long error today; it shows now because these sentences are long.
+- Four source files were already over 500 lines before this feature (`ops/doctor.ts`, `settings/words.ts`, `asking/first-deploy.ts`, `ops/server.ts`); none was made longer.

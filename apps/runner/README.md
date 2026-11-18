@@ -88,10 +88,11 @@ protocol 3: a runner from before it answers either with `invalid_request` before
   `apply`, checks the deploy in a fixed order, and only then uses its number and starts Docker
   Compose.
 - `records` takes `{ "app" }` and answers `{ "statements": […] }`: for each secret of the app it
-  keeps a record of, the record's signed statement, sorted by name. A statement says the secret's
-  name, its version, the hash of its sealed value and who set it, never a value, sealed or not. An
-  app it does not hold, or one it takes format 1 for, answers `{"statements":[]}`. Like `status`,
-  it needs the runner to be set up and its folder to be private, takes no lock and changes nothing.
+  keeps a record of, the record's signed statement, sorted by name. A statement longer than 4,096
+  characters is left out. A statement says the secret's name, its version, the hash of its sealed
+  value and who set it, never a value, sealed or not. An app it does not hold, or one it takes
+  format 1 for, answers `{"statements":[]}`. Like `status`, it needs the runner to be set up and its
+  folder to be private, takes no lock and changes nothing.
 - `state` and `logs` read from Docker and change nothing. They need the runner to be set up and
   its folder to be private, like `status`, and take no lock.
 - `state` runs `docker compose -p zekno-<app> ps --all --format json` for each app the runner
@@ -196,15 +197,15 @@ or other detail of the server.
   on the clock.
 - **What it does not carry out yet**: a deploy in format 2 that asks for a build, a command before
   the deploy, a health check or a route is refused with `unsupported_version`, once its format has
-  been checked. One whose field breaks its own rule, with a field the format does not have, or
-  with a `v` other than 2, is `malformed`.
+  been checked. One whose field breaks its own rule, with a field the format does not have, with a
+  `v` other than 2, or written in any other spelling than the one zekno signs, is `malformed`.
 - **Format 1, for an app that has moved on**: a deploy in format 1 (`apply`) is taken only for an
   app the runner held when it first read a state without the mark, and that has had no deploy in
   format 2 since. Any other is refused with `unsupported_version`, a word every older zekno can
   read.
 - **Too much**: a deploy that would make it hold more than 1,024 apps or 8,192 secret versions, or
   keep more than 8,192 records or 64 MiB of them, is refused with `too_large`, before anything is
-  opened.
+  opened. So is a deploy that sends a record whose statement is longer than 4,096 characters.
 - **A request it cannot read**: one that does not match its message, is larger than 32 MiB, or
   asks for the logs of an app it never accepted a deploy of, is refused with `invalid_request`.
   The app name is checked against the app-name pattern before Docker sees it.

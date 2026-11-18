@@ -142,8 +142,8 @@ came, here or in another terminal, it cannot tell which of the two ran:
 When the runner cannot be read again, the sentence names no deploy:
 `Another deploy of this app reached the runner first. Nothing of this one ran. Run zekno deploy again to deploy on top of it.`
 With no terminal, or with `--json`, each of these is one line on standard
-error, and `--json`'s object keeps its shape. On the app's deploy screen it
-is the result line, and `Number <n> is used, so the next deploy will be <n+1>.`
+error, and nothing is printed on standard output. On the app's deploy screen
+it is the result line, and `Number <n> is used, so the next deploy will be <n+1>.`
 is not shown after a deploy in the new format that was refused or got no
 answer.
 

@@ -19,3 +19,7 @@ The panel, the stage row, the marks and the way a refusal and a warning are laid
 - A refusal's first sentence is drawn in bold and must fit one line of 100 columns. That is why each refusal says what happened, then "Nothing of it ran." as a sentence of its own.
 - A stop before signing is drawn with the summary panel and `✖ Checked`. Whether the panel shows at that point, or only the sentence, follows what the program does today for a stop at that stage; the plan checks it.
 - The README's note is drawn as a short list. `lines.md` first proposed it as one long sentence.
+
+## As built
+
+Four more boards, `BuiltDeploy2Order`, `BuiltDeploy2Secrets`, `BuiltDeploy2Versions` and `BuiltDeploy2App`, are captures of the real program made on 2026-11-19 (the row "Deploy version 2 (spec 014): as built" of the canvas). `walkthrough.md` holds each capture as plain text, how it was made, and the comparison with the approved boards. Every approved sentence came out word for word; where the screens around them differ from the approved boards is written on the built boards and in `plan.md`, "As built".
