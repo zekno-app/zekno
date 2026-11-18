@@ -1,6 +1,6 @@
 # Deploy version 2: the boards
 
-Four boards, proposed on 2026-11-18 and **not approved yet**. They are the row "Deploy version 2 (spec 014)" of the design canvas (https://claude.ai/artifact/BVuvZPZTReLa4TSHfyzMJW). Nothing is built until the maintainer approves them.
+Four boards, **approved by the maintainer on 2026-11-18**. They are the row "Deploy version 2 (spec 014)" of the design canvas (https://claude.ai/artifact/BVuvZPZTReLa4TSHfyzMJW).
 
 | Board | Shows |
 |---|---|

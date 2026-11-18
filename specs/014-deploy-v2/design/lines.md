@@ -1,6 +1,6 @@
 # Lines: what a person newly sees in feature 014
 
-**Feature**: [014-deploy-v2](../spec.md) · **Date**: 2026-11-18 · **Status**: raw material for the design boards. **Every wording below is a proposal.** None is approved, and none is built until the maintainer approves it. The four boards beside this file (`Deploy2Overtaken`, `Deploy2Secrets`, `Deploy2Versions`, `Deploy2Refusals`) draw them with the program's real components; where a board and this file differ, the board is the later one.
+**Feature**: [014-deploy-v2](../spec.md) · **Date**: 2026-11-18 · **Status**: the boards made from this file were approved by the maintainer on 2026-11-18. The wordings below are the approved ones, except C3, which is not built (spec, "Decided with the maintainer", item 7). The four boards beside this file (`Deploy2Overtaken`, `Deploy2Secrets`, `Deploy2Versions`, `Deploy2Refusals`) draw them with the program's real components; where a board and this file differ, the board is the later one.
 
 **How to read it.** Each entry says where the line appears, when, today's line when one changes (quoted exactly, with its file and line), the closest sentences the CLI already prints, used as the model, and one proposed wording. Layout is not designed here: these are the words and the places. In the sentences, `<S>` is a server's name, `<A>` an app's name, `<N>` a deploy number, `<NAME>` a secret's name, `<F>` the runner's version, `<C>` the version this zekno carries.
 

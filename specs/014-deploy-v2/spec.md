@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft. The direction was agreed with the maintainer on 2026-11-18 (see Clarifications). The new and changed lines a person would see are proposed in [`design/lines.md`](./design/lines.md) and are not approved yet. Nothing is built until they are. Nine points wait for the maintainer (Assumptions, "Needs the maintainer").
+**Status**: Approved. The direction, the four boards in [`design/`](./design/) and the nine points that were open were settled with the maintainer on 2026-11-18 (see Clarifications, and Assumptions, "Decided with the maintainer"). The words of every new line are in [`design/lines.md`](./design/lines.md) and on the boards.
 
 **Input**: The signed deploy, version 2, was designed and reviewed twice during feature 010 and never built ([`deploy-v2.md`](../010-app-settings/deploy-v2.md), "the design" below, and [`deploy-v2-review.md`](../010-app-settings/deploy-v2-review.md), "the review"). The maintainer decided on 2026-11-18 to build it in two features. This one is the first step, as the design's question Q16 defines it: the new signed message in the core library, the runner and the CLI; a runner that carries out `previous`, `expiresAt` and secrets by version with the completeness rule, with the review's findings V20 and V21 closed; a version-2 deploy that uses a field the runner does not carry out yet (`builds`, `routes`, `health`, `predeploy`) refused, never ignored; protocol number 3; version 1 and version 2 living together as the design's part 4.7 says. The format of the whole version-2 message is fixed now, once (parts 3 and 5), including the fields carried out later. Feature 015 (domains and HTTPS) follows.
 
@@ -17,6 +17,10 @@
 - Q: What happens to a secret set by a member who was since removed (Q9)? → A: The runner refuses a deploy that uses it, until the secret is set again or removed. Today the CLI warns and deploys without it; that changes.
 - Q: Does the README say what the hosted service can read (Q12)? → A: Yes, when this feature lands.
 - Q: Which numbers do releases get? → A: The maintainer, on 2026-11-18: "keep using 0.1 term, we can pump it like 0.1.1 or 0.1.1-rc or something but never pump to version 2". Releases of zekno and of the runner stay in the 0.1 line: the next runner release is 0.1.1, with development releases such as 0.1.1-dev.1 before it. No release is numbered 0.2 or higher until the maintainer says so. "Version 2" in this spec is the number of the signed deploy's format, a field inside the message, not a release of the product.
+- Q: Are the four boards approved? → A: Yes, all four (`Deploy2Overtaken`, `Deploy2Secrets`, `Deploy2Versions`, `Deploy2Refusals`), with the 0.1.1 numbers.
+- Q: The nine open points? → A: Each as recommended. The maintainer answered the four that change what a person sees or the release plan one by one (no runner release in this feature; an older zekno stops before signing; `zekno secret set` and `zekno secret rm` may ask the server; a removed member's secret stops the deploy on old runners too), and was told the other five follow the design. On the second of these the maintainer added "but need to decide soon"; read here as: how a person updates zekno has to be decided soon, since that sentence tells them to. It is not settled by this feature.
+- Q: Does "never version 2" cover the name of the new message? → A: No. "I just mean our app versioning only." The format number stays 2.
+- Q: Release candidates? → A: Pre-releases keep the form `0.1.1-dev.1`; no `-rc` form is added.
 - Q: What is decided for 015 already? → A: The reverse proxy is Caddy. The first version has no zero-downtime deploys. Zekno never changes DNS. All three are out of scope here and recorded only so this spec does not contradict them.
 
 ## Why
@@ -43,17 +47,17 @@ A developer runs `zekno deploy`. The deploy names the last deploy of the app it 
 **Acceptance Scenarios**:
 
 1. **Given** an app at deploy 41 on a server, **When** the developer runs `zekno deploy`, **Then** the deploy is signed as made after 41 and numbered 42, and the result line is today's: `Deploy 42 of demo is running on prod with 2 secrets.`
-   **Recommended: (b), and no real-server proof in this feature.** The new runner is tried in the tests, which run the real runner program and real Docker on this machine. `main` stays releasable: a zekno built from it keeps installing 0.1.0 and signing version 1 until 015 ships 0.1.1, which is also when the proof on a real server happens, as decided. The reason not to prove it on the maintainer's server now: the first write of the new runner makes the server's state unreadable to runner 0.1.0, and no release exists to leave it on.
+   **Decided: (b), and no real-server proof in this feature.** The new runner is tried in the tests, which run the real runner program and real Docker on this machine. `main` stays releasable: a zekno built from it keeps installing 0.1.0 and signing version 1 until 015 ships 0.1.1, which is also when the proof on a real server happens, as decided. The reason not to prove it on the maintainer's server now: the first write of the new runner makes the server's state unreadable to runner 0.1.0, and no release exists to leave it on.
 2. **Given** two terminals that both read 41 and both sign 42, **When** the second arrives after the first was accepted, **Then** it is refused, nothing of it runs, no number is used, and the CLI reads the server again and says another deploy reached it first as deploy 42 and that deploying again puts this one on top (C1).
-   **Recommended: (a).** Stop before signing, with the sentence on the board `Deploy2Versions`. Releasing an app's domains because zekno was out of date is the kind of surprise this project exists to prevent.
+   **Decided: (a).** Stop before signing, with the sentence on the board `Deploy2Versions`. Releasing an app's domains because zekno was out of date is the kind of surprise this project exists to prevent.
 3. **Given** a deploy whose answer never came, **When** the developer deploys again and the server's last number equals that deploy's own, **Then** the CLI says it cannot tell which deploy with that number ran (C2).
-   **Recommended: (a).** It is the design's own recommendation and a few lines of code.
+   **Decided: (a).** It is the design's own recommendation and a few lines of code.
 4. **Given** an app the server already holds, **When** a deploy for it is signed as the app's first, **Then** the runner refuses it (`replayed`) and the CLI's own check that stops such a deploy before signing stays as it is.
-   **Recommended: (b).** Give `composeUp` its working folder in the new runner. Leave the bound of 1,000 alone: it lives only on the version-1 path, which is on its way out, and it has never been met.
+   **Decided: (b).** Give `composeUp` its working folder in the new runner. Leave the bound of 1,000 alone: it lives only on the version-1 path, which is on its way out, and it has never been met.
 5. **Given** an app at deploy 41, **When** the developer runs `zekno rollback`, **Then** it prints today's `Rolling back demo to what deploy 40 ran.` and signs a new deploy made after 41 and numbered 42, with the current secrets.
-   **Recommended: (b).** One lock and no time limit now. Both belong with builds from source, which is what makes a deploy long.
+   **Decided: (b).** One lock and no time limit now. Both belong with builds from source, which is what makes a deploy long.
 6. **Given** a runner whose answer about the app's last number is false, **When** the deploy reaches it, **Then** it is refused (`replayed` or `sequence_jump`) and nothing runs: a lie can only make a deploy fail.
-   **Recommended: (a), and only then.** `zekno secret set` and `zekno secret rm` stay offline, as today, whenever this machine holds a record of the secret it can verify, which is always the case for one developer. They ask the server only when it does not.
+   **Decided: (a), and only then.** `zekno secret set` and `zekno secret rm` stay offline, as today, whenever this machine holds a record of the secret it can verify, which is always the case for one developer. They ask the server only when it does not.
 
 ---
 
@@ -105,7 +109,7 @@ A developer updates zekno before updating the runner, or the other way round. Ev
 1. **Given** a server that runs 0.1.0, **When** the developer runs `zekno deploy` with this feature's CLI, **Then** the CLI signs a version-1 deploy as today, the app starts, and the CLI says this deploy was signed in the older format and how to update the runner (C6). `zekno status` and `zekno server add` say today's W3, and `zekno doctor`'s Runner line says today's `0.1.0, older than this zekno's …` (lines.md, part V).
 2. **Given** this feature's runner and a zekno from before it, **When** that zekno deploys an app the runner held before it was updated and that has had no version-2 deploy, **Then** it is accepted as today.
 3. **Given** the same pair, **When** that zekno deploys a new app, or an app this feature's CLI has deployed since, **Then** it is refused before anything is used, and that zekno says what it says today for an unknown reason: `The runner refused the request (unsupported_version).`
-4. **Given** a runner of a later version than this CLI, **When** the developer runs `zekno status`, **Then** it says today's W5 (`… and speaks a newer protocol. Update zekno before you deploy to prod.`). What `zekno deploy` does then is Needs the maintainer, item 2.
+4. **Given** a runner of a later version than this CLI, **When** the developer runs `zekno status`, **Then** it says today's W5 (`… and speaks a newer protocol. Update zekno before you deploy to prod.`). What `zekno deploy` does then is Decided with the maintainer, item 2.
 5. **Given** this feature's runner has written its state, **When** someone puts runner 0.1.0 back by hand, **Then** that runner refuses every request (`invalid_state`) and never reads the state as empty.
 
 ---
@@ -158,7 +162,7 @@ A reader of the security model learns exactly what the hosted service, when it e
 ### Edge Cases
 
 - Two deploys of one app from two terminals at once: one gets today's `busy`; one that read the number before the other finished is refused as overtaken (C1).
-- A connection that drops after the deploy was sent: the history keeps it as sent. What the next `zekno deploy` does with it depends on Needs the maintainer, item 7.
+- A connection that drops after the deploy was sent: the history keeps it as sent. What the next `zekno deploy` does with it depends on Decided with the maintainer, item 7.
 - A runner restored from a backup lowers each app's number, and deploys accepted since could be delivered again in order (design T34). Restoring the runner's folder is not supported; set the server up again. Unchanged by this feature, and the docs say so.
 - An app deployed only with version 1 so far, with secrets: its first version-2 deploy must carry each secret's record, or the secret must be removed. A machine that holds the records sends them; one that does not is told which secret it cannot account for (C5).
 - A secret this machine never had, held by the server: listed from the server's record without its value passing through this machine.
@@ -212,8 +216,8 @@ A reader of the security model learns exactly what the hosted service, when it e
 **A secret set by a member since removed**
 
 - **FR-026**: The runner MUST refuse a deploy that uses a secret whose statement was signed by a member no longer in the team list it holds (`untrusted_secret`), until the secret is set again or removed.
-- **FR-027**: The CLI MUST find such a secret before it signs, stop with a sentence that names it and the two commands that fix it (C4), and sign nothing. On the version-2 path this replaces today's warning "Left out a record: unknown_signer." How the version-1 path treats it is Needs the maintainer, item 8.
-- **FR-028**: `zekno secret set` and `zekno secret rm` MUST be able to fix such a secret, and a secret only the server holds. How they learn its version is Needs the maintainer, item 6.
+- **FR-027**: The CLI MUST find such a secret before it signs, stop with a sentence that names it and the two commands that fix it (C4), and sign nothing. On the version-2 path this replaces today's warning "Left out a record: unknown_signer." How the version-1 path treats it is Decided with the maintainer, item 8.
+- **FR-028**: `zekno secret set` and `zekno secret rm` MUST be able to fix such a secret, and a secret only the server holds. How they learn its version is Decided with the maintainer, item 6.
 
 **Version 1 and version 2 together** (design, part 4.7)
 
@@ -247,7 +251,7 @@ A reader of the security model learns exactly what the hosted service, when it e
 - **FR-047**: Every new sentence MUST keep the project's wording rules: "runner", never "agent"; pre-alpha and unaudited stay visible; nothing is promised that is not built; the desktop app is not named in the README or the docs.
 - **FR-048**: Every new or changed line a person sees MUST be approved by the maintainer before it is built.
 - **FR-049**: The maintainer's server MUST be used only with a go-ahead each time. Every outward step (pushing a branch or a release tag, approving a release) is the maintainer's.
-- **FR-050**: Which runner release this feature ends with, and whether it reaches `main`, is Needs the maintainer, item 1. `main` MUST never name a development version.
+- **FR-050**: Which runner release this feature ends with, and whether it reaches `main`, is Decided with the maintainer, item 1. `main` MUST never name a development version.
 
 **The README and the docs**
 
@@ -282,9 +286,9 @@ A reader of the security model learns exactly what the hosted service, when it e
 
 ## Assumptions
 
-### Needs the maintainer
+### Decided with the maintainer (2026-11-18)
 
-Each of these is a decision this step needs that neither the design nor the decisions of 2026-11-18 settle. Each carries a recommendation; none is chosen until the maintainer says so.
+Each of these was a decision this step needed that neither the design nor the first decisions of 2026-11-18 settled. The maintainer took the recommendation on each. The options are kept so the reason stays readable.
 
 1. **The release this feature ends with, and `main`.** The maintainer said 0.1.1 comes with 015. (a) A development release, such as `0.1.1-dev.1`, cut from `dev` and recorded there, while `main` keeps 0.1.0: `dev` then names a development version, so `dev` cannot be merged into `main` (the `check-main` rule of `apps/runner/RELEASING.md`) until 015's 0.1.1, and any fix meant for `main` meanwhile goes another way. (b) No release: the new runner is tried from source only (`--runner-file`, a runner on this machine); a zekno built from `dev` keeps installing 0.1.0 and so signs version 1 on every server until 015. (c) A prod release now, so 015 ends with another number than 0.1.1. Also: whether this feature includes a proof on a real server, or leaves it to 015.
 2. **This CLI and a runner newer than it.** Today a runner with a higher protocol only draws a warning (W5) and deploys go ahead. This CLI signs every later field empty, and on a runner that carries out routes an empty `routes` releases every domain of the app (design, part 4.2: "a route left out is released"). Neither the design nor the review covers this direction. (a) `zekno deploy` and `zekno rollback` stop before signing when the runner's protocol is higher than the CLI's (C7). (b) Keep today's warning only, and accept that an out-of-date zekno can release domains.
@@ -293,11 +297,11 @@ Each of these is a decision this step needs that neither the design nor the deci
 5. **Two locks and a time limit on `docker compose up`.** Part 6 gives the runner a short state lock beside the deploy lock, so a team list update (`sync`) is never refused while a deploy runs, and limits `up` to 1,800 seconds on both paths. (a) Build both now. (b) Keep one lock and no limit until builds make deploys long. With one lock, V20 holds because nothing writes the state after the number is used; with two, the rule "read again, change only your own part" is needed now.
 6. **How `zekno secret set` and `zekno secret rm` learn a secret's version** when this machine has no record it can verify (the server holds it, or the member who set it was removed). Today both work without reaching the server. (a) They ask the server for the records it holds, on one connection, as `zekno status` does. (b) They stay offline, and take the version from a record on this machine without trusting its signer; a false version can then lock the name.
 7. **Sending the same deploy again (V19).** The design says that when an answer never came and nothing changed, the CLI sends the same signed deploy again instead of signing another (C3). (a) Build it now, and say what "nothing changed" means: the same Compose text, secrets and removals. (b) Leave it for the hosted service, where alternatives matter most; over SSH the CLI signs a new deploy as today.
-   **Recommended: (b).** Over SSH the next `zekno deploy` signs a new deploy, as today. The line C3 is not built.
+   **Decided: (b).** Over SSH the next `zekno deploy` signs a new deploy, as today. The line C3 is not built.
 8. **A removed member's secret on the version-1 path.** With runner 0.1.0 this CLI signs version 1, where no runner checks statements. (a) Stop before signing, as on version 2 (C4). (b) Keep today's warning and deploy without it.
-   **Recommended: (a).** One rule for the person, whichever runner the server has: the sentence on the board `Deploy2Secrets`.
+   **Decided: (a).** One rule for the person, whichever runner the server has: the sentence on the board `Deploy2Secrets`.
 9. **Refusal reasons of later fields.** The design lists `pack_missing`, `pack_mismatch`, `domain_taken` and `not_allowed_here` among protocol 3's new reasons. (a) The core library knows them all now, so this CLI explains a later runner's refusal. (b) Each joins with its feature; this CLI then says "The runner did not answer as expected" for one it does not know.
-   **Recommended: (b).** With item 2 (a), this zekno never deploys to a later runner, so it never receives one of them.
+   **Decided: (b).** With item 2 (a), this zekno never deploys to a later runner, so it never receives one of them.
 
 ### Other assumptions
 
