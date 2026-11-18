@@ -24,11 +24,29 @@ These numbers are the baseline: a failure is new only if it is not in this list.
 | A, the screens | T003, T005 to T013 | done |
 | B, the frame | T001, T004, T014, T015 | done |
 | C, the split | T016 to T024 | done |
-| D, the new pages | T025 to T028 | open |
+| D, the new pages | T025 to T028 | done |
 | E, the READMEs | T029 to T036 | open |
 | F, the end | T037 to T040 | open |
 
 T002 is done: the old pages are kept outside the repository for the comparisons (from `9ad84d3`, since GitHub's `dev` does not hold that commit).
+
+## Part D, the new pages (T025 to T028): done
+
+- `quick-start.mdx` (100 lines, as on the board `DocsQuickStart`): what you need, build `zekno`, `zekno deploy` with the screen `first-deploy` and what happened, `zekno` with the screen `home`, what next. Every requirement it names was checked against the reference pages, word for word where a number is involved: Bun 1.4.4 (`install.mdx`), built from source (`install.mdx`), one developer and macOS or Linux with a system keychain ("Status and limits"), a Linux server on x86-64 or ARM64 with glibc 2.17 or newer, Docker with its Compose plugin and HTTPS to github.com (`servers.mdx`, "Supported servers"), a window of 80 by 24 (`app.mdx`).
+- `index.mdx` (144 lines) rewritten: what Zekno is, what works today, a deploy as it happens today, the hosted service as planned in one paragraph, "Status and limits" with every statement it had, where to go next. The callout keeps the old page's title, "Pre-alpha", and says it is unaudited; the page test exempts the introduction from the standard callout.
+- `security.mdx` (75 lines): the trust table, the steps of a deploy, what it protects against and what it does not, from the old introduction, with the CLI as the program on your machine, and a link to the README's full model. It does not copy the README's open-source table or design rules.
+- Every old sentence of the introduction that changed or moved, and where, is in `move-list.md` under "The introduction".
+- All eleven screens are placed, each with a caption, on the pages `contracts/screens.md` names.
+- **Fixed by this session after part D**: three code blocks moved by part C drew a screen by hand right next to the real screen of the same thing (the first deploy in `deploying.mdx`, `zekno add postgres` in `templates.mdx`, the settings screen in `changing-settings.mdx`). `contracts/pages.md` rule 8 forbids that, and the first one said `Runner installed  52 MB`, which no real run prints (the program prints the unpacked runner's size, about 110 MB). The three blocks were removed and are written out whole in `move-list.md` under "Dropped", with the reason. The usage list on Commands is a list of what to type, not a screen, and stays. The comparison of T024, run again: 1,756 old lines, 1,670 on a page as they were, 22 reworded, 64 dropped, **0 unexplained**.
+
+## Part E, the READMEs (T029 to T036): done
+
+- `README.md` (331 lines): badges with "audit: none yet", the warning word for word, the picture of Home with its description, "What works today", "Try it", the overview and why, "How it works" with today's path first (a new Mermaid diagram) and the hosted service under "Planned: …", the security model, "Repository", "Develop", the roadmap in the road map's order, contributing, license.
+- **The security model is whole.** This session compared it with the old one line by line: the only lines that differ are the seven `contracts/readme.md` lists (the trust row, the threat row, the open-source row removed, rules 1, 3, 6 and 8). Every changed sentence, old and new, is in `move-list.md` under "The security model's wording".
+- **Rule 1** is longer than the contract's sentence, as the contract's fallback asks: `apps/cli/test/layers/layers.test.ts` checks only that `src/ops/` imports nothing that draws and that `src/ui/` takes only types from `src/ops/`; it does not check the full-screen app's screens, and the screens and the signing code run in one program. So the rule says it is a rule for any interface and how far the CLI meets it today.
+- `apps/cli/README.md` cut from 1,854 to 171 lines: what zekno is, build from source, develop, end-to-end tests, screens for the docs. Before cutting, 1,308 sentences of the removed sections were compared with the docs: 1,239 are on a page as they are, 61 are there in other words, 7 are the opening that stays, and 1 (the runner release's address) was on no page and was moved into `servers.mdx`. Each is in `move-list.md` under "From the CLI's README".
+- No test needed changing (T036): `contributing.test.ts` still holds over the short README, and `docs.test.ts` already reads it as one file among others. The docs test was checked to fail on `zekno deploy --bogus` put into `README.md`.
+- Links into the docs from both READMEs are full `https://zekno.app/docs/…` addresses, checked by the page test.
 
 ## Part C, the split (T016 to T024): done
 
@@ -70,6 +88,10 @@ GitHub's API through the session's GitHub connector was tried too: it can read t
 - **Values chosen for the screens**: `in 4.2s`, `2 min ago`, and an hour between the two deploys of `app-detail`. The runner's size is `110 MB` from `apps/runner/README.md`.
 - **Is `https://zekno.app/docs` live?** The runner's README now links there (the address in `config/site.ts`). This session cannot check that the docs are served there; if not, a relative link to `../web/content/docs/servers.mdx#…` would do.
 - **`templates.mdx` has two openings and two "does not do" lists**, one from the old templates page and one from `zekno add`. Merging them is a rewording, so it is left to you.
+- **Hand-written examples beside the real screens.** The doctor and secrets pages keep hand-written examples that show other cases than their screens (a warning and a problem; another app), and the usage list stays on Commands. They use the old example values (`demo`, `prod`, `203.0.113.7`). Whether to keep them is yours.
+- **The quick start builds from `main`**, because only a build from `main` is documented to install the published runner; `main` does not have `zekno add` yet (feature 012 is on `dev`), so the quick start's "Add a database" card points at a command that build lacks until `dev` is merged.
+- **Roadmap items left out** to follow the contract's list: two-person approval for production deploys, a local mock of the control plane, and the signed-in dashboard. "Website: the landing page and the docs" was added under Built.
+- **Rule 1 could be stated as checked** if a test kept `src/app/screens/` and `src/ui/` from importing `profile/` and `@workspace/core`. That would be a test-only change, for a later feature.
 - **`help` wraps** at 100 columns (the `zekno add` line and the last notes), because that is what the program prints there.
 
 - **GitHub access for the cloud session.** Reconnect GitHub at claude.ai and check that the Claude GitHub App is installed on `zekno-app`; then the commits of this session can be pushed.

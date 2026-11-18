@@ -56,10 +56,10 @@
 
 **Independent test**: the page alone is enough to end with an app running.
 
-- [ ] T025 [US2] Write `apps/web/content/docs/quick-start.mdx` as on the board `DocsQuickStart`: what you need, build, `zekno deploy` with the screen `first-deploy` and what happened, `zekno` with the screen `home`, what next. Every requirement it states is checked against `install.mdx` and the reference pages
-- [ ] T026 [US2] Rewrite `apps/web/content/docs/index.mdx`: what Zekno is, what works today, limits, a deploy as it happens today, the hosted service as planned in a few lines, links to the quick start and the groups
-- [ ] T027 [US2] Write `apps/web/content/docs/security.mdx` from today's introduction (trust table, steps, limits), with the CLI as the program on your machine and a link to the README's full model
-- [ ] T028 [US2] Place the screens in their pages (`contracts/screens.md`, "Used on") with a caption each
+- [x] T025 [US2] Write `apps/web/content/docs/quick-start.mdx` as on the board `DocsQuickStart`: what you need, build, `zekno deploy` with the screen `first-deploy` and what happened, `zekno` with the screen `home`, what next. Every requirement it states is checked against `install.mdx` and the reference pages
+- [x] T026 [US2] Rewrite `apps/web/content/docs/index.mdx`: what Zekno is, what works today, limits, a deploy as it happens today, the hosted service as planned in a few lines, links to the quick start and the groups
+- [x] T027 [US2] Write `apps/web/content/docs/security.mdx` from today's introduction (trust table, steps, limits), with the CLI as the program on your machine and a link to the README's full model
+- [x] T028 [US2] Place the screens in their pages (`contracts/screens.md`, "Used on") with a caption each
 
 ## Phase 6: User Story 1 - Understand the project from the README (P1)
 
@@ -67,11 +67,11 @@
 
 **Independent test**: a reader new to the project says what they could run today.
 
-- [ ] T029 [US1] Rewrite the top of `README.md` as on the board `ReadmeTop`: badges, warning, the picture, "What works today", "Try it"
-- [ ] T030 [US1] "How it works" in `README.md`: today's path as a Mermaid diagram first, then the planned design under its own heading with the CLI as the program on your machine
-- [ ] T031 [US1] The security model in `README.md`: every row and rule kept; the desktop app's sentences replaced as in `contracts/readme.md`; rule 1 worded only as far as the code shows it true
-- [ ] T032 [US1] "Repository", "Develop" and "Roadmap" in `README.md` as in `contracts/readme.md`
-- [ ] T033 [US1] Compare the security model before and after, row by row and rule by rule; write each changed sentence, old and new, into `specs/013-docs-refresh/move-list.md` under "The security model's wording"
+- [x] T029 [US1] Rewrite the top of `README.md` as on the board `ReadmeTop`: badges, warning, the picture, "What works today", "Try it"
+- [x] T030 [US1] "How it works" in `README.md`: today's path as a Mermaid diagram first, then the planned design under its own heading with the CLI as the program on your machine
+- [x] T031 [US1] The security model in `README.md`: every row and rule kept; the desktop app's sentences replaced as in `contracts/readme.md`; rule 1 worded only as far as the code shows it true
+- [x] T032 [US1] "Repository", "Develop" and "Roadmap" in `README.md` as in `contracts/readme.md`
+- [x] T033 [US1] Compare the security model before and after, row by row and rule by rule; write each changed sentence, old and new, into `specs/013-docs-refresh/move-list.md` under "The security model's wording"
 
 ## Phase 7: User Story 5 - One place for each fact (P3)
 
@@ -79,9 +79,9 @@
 
 **Independent test**: a sentence about a command's behaviour is found in one page of the docs and nowhere else.
 
-- [ ] T034 [US5] Compare each section of `apps/cli/README.md` that is to go with the docs; move what the docs lack to the right page and note it in the move list under "From the CLI's README"
-- [ ] T035 [US5] Cut `apps/cli/README.md` to the five sections of `contracts/readme.md`, under 250 lines, with "Screens for the docs"
-- [ ] T036 [US5] Update `apps/cli/test/docs/contributing.test.ts` and any test that read the removed sections
+- [x] T034 [US5] Compare each section of `apps/cli/README.md` that is to go with the docs; move what the docs lack to the right page and note it in the move list under "From the CLI's README"
+- [x] T035 [US5] Cut `apps/cli/README.md` to the five sections of `contracts/readme.md`, under 250 lines, with "Screens for the docs"
+- [x] T036 [US5] Update `apps/cli/test/docs/contributing.test.ts` and any test that read the removed sections
 
 ## Phase 8: Polish and checks
 
