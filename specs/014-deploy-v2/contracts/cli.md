@@ -106,7 +106,7 @@ lacks), the format.
   is not one of this machine's records' envelopes: when this machine's highest verified item for
   the name (`verifySecret`, `verifySecretRemoval`) is a record, its version is below the listed
   statement's, and its hash differs. A removal, no item here, or the listed statement being this
-  machine's own never trips it. Its sentence is proposed and waits for the maintainer.
+  machine's own never trips it. Its sentence was approved by the maintainer on 2026-11-18.
 - **CL17.** Every other item that did not verify is left out with today's warning (CL4). `status`'s
   versions decide only CL16; they are never signed (FR-021).
 
@@ -160,7 +160,7 @@ are offered for rollback, as today (FR-035).
 | C2 | `<S> holds deploy <N> of <A>, and this machine signed a deploy <N> whose answer never came. zekno cannot tell which of the two ran. Run zekno deploy again to settle it.` | `C2(app, server, n)` | after `replayed`, a `sent` entry `N` | deploy-words; deploy-answer; deploy-v2 |
 | C4 | ``<NAME> was set by someone who is no longer in the team, so <A> cannot be deployed with it. Set it again with `zekno secret set <NAME>`, or remove it with `zekno secret rm <NAME>`. Nothing was signed.`` | `C4(name, app)`; `ops/deploy-secrets.ts` | CL15 | deploy-words; `test/ops/deploy-secrets.test.ts`; removed-member |
 | C5 | ``<S> holds <NAME> for <A>, and this machine cannot check who set it. Set it again with `zekno secret set <NAME>`, or remove it with `zekno secret rm <NAME>`. Nothing was signed.`` | `C5(name, app, server)`; `ops/deploy-secrets.ts` | CL16 | deploy-words; deploy-secrets; secrets-v2 |
-| C5b | ``<S> holds a newer <NAME> for <A> than the one set on this machine. Set it again with `zekno secret set <NAME>` to replace it, or remove it with `zekno secret rm <NAME>`. Nothing was signed.`` (proposed, to be confirmed) | `C5b(name, app, server)`; `ops/deploy-secrets.ts` | CL16b | deploy-words; deploy-secrets; `test/scenarios/held.test.ts` |
+| C5b | ``<S> holds a newer <NAME> for <A> than the one set on this machine. Set it again with `zekno secret set <NAME>` to replace it, or remove it with `zekno secret rm <NAME>`. Nothing was signed.`` (approved 2026-11-18) | `C5b(name, app, server)`; `ops/deploy-secrets.ts` | CL16b | deploy-words; deploy-secrets; `test/scenarios/held.test.ts` |
 | C6 | ``The runner on <S> is version <F>, older than this zekno's <C>, so this deploy was signed in the older format. Run `zekno server update <S>` to bring it to <C>.`` | `C6(server, version, carried)`; warned by `ops/deploy.ts` | CL8 with `older` | deploy-words; `test/ops/deploy-format.test.ts`; deploy-versions; pairing |
 | C7 | `The runner on <S> is version <F>, newer than this zekno's <C>, and speaks a newer protocol. Update zekno to deploy to <S>. Nothing was signed.` | `C7(server, version, carried)`; `chooseFormat` | CL1 | deploy-words; deploy-format; deploy-versions |
 | C8 | `Number <N> is used, so the next deploy will be <N+1>.` left out | `ui/parts/deploy-summary.tsx` `numberUsed` | a version-2 deploy that ended in error | `test/app/app-operate.test.tsx`; `test/ui/ink/single-commands.test.tsx` |

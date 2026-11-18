@@ -30,10 +30,8 @@ programs of `runner-v0.1.0` and of `e7b0146` taken from git, and real Docker whe
 
 ## Needs the maintainer
 
-- **C5b's words.** Decision B (below) adds one stop, C5b, for a secret the server holds that is
-  newer than this machine's own record of it. Its wording in `design/lines.md` is proposed and
-  waits for the maintainer's yes (FR-048). Only T079's words wait; with other words, only
-  `apps/cli/src/shared/deploy-words.ts` and its test change.
+Nothing. C5b's words, the one sentence decision B (below) added, were approved by the maintainer
+on 2026-11-18 as written in `design/lines.md`.
 
 ## Decided with the maintainer after the plan (2026-11-18)
 

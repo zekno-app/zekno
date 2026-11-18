@@ -141,7 +141,7 @@ Nothing else was run; no server, no network, no file of the repository but these
   `SECRET_NAME`, so it prints safely. Several blocked names: one line per name in name order (its
   C4 or C5 sentence without `Nothing was signed.`), then `Nothing was signed.` once at the end of
   the last line, as lines.md's C4 says ("One line per secret, then the last sentence once").
-- **C5b** (version 2 only; proposed sentence, to be confirmed; decision B). After
+- **C5b** (version 2 only; sentence approved on 2026-11-18; decision B). After
   `secretsForDeploy`, in `ops/deploy-secrets.ts`: for each listed statement that is the runner's
   (its envelope is not one of this machine's records), take this machine's highest verified item
   for the name (`verifySecret`, `verifySecretRemoval`); when that item is a record, its version is

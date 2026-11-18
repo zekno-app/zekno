@@ -1,6 +1,6 @@
 # Lines: what a person newly sees in feature 014
 
-**Feature**: [014-deploy-v2](../spec.md) · **Date**: 2026-11-18 · **Status**: the boards made from this file were approved by the maintainer on 2026-11-18. The wordings below are the approved ones, except C3, which is not built (spec, "Decided with the maintainer", item 7), and C5b, added after the plan (item 6, decision B), which is proposed and waits for the maintainer. The four boards beside this file (`Deploy2Overtaken`, `Deploy2Secrets`, `Deploy2Versions`, `Deploy2Refusals`) draw them with the program's real components; where a board and this file differ, the board is the later one.
+**Feature**: [014-deploy-v2](../spec.md) · **Date**: 2026-11-18 · **Status**: the boards made from this file were approved by the maintainer on 2026-11-18. The wordings below are the approved ones, except C3, which is not built (spec, "Decided with the maintainer", item 7). C5b, the one sentence added after the boards, was approved by the maintainer on 2026-11-18. The four boards beside this file (`Deploy2Overtaken`, `Deploy2Secrets`, `Deploy2Versions`, `Deploy2Refusals`) draw them with the program's real components; where a board and this file differ, the board is the later one.
 
 **How to read it.** Each entry says where the line appears, when, today's line when one changes (quoted exactly, with its file and line), the closest sentences the CLI already prints, used as the model, and one proposed wording. Layout is not designed here: these are the words and the places. In the sentences, `<S>` is a server's name, `<A>` an app's name, `<N>` a deploy number, `<NAME>` a secret's name, `<F>` the runner's version, `<C>` the version this zekno carries.
 
@@ -116,7 +116,7 @@ One sentence per reason (`REASONS` in `apps/cli/src/cli/errors.ts`). A refusal i
 - **Today**: the same warning template as C4, with that reason, and the deploy goes on.
 - **Proposed**: ``<S> holds <NAME> for <A>, and this machine cannot check who set it. Set it again with `zekno secret set <NAME>`, or remove it with `zekno secret rm <NAME>`. Nothing was signed.``
 
-### C5b. The server holds a newer secret than the one set on this machine (new; proposed, to be confirmed)
+### C5b. The server holds a newer secret than the one set on this machine (new; approved by the maintainer on 2026-11-18)
 
 - **Where**: as C4.
 - **When**: a version-2 deploy, and this machine's latest item for `<NAME>` is a record that is older than a statement the server holds for it and that verifies here, with another hash: another machine set it since. Today's rule would quietly deploy the server's newer value and drop this machine's.
