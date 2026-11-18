@@ -1,8 +1,9 @@
 # README and docs refresh: the boards
 
-Six boards, proposed on 2026-11-18 and **not approved yet**. They are the row "README and docs
-refresh (spec 013)" of the design canvas (https://claude.ai/artifact/BVuvZPZTReLa4TSHfyzMJW).
-Nothing in the README or the docs is rewritten until the maintainer approves them.
+Six boards, **approved by the maintainer on 2026-11-18** with one change: the desktop app is not
+named in the README or the docs, so the two README boards were redrawn without it. They are the row
+"README and docs refresh (spec 013)" of the design canvas
+(https://claude.ai/artifact/BVuvZPZTReLa4TSHfyzMJW).
 
 | Board | Shows |
 |---|---|
@@ -25,7 +26,6 @@ its colours and the GitHub page around them are drawn.
   runner. The captures made for the docs must not show a size or a time that a real run would
   never show. The plan decides how.
 - The line counts on `DocsTree` are estimates from today's headings.
-- The roadmap's order on `ReadmeOutline` is the order of the road map, which the maintainer has
-  not confirmed yet.
-- The README's picture of Home is a file made from the same capture as the docs' frame. Which
-  kind of file is a choice for the plan, to agree with the maintainer.
+- The roadmap's order on `ReadmeOutline` is the order of the road map, approved with the boards.
+- The README's picture of Home is an SVG file made from the same capture as the docs' frame,
+  approved with the boards.

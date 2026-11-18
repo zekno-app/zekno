@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft. The direction was agreed with the maintainer on 2026-11-18 (see Clarifications). The boards (`design/`) are proposed and not approved yet. Nothing in the README or the docs is rewritten until they are.
+**Status**: Approved. The direction and the six boards (`design/`) were approved by the maintainer on 2026-11-18 (see Clarifications), with one change: the desktop app is not named anywhere in the README or the docs.
 
 **Input**: User description: "I think we built a lot since the first README and the docs page were created. Now should we update them to match our current process including the CLI designs?" Answered with four proposals, and the maintainer said "Do it": the root README says what works today first; the one long CLI page of the docs is split into pages; the docs show the CLI's real screens; the CLI's own README is cut down to a developer's guide.
 
@@ -17,12 +17,14 @@
 - Q: Is the long CLI page split? → A: Yes, into a quick start, the terminal app, one page per group of commands, and reference pages.
 - Q: Does the CLI's README keep its full copy of the docs? → A: No. It becomes a guide for people who build and test the CLI, and points to the docs for the rest.
 - Q: Does this cover how the project is built (specs, boards before code, reviews)? → A: Not asked for. Out of scope unless the maintainer says otherwise.
+- Q: Are the six boards approved? → A: Yes, all of them: the seventeen pages and their names, the frame, the README's top with the badge "audit: none yet", the README's picture as a file made from the capture, and the roadmap in the road map's order.
+- Q: Is the desktop app described as planned? → A: No. The maintainer: "since we don't have anything related to the desktop app, defer all terms related to it in my docs and readme so users won't ask about it". It is not named in the README or the docs. Where the design needs a program on the developer's machine, that program is the CLI, which holds the key today.
 
 ## Why
 
 The README and the docs were first written in the project's first week, when nothing ran. Since then eleven features were built, and each added its paragraphs where the last one stopped. The facts are mostly right. The shape is not:
 
-- The README opens with "This repository is being scaffolded" and draws a desktop app and a hosted service, neither of which exists. What a person can run today, the CLI talking to the runner over SSH, is not drawn anywhere, and there is no way in for someone who wants to try it.
+- The README opens with "This repository is being scaffolded" and draws a desktop program and a hosted service, neither of which exists. What a person can run today, the CLI talking to the runner over SSH, is not drawn anywhere, and there is no way in for someone who wants to try it.
 - The docs are four pages. One of them is 1,975 lines. There is no quick start. No screen of the CLI is shown, though its screens were designed with care and are the first thing a person meets.
 - The CLI's README is 1,854 lines of nearly the same text as the docs page, so every change is written twice.
 
@@ -41,7 +43,7 @@ A developer opens the repository on GitHub. Before they scroll, they learn what 
 **Acceptance Scenarios**:
 
 1. **Given** the README, **When** a reader reads its first screen, **Then** they find what works today (the CLI and the runner, over SSH, one developer), stated before the planned design.
-2. **Given** the architecture section, **When** a reader looks at it, **Then** the path that exists today is drawn first, and the design with the desktop app and the hosted service is drawn after it and labelled as planned.
+2. **Given** the architecture section, **When** a reader looks at it, **Then** the path that exists today is drawn first, and the design with the hosted service is drawn after it and labelled as planned, with the CLI as the program on the developer's machine.
 3. **Given** the README, **When** a reader looks for a screen of the CLI, **Then** they find one, made from the real program.
 4. **Given** the security model as it stands today, **When** the README is rewritten, **Then** every promise, every limit and every design rule it states is still stated, with none weakened.
 5. **Given** the road map the maintainer follows, **When** a reader reads the README's roadmap, **Then** it lists the same stages in the same order.
@@ -121,10 +123,10 @@ A person who works on the CLI finds how to build, run and test it in a short REA
 
 - **FR-001**: The README MUST state, on its first screen, that the project is pre-alpha and unaudited, in words that are true today. It MUST NOT say the repository is being scaffolded.
 - **FR-002**: The README MUST say what works today before it describes the planned design: the CLI and the runner, deploying directly over SSH, for one developer.
-- **FR-003**: The README MUST draw the path that exists today, and MUST label the design with the desktop app and the hosted service as planned.
+- **FR-003**: The README MUST draw the path that exists today, and MUST label the design with the hosted service as planned. In that design the program on the developer's machine is the CLI.
 - **FR-004**: The README MUST hold a short way to try the CLI, and a link to the quick start.
 - **FR-005**: The README MUST show one screen of the CLI made from the real program.
-- **FR-006**: The README MUST keep every promise, limit, threat-table row and design rule of the security model it holds today. A reworded one MUST mean the same.
+- **FR-006**: The README MUST keep every promise, limit, threat-table row and design rule of the security model it holds today. A reworded one MUST mean the same. The rows and rules that name the desktop app are reworded to name the CLI or the developer's machine, and each rewording is written down for the maintainer to read (FR-028).
 - **FR-007**: The table of what exists MUST state each part's status in a sentence or two, and point to the docs for detail.
 - **FR-008**: The README's roadmap MUST list the stages of the road map the maintainer follows, in its order, and mark what is done.
 
@@ -159,6 +161,10 @@ A person who works on the CLI finds how to build, run and test it in a short REA
 - **FR-026**: No package is added to the repository without the maintainer's agreement.
 - **FR-027**: The wording rules of the project hold in every new sentence: "runner", never "agent"; pre-alpha and unaudited stay visible; nothing is promised that is not built.
 
+**No desktop app**
+
+- **FR-028**: The README, the READMEs of the apps and every page of the docs MUST NOT name the desktop app, its folder or the framework chosen for it. A test checks it. Every sentence that named it today is on a written list with the sentence that replaces it, or the reason it was removed. The landing page is not part of this feature and is not changed.
+
 ### Key Entities
 
 - **Page**: one file of the docs, with a title, a place in the page tree and headings that links can point at.
@@ -176,14 +182,14 @@ A person who works on the CLI finds how to build, run and test it in a short REA
 - **SC-004**: The CLI's README is under 250 lines (today: 1,854), and no section of it repeats the docs.
 - **SC-005**: Every screen in the docs and the README is reproduced by one command, twice in a row, with the same result.
 - **SC-006**: Every heading of today's CLI page is on the move list, with zero unexplained.
-- **SC-007**: No sentence of the README or the docs presents a part that is not built as if it were.
+- **SC-007**: No sentence of the README or the docs presents a part that is not built as if it were, and none names the desktop app.
 - **SC-008**: Every check of the repository passes, and no file of the CLI's source, the runner or the core library has changed.
 
 ## Assumptions
 
 - The docs site keeps its layout, its framework and its dark colours. This feature adds pages and one way to show a screen. It does not redesign the site.
 - Screens are captured at 100 columns by 30 lines, the size the designs were drawn at. A page may use the 80 by 24 capture where it reads better.
-- The planned parts (desktop app, hosted service, teammates) stay described, because the security model is the reason for the project. They are labelled as planned wherever they appear.
+- The hosted service and teammates stay described, because the security model is the reason for the project. They are labelled as planned wherever they appear. The desktop app is not described at all (FR-028).
 - The landing page is not part of this feature.
 - The built site is not started or built from here. Pages are checked by the repository's tests and by compiling their text. The maintainer looks at the running site.
 - How the project itself is built (specs, boards, reviews) is not documented by this feature.
