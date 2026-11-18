@@ -130,3 +130,16 @@ The session that planned the feature pulled the branch and checked the work itse
 - **T041 and T042**: the road map and the feature map updated, and the branch merged into `dev` on this computer.
 
 Still for the maintainer's eye: the running site (the sidebar's three groups, a frame at a narrow window, whether the site's Geist Mono joins the box lines) and the README on GitHub.
+
+## After the checks: four fixes, the built site, and the pushes (2026-11-18)
+
+Asked for by the maintainer before pushing.
+
+- **The landing page** no longer names the desktop app (eight sentences, listed in `move-list.md`), and the page test that refuses the term reads it too.
+- **The templates page** opens once and lists once what a template does not do (363 lines, from 402).
+- **The roadmap** has "Two-person approval for production deploys" again, and names the dashboard with the hosted service.
+- **Two tests**: `apps/cli/test/layers/screens-hold-no-key.test.ts` (no file that draws loads the keychain code or the core library), so the README's rule 1 now says what is checked; and the runner's tag test has 30 seconds, since it starts one program per refused tag at once.
+- **Found on the built site, and fixed**: in a frame, `●` came out 10px wide and `←` 17px against a cell of 7.5px, because the site's monospace font lacks them and the browser took them from a wider font; every border after them on the row moved. `screen.tsx` now holds each character outside ASCII and the box-drawing range to one cell. No test here could see it: it shows only with the site's real fonts.
+- **Last full run of the checks**: typecheck and lint pass; web 52 pass; core 102 pass; runner 147 pass, 1 skip, 0 fail; cli 2,213 pass, 4 skip, 0 fail across 109 files; Prettier clean in `apps/cli`; every screen in step.
+- **The built site, looked at** in the maintainer's browser on the preview of `dev`: the sidebar's three groups; Home's frame with straight borders and the address whole, every bordered row the same width; at a 386px window the page does not scroll sideways and the frame scrolls inside itself; all eighteen pages answer, and none holds the term.
+- **Pushed**, at the maintainer's word for this time only: `dev`, then `main`.
