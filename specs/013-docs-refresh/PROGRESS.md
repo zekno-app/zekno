@@ -25,10 +25,17 @@ These numbers are the baseline: a failure is new only if it is not in this list.
 | B, the frame | T001, T004, T014, T015 | done |
 | C, the split | T016 to T024 | done |
 | D, the new pages | T025 to T028 | done |
-| E, the READMEs | T029 to T036 | open |
-| F, the end | T037 to T040 | open |
+| E, the READMEs | T029 to T036 | done |
+| F, the end | T037 to T040 | done; T041 and T042 left for the maintainer's computer |
 
 T002 is done: the old pages are kept outside the repository for the comparisons (from `9ad84d3`, since GitHub's `dev` does not hold that commit).
+
+## Part F, the end (T037 to T040): done
+
+- **T037, the checks of `quickstart.md`, last full run**: `bun run typecheck --force` passes (5 of 5); `bun run lint --force` passes (5 of 5); `bun run test --force`: web 52 pass, 0 fail; core 102 pass; runner 144 pass, 2 skip, 2 fail (the same two as at the start); cli 2139 pass, 9 skip, 66 fail across 108 files. **No failure is new**: every CLI failure is one of the baseline's 67, all caused by running as root (see "Starting numbers"). In `apps/cli`: Prettier clean; `bun run screens --check` every screen in step. No page over 500 lines (longest `templates.mdx`, 402); the CLI's README 171 lines; no "desktop" or "Electrobun" in the READMEs or `apps/web/content`; the comparison of the old pages, 0 unexplained.
+- **T038**: `git diff 9ad84d3 --stat` over `apps/cli/src`, `apps/runner/src`, `packages/core`, `apps/cli/tests`, `apps/cli/e2e.config.ts` prints nothing. (`dev` on GitHub does not hold `9ad84d3`, the commit this branch grew from, so the comparison is with it.)
+- **T039**: the new pages were read from top to bottom. Every "above" and "below" still points at something on its page. One row was changed: the introduction's status table said "Control plane | Hosted by Zekno, closed source" under "What works today", as if it existed; it now begins "Not built yet." (in `move-list.md`).
+- **T040**: "As built" is at the end of `plan.md`.
 
 ## Part D, the new pages (T025 to T028): done
 
@@ -95,3 +102,17 @@ GitHub's API through the session's GitHub connector was tried too: it can read t
 - **`help` wraps** at 100 columns (the `zekno add` line and the last notes), because that is what the program prints there.
 
 - **GitHub access for the cloud session.** Reconnect GitHub at claude.ai and check that the Claude GitHub App is installed on `zekno-app`; then the commits of this session can be pushed.
+
+## For the maintainer
+
+**Finished**: parts A to F, tasks T001 to T040. Seventeen pages in three groups; eleven real screens of the CLI, kept true by `bun run screens --check` and a test; the frame `<Screen>`; the README that says what works today first; the CLI's README as a developer's guide (171 lines); the desktop app named nowhere outside the landing page.
+
+**Open**:
+
+- **Nothing is on GitHub.** Every push was refused (403, no GitHub access for the cloud session; the GitHub connector was refused writes too). All the commits are on the local `013-docs-refresh` of the cloud session only. Fix the access, then push from that session, or the work must be redone.
+- T041 (the road map and the feature map) and T042 (merging into `dev`): for your computer, as `HANDOFF.md` says.
+- The eye checks on the running site and on GitHub (see "As built" in `plan.md`).
+
+**The reworded security rules**: in `specs/013-docs-refresh/move-list.md`, under "The security model's wording", each with the old and the new sentence: the trust-boundaries row, the threat row, the open-source row removed, and rules 1, 3, 6 and 8. The rest of the model is unchanged, line for line.
+
+**To decide**: the items under "Needs the maintainer" above.
