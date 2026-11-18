@@ -1,0 +1,23 @@
+$ zekno add postgres
+[green]✔[/] [dim]Read by[/]  web
+[bold]PostgreSQL 18.7[/]  [dim]A relational database.[/]                                 [dim]by zekno[/]
+[dim]╭──────────────────────────────────────────────────────────────────────────────╮[/]
+[dim]│[/] [dim]app[/]     [bold]demo[/]                                                                 [dim]│[/]
+[dim]│[/] [dim]server[/]  prod[dim] deploy@203.0.113.7[/]                                              [dim]│[/]
+[dim]│[/] [dim]file[/]    zekno.app.json[dim]  2 services: web, worker[/]                              [dim]│[/]
+[dim]╰──────────────────────────────────────────────────────────────────────────────╯[/]
+[bold]Adds a service[/]
+  [brand,bold]postgres[/]                postgres:18.7[dim]  pinned by digest[/]
+                          restart always[dim] · [/]port 5432, not published
+                          data kept in volume postgres-data
+[bold]Makes a secret on this machine[/][dim]  never shown[/]
+  POSTGRES_PASSWORD       32 random characters
+                          [dim]read by postgres[/]
+[bold]Builds a secret from it[/]
+  DATABASE_URL            postgres://app:[dim]••••[/]@postgres:5432/app
+                          [dim]read by web[/]
+[yellow]![/] [yellow]Zekno does not back up this data.[/]
+[brand]?[/] [bold]Add postgres to demo?[/] Nothing is deployed until you deploy. [dim](y/N)[/] yes
+[green]✔[/] Added postgres to zekno.app.json
+[green]✔[/] Stored POSTGRES_PASSWORD and DATABASE_URL, sealed for prod
+  [dim]Run zekno deploy to start it.[/]

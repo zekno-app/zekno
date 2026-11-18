@@ -1,0 +1,33 @@
+$ zekno deploy
+  [dim]Nothing is set up on this machine yet. Three things first: your key, a server, this app.[/]
+
+[brand#2383e2]?[/] [bold]Your name[/] [dim]›[/] ada
+[green]✔[/] Key created. It is in your system keychain.
+  [dim]Team code  [/]  [bold]NX97-5462-1ZBN-2BD9-F499[/]
+  [dim]Identifies your team. A server checks it before it agrees to obey your team.[/]
+
+[brand#2383e2]?[/] [bold]Where is the server?[/] [dim]›[/] deploy@203.0.113.7
+[brand#2383e2]?[/] [bold]A name for it[/] [dim]›[/] prod
+[green]✔[/] Connected over SSH
+[green]✔[/] Docker with Compose found
+[green]✔[/] Runner installed  [dim]1 MB, checksum verified[/]
+[green]✔[/] Added prod to the signed team list
+  [dim]Server code[/]  [bold]V07X-G3J1-G0X6-JAJ8-P0DZ[/]
+  [dim]Identifies this server's key. Teammates compare it before they trust the server.[/]
+  [dim]You reached this server over SSH, so its identity rests on SSH's host verification.[/]
+
+[brand#2383e2]?[/] [bold]Name for this app[/] [dim]›[/] demo
+[brand#2383e2]?[/] [bold]Remember this folder?[/] It writes zekno.json, so it always deploys demo to prod. [dim](y/N)[/] yes
+
+[yellow]![/] compose.yaml expects 1 value that has no secret yet.
+[brand#2383e2]?[/] [bold]Value for DATABASE_URL (demo on prod): [/][dim](hidden)[/]
+
+[dim]╭─ [/][bold]Deploy 1[/] [dim]───────────────────────────────────────────────────╮[/]
+[dim]│[/] [dim]app[/]       demo                                               [dim]│[/]
+[dim]│[/] [dim]server[/]    prod                                               [dim]│[/]
+[dim]│[/] [dim]secrets[/]   1                                                  [dim]│[/]
+[dim]╰──────────────────────────────────────────────────────────────╯[/]
+
+[green]✔[/] Checked  [green]✔[/] Signed  [green]✔[/] Sent  [green]✔[/] Started
+
+[green]✔[/] [bold]demo is live on prod[/][dim] in 0.5s[/]
