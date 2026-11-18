@@ -1,0 +1,24 @@
+{
+  "pages": [
+    "---Start---",
+    "index",
+    "quick-start",
+    "install",
+    "security",
+    "---Using zekno---",
+    "app",
+    "deploying",
+    "servers",
+    "secrets",
+    "settings",
+    "changing-settings",
+    "templates",
+    "project-file",
+    "doctor",
+    "---Reference---",
+    "cli",
+    "output",
+    "storage",
+    "runner"
+  ]
+}

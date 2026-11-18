@@ -1,0 +1,203 @@
+---
+title: App settings
+description: The settings file zekno.app.json, with every setting and its rule, the start command, published ports and volumes.
+---
+
+<Callout type="warn" title="Pre-alpha and unaudited">
+  The command-line tool, the runner and the core library have had internal
+  reviews only. Do not use them for anything you could not afford to lose, and
+  do not rely on them in production before an external audit.
+</Callout>
+
+## zekno settings
+
+An app can be described by settings instead of a Compose file. The settings
+live in `zekno.app.json`, a file in the project folder, beside the code. At
+each deploy, `zekno` turns them into Compose text on your machine, and that
+text is what is signed, sent and recorded, as a Compose file is. The runner
+runs it as it runs any deploy. A Compose file written by hand stays possible:
+a folder deploys one or the other (see [zekno deploy](/docs/deploying#zekno-deploy) for
+which).
+
+The five `zekno settings` commands show, change, start and print the file.
+None of them contacts a server, deploys or signs anything. Only
+`zekno settings` itself may read the keychain, once, when the file it shows
+is the one a `zekno.json` in use here names (below).
+
+**Which file.** Every `zekno settings` command looks at the settings file
+`zekno deploy` in the same folder would sign, by the same rule (see
+[zekno deploy](/docs/deploying#zekno-deploy)): the one the `zekno.json` in use here names, in
+this folder or in one above, wherever it is, and named as the deploy names
+it, such as `deploy/zekno.app.json`; else this folder's own `zekno.app.json`.
+A `zekno.json` is in use here when your team signed it and it was used in its
+folder on your machine. One that carries a signature and is not in use here
+yet is what `zekno deploy` asks about first ("Use it here?"), and a yes deploys
+the file it names: when that is not this folder's own `zekno.app.json`, each
+command says so in one sentence and shows or changes nothing, exit status 1:
+`This folder's zekno.json names deploy/zekno.app.json and is not in use on this machine yet: zekno deploy asks about it first, and a yes deploys deploy/zekno.app.json, not the zekno.app.json here.`
+When the file here is a Compose file written by hand, the sentence names it
+in place of `zekno.app.json`:
+`..., and a yes deploys deploy/zekno.app.json, not the compose.yaml here.`
+Nothing is asked or recorded: answer the question with `zekno link` or
+`zekno deploy`. Any other `zekno.json` is left aside, as `zekno deploy` leaves
+it. When the deploy would use a Compose file while a `zekno.app.json` lies
+here, each command says so in one sentence and shows or changes nothing, exit
+status 1:
+`This folder's zekno.json names compose.yaml, so zekno deploy uses it, not the zekno.app.json here.`
+With `compose.yaml` here too and no `zekno.json`, the settings are shown and
+changed, and a warning says that `zekno deploy` asks which to deploy, or takes
+`-f <file>`.
+
+**Options.** The settings commands take only their own: `--json` for
+`zekno settings`, `--yes` for `set` and `unset`. Any other, `--app`,
+`--server` and `-f` among them, is refused with exit status 2, since it would
+change nothing here: `` `zekno settings compose` does not take `--app`. `` To
+see what a deploy with `--app` or `--server` would sign, run the command where
+that app's folder is. A file counts only when its folder lists it exactly as
+`zekno.app.json`: on a disk that ignores letter case, as macOS has by default,
+`ZEKNO.APP.JSON` is not a settings file.
+
+### The settings file
+
+```json
+{
+  "zekno": 1,
+  "services": {
+    "web": {
+      "source": { "image": "ghcr.io/acme/demo-web:1.4.2" },
+      "deploy": {
+        "start": "bun run start",
+        "restart": "on-failure",
+        "memory": "1g",
+        "cpus": 1
+      },
+      "networking": { "port": 3000 },
+      "variables": {
+        "secrets": ["DATABASE_URL", "SESSION_KEY"],
+        "plain": { "NODE_ENV": "production" }
+      },
+      "volumes": { "uploads": "/data/uploads" }
+    },
+    "worker": {
+      "source": { "image": "ghcr.io/acme/demo-worker:1.4.2" },
+      "deploy": { "start": "bun run worker", "restart": "always" },
+      "variables": { "secrets": ["DATABASE_URL"] }
+    }
+  }
+}
+```
+
+One file describes one app, with one or more services. Each service has up to
+five sections: `source`, `deploy`, `networking`, `variables` and `volumes`.
+Only `source.image` is required. Any other setting, and any section, may be
+left out.
+
+| Section | Setting | What it is, and its rule |
+| --- | --- | --- |
+| `source` | `image` | The image the service runs, as Docker names it, such as `ghcr.io/acme/web:1.4.2`: a host if any, a lowercase path, then a tag, a digest (`@sha256:` and 64 hex digits) or both. At most 255 characters |
+| `deploy` | `start` | The start command. Left out: the image's own. At most 4096 characters and 256 words, with no control or invisible character (below). It runs without a shell: see [The start command](#the-start-command) |
+| | `restart` | `no`, `on-failure` or `always`. Left out: `no` |
+| | `memory` | A memory limit: a whole number and `m` or `g`, such as `512m` or `1g`, at least `6m`. Left out: no limit |
+| | `cpus` | A processor limit: a number above 0 and at most 1024, with at most two decimals, such as `0.5` or `2`. Left out: no limit |
+| `networking` | `port` | The port the service listens on, 1 to 65535. The other services of the app reach it by the service's name |
+| | `publish` | A port of the server that reaches `port`, 1 to 65535. It needs `port`, and two services cannot publish the same one. Left out: not published. See [Published ports](#published-ports) |
+| `variables` | `secrets` | The names of the secrets the service reads, each set with `zekno secret set`. Never a value. Letters, digits and underscore, not starting with a digit, at most 128 characters, and not a name `zekno` keeps for itself, such as `PATH` |
+| | `plain` | Values that are not secret, such as `{ "NODE_ENV": "production" }`. A name as for a secret, though a name `zekno` keeps for itself is allowed here. A value of one line with no control or invisible character (below), at most 4096 characters, which may be empty. A name cannot be both a secret and a plain variable of one service |
+| `volumes` | `<name>` | A named volume, and the absolute path in the container where it is mounted, such as `/data`. See [Volumes](#volumes) |
+
+- A service's name is lowercase letters, digits and hyphens, starts with a
+  letter, and is at most 63 characters. A volume's name may also hold
+  underscores.
+- `"zekno": 1` is the version of settings the file is written for. A file
+  written for a later version is refused:
+  `zekno.app.json is written for a later version of zekno. Update zekno to use it.`
+- At most 32 services. Each service reads at most 256 secret names, has at
+  most 128 plain variables and 16 volumes, and mounts no two volumes at the
+  same path. The services of one app read at most 256 secret names together.
+
+**How it is read.** It is JSON, read strictly: no comment, no comma after the
+last item, no key twice in one object, nested at most 6 deep, no text longer
+than 4096 characters, at most 64 KiB of UTF-8. Keys may come in any order. It
+is read once, with the checks a Compose file has: a regular file, and, unless
+it is named with `-f`, one of yours, with one name on the disk, inside its
+folder. Every command that reads it stops at the first
+fault, before anything is written, signed or sent, with one sentence that
+names the place and the rule, never the file's content:
+
+```text
+✖ zekno.app.json could not be read as settings.
+  web, deploy.memory: use a size such as 512m or 1g.
+```
+
+Piped, it is one line on standard error. Exit status 1.
+
+**Characters.** A start command and a plain value may hold text in any
+script, accents and emoji, but no control character and no character that is
+drawn as nothing or turns text around: a zero-width space or joiner, a soft
+hyphen, a direction mark or override, a tag character, a Hangul filler, a
+variation selector that does not follow an emoji, a line or paragraph
+separator. So what `zekno` shows of a value is the value that is signed. Every
+other setting takes ASCII only. A value that holds one is refused with its
+place:
+`web, variables.plain.NODE_ENV: use no invisible character, such as a zero-width space or a right-to-left mark.`
+Nor may a plain value start or end with a space or another blank (a no-break
+space, an ideographic space, a braille blank and the like), which would not be
+seen at the end of a line; nor may the first or last word of a start command.
+Blanks inside a value stay, and so do the spaces that only separate the words
+of a start command:
+`web, variables.plain.REQUIRE_AUTH: use no space or other blank at its start or end.`
+
+**What it can never hold.** A secret's value: `secrets` is a list of names,
+and the values stay in `zekno secret set`. A path on your machine: no setting
+takes one. A folder of the server: a volume is a named volume. A command for
+your machine: nothing in the file runs there, and `start` runs in the
+container. Another file: JSON has no include, and `env_file`, `extends` and
+`include` are settings this `zekno` does not know. So `zekno.app.json` holds
+no secret and is safe to commit.
+
+**Settings this version does not have.** `source.build`, `deploy.predeploy`,
+`deploy.healthcheck`, `deploy.replicas` and `networking.domains` are names
+kept for settings this version of `zekno` does not have. A file that sets one
+is refused by every command that reads it, with two sentences that name it,
+and exit status 1:
+
+```text
+✖ zekno.app.json sets a domain for web.
+  Domains are not in this version of zekno yet.
+```
+
+### The start command
+
+The start command runs without a shell. Its words go to the container as they
+are: no shell reads them, on your machine or on the server. Spaces separate
+the words. A word in single quotes is taken as written; in double quotes,
+`\"` and `\\` are a quote and a backslash. Outside quotes, `;`, `&`, `|`, `<`,
+`>`, `(`, `)`, `$` and backquotes are refused. To use a shell, start the
+command with `sh -c` and put the rest in quotes, as `sh -c "…"` or
+`sh -c '…'`:
+
+```json
+"start": "sh -c 'bun run migrate && bun run start'"
+```
+
+### Published ports
+
+`port` alone is not published on the server: the app's other services reach
+it by the service's name. With `publish`, the port is published on every
+address of the server, as Compose does. It is then open to whoever can reach
+the server: Docker's published ports can pass a host firewall such as `ufw`,
+and Zekno does not manage the server's firewall.
+
+### Volumes
+
+A volume is a named volume only. Docker keeps its data on the server under the
+name `zekno-<app>_<volume>`: for the app `demo`, the volume `uploads` is
+`zekno-demo_uploads`. A folder of the server cannot be mounted from settings,
+so a settings file from someone else's repository cannot reach the server's
+own files. To mount a folder of the server, write a Compose file:
+`zekno settings compose > compose.yaml` gives one to start from. Then remove
+`zekno.app.json`, or say which file with `-f`.
+
+Removing a volume from the settings keeps its data: Compose never removes a
+named volume. To delete it, run `docker volume rm zekno-demo_uploads` on the
+server.

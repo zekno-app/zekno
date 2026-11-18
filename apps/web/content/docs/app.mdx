@@ -1,0 +1,168 @@
+---
+title: The terminal app
+description: The full-screen app zekno opens at a terminal, with its screens, keys and questions, how it keeps in touch with servers, deploying from it, and logs.
+---
+
+<Callout type="warn" title="Pre-alpha and unaudited">
+  The command-line tool, the runner and the core library have had internal
+  reviews only. Do not use them for anything you could not afford to lose, and
+  do not rely on them in production before an external audit.
+</Callout>
+
+Run `zekno` alone at a terminal and a full-screen app opens. Everything the app
+does is also a single command, for scripts.
+
+`zekno` with no arguments, at a terminal, opens a full-screen app. Without a
+terminal (piped, in a script, or with `TERM=dumb`) it prints the help and
+exits with status 2.
+
+The window must be at least 80 columns by 24 lines. In a smaller one the app
+asks for a larger window, and comes back to the same screen when there is
+room. Each screen lists its keys on its last line. When you quit, the terminal
+is left as it was, also after an error.
+
+| Screen | Opens from | Shows |
+| --- | --- | --- |
+| Home | Start, when a team exists | Servers; the selected server's apps with deploy number, state and when; the selected app's details and actions; whether this folder is linked |
+| App | `enter` on an app | Deploy history; secrets by name and version; the selected deploy's details; a note when a secret is newer than the running deploy |
+| Deploy | `d`, or `r` | Summary panel, stage row, one live line; Docker's output on `o` and on failure |
+| Logs | `l` | Time, service, text; following or paused |
+| First run | Start, when no team exists | The logo, the three steps (your key, a server, a first deploy), the name question |
+| Add a server | `a` on Home, or step 2 of first run | The destination and name, each step as it completes, the team code and the server code with what each is for. Once done it stays, every step ticked and the server code shown, until `enter` goes to Home |
+| Set a secret | `s`, or before a deploy when values are missing | The names that are missing, the hidden prompt |
+| Settings | `e` on an app | This folder's `zekno.app.json`, one service at a time, in sections; on `c`, the Compose text it turns into. See [The settings screen](/docs/changing-settings#the-settings-screen) |
+| Help | `?` | The app's keys, in groups. `e` and the keys of the settings screen are on their hint lines, not in help |
+
+A profile that does not verify opens an error screen with the reason instead
+of Home. Only `q` and `ctrl-c` work there.
+
+## Keys
+
+| Key | Where | Does |
+| --- | --- | --- |
+| `↑` `↓` | Lists, logs, settings | Move the selection, or scroll |
+| `←` `→`, `tab` | Home, App, Settings | Move between panes. On Settings, `tab` shows the next service |
+| `enter` | Lists, questions | Open, or confirm. On a secret, set its new value. On Logs after the connection dropped, connect again. On Home, on a server marked `!` (SSH needs an answer), connect to it so SSH can ask. On Add a server once it is done, go to Home with the new server selected. On Settings, change the selected setting |
+| `esc` | Everywhere but Home | Go back. On Deploy, the deploy carries on. At the hidden prompt before a deploy, back to the list of missing values; on that list, the question "deploy without them?" On Settings while a change is open, close it and write nothing |
+| `d` | Home, App, Settings | Deploy this folder (see [Deploying from the app](#deploying-from-the-app)) |
+| `e` | App | Open the app's settings, from this folder's `zekno.app.json` |
+| `c` | Settings | Show the Compose text the settings turn into, or the settings again |
+| `r` | Home, App | Roll back: on App to the selected deploy, on Home to the one before the latest |
+| `l` | Home, App | Logs |
+| `s` | Home, App | Set a secret |
+| `x` | App, secrets pane | Remove the selected secret, after a confirm |
+| `a` | Home | Add a server |
+| `u` | Home, on a server marked `! older runner` | Update the runner, after a confirm |
+| `o` | Deploy, Add a server | Show or hide the full output |
+| `f` | Logs | Pause or resume following |
+| `/` | Logs | Filter by text; `esc` clears it |
+| `1` to `9` | Logs | Show one service; `0` shows all |
+| `?` | Everywhere but the profile error screen | Help for this screen |
+| `q` | Everywhere but a question | Quit. Waits for a deploy in progress |
+| `ctrl-c` | Everywhere | As `q`. In the hidden prompt it cancels the prompt only |
+
+A key that does nothing on the current screen is ignored. While a text
+question is open, letter keys type into it.
+
+## Questions
+
+| Question | Asked | Answers |
+| --- | --- | --- |
+| Remove `NAME`? | `x` on a secret | `enter` removes it, `esc` cancels |
+| The runner on `<server>` is out of date | `u` | `u` updates now, `esc` leaves it for later |
+| `<member>` linked this folder to `<app>` on `<server>` | The app opens where a teammate's signed `zekno.json` was not used here before. A file in a folder above is named with that folder and its Compose file: `<member>` linked `<folder>` to `<app>` on `<server>`, with `<folder>/<compose>` | `y` uses it here, `n` or `esc` not now |
+| Remember this folder? | `d` in a folder with no `zekno.json` | `enter` writes `zekno.json`, signed by you and naming the file it deploys (`compose.yaml` or `zekno.app.json`), and deploys, `n` deploys without it, `esc` cancels |
+| This folder is linked to `<app>` on `<server>` | `d` in a linked folder with another app selected | `y` deploys the folder to the selected app, `n` or `esc` does not deploy |
+| Deploy `<app>` to `<server>` without `NAME`? | `esc` on the list of missing values | `y` deploys, `n` or `esc` does not deploy |
+| Write this to zekno.app.json? Nothing is deployed until you deploy. | A new value on the settings screen | `y` writes it, `n`, `enter` or `esc` keeps the value and writes nothing |
+
+## What is running, and keeping in touch with servers
+
+- Home and the App screen show each app as `running`, `stopped`,
+  `partly running` or `unknown`, by a word and a symbol as well as a colour.
+  An app is running when every service runs, stopped when none does, and
+  partly running otherwise.
+- State is read when a screen opens and every 5 seconds while Home or App is
+  showing: Home reads every server, App its own. Nothing is read while a
+  question is open, below 80 by 24, or while the app is quitting.
+- When the app starts, it opens one session to each server: one SSH connection
+  to the runner, kept open while the app runs. That is the moment SSH may ask
+  for a password. Each read sends its requests over that session, so a read
+  adds no SSH login. One read per server at a time.
+- A read with no answer within 20 seconds, or a session that ends, closes that
+  session. The server is then shown as not reached, with the reason, and its
+  apps' state as unknown. Its apps keep the deploy numbers your machine has.
+- A server whose session was lost is connected to again in the background, at
+  most once every 30 seconds, in SSH's batch mode only: it never asks for a
+  password and never takes over the terminal.
+- Where SSH would have had to ask (a password, a key passphrase, a host key)
+  and was not answered, the server is marked `!` instead of its dot, with "needs an answer" under its name, and its apps' state is unknown. It is not
+  tried in the background again until you connect to it on purpose: `enter` on
+  it in the servers pane (the hints say `enter connect`), or start the app,
+  deploy, roll back, open logs, update or add. A server that refuses the
+  connection, does not answer in time or does not resolve is shown as not
+  reached (`✖`).
+- `enter connect` tries SSH's batch mode, then hands the terminal over so SSH
+  can ask, checks that it is the server you connected, and keeps the session
+  for the reads that follow. If you cancel at SSH's question, the mark stays.
+- Deploys, rollbacks, secrets and logs use connections of their own, never the
+  kept session.
+- After a server is added from the app, the session it was added over is kept,
+  so SSH does not ask a second time.
+- A runner that does not report its version has no sessions. It is read when
+  the app starts and after `u`, never in the background.
+- Every kept session is closed when the app closes, on `q`, an error or a
+  signal.
+- If SSH has to ask for a password or a host key, the app first tries SSH's
+  batch mode, then hands the terminal over so you can answer on the normal
+  screen, and takes it back once the connection is up.
+
+## Deploying from the app
+
+- A folder linked by a `zekno.json` signed by your team and in use on your
+  machine deploys at once to its own app on its own server, and on its own server with no apps. With
+  another app selected, on its own server or another, `d` first asks: "This
+  folder is linked to web on dev. You selected billing. Deploy this folder to
+  billing? It replaces what billing runs now." Only `y` deploys the folder's
+  file to the selected app; `n` or `esc` ends with "Nothing was deployed.",
+  and `enter` does nothing. Nothing is read from the keychain, signed or sent
+  before `y`, and `zekno.json` is not changed. On another server with no apps,
+  `d` says so and deploys nothing. One exception: on its own server, a linked
+  app that has never been deployed there has no row to select yet, so `d`
+  deploys it as its first deploy whichever row is marked. No other app is
+  replaced.
+- `d` deploys the file `zekno deploy` would: the one a linked folder's
+  `zekno.json` names, which may be `zekno.app.json`, or in a folder that is
+  not linked the one of `compose.yaml` and `zekno.app.json` that is there.
+  With both there and no `zekno.json`, `d` deploys nothing and says
+  `This folder has zekno.app.json and compose.yaml. Run zekno link -f <file> here to say which.`
+  Neither is ever picked over the other without you saying so.
+- A folder with no `zekno.json` deploys its file to the selected app. Before
+  the first deploy, the app asks whether to remember the folder; yes writes
+  `zekno.json` naming that file, signed with your key, and records it as used
+  here. With no app selected, it points you to `zekno link`.
+- A folder whose `zekno.json` is not signed by your team deploys nothing, and
+  Home says why. One signed by your team that was not used here before is
+  asked about when the app opens; until you say yes, `d` deploys nothing and
+  says so.
+- The file is read once, when `d` is pressed. A settings file is turned into
+  its Compose text then, and a fault in it is said on the status line before
+  any question; nothing is deployed. The names listed and the text signed
+  come from that one read.
+- Before a deploy, names the Compose text expects that have no secret are
+  listed, at most 64. Each can be set with the hidden prompt, or the deploy
+  can go ahead without them. At the prompt `esc` returns to the list and signs
+  nothing. On the list `esc` asks before deploying without them; "no" ends
+  with "Nothing was deployed.".
+- `esc` during a deploy returns to the screen before; the result arrives there
+  as a line. `q` waits for the deploy to finish, then closes.
+- The deploy screen shows a summary panel, a row of stages (checked, signed,
+  sent, starting, then started or failed) and one live line. Docker's full
+  output is shown on `o`, and on a failed start.
+
+## Logs in the app
+
+The logs screen follows an app's logs over a connection of its own. It keeps
+the last 2000 lines in memory and writes nothing to disk. It says where they
+come from: "Read straight from your server over SSH. Nothing passes through
+Zekno." When the connection drops, it says so, and `enter` connects again.

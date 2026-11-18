@@ -1,0 +1,173 @@
+---
+title: Deploying
+description: zekno deploy, rollback, status and logs.
+---
+
+<Callout type="warn" title="Pre-alpha and unaudited">
+  The command-line tool, the runner and the core library have had internal
+  reviews only. Do not use them for anything you could not afford to lose, and
+  do not rely on them in production before an external audit.
+</Callout>
+
+## zekno deploy
+
+Signs a deploy with the next deploy number, and sends it to the runner over
+one connection. What it deploys is a Compose file, or an app's settings in
+`zekno.app.json` turned into Compose text on your machine (see
+[zekno settings](/docs/settings#zekno-settings)). The first of these that applies decides
+which file:
+
+1. `-f <file>`, when given. It may be anywhere. A file named exactly
+   `zekno.app.json` is read as settings, any other as a Compose file.
+2. Otherwise the file a `zekno.json` signed by your team and in use here
+   names, when the app is the one it names. It may be `zekno.app.json`.
+3. Otherwise the one of `compose.yaml` and `zekno.app.json` in the current
+   folder, when only one of them is there.
+4. Both are there, and nothing above says which. At a terminal,
+   `zekno deploy` asks:
+
+   ```text
+   ? Deploy from which file?
+     ❯ zekno.app.json  your settings
+       compose.yaml    a Compose file written by hand
+     ↑↓ move   enter choose   esc leave
+   ```
+
+   Enter leaves `✔ From  zekno.app.json` (or `compose.yaml`) and goes on with
+   that file. With no terminal it deploys nothing, connects to nothing, and
+   stops with exit status 2:
+   `This folder has zekno.app.json and compose.yaml. Say which with -f <file>.`
+
+Neither file is ever picked over the other without you saying so. A name
+counts as there even when it is a symbolic link that leads nowhere; the file's
+reader then says what is wrong with it. With neither file and nothing above,
+the deploy stops with
+``No Compose file at <folder>/compose.yaml. Point to one with `-f <file>`.``
+
+Except with `-f`, the file must stay inside its folder: a symbolic link out of
+it is refused. Every file is read once, from one open file, and must be a
+regular file: at most 256 KiB for a Compose file, 64 KiB for a settings file.
+A named pipe is refused, not waited on. Do not put secrets in the Compose file
+itself: it is stored and sent as written. A settings file cannot hold a
+secret's value.
+
+A settings file is read and checked whole. A fault in it, or a setting this
+version does not have, stops the deploy with its sentence and exit status 1,
+before anything is connected, signed or sent. From a settings file,
+the text that is signed, sent and recorded is its Compose text, byte for byte
+the text `zekno settings compose` prints. Rollback, status and logs work on it
+as on any deploy. A service removed from the settings is stopped at the next
+deploy. A volume removed from them keeps its data (see [Volumes](/docs/settings#volumes)).
+
+At a terminal, the summary panel of a deploy from settings has one more row,
+after `server`: the file, then its services, dim.
+
+```text
+app      demo
+server   prod deploy@203.0.113.7
+from     zekno.app.json  2 services: web, worker
+```
+
+A deploy from a Compose file draws the panel as before. Plain output and
+`--json` are the same for both.
+
+Exit status 1 when the runner accepted the deploy but the app did not start.
+The deploy number is used either way.
+
+```bash
+zekno deploy --app api --server prod -f compose.yaml
+```
+
+At a terminal, `zekno deploy` run in a project folder first sets up what is
+missing, in this order. Each thing is kept as soon as it is made. With both
+files in the folder, "Deploy from which file?" is asked first, after the
+question about a teammate's `zekno.json` when there is one. A fault in the
+settings file is said next, before any other question.
+
+1. Your key. It asks your name, creates the key in the system keychain as
+   `zekno init` does, and shows the team code.
+2. A server. It asks where the server is (`user@host`) and a name for it,
+   installs the runner as `zekno server add` installs it, and shows the server
+   code. With one server it uses that one and says so. With several it asks
+   which.
+3. The app. It offers the apps on that server, and `+ a new app` with the
+   folder's name filled in. When it asked for the server or the app, it asks
+   whether to remember this folder: yes writes a signed `zekno.json` naming
+   the file deployed, as `zekno link` does.
+4. The values the Compose file or the settings expect that have no secret
+   yet. Each is asked with nothing shown as you type. Esc skips one, and the
+   next run asks for it again.
+5. Then the deploy.
+
+```text
+$ zekno deploy
+  Nothing is set up on this machine yet. Three things first: your key, a server, this app.
+
+? Your name › ada
+✔ Key created. It is in your system keychain.
+  Team code    J4QF-AM29-F01W-PYWM-CS8P
+  Identifies your team. A server checks it before it agrees to obey your team.
+
+? Where is the server? › deploy@203.0.113.7
+? A name for it › prod
+✔ Connected over SSH
+✔ Docker with Compose found
+✔ Runner installed  52 MB, checksum verified
+✔ Added prod to the signed team list
+  Server code  MM4G-GPD7-M9VM-ACGJ-Y48R
+  Identifies this server's key. Teammates compare it before they trust the server.
+  You reached this server over SSH, so its identity rests on SSH's host verification.
+
+? Name for this app › demo
+? Remember this folder? It writes zekno.json, so it always deploys demo to prod. (y/N) yes
+
+! compose.yaml expects 1 value that has no secret yet.
+? Value for DATABASE_URL (demo on prod): (hidden)
+
+  (the deploy panel and stages, as for any deploy)
+✔ demo is live on prod in 6.1s
+```
+
+Esc or Ctrl-C leaves any question. What was made before it is kept, and running
+`zekno deploy` again carries on from there. A detail given by a flag or by a
+linked folder is never asked for. With no terminal, `zekno deploy` asks nothing
+and stops as before.
+
+## zekno rollback
+
+Deploys an earlier service definition again, under the next number, with the
+current secrets. Only deploys your machine signed and the runner answered for
+count. Without `--to`, it returns to the one before the latest.
+
+```bash
+zekno rollback --app api --server prod --to 3
+```
+
+## zekno status
+
+Reads what a server holds: its team list version, each app's last deploy and
+whether it is running, and each secret's version. Never a value. When the
+runner is older or newer than the one this `zekno` carries, a warning says
+so, and what works until they match: an older runner is brought up to date
+with `zekno server update`, and for a newer one you update `zekno`. Deploys
+still work, unless the newer runner speaks a newer protocol; then you are told
+to update `zekno` first.
+
+```bash
+zekno status --server prod
+```
+
+## zekno logs
+
+Prints an app's logs, read straight from its server. `--tail <n>` is how many
+earlier lines Docker sends first: 0 to 1000, 200 by default. It follows until
+interrupted, or until Docker's log command or the connection ends.
+`--no-follow` prints the lines Docker has and ends. Ctrl-C, or a reader that
+closes the pipe (`zekno logs | head -1`), stops the reading on the server and
+ends the command quietly with status 0. It needs a runner that reports its
+version, as every released runner does, and an app the server has a deploy of.
+Nothing is written to disk.
+
+```bash
+zekno logs --app api --server prod --tail 50 --no-follow
+```

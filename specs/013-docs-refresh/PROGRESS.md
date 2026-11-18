@@ -23,12 +23,22 @@ These numbers are the baseline: a failure is new only if it is not in this list.
 |---|---|---|
 | A, the screens | T003, T005 to T013 | done |
 | B, the frame | T001, T004, T014, T015 | done |
-| C, the split | T016 to T024 | open |
+| C, the split | T016 to T024 | done |
 | D, the new pages | T025 to T028 | open |
 | E, the READMEs | T029 to T036 | open |
 | F, the end | T037 to T040 | open |
 
 T002 is done: the old pages are kept outside the repository for the comparisons (from `9ad84d3`, since GitHub's `dev` does not hold that commit).
+
+## Part C, the split (T016 to T024): done
+
+- The old `cli.mdx` (from `9ad84d3`) was cut by a script along its headings, never retyped, into `install`, `app`, `deploying`, `servers`, `secrets`, `settings`, `changing-settings`, `project-file`, `doctor`, `output`, `storage`; "zekno add" went into `templates.mdx` before the list of templates; `cli.mdx` is now "Commands": the old opening where it fits, the old command list, and a new table of every command of the help with the page that describes it (each line taken from the first sentence of that command's section). "Status and limits" is appended as it is to `index.mdx`. `meta.json` is exactly the one of `research.md` §6. The longest page is `templates.mdx`, 423 lines.
+- All 52 old headings are on the page the contract names (`move-list.md`). Heading levels: a command's h3 became h2 and its h4 h3; a whole h2 that became a page became the page's title.
+- **Deviations, small**: `project-file` has `zekno link` before "Linking a folder" (the contract's order; the old page had them the other way). The old templates page's "What it does not do" became "What a template does not do", because `zekno add` brings a heading of the same name onto the page (rule 5). `templates.mdx` therefore has two overlapping openings and two "does not do" lists, one from each old page: kept, because this is a move.
+- **Links**: `runner.mdx` (3 links) now points at `/docs/servers#…`. `apps/runner/README.md` (3 links that went to `../cli/README.md#…`, sections part E removes) now points at `https://zekno.app/docs/servers#…`, the site's address in `apps/web/config/site.ts`. `CONTRIBUTING.md` had no link into the old page.
+- **The comparison (T024)**: of the 1,756 non-empty lines of the old `cli.mdx` and `templates.mdx`, 1,733 are on a new page as they were, 22 are under "Reworded" in the move list, 1 under "Dropped" (a link to "The project file" in `zekno link`, now on that very page). **Unexplained: 0.** This session checked it again with a script of its own: 23 lines are on no page, and each is in the move list.
+- **Tests**: `apps/web/modules/docs/lib/pages.test.ts` has the checks of `contracts/pages.md` for the final state, plus "screens and pages agree". `apps/cli/test/docs/docs.test.ts` reads every page of the docs. After part C, `bun test` in `apps/web` gave 48 pass, 4 fail, the four expected: `quick-start` and `security` do not exist (tree; callout); `README.md` and `index.mdx` still name the desktop app; no stored screen is shown yet. `bun test test/docs` in `apps/cli`: 42 pass, 0 fail. **The docs test bites** (tried by this session): `--force` changed to `--forse` on every page made it fail with "No page of the docs names --force" and "… `zekno link` does not take --forse"; the pages were put back byte for byte.
+- Typecheck and lint of the whole repository pass; Prettier is clean on the two test files; protected paths unchanged.
 
 ## Part A, the screens (T003, T005 to T013): done
 
@@ -58,6 +68,8 @@ GitHub's API through the session's GitHub connector was tried too: it can read t
 
 - **The address on Home is cut.** The servers pane of `home` shows `deploy@203.0.113.…`: `deploy@203.0.113.10` is one cell too long for the pane, and the program cuts it. That is what the program really draws. The contract's example address is kept; a shorter one (such as `203.0.113.7`, as in the walkthroughs) would show whole. Yours to choose.
 - **Values chosen for the screens**: `in 4.2s`, `2 min ago`, and an hour between the two deploys of `app-detail`. The runner's size is `110 MB` from `apps/runner/README.md`.
+- **Is `https://zekno.app/docs` live?** The runner's README now links there (the address in `config/site.ts`). This session cannot check that the docs are served there; if not, a relative link to `../web/content/docs/servers.mdx#…` would do.
+- **`templates.mdx` has two openings and two "does not do" lists**, one from the old templates page and one from `zekno add`. Merging them is a rewording, so it is left to you.
 - **`help` wraps** at 100 columns (the `zekno add` line and the last notes), because that is what the program prints there.
 
 - **GitHub access for the cloud session.** Reconnect GitHub at claude.ai and check that the Claude GitHub App is installed on `zekno-app`; then the commits of this session can be pushed.

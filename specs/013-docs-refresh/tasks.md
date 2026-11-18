@@ -40,15 +40,15 @@
 
 **Independent test**: any command of the help is reached in two clicks from `/docs`.
 
-- [ ] T016 [US3] Write `apps/web/modules/docs/lib/pages.test.ts` with the six checks of `contracts/pages.md` (length, tree, links, move list, no desktop app, callout), and the check that pages and stored screens agree
-- [ ] T017 [US3] Split `apps/web/content/docs/cli.mdx` into the pages of `contracts/pages.md`: `install`, `app`, `deploying`, `servers`, `secrets`, `settings`, `changing-settings`, `project-file`, `doctor`, `output`, `storage`, moving text as it is (rules 4 and 5)
-- [ ] T018 [US3] Move "zekno add" into `apps/web/content/docs/templates.mdx`, before the list of templates
-- [ ] T019 [US3] Rewrite `apps/web/content/docs/cli.mdx` as "Commands": every command of the help, one line each, a link to where it is described
-- [ ] T020 [US3] Write `apps/web/content/docs/meta.json` with the three groups in order
-- [ ] T021 [US3] Fix every link in `apps/web/content/docs/runner.mdx`, `apps/runner/README.md`, `CONTRIBUTING.md` and the pages themselves that pointed into the old page
-- [ ] T022 [US3] Write `specs/013-docs-refresh/move-list.md`: one row per old heading, then "Reworded" and "Dropped"
-- [ ] T023 [US3] Rework `apps/cli/test/docs/docs.test.ts` for the new set of files (`contracts/pages.md`, "The tests"); take one flag out of a page and see it fail, then undo
-- [ ] T024 [US3] Compare every non-empty line of the old page (T002) with the new pages: each is found, or is under "Reworded" or "Dropped" in the move list
+- [x] T016 [US3] Write `apps/web/modules/docs/lib/pages.test.ts` with the six checks of `contracts/pages.md` (length, tree, links, move list, no desktop app, callout), and the check that pages and stored screens agree
+- [x] T017 [US3] Split `apps/web/content/docs/cli.mdx` into the pages of `contracts/pages.md`: `install`, `app`, `deploying`, `servers`, `secrets`, `settings`, `changing-settings`, `project-file`, `doctor`, `output`, `storage`, moving text as it is (rules 4 and 5)
+- [x] T018 [US3] Move "zekno add" into `apps/web/content/docs/templates.mdx`, before the list of templates
+- [x] T019 [US3] Rewrite `apps/web/content/docs/cli.mdx` as "Commands": every command of the help, one line each, a link to where it is described
+- [x] T020 [US3] Write `apps/web/content/docs/meta.json` with the three groups in order
+- [x] T021 [US3] Fix every link in `apps/web/content/docs/runner.mdx`, `apps/runner/README.md`, `CONTRIBUTING.md` and the pages themselves that pointed into the old page
+- [x] T022 [US3] Write `specs/013-docs-refresh/move-list.md`: one row per old heading, then "Reworded" and "Dropped"
+- [x] T023 [US3] Rework `apps/cli/test/docs/docs.test.ts` for the new set of files (`contracts/pages.md`, "The tests"); take one flag out of a page and see it fail, then undo
+- [x] T024 [US3] Compare every non-empty line of the old page (T002) with the new pages: each is found, or is under "Reworded" or "Dropped" in the move list
 
 ## Phase 5: User Story 2 - Try it, from nothing to a live app (P1)
 

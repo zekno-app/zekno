@@ -1,13 +1,15 @@
 /**
- * SC-010: the CLI's README and its docs page name every command, flag and
- * key the CLI has, and every `zekno` command they name exists. The commands
- * and flags are read from the CLI's own help text, and the keys from the key
- * tables of the app's contracts (feature 004's app, and feature 010's
- * settings screen), so this test copies neither. Nothing here starts a
- * process.
+ * SC-010, as feature 013 split the docs into pages (contracts/pages.md, "The
+ * tests"; research.md §8): the pages of the docs, taken together, name every
+ * command, flag and key the CLI has; every `zekno` command a page, the CLI's
+ * README or the root README names exists, with flags that command takes; and
+ * every key in a page's key table is a key of the app. The commands and flags
+ * are read from the CLI's own help text, and the keys from the key tables of
+ * the app's contracts (feature 004's app, and feature 010's settings screen),
+ * so this test copies neither. Nothing here starts a process.
  */
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { HELP, run } from "../../src/cli/cli"
@@ -18,8 +20,15 @@ import { plainUi } from "../../src/ui/plain/plain"
 const ROOT = join(import.meta.dir, "../../../..")
 const read = (path: string): string => readFileSync(join(ROOT, path), "utf8")
 
-/** The two places a person reads about the CLI. */
-const DOCS = ["apps/cli/README.md", "apps/web/content/docs/cli.mdx"] as const
+/** The folder of the docs' pages. */
+const PAGES_FOLDER = "apps/web/content/docs"
+/** Every page of the docs. */
+const PAGES = readdirSync(join(ROOT, PAGES_FOLDER))
+  .filter((file) => file.endsWith(".mdx"))
+  .sort()
+  .map((file) => `${PAGES_FOLDER}/${file}`)
+/** The READMEs that name `zekno` commands without having to name them all. */
+const READMES = ["apps/cli/README.md", "README.md"]
 /** The contracts whose key tables list the app's keys: the app (feature 004) and its settings screen (feature 010). */
 const CONTRACTS = [
   "specs/004-cli-app/contracts/app.md",
@@ -62,6 +71,22 @@ function keyColumn(markdown: string): string[] {
     for (const match of (line.split("|")[1] ?? "").matchAll(/`([^`]+)`/g))
       keys.push(match[1]!)
   }
+  return keys
+}
+
+/** The backquoted names in the first cell of each row of every table whose header starts with `| Key |`. */
+function keyTables(markdown: string): string[] {
+  const keys: string[] = []
+  const lines = markdown.split("\n")
+  lines.forEach((line, index) => {
+    if (!/^\|\s*Key\s*\|/.test(line)) return
+    // The row after the header is the line under it.
+    for (const row of lines.slice(index + 2)) {
+      if (!row.startsWith("|")) break
+      for (const match of (row.split("|")[1] ?? "").matchAll(/`([^`]+)`/g))
+        keys.push(match[1]!)
+    }
+  })
   return keys
 }
 
@@ -202,25 +227,40 @@ describe("what the docs are checked against", () => {
   })
 })
 
-describe.each(DOCS)("%s", (file) => {
-  const text = read(file)
+describe("the pages of the docs, taken together", () => {
+  const text = PAGES.map(read).join("\n")
 
-  test("names every command and every flag of the help", () => {
+  test("there are pages to read", () => {
+    expect(PAGES).toContain(`${PAGES_FOLDER}/cli.mdx`)
+    expect(PAGES.length).toBeGreaterThan(1)
+  })
+
+  test("name every command and every flag of the help", () => {
     const missing = [
       ...[...COMMANDS.keys()]
         .filter((command) => !text.includes(`zekno ${command}`))
         .map((command) => `zekno ${command}`),
       ...FLAGS.filter((flag) => !names(text, flag)),
     ]
-    expect(missing.map((name) => `${file} does not name ${name}`)).toEqual([])
+    expect(missing.map((name) => `No page of the docs names ${name}`)).toEqual(
+      []
+    )
   })
 
-  test(`names every key of ${CONTRACT_NAMES}`, () => {
+  test(`name every key of ${CONTRACT_NAMES}`, () => {
     const missing = KEYS.filter((key) => !text.includes(`\`${key}\``))
     expect(
-      missing.map((key) => `${file} does not name the key ${key}`)
+      missing.map((key) => `No page of the docs names the key ${key}`)
     ).toEqual([])
   })
+
+  test("have a key table", () => {
+    expect(keyTables(text).length).toBeGreaterThan(0)
+  })
+})
+
+describe.each([...PAGES, ...READMES])("%s", (file) => {
+  const text = read(file)
 
   test("every zekno command it names is a command of the CLI, with flags that command takes", () => {
     const wrong: string[] = []
@@ -257,12 +297,12 @@ describe.each(DOCS)("%s", (file) => {
     }
     expect(wrong).toEqual([])
   })
+})
 
-  test(`every key in its key table is a key of ${CONTRACT_NAMES}`, () => {
-    const listed = keyColumn(text)
-    expect(listed.length).toBeGreaterThan(0)
+describe.each(PAGES)("%s", (file) => {
+  test(`every key in its key tables is a key of ${CONTRACT_NAMES}`, () => {
     expect(
-      listed
+      keyTables(read(file))
         .filter((key) => !KEYS.includes(key))
         .map(
           (key) => `${file} lists the key ${key}, which the app does not have`

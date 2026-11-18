@@ -98,3 +98,43 @@ Zekno sells; the design means you don't have to trust it.
     Security problems are reported privately, never in public issues.
   </Card>
 </Cards>
+
+## Status and limits
+
+- **One developer on one machine.** Teammates arrive with the control plane,
+  which is not written yet.
+- **SSH is the route.** `zekno` talks to the runner directly, over SSH. No
+  Zekno service is involved.
+- **Only `zekno version` and `zekno doctor` reach the network on their own:**
+  each asks GitHub once for the newest release, and sends nothing about you.
+- **State and logs come from your server.** Whether an app is running, and its
+  logs, are read from the runner over SSH when you look. They never pass
+  through Zekno, and your machine keeps none of it.
+- **The runner comes from a release.** `zekno server add` installs on a
+  server the one runner version your build of `zekno` carries, and only when
+  it matches the checksum that build holds. A `zekno` built from `main`
+  installs a prod release, such as `0.1.0`; one built from `dev` installs a
+  development release, such as `0.1.0-dev.1`. See
+  [Installing the runner](/docs/servers#installing-the-runner).
+- **The first runner release is 0.1.0.** A `zekno` built from `main` holds its
+  checksums and installs it on a server by itself. Between a release being
+  started and its second build, a `zekno` built from that branch holds no
+  checksums and says it has no published runner to install.
+- **Docker's messages are shown as they are.** An error from Docker can repeat
+  a value that was filled in from a secret.
+- **App settings cover an image that is already built.** This version cannot
+  build an image from source, serve a domain with HTTPS, wait for a health
+  check, run a command before a deploy, or run several copies of a service. A
+  `zekno.app.json` that sets one of them is refused with a sentence that names
+  it. A Compose file written by hand can do what Compose does.
+- **A published port is open to whoever can reach the server.** It is
+  published on every address of the server, as Compose does, and Docker's
+  published ports can pass a host firewall such as `ufw`. Zekno does not
+  manage the server's firewall.
+- **"Changed, not deployed" knows only your machine's deploys.** A teammate's
+  later deploy from another machine is not seen.
+- Made for macOS and Linux with a system keychain. Windows is not tested.
+
+The internal security reviews, which say what was checked and what was not,
+are in the `specs` folder of the
+[repository](https://github.com/zekno-app/zekno).

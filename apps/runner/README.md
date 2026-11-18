@@ -143,7 +143,7 @@ or other detail of the server.
 The server needs Docker with Compose, and Linux on x86-64 (a processor with SSE4.2: Intel
 Nehalem, AMD Bulldozer or newer) or on ARM64, with the GNU C library (glibc) 2.17 or newer. Alpine
 and other systems with musl are not supported yet. The rest of what a server needs, and what was
-tried, is in the [CLI's README](../cli/README.md#supported-servers). `ZEKNO_DOCKER` names the
+tried, is in the [docs](https://zekno.app/docs/servers#supported-servers). `ZEKNO_DOCKER` names the
 Docker command if it is not `docker`.
 
 ### With `zekno server add`
@@ -153,7 +153,7 @@ the runner release that build of zekno carries, checks its SHA-256 against the v
 checks that it starts, and only then puts it in place. A zekno built from `main` installs a prod
 release, such as `0.1.0`; one built from `dev` installs a development release, such as
 `0.1.0-dev.1`. The steps and their limits are in the
-[CLI's README](../cli/README.md#installing-the-runner).
+[docs](https://zekno.app/docs/servers#installing-the-runner).
 
 | Who the CLI logs in as | Runner | Its folder |
 |------------------------|--------|------------|
@@ -243,7 +243,7 @@ request into it, that carries a development version. It reports; it holds a push
 
 The workflow does not record checksums in zekno. Only the maintainer's second build does, once a
 build of the same commit on their own machine gave the same files
-([CLI's README](../cli/README.md#how-a-release-is-trusted)).
+([docs](https://zekno.app/docs/servers#how-a-release-is-trusted)).
 
 How to cut a release, from start to end, and how to withdraw one: [RELEASING.md](./RELEASING.md).
 

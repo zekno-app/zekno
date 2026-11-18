@@ -1,0 +1,63 @@
+---
+title: Output and exit status
+description: Exit status, and what zekno prints with and without a terminal.
+---
+
+<Callout type="warn" title="Pre-alpha and unaudited">
+  The command-line tool, the runner and the core library have had internal
+  reviews only. Do not use them for anything you could not afford to lose, and
+  do not rely on them in production before an external audit.
+</Callout>
+
+## Exit status
+
+| Status | Means |
+| --- | --- |
+| `0` | Success. Also the app when you quit, and `zekno logs` stopped with Ctrl-C or a closed pipe |
+| `1` | Refused or failed, including a deploy whose app did not start, and a question left with Esc or Ctrl-C |
+| `2` | Wrong usage, including a `zekno.json` not signed by your team, one not used here yet when there is no terminal to ask on, `zekno` with no arguments and no terminal, a folder with both `zekno.app.json` and `compose.yaml` and nothing to say which when there is no terminal to ask on, and a setting value not allowed |
+
+## Output
+
+At a terminal, single commands use the app's symbols, wording and panels.
+`zekno deploy` and `zekno rollback` show the summary panel, the stage row and a
+result line with what to run next; a failed start shows what Docker reported.
+Over SSH nothing is animated, because SSH may ask for a password in the same
+terminal.
+
+When standard output or standard input is not a terminal (piped, in a script,
+`< /dev/null`), with `TERM=dumb` or with `--json`, commands print plain lines:
+results on standard output with table cells separated by tabs, warnings and
+failures on standard error, no colour, symbols or panels.
+With `--json`, one JSON object. That form is stable, and these are the changes
+from the first version:
+
+| Command | Plain output | Changed from the first version? |
+| --- | --- | --- |
+| `deploy`, `rollback` | `Deploy <n> of <app> is running on <server> with <k> secrets.` | Yes: "`<k> secret(s)`" became "`<k> secrets`", "`1 secret`" or "`no secrets`" |
+| `deploy --json` | `{"outcome","app","sequence","server"}` | No |
+| `status` | `<server>: team list version <v>`, then `<app>\tdeploy <n>\t<state>`, then `<app>/<NAME>\tversion <v>` | Yes: a third cell, `running`, `stopped`, `partly running` or `unknown`; the apps in Home's order, the latest deploy from your machine first |
+| `status --json` | As before, plus `"apps": { "<app>": { "state", "services": [...] } }` | Yes: one added field |
+| `secret ls`, `server ls` | Unchanged | No |
+| `logs` | `<time>\t<service>\t<text>`, one line per log line | New |
+| `settings` | `<service>\t<place>\t<value>`, one line per setting that is set | New |
+| `settings --json` | The file's own data, one object | New |
+| `settings set`, `settings unset` | `<service> · <label>  <old> → <new>`, then `Written  Run zekno deploy to use it.` | New |
+| `settings compose` | The Compose text, byte for byte | New |
+
+Docker's output is not printed during a deploy. On a failed start in plain
+mode, the lines Docker reported are written to standard error after the
+failure sentence.
+
+A script that gives zekno a terminal on both ends (`expect`, `script`,
+`docker run -t`) gets the questions a person gets. Pass `--server` and
+`--app`, or `--json`, or `< /dev/null`, so that nothing waits on a question.
+
+Lines that a runner, Docker or SSH write on standard error are passed on after
+the mark `remote:`, so they cannot pass for the tool's own. One place has no
+mark: at a terminal, `zekno deploy` and `zekno rollback` show Docker's latest
+line dim and set in by two columns under the stage row, and on a failed start show
+Docker's lines inside a panel titled "Docker said". Those lines are the
+server's words, not the tool's. Text from a server is cleaned of terminal
+control sequences before it reaches the terminal, in the app and in single
+commands.
