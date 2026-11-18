@@ -22,13 +22,23 @@ These numbers are the baseline: a failure is new only if it is not in this list.
 | Part | Tasks | State |
 |---|---|---|
 | A, the screens | T003, T005 to T013 | open |
-| B, the frame | T001, T004, T014, T015 | open |
+| B, the frame | T001, T004, T014, T015 | done |
 | C, the split | T016 to T024 | open |
 | D, the new pages | T025 to T028 | open |
 | E, the READMEs | T029 to T036 | open |
 | F, the end | T037 to T040 | open |
 
 T002 is done: the old pages are kept outside the repository for the comparisons (from `9ad84d3`, since GitHub's `dev` does not hold that commit).
+
+## Part B, the frame (T001, T004, T014, T015): done
+
+- **T001**: `research.md` §6 now holds the installed Fumadocs facts (fumadocs-core 16.19.0, fumadocs-mdx 15.6.1, next 16.4.6): the exact `meta.json` with the three groups as `---Name---` separators; `index` must be named; a page not named in `pages` leaves the sidebar (so the page test checks every page is named); every `.json` under `content/docs` is read as a meta file (so screens live in `content/screens`). Heading ids: github-slugger 2.0.0 through `remarkHeading`, one slugger per page, backticks dropped, punctuation removed, spaces not collapsed (`` `--json` and `--plain` `` gives `--json-and---plain`), repeats get `-1`, `-2`. The same slugger is reachable from `apps/web` as `createHeadingIds` in `fumadocs-core/mdx-plugins/remark-heading.runtime`.
+- **T004**: `apps/web/modules/docs/lib/screens.ts` reads and checks a stored screen by hand (no package) and throws with the screen's name; `screens.test.ts` works on files in a temporary folder.
+- **T014**: `apps/web/modules/docs/components/screen.tsx`, a server component with no client JavaScript, registered as `Screen` in `components/mdx.tsx`.
+- **T015**: looked at in Playwright's Chromium 157 with a static preview of the component's markup and the site's compiled CSS, at 1440px and at 390px, beside the board. At 390px the page is 390px wide and the frame scrolls sideways inside itself; the keyboard moves it. Nothing in the component needed fixing.
+- **Checked by this session**: `bun test` in `apps/web` 41 pass, 0 fail; typecheck and lint pass; Prettier clean on the four files; a stored screen with an unknown colour and a missing name each throw with the screen's name. Protected paths unchanged.
+- **Choices the board did not settle** (the plainest, easy to undo): corners 10px as on the board, though Fumadocs' code block is 14px; a colour with `dim` shows the colour; long titles are cut on a phone, the command on the right never; the native thin scrollbar rather than the drawn track of the phone board.
+- **For the maintainer's eye**: box-drawing lines join only if the site's Geist Mono serves its U+2500 to U+259F part. With the full font they join in the preview; on the built site it is still to be seen.
 
 ## Pushing
 

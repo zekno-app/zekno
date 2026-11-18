@@ -8,13 +8,13 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Read the installed Fumadocs docs for the page tree's `meta.json` and for MDX components (`node_modules/fumadocs-*`, `node_modules/@fumadocs/*`), and Next's guide in `apps/web/node_modules/next/dist/docs/` for reading a file in a server component; note what differs from `research.md` §6 in `specs/013-docs-refresh/research.md`
-- [ ] T002 Save the old CLI page for the comparison at the end: `git show dev:apps/web/content/docs/cli.mdx` and `git show dev:apps/cli/README.md` into the scratchpad (not the repository)
+- [x] T001 Read the installed Fumadocs docs for the page tree's `meta.json` and for MDX components (`node_modules/fumadocs-*`, `node_modules/@fumadocs/*`), and Next's guide in `apps/web/node_modules/next/dist/docs/` for reading a file in a server component; note what differs from `research.md` §6 in `specs/013-docs-refresh/research.md`
+- [x] T002 Save the old CLI page for the comparison at the end: `git show dev:apps/web/content/docs/cli.mdx` and `git show dev:apps/cli/README.md` into the scratchpad (not the repository)
 
 ## Phase 2: Foundational (the file format both sides share)
 
 - [ ] T003 [P] Write `apps/cli/test/screens/format.ts`: the terminal's text to rows of runs with the looks of `contracts/screens.md` (bold, dim, brand, green, yellow, red; an unknown colour throws with its name), trailing spaces removed, and the stored file written one row per line; with `apps/cli/test/screens/format.test.ts`
-- [ ] T004 [P] Write `apps/web/modules/docs/lib/screens.ts`: reads `apps/web/content/screens/<name>.json`, checks every field of `contracts/screens.md` by hand (no package), throws with the screen's name when the file is missing or unsound; with `apps/web/modules/docs/lib/screens.test.ts` on files made in a temporary folder
+- [x] T004 [P] Write `apps/web/modules/docs/lib/screens.ts`: reads `apps/web/content/screens/<name>.json`, checks every field of `contracts/screens.md` by hand (no package), throws with the screen's name when the file is missing or unsound; with `apps/web/modules/docs/lib/screens.test.ts` on files made in a temporary folder
 
 ## Phase 3: User Story 4 - See the CLI before installing it (P2, built first because US1 and US2 show its screens)
 
@@ -31,8 +31,8 @@
 - [ ] T011 [US4] Write `apps/cli/test/screens/svg.ts` and have the command write `.github/assets/screen-home.svg` from `home.json`: cells placed by column, box-drawing characters as lines, a `<title>` with the description
 - [ ] T012 [US4] Write `apps/cli/test/screens/screens.test.ts`: runs the check in a child process, fails naming each screen that drifted, and fails when the SVG differs from what `home.json` gives
 - [ ] T013 [US4] Run `bun run screens` twice; the second run changes no file (SC-005). Read every stored screen: example values only, nothing from this machine (no home folder, no user name, no temporary path)
-- [ ] T014 [P] [US4] Write `apps/web/modules/docs/components/screen.tsx` as on the board `DocsFrame` and in `contracts/screens.md`, "The frame in the docs"; register `Screen` in `apps/web/modules/docs/components/mdx.tsx`
-- [ ] T015 [US4] Check the frame by eye: a static preview of the component's markup with the site's fonts and tokens, in headless Chrome at a wide and at a 390px window, beside the board; fix what differs
+- [x] T014 [P] [US4] Write `apps/web/modules/docs/components/screen.tsx` as on the board `DocsFrame` and in `contracts/screens.md`, "The frame in the docs"; register `Screen` in `apps/web/modules/docs/components/mdx.tsx`
+- [x] T015 [US4] Check the frame by eye: a static preview of the component's markup with the site's fonts and tokens, in headless Chrome at a wide and at a 390px window, beside the board; fix what differs
 
 ## Phase 4: User Story 3 - Find the page for one command (P2)
 
