@@ -1,15 +1,11 @@
 /**
  * The findings of the review of the runner's session, state and logs
  * (specs/004-cli-app/security-review.md, S1 to S8). Each test fails on the
- * runner as it was before its fix. S5 is tested in runner.test.ts.
+ * runner as it was before its fix. S5 is tested in runner.test.ts, and the
+ * limits on what a runner holds (L3) in hardening-limits.test.ts.
  */
 import { describe, expect, test } from "bun:test"
-import {
-  LIMITS,
-  parseMessage,
-  RunnerAppStatesSchema,
-  RunnerStatusSchema,
-} from "@workspace/core"
+import { parseMessage, RunnerStatusSchema } from "@workspace/core"
 import {
   chmodSync,
   closeSync,
@@ -23,13 +19,12 @@ import {
 import { join } from "node:path"
 
 import { appStates } from "../../src/docker/inspect"
+import { buildDeployV2 } from "../support/deploy-v2"
 import {
-  buildDeploy,
   deployed,
   fakeDocker,
   isAlive,
   residentMiB,
-  runner,
   RUNNER_MAIN,
   session,
   tempDir,
@@ -160,11 +155,11 @@ describe("a client far ahead of its answers ends its session (S1, S2)", () => {
   test("S2: requests sent far ahead are not run once the session has ended, and Docker's log command is stopped", async () => {
     const w = await deployed(["web"])
     w.docker.logs("web", LOG_LINES, { follow: true })
-    const deploy = await buildDeploy({
+    const deploy = await buildDeployV2({
       trust: w.trust,
       serverId: w.serverId,
       signer: w.signer,
-      sequence: 2,
+      previous: 1,
     })
     const s = session(w.home, w.docker.path)
     let logsPid: number | undefined
@@ -178,7 +173,7 @@ describe("a client far ahead of its answers ends its session (S1, S2)", () => {
 
       // A genuine deploy, then more requests than a session holds, without waiting for any answer.
       const ahead = [
-        { command: "apply", input: { rosters: w.rosters, deploy } },
+        { command: "deploy", input: { rosters: w.rosters, ...deploy } },
         ...Array.from({ length: 1100 }, () => ({ command: "state" })),
       ]
       await flood(
@@ -439,101 +434,4 @@ describe("a container that prints without pause, and a client that goes away (L6
       await cleanUp(run.child, [run.logsPid])
     }
   }, 10_000)
-})
-
-describe("what a runner holds always fits the answers that report it (L3)", () => {
-  const state = (home: string) =>
-    JSON.parse(readFileSync(join(home, "state.json"), "utf8"))
-  const keep = (home: string, value: unknown) =>
-    writeFileSync(join(home, "state.json"), JSON.stringify(value))
-
-  test("a deploy of one app or one secret past the limits is refused as too large; a deploy within them still goes", async () => {
-    const w = await deployed(["web"])
-    const held = state(w.home)
-    // As many apps as a runner holds, `web` among them.
-    for (let n = 1; n < LIMITS.appsPerServer; n++)
-      held.lastSequence[`app-${n}`] = 1
-    // As many secrets as it remembers, `web/GREETING` among them.
-    for (
-      let n = Object.keys(held.secrets).length;
-      n < LIMITS.secretsPerServer;
-      n++
-    )
-      held.secrets[`app-1/S${n}`] = { version: 1, hash: "0".repeat(64) }
-    keep(w.home, held)
-    const apply = async (deploy: Awaited<ReturnType<typeof buildDeploy>>) =>
-      (
-        await runner(w.home, w.docker.path, "apply", {
-          rosters: w.rosters,
-          deploy,
-        })
-      ).json
-    const next = (app: string, values?: Record<string, string>) =>
-      buildDeploy({
-        trust: w.trust,
-        serverId: w.serverId,
-        signer: w.signer,
-        sequence: 2,
-        app,
-        values,
-      })
-    expect(await apply(await next("one-more"))).toEqual({
-      outcome: "refused",
-      reason: "too_large",
-    })
-    expect(
-      await apply(await next("web", { GREETING: "hello", ONE_MORE: "x" }))
-    ).toEqual({ outcome: "refused", reason: "too_large" })
-    expect(state(w.home).lastSequence.web).toBe(1)
-    expect(await apply(await next("web"))).toEqual({
-      outcome: "started",
-      app: "web",
-      sequence: 2,
-    })
-    expect(Object.keys(state(w.home).lastSequence)).toHaveLength(
-      LIMITS.appsPerServer
-    )
-  })
-
-  test("an answer about what is running holds at most 4096 services: an app past them is left out, never cut short", async () => {
-    const w = await deployed(["web"])
-    const held = state(w.home)
-    const apps = [
-      "web",
-      ...Array.from(
-        { length: LIMITS.servicesPerServer / LIMITS.servicesPerApp },
-        (_, n) => `app-${n}`
-      ),
-    ]
-    for (const app of apps) {
-      held.lastSequence[app] = 1
-      w.docker.ps(
-        app,
-        Array.from({ length: LIMITS.servicesPerApp }, (_, n) =>
-          JSON.stringify({
-            Service: `s${n}`,
-            State: "running",
-            ExitCode: 0,
-            Health: "",
-          })
-        ).join("\n")
-      )
-    }
-    keep(w.home, held)
-    const saved = process.env.ZEKNO_DOCKER
-    process.env.ZEKNO_DOCKER = w.docker.path
-    try {
-      const answer = (await appStates(
-        w.home,
-        new AbortController().signal
-      )) as { apps: Record<string, { services: unknown[] }> }
-      expect(Object.keys(answer.apps)).toEqual(apps.slice(0, -1))
-      for (const app of apps.slice(0, -1))
-        expect(answer.apps[app]!.services).toHaveLength(LIMITS.servicesPerApp)
-      expect(parseMessage(RunnerAppStatesSchema, answer).ok).toBe(true)
-    } finally {
-      if (saved === undefined) delete process.env.ZEKNO_DOCKER
-      else process.env.ZEKNO_DOCKER = saved
-    }
-  })
 })

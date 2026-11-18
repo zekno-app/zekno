@@ -1,14 +1,16 @@
+/**
+ * `zekno-runner session`: several requests over one connection, each through
+ * the same code, lock and checks as its own command. How request lines are
+ * read is in request-lines.test.ts, the session's refusals of `apply` in
+ * session-refusals.test.ts, and `deploy` and `records` in
+ * session-deploy.test.ts.
+ */
 import { describe, expect, test } from "bun:test"
 import {
-  createDeploy,
-  createSigner,
-  generateMemberKeyPair,
   LIMITS,
   parseMessage,
-  proposeRoster,
   RUNNER_PROTOCOL,
   RUNNER_VERSION_PATTERN,
-  RunnerReportSchema,
   RunnerStatusSchema,
   RunnerVersionSchema,
   SessionFrameSchema,
@@ -17,7 +19,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import pkg from "../../package.json"
-import { requestLines } from "../../src/session/session"
+import { buildDeployV2, olderState } from "../support/deploy-v2"
 import {
   buildDeploy,
   fakeDocker,
@@ -29,53 +31,30 @@ import {
   type Frame,
 } from "../support/helpers"
 
-type World = Awaited<ReturnType<typeof world>>
-
 const SECRET = "hello from the test"
+
+/**
+ * A world whose runner took `web` at deploy 1 before it was updated, and the
+ * version-1 deploy that comes next: the one-shot `apply` takes version 1 only
+ * for an app held then (contracts/runner-checks.md, "The version-1 path").
+ */
+async function heldBefore() {
+  const w = await world()
+  olderState(w.home, { web: 1 })
+  const deploy = await buildDeploy({
+    trust: w.trust,
+    serverId: w.serverId,
+    signer: w.signer,
+    sequence: 2,
+  })
+  return { w, deploy }
+}
 
 /** Every frame is a frame of the contract: an event or a result, nothing else. */
 function expectValidFrames(frames: Frame[]) {
   for (const frame of frames)
     expect(parseMessage(SessionFrameSchema, frame).ok).toBe(true)
 }
-
-/** Splits `chunks` into lines the way a session reads its input, with a limit of 8 bytes. */
-async function split(chunks: string[]): Promise<(string | null)[]> {
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const chunk of chunks)
-        controller.enqueue(new TextEncoder().encode(chunk))
-      controller.close()
-    },
-  })
-  const lines: (string | null)[] = []
-  for await (const line of requestLines(stream, 8))
-    lines.push(line === null ? null : new TextDecoder().decode(line))
-  return lines
-}
-
-describe("reading request lines", () => {
-  test("a line may arrive in pieces, and the last one needs no line feed", async () => {
-    expect(await split(['{"a"', ':1}\n{"b":2', "}\n", "\n", "last"])).toEqual([
-      '{"a":1}',
-      '{"b":2}',
-      "",
-      "last",
-    ])
-    expect(await split(["one\n"])).toEqual(["one"])
-    expect(await split([])).toEqual([])
-  })
-
-  test("a line over the limit is given as null, however it arrives, and the next line is read as usual", async () => {
-    expect(await split(["12345678\n123456789\nok\n"])).toEqual([
-      "12345678",
-      null,
-      "ok",
-    ])
-    expect(await split(["1234", "5678", "9", "0\nok"])).toEqual([null, "ok"])
-    expect(await split(["123456789"])).toEqual([null])
-  })
-})
 
 describe("zekno-runner version", () => {
   test("names its version and protocol, with or without a session", async () => {
@@ -120,32 +99,32 @@ describe("zekno-runner session", () => {
         .result
     ).toEqual({ outcome: "ok" })
 
-    const first = await buildDeploy({
+    const first = await buildDeployV2({
       trust: w.trust,
       serverId: w.serverId,
       signer: w.signer,
-      sequence: 1,
+      previous: 0,
     })
     expect(
       (
         await s.request({
-          command: "apply",
-          input: { rosters: w.rosters, deploy: first },
+          command: "deploy",
+          input: { rosters: w.rosters, ...first },
         })
       ).result
     ).toEqual({ outcome: "started", app: "web", sequence: 1 })
-    const second = await buildDeploy({
+    const second = await buildDeployV2({
       trust: w.trust,
       serverId: w.serverId,
       signer: w.signer,
-      sequence: 2,
+      previous: 1,
       values: { GREETING: "a newer value" },
     })
     expect(
       (
         await s.request({
-          command: "apply",
-          input: { rosters: w.rosters, deploy: second },
+          command: "deploy",
+          input: { rosters: w.rosters, ...second },
         })
       ).result
     ).toEqual({ outcome: "started", app: "web", sequence: 2 })
@@ -165,8 +144,8 @@ describe("zekno-runner session", () => {
     expect(
       (
         await s.request({
-          command: "apply",
-          input: { rosters: w.rosters, deploy: second },
+          command: "deploy",
+          input: { rosters: w.rosters, ...second },
         })
       ).result
     ).toEqual({ outcome: "refused", reason: "replayed" })
@@ -193,24 +172,18 @@ describe("zekno-runner session", () => {
   })
 
   test("an apply sends Docker's lines as progress events before its result", async () => {
-    const w = await world()
+    const { w, deploy } = await heldBefore()
     const long = "x".repeat(5000)
     w.docker.upPrints({
       stdout: "pulling example/web:1\n",
       stderr: ` Container zekno-web-web-1  Recreate\n\n Container zekno-web-web-1  Started\r\n${long}\n`,
     })
     const s = session(w.home, w.docker.path)
-    const deploy = await buildDeploy({
-      trust: w.trust,
-      serverId: w.serverId,
-      signer: w.signer,
-      sequence: 1,
-    })
     const { events, result } = await s.request({
       command: "apply",
       input: { rosters: w.rosters, deploy },
     })
-    expect(result).toEqual({ outcome: "started", app: "web", sequence: 1 })
+    expect(result).toEqual({ outcome: "started", app: "web", sequence: 2 })
 
     const lines = events.map((event) => {
       expect(event.event).toBe("progress")
@@ -236,18 +209,12 @@ describe("zekno-runner session", () => {
   })
 
   test("a failed start sends what Docker reported, then start_failed", async () => {
-    const w = await world()
+    const { w, deploy } = await heldBefore()
     w.docker.failWith(1)
     w.docker.upPrints({
       stderr: "Error response from daemon: port is already allocated\n",
     })
     const s = session(w.home, w.docker.path)
-    const deploy = await buildDeploy({
-      trust: w.trust,
-      serverId: w.serverId,
-      signer: w.signer,
-      sequence: 1,
-    })
     const { events, result } = await s.request({
       command: "apply",
       input: { rosters: w.rosters, deploy },
@@ -258,21 +225,15 @@ describe("zekno-runner session", () => {
         line: "Error response from daemon: port is already allocated",
       },
     ])
-    expect(result).toEqual({ outcome: "start_failed", app: "web", sequence: 1 })
+    expect(result).toEqual({ outcome: "start_failed", app: "web", sequence: 2 })
     expect((await s.close()).code).toBe(0)
   })
 
   test("the one-shot apply still prints one JSON line, with Docker's output on standard error", async () => {
-    const w = await world()
+    const { w, deploy } = await heldBefore()
     w.docker.upPrints({
       stdout: "pulling example/web:1\n",
       stderr: " Container zekno-web-web-1  Started\n",
-    })
-    const deploy = await buildDeploy({
-      trust: w.trust,
-      serverId: w.serverId,
-      signer: w.signer,
-      sequence: 1,
     })
     const result = await runner(w.home, w.docker.path, "apply", {
       rosters: w.rosters,
@@ -280,7 +241,7 @@ describe("zekno-runner session", () => {
     })
     expect(result.code).toBe(0)
     expect(result.stdout).toBe(
-      `${JSON.stringify({ outcome: "started", app: "web", sequence: 1 })}\n`
+      `${JSON.stringify({ outcome: "started", app: "web", sequence: 2 })}\n`
     )
     expect(result.stderr).toContain("pulling example/web:1")
     expect(result.stderr).toContain(" Container zekno-web-web-1  Started")
@@ -300,7 +261,8 @@ describe("zekno-runner session", () => {
         (await s.request({ command: "status" })).result
       ).ok
     ).toBe(true)
-    expect(await s.request({ command: "deploy" })).toEqual({
+    // `deploy` is a command since protocol 3; `pack` is one no runner knows yet.
+    expect(await s.request({ command: "pack" })).toEqual({
       events: [],
       result: refusal,
     })
@@ -357,17 +319,11 @@ describe("zekno-runner session", () => {
   })
 
   test("an apply carries on to its end when the input closes and nobody reads any more", async () => {
-    const w = await world()
+    const { w, deploy } = await heldBefore()
     w.docker.upPrints({ stderr: " Container zekno-web-web-1  Recreate\n" })
     // Docker prints more after the connection has gone: writing it must not stop the runner.
     w.docker.holdUp(" Container zekno-web-web-1  Started\n".repeat(2000))
     const s = session(w.home, w.docker.path)
-    const deploy = await buildDeploy({
-      trust: w.trust,
-      serverId: w.serverId,
-      signer: w.signer,
-      sequence: 1,
-    })
     s.send({ command: "apply", input: { rosters: w.rosters, deploy } })
     await waitFor(w.docker.upStarted, "docker compose up to start")
 
@@ -379,7 +335,7 @@ describe("zekno-runner session", () => {
     expect(w.docker.upFinished()).toBe(true)
     expect(
       JSON.parse(readFileSync(join(w.home, "state.json"), "utf8")).lastSequence
-    ).toEqual({ web: 1 })
+    ).toEqual({ web: 2 })
     expect(existsSync(join(w.home, "lock"))).toBe(false)
     expect(
       (
@@ -392,22 +348,16 @@ describe("zekno-runner session", () => {
   })
 
   test("an apply whose input closed while it ran still sends its result to a reader that stayed", async () => {
-    const w = await world()
+    const { w, deploy } = await heldBefore()
     w.docker.holdUp(" Container zekno-web-web-1  Started\n")
     const s = session(w.home, w.docker.path)
-    const deploy = await buildDeploy({
-      trust: w.trust,
-      serverId: w.serverId,
-      signer: w.signer,
-      sequence: 1,
-    })
     s.send({ command: "apply", input: { rosters: w.rosters, deploy } })
     await waitFor(w.docker.upStarted, "docker compose up to start")
     const closing = s.close()
     w.docker.releaseUp()
     expect((await closing).code).toBe(0)
     expect(s.frames.at(-1)).toEqual({
-      result: { outcome: "started", app: "web", sequence: 1 },
+      result: { outcome: "started", app: "web", sequence: 2 },
     })
     expect(s.frames).toContainEqual({
       event: "progress",
@@ -430,13 +380,7 @@ describe("zekno-runner session", () => {
   })
 
   test("a session takes the same lock as the one-shot commands, and only while it works", async () => {
-    const w = await world()
-    const deploy = await buildDeploy({
-      trust: w.trust,
-      serverId: w.serverId,
-      signer: w.signer,
-      sequence: 1,
-    })
+    const { w, deploy } = await heldBefore()
     const s = session(w.home, w.docker.path)
     writeFileSync(join(w.home, "lock"), String(process.pid)) // this test process is alive
     expect(
@@ -459,7 +403,7 @@ describe("zekno-runner session", () => {
           input: { rosters: w.rosters, deploy },
         })
       ).result
-    ).toEqual({ outcome: "started", app: "web", sequence: 1 })
+    ).toEqual({ outcome: "started", app: "web", sequence: 2 })
     // Between requests the session holds no lock: a one-shot command can run.
     expect(existsSync(join(w.home, "lock"))).toBe(false)
     expect(
@@ -503,230 +447,5 @@ describe("zekno-runner session", () => {
     )
     expect(result.code).toBe(2)
     expect(result.stdout).toBe("")
-  })
-})
-
-/** The cases of refusals.test.ts, each sent through a session instead of a one-shot `apply`. */
-describe("through a session, the runner refuses what the team did not sign", () => {
-  async function attempt(
-    build: (w: World) => Promise<unknown>,
-    reason: string
-  ) {
-    const w = await world()
-    const s = session(w.home, w.docker.path)
-    // One genuine deploy first, so there is state to protect.
-    const genuine = await buildDeploy({
-      trust: w.trust,
-      serverId: w.serverId,
-      signer: w.signer,
-      sequence: 1,
-    })
-    expect(
-      (
-        await s.request({
-          command: "apply",
-          input: { rosters: w.rosters, deploy: genuine },
-        })
-      ).result.outcome
-    ).toBe("started")
-    const state = readFileSync(join(w.home, "state.json"), "utf8")
-    const compose = readFileSync(join(w.home, "apps/web/compose.yaml"), "utf8")
-
-    const answer = await s.request({ command: "apply", input: await build(w) })
-    expect(answer).toEqual({
-      events: [],
-      result: { outcome: "refused", reason },
-    })
-    expect(parseMessage(RunnerReportSchema, answer.result).ok).toBe(true)
-    // Nothing was started and nothing the runner remembers changed.
-    expect(w.docker.calls()).toHaveLength(1)
-    expect(readFileSync(join(w.home, "state.json"), "utf8")).toBe(state)
-    expect(readFileSync(join(w.home, "apps/web/compose.yaml"), "utf8")).toBe(
-      compose
-    )
-    // A refusal does not end the session.
-    expect(
-      parseMessage(
-        RunnerStatusSchema,
-        (await s.request({ command: "status" })).result
-      ).ok
-    ).toBe(true)
-    expect((await s.close()).code).toBe(0)
-  }
-
-  test("a deploy signed by a key that is not in the team list", async () => {
-    await attempt(async (w) => {
-      const stranger = createSigner(generateMemberKeyPair().secretKey)
-      const forgedTrust = {
-        ...w.trust,
-        members: [
-          {
-            name: "Mallory",
-            publicKey: stranger.publicKey,
-            role: "admin" as const,
-          },
-        ],
-      }
-      const deploy = await createDeploy({
-        trust: forgedTrust,
-        serverId: w.serverId,
-        app: "web",
-        sequence: 2,
-        compose: "services:\n  miner:\n    image: example/miner\n",
-        secrets: [],
-        signer: stranger,
-      })
-      return { rosters: w.rosters, deploy }
-    }, "unknown_signer")
-  })
-
-  test("a genuine deploy delivered a second time", async () => {
-    const w = await world()
-    const s = session(w.home, w.docker.path)
-    const deploy = await buildDeploy({
-      trust: w.trust,
-      serverId: w.serverId,
-      signer: w.signer,
-      sequence: 1,
-    })
-    expect(
-      (
-        await s.request({
-          command: "apply",
-          input: { rosters: w.rosters, deploy },
-        })
-      ).result.outcome
-    ).toBe("started")
-    expect(
-      await s.request({
-        command: "apply",
-        input: { rosters: w.rosters, deploy },
-      })
-    ).toEqual({
-      events: [],
-      result: { outcome: "refused", reason: "replayed" },
-    })
-    expect(w.docker.calls()).toHaveLength(1)
-    // Delivered again in a new session, it is still refused.
-    expect((await s.close()).code).toBe(0)
-    const again = session(w.home, w.docker.path)
-    expect(
-      (
-        await again.request({
-          command: "apply",
-          input: { rosters: w.rosters, deploy },
-        })
-      ).result
-    ).toEqual({ outcome: "refused", reason: "replayed" })
-    expect((await again.close()).code).toBe(0)
-    expect(w.docker.calls()).toHaveLength(1)
-  })
-
-  test("a genuine deploy with one byte of the service definition changed", async () => {
-    await attempt(async (w) => {
-      const deploy = await buildDeploy({
-        trust: w.trust,
-        serverId: w.serverId,
-        signer: w.signer,
-        sequence: 2,
-      })
-      const payload = Buffer.from(deploy.envelope.payload, "base64url")
-      const at = payload.indexOf("example/web:1")
-      payload[at] = payload[at]! ^ 1
-      return {
-        rosters: w.rosters,
-        deploy: {
-          ...deploy,
-          envelope: {
-            ...deploy.envelope,
-            payload: payload.toString("base64url"),
-          },
-        },
-      }
-    }, "bad_signature")
-  })
-
-  test("a genuine deploy with two secrets' encrypted values exchanged", async () => {
-    await attempt(async (w) => {
-      const deploy = await buildDeploy({
-        trust: w.trust,
-        serverId: w.serverId,
-        signer: w.signer,
-        sequence: 2,
-        values: { A_SECRET: "demo-a", B_SECRET: "demo-b" },
-      })
-      const [a, b] = deploy.secrets
-      return {
-        rosters: w.rosters,
-        deploy: {
-          ...deploy,
-          secrets: [
-            { ...a!, ciphertext: b!.ciphertext },
-            { ...b!, ciphertext: a!.ciphertext },
-          ],
-        },
-      }
-    }, "secrets_mismatch")
-  })
-
-  test("a team list the attacker signed themselves", async () => {
-    await attempt(async (w) => {
-      const stranger = createSigner(generateMemberKeyPair().secretKey)
-      const pretend = {
-        ...w.trust,
-        members: [
-          ...w.trust.members,
-          {
-            name: "Mallory",
-            publicKey: stranger.publicKey,
-            role: "admin" as const,
-          },
-        ],
-      }
-      const forged = await proposeRoster({ trust: pretend, signer: stranger })
-      const deploy = await buildDeploy({
-        trust: w.trust,
-        serverId: w.serverId,
-        signer: w.signer,
-        sequence: 2,
-      })
-      return { rosters: [...w.rosters, forged.envelope], deploy }
-    }, "unknown_signer")
-  })
-
-  test("input that is not a request at all", async () => {
-    const w = await world()
-    const s = session(w.home, w.docker.path)
-    const refusal = {
-      events: [],
-      result: { outcome: "refused", reason: "invalid_request" },
-    }
-    // The same inputs as the one-shot test, as the input of an `apply` request.
-    for (const input of [
-      undefined,
-      "",
-      "garbage",
-      {},
-      [],
-      { rosters: w.rosters },
-      { rosters: w.rosters, deploy: {}, extra: 1 },
-    ]) {
-      expect(
-        await s.request(
-          input === undefined
-            ? { command: "apply" }
-            : { command: "apply", input }
-        )
-      ).toEqual(refusal)
-    }
-    // And the same text as whole lines, which are not requests either. Two, so the session goes on.
-    expect(await s.request("garbage")).toEqual(refusal)
-    expect(await s.request("[]")).toEqual(refusal)
-    expect((await s.request({ command: "version" })).result).toEqual({
-      version: pkg.version,
-      protocol: RUNNER_PROTOCOL,
-    })
-    expect((await s.close()).code).toBe(0)
-    expect(w.docker.calls()).toEqual([])
   })
 })

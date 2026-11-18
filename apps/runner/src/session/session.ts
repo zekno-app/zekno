@@ -1,7 +1,9 @@
 /**
  * A session: several requests over one connection. It is a way of carrying
  * requests, not a second way in: every request runs the same code, takes the
- * same lock and passes the same checks as its one-shot command.
+ * same lock and passes the same checks as its one-shot command. `deploy` and
+ * `records` have no one-shot command: they exist only here (contracts/
+ * protocol.md, P2).
  */
 import {
   LIMITS,
@@ -15,6 +17,8 @@ import {
 
 import { version as runnerVersion } from "../../package.json"
 import { apply, refused, setup, status, sync } from "../commands/commands"
+import { deploy } from "../commands/deploy"
+import { records } from "../commands/records"
 import { appStates, followLogs } from "../docker/inspect"
 
 export const version = (): RunnerVersion => ({
@@ -174,6 +178,13 @@ async function handle(
         return await apply(dir, text, (line) =>
           sink.write({ event: "progress", line })
         )
+      case "deploy":
+        // A deploy of version 2: Docker's lines as `apply` sends them.
+        return await deploy(dir, text, (line) =>
+          sink.write({ event: "progress", line })
+        )
+      case "records":
+        return records(dir, text)
       case "state":
         return await appStates(dir, closed)
       case "logs": {

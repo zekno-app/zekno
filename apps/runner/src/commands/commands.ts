@@ -1,19 +1,22 @@
 import {
+  afterVersionOneDeploy,
   applyRosterUpdate,
   CoreError,
   generateServerKeyPair,
-  initialRunnerState,
   LIMITS,
+  newRunnerState,
   openSecrets,
   parseMessage,
-  parseRunnerState,
+  readRunnerState,
   RunnerApplyRequestSchema,
   RunnerSetupRequestSchema,
   RunnerSyncRequestSchema,
   serverConfirmationCode,
   serverIdOf,
+  takesVersionOne,
   trustFoundingRoster,
   verifyDeploy,
+  versionOneView,
   type Envelope,
   type RunnerReport,
   type RunnerSetupResponse,
@@ -21,6 +24,7 @@ import {
   type RunnerStatus,
   type ServerPublicKey,
   type ServerSecretKey,
+  type StoredRunnerState,
 } from "@workspace/core"
 
 import { composeUp } from "../docker/compose"
@@ -42,19 +46,24 @@ export const refused = (reason: Reason): RunnerReport => ({
 })
 
 type Loaded = {
-  state: RunnerState
+  /** The stored state with its mark (contracts/state.md). A state runner 0.1.0 wrote is marked in memory only. */
+  state: StoredRunnerState
   publicKey: ServerPublicKey
   secretKey: ServerSecretKey
 }
 
-/** Reads the key and the state, or says why the runner cannot act. */
+/**
+ * Reads the key and the state, or says why the runner cannot act. Reading
+ * writes nothing: a state from before version 2 stays as it is on disk until
+ * the first request that saves one (ST10).
+ */
 export function load(dir: string): Loaded | RunnerReport {
   if (!isSetUp(dir)) return refused("not_set_up")
   // Someone else's folder, or a key others can read, is not a state to act on.
   if (!isPrivate(dir)) return refused("invalid_state")
   try {
     const keys = readKeys(dir)
-    const state = parseRunnerState(readState(dir))
+    const state = readRunnerState(readState(dir))
     if (serverIdOf(keys.publicKey as ServerPublicKey) !== state.serverId)
       return refused("invalid_state")
     return {
@@ -68,11 +77,15 @@ export function load(dir: string): Loaded | RunnerReport {
   }
 }
 
-/** Applies the team lists the runner does not have yet. `rosters` is the whole chain from version 1. */
-function follow(
-  state: RunnerState,
+/**
+ * Applies the team lists the runner does not have yet. `rosters` is the whole
+ * chain from version 1. Only the team changes: the state given back is whole,
+ * with its mark, ready to be saved as it is (ST4).
+ */
+export function follow(
+  state: StoredRunnerState,
   rosters: readonly Envelope[]
-): RunnerState | RunnerReport {
+): StoredRunnerState | RunnerReport {
   let team = state.team
   for (const envelope of rosters.slice(team.version)) {
     const applied = applyRosterUpdate(team, envelope)
@@ -86,7 +99,7 @@ export const isReport = (value: object): value is RunnerReport =>
   "outcome" in value
 
 /** Whether a state holds no more apps and secrets than a runner may report (LIMITS). */
-const withinLimits = (state: RunnerState): boolean =>
+export const withinLimits = (state: RunnerState): boolean =>
   Object.keys(state.lastSequence).length <= LIMITS.appsPerServer &&
   Object.keys(state.secrets).length <= LIMITS.secretsPerServer
 
@@ -115,9 +128,10 @@ export function setup(
     const keys = generateServerKeyPair()
     // The key first, created exclusively: two setups can never both succeed.
     writeKeys(dir, keys)
+    // Marked from the start, with no app at format 1: it takes no version-1 deploy at all (ST3).
     writeState(
       dir,
-      initialRunnerState({ serverId: keys.serverId, team: team.value })
+      newRunnerState({ serverId: keys.serverId, team: team.value })
     )
     return {
       serverPublicKey: keys.publicKey,
@@ -129,10 +143,11 @@ export function setup(
   }
 }
 
+/** What the server holds, as every zekno reads it: built from the version-1 view, so its shape never changes (FR-033). */
 export function status(dir: string): RunnerStatus | RunnerReport {
   const loaded = load(dir)
   if (isReport(loaded)) return loaded
-  const { state } = loaded
+  const state = versionOneView(loaded.state)
   return {
     serverId: state.serverId,
     serverPublicKey: loaded.publicKey,
@@ -152,7 +167,7 @@ export function status(dir: string): RunnerStatus | RunnerReport {
 }
 
 /** Runs one piece of work while holding the lock, so two runs never interleave. */
-async function locked(
+export async function locked(
   dir: string,
   work: () => Promise<RunnerReport>
 ): Promise<RunnerReport> {
@@ -185,9 +200,44 @@ export function sync(dir: string, input: string): Promise<RunnerReport> {
 }
 
 /**
- * Takes newer team lists, then one deploy. Nothing is decrypted before the
- * core library has verified the deploy, and the new state is saved before
- * anything is started.
+ * Saves the Compose text of an accepted deploy and starts it in the runner's
+ * own folder. Called only once the deploy's number is used: whatever happens
+ * here, the outcome is `started` or `start_failed`.
+ */
+export async function startApp(
+  dir: string,
+  deploy: { app: string; sequence: number; compose: string },
+  secrets: Record<string, string>,
+  onProgress?: (line: string) => void
+): Promise<RunnerReport> {
+  const { app, sequence } = deploy
+  try {
+    const file = writeCompose(dir, app, deploy.compose)
+    const exit = await composeUp({
+      dir,
+      app,
+      file,
+      secrets,
+      onLine: onProgress,
+    })
+    return { outcome: exit === 0 ? "started" : "start_failed", app, sequence }
+  } catch {
+    return { outcome: "start_failed", app, sequence }
+  }
+}
+
+/**
+ * Takes newer team lists, then one deploy of version 1. Nothing is decrypted
+ * before the core library has verified the deploy, and the new state is
+ * saved before anything is started.
+ *
+ * The deploy is checked against the version-1 view of the stored state, and
+ * is then taken only for an app this runner held when it first read a state
+ * from before version 2, and that has had no deploy of version 2 since
+ * (FR-031): any other app is refused `unsupported_version`, a reason every
+ * older zekno reads. What is saved is the whole stored state with only the
+ * numbers and secret versions changed, so the mark and every app's format
+ * survive (V21). No record is kept: version 1 carries none (FR-024).
  */
 export function apply(
   dir: string,
@@ -204,30 +254,25 @@ export function apply(
     if (isReport(followed)) return followed
     if (followed !== loaded.state) writeState(dir, followed)
 
-    const verified = verifyDeploy({ ...request.value.deploy, state: followed })
+    const verified = verifyDeploy({
+      ...request.value.deploy,
+      state: versionOneView(followed),
+    })
     if (!verified.ok) return refused(verified.error.code)
+    // The app is known only from under the signature, so the gate comes after it, before any write.
+    if (!takesVersionOne(followed, verified.value.deploy.app))
+      return refused("unsupported_version")
+    const next = afterVersionOneDeploy(followed, verified.value.nextState)
     // What a runner holds must always fit the answers that report it (`status`, `state`),
     // so a deploy of one app or one secret more than that is refused before anything is opened.
-    if (!withinLimits(verified.value.nextState)) return refused("too_large")
+    if (!withinLimits(next)) return refused("too_large")
 
     // Open before saving: a deploy whose secrets cannot be opened must not use up its number.
     const secrets = openSecrets(verified.value, loaded.secretKey)
     if (!secrets.ok) return refused("secrets_mismatch")
 
-    const { app, sequence, compose } = verified.value.deploy
-    writeState(dir, verified.value.nextState)
+    writeState(dir, next)
     // From here the deploy is accepted and its number is used, whatever happens next.
-    try {
-      const file = writeCompose(dir, app, compose)
-      const exit = await composeUp({
-        app,
-        file,
-        secrets: secrets.value,
-        onLine: onProgress,
-      })
-      return { outcome: exit === 0 ? "started" : "start_failed", app, sequence }
-    } catch {
-      return { outcome: "start_failed", app, sequence }
-    }
+    return startApp(dir, verified.value.deploy, secrets.value, onProgress)
   })
 }

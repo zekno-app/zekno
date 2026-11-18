@@ -75,6 +75,12 @@ export async function readLines(
  * are never written to disk by the runner. Returns Docker's exit status.
  */
 export async function composeUp(input: {
+  /**
+   * The runner's own folder, where Docker runs: Compose reads files from the
+   * folder it runs in, and wherever the runner was started is not the
+   * runner's to trust (research R14).
+   */
+  dir: string
   app: string
   file: string
   secrets: Record<string, string>
@@ -112,6 +118,7 @@ export async function composeUp(input: {
         }
       }
       const child = Bun.spawn(argv, {
+        cwd: input.dir,
         env,
         stdin: "ignore",
         stdout: "pipe",
@@ -126,6 +133,7 @@ export async function composeUp(input: {
     }
     // Standard output is reserved for the runner's one JSON line.
     const child = Bun.spawn(argv, {
+      cwd: input.dir,
       env,
       stdin: "ignore",
       stdout: "pipe",

@@ -22,6 +22,8 @@ import {
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+import { buildDeployV2, deployV2 } from "./deploy-v2"
+
 export const RUNNER_MAIN = join(import.meta.dir, "../../src/main.ts")
 export const COMPOSE =
   "services:\n  web:\n    image: example/web:1\n    environment:\n      - GREETING\n"
@@ -246,14 +248,16 @@ export type Frame = Record<string, unknown>
 /**
  * Runs `zekno-runner session` as its own process, the way SSH would, and
  * reads its frames as they arrive. A line that is not JSON is kept as
- * `{ unreadable: <line> }` so a test can see it.
+ * `{ unreadable: <line> }` so a test can see it. `command` starts another
+ * runner, such as runner 0.1.0 (`olderRunner`).
  */
 export function session(
   home: string,
   docker: string,
-  env: Record<string, string> = {}
+  env: Record<string, string> = {},
+  command: string[] = [process.execPath, RUNNER_MAIN]
 ) {
-  const child = Bun.spawn([process.execPath, RUNNER_MAIN, "session"], {
+  const child = Bun.spawn([...command, "session"], {
     env: {
       ...process.env,
       ZEKNO_RUNNER_HOME: home,
@@ -398,25 +402,22 @@ export async function world() {
   }
 }
 
-/** A world with a deploy accepted for each of `apps`. */
+/** A world with a deploy accepted for each of `apps`: its first, of version 2, made against 0. */
 export async function deployed(
   apps: string[]
 ): Promise<Awaited<ReturnType<typeof world>>> {
   const w = await world()
   for (const app of apps) {
-    const deploy = await buildDeploy({
+    const built = await buildDeployV2({
       trust: w.trust,
       serverId: w.serverId,
       signer: w.signer,
-      sequence: 1,
+      previous: 0,
       app,
     })
-    const result = await runner(w.home, w.docker.path, "apply", {
-      rosters: w.rosters,
-      deploy,
-    })
-    if (result.json?.outcome !== "started")
-      throw new Error(`deploy of ${app} failed: ${JSON.stringify(result.json)}`)
+    const { result } = await deployV2(w, { rosters: w.rosters, ...built })
+    if (result.outcome !== "started")
+      throw new Error(`deploy of ${app} failed: ${JSON.stringify(result)}`)
   }
   return w
 }

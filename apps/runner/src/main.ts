@@ -16,6 +16,7 @@ import { apply, refused, setup, status, sync } from "./commands/commands"
 import { homeDir } from "./home/home"
 import { runSession, stdoutSink, version } from "./session/session"
 
+/** The one-shot commands. `deploy` and `records` exist only inside a session (contracts/protocol.md, P2). */
 const COMMANDS = ["setup", "sync", "apply", "status", "version", "session"]
 const USAGE = `Usage: zekno-runner <${COMMANDS.join("|")}>\nReads one JSON message from standard input and prints one JSON line.\n\`session\` reads one request per line and answers each, until its input closes.`
 

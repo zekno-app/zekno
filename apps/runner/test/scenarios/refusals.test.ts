@@ -7,7 +7,20 @@ import {
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
+import { olderState } from "../support/deploy-v2"
 import { buildDeploy, runner, world } from "../support/helpers"
+
+/**
+ * A runner that took `web` at deploy 1 before it was updated: the one-shot
+ * `apply` takes version 1 only for an app held then (contracts/
+ * runner-checks.md, "The version-1 path"). The refusals of `deploy` are in
+ * deploy-v2-refusals.test.ts.
+ */
+async function heldBefore() {
+  const w = await world()
+  olderState(w.home, { web: 1 })
+  return w
+}
 
 /** Someone with SSH access to the server, but without the team's signing key. */
 describe("the runner refuses what the team did not sign", () => {
@@ -15,13 +28,13 @@ describe("the runner refuses what the team did not sign", () => {
     build: (w: Awaited<ReturnType<typeof world>>) => Promise<unknown>,
     reason: string
   ) {
-    const w = await world()
+    const w = await heldBefore()
     // One genuine deploy first, so there is state to protect.
     const genuine = await buildDeploy({
       trust: w.trust,
       serverId: w.serverId,
       signer: w.signer,
-      sequence: 1,
+      sequence: 2,
     })
     expect(
       (
@@ -63,7 +76,7 @@ describe("the runner refuses what the team did not sign", () => {
         trust: forgedTrust,
         serverId: w.serverId,
         app: "web",
-        sequence: 2,
+        sequence: 3,
         compose: "services:\n  miner:\n    image: example/miner\n",
         secrets: [],
         signer: stranger,
@@ -73,12 +86,12 @@ describe("the runner refuses what the team did not sign", () => {
   })
 
   test("a genuine deploy delivered a second time", async () => {
-    const w = await world()
+    const w = await heldBefore()
     const deploy = await buildDeploy({
       trust: w.trust,
       serverId: w.serverId,
       signer: w.signer,
-      sequence: 1,
+      sequence: 2,
     })
     expect(
       (
@@ -102,7 +115,7 @@ describe("the runner refuses what the team did not sign", () => {
         trust: w.trust,
         serverId: w.serverId,
         signer: w.signer,
-        sequence: 2,
+        sequence: 3,
       })
       const payload = Buffer.from(deploy.envelope.payload, "base64url")
       const at = payload.indexOf("example/web:1")
@@ -126,7 +139,7 @@ describe("the runner refuses what the team did not sign", () => {
         trust: w.trust,
         serverId: w.serverId,
         signer: w.signer,
-        sequence: 2,
+        sequence: 3,
         values: { A_SECRET: "demo-a", B_SECRET: "demo-b" },
       })
       const [a, b] = deploy.secrets
@@ -163,7 +176,7 @@ describe("the runner refuses what the team did not sign", () => {
         trust: w.trust,
         serverId: w.serverId,
         signer: w.signer,
-        sequence: 2,
+        sequence: 3,
       })
       return { rosters: [...w.rosters, forged.envelope], deploy }
     }, "unknown_signer")

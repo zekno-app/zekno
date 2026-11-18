@@ -1,7 +1,8 @@
 /**
  * The runner's folder on the server: the server's key, the state the core
- * library asks it to remember, and the service definition of each app.
- * Nothing decrypted is ever written here.
+ * library asks it to remember, the service definition of each app, and the
+ * secret records it keeps, sealed (`records/`, in records.ts). Nothing
+ * decrypted is ever written here.
  */
 import { randomBytes } from "node:crypto"
 import {
@@ -79,7 +80,8 @@ const paths = (dir: string) => ({
 
 const token = () => randomBytes(12).toString("hex")
 
-function ensureDir(dir: string): void {
+/** Makes a folder only its owner can enter, if it is not there yet, and makes it so if it is. */
+export function ensureDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   chmodSync(dir, 0o700)
 }
@@ -118,7 +120,7 @@ function syncDir(dir: string): void {
  * Writes a file so that a reader sees the old content or the new, never half
  * of either, and so that the new content survives a power loss.
  */
-function writeAtomic(path: string, content: string): void {
+export function writeAtomic(path: string, content: string): void {
   const temporary = `${path}.${token()}.tmp`
   // Exclusive create: never follows a link someone left at this name.
   const handle = openSync(temporary, "wx", 0o600)

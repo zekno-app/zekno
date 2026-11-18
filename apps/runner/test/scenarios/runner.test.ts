@@ -9,8 +9,8 @@ import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { defaultHome, homeDir } from "../../src/home/home"
+import { buildDeployV2, deployV2 } from "../support/deploy-v2"
 import {
-  buildDeploy,
   COMPOSE,
   fakeDocker,
   filesUnder,
@@ -61,21 +61,25 @@ describe("the runner", () => {
   })
 
   test("starts an accepted deploy with the secrets in Docker's environment and nowhere on disk", async () => {
-    const { home, docker, trust, serverId, signer, rosters } = await world()
-    const deploy = await buildDeploy({
+    const w = await world()
+    const { home, docker, trust, serverId, signer, rosters } = w
+    const deploy = await buildDeployV2({
       trust,
       serverId,
       signer,
-      sequence: 1,
+      previous: 0,
       values: {
         GREETING: "hello from the test",
         PATH: "/tmp/evil",
         DOCKER_HOST: "tcp://attacker.example",
       },
     })
-    const result = await runner(home, docker.path, "apply", { rosters, deploy })
-    expect(result.code).toBe(0)
-    expect(result.json).toEqual({ outcome: "started", app: "web", sequence: 1 })
+    const result = await deployV2(w, { rosters, ...deploy })
+    expect(result.result).toEqual({
+      outcome: "started",
+      app: "web",
+      sequence: 1,
+    })
 
     const [call] = docker.calls()
     expect(call!.args).toBe(
@@ -96,10 +100,11 @@ describe("the runner", () => {
   })
 
   test("reports what it holds, without values", async () => {
-    const { home, docker, trust, serverId, signer, rosters } = await world()
-    await runner(home, docker.path, "apply", {
+    const w = await world()
+    const { home, docker, trust, serverId, signer, rosters } = w
+    await deployV2(w, {
       rosters,
-      deploy: await buildDeploy({ trust, serverId, signer, sequence: 1 }),
+      ...(await buildDeployV2({ trust, serverId, signer, previous: 0 })),
     })
     const result = await runner(home, docker.path, "status")
     const status = parseMessage(RunnerStatusSchema, result.json)
@@ -115,29 +120,33 @@ describe("the runner", () => {
   })
 
   test("when the app does not start, the deploy is still accepted and its number is used", async () => {
-    const { home, docker, trust, serverId, signer, rosters } = await world()
+    const w = await world()
+    const { docker, trust, serverId, signer, rosters } = w
     docker.failWith(1)
-    const deploy = await buildDeploy({ trust, serverId, signer, sequence: 1 })
-    const failed = await runner(home, docker.path, "apply", { rosters, deploy })
-    expect(failed.code).toBe(1)
-    expect(failed.json).toEqual({
+    const deploy = await buildDeployV2({ trust, serverId, signer, previous: 0 })
+    const failed = await deployV2(w, { rosters, ...deploy })
+    expect(failed.result).toEqual({
       outcome: "start_failed",
       app: "web",
       sequence: 1,
     })
     // The same deploy cannot be delivered again.
-    expect(
-      (await runner(home, docker.path, "apply", { rosters, deploy })).json
-    ).toEqual({ outcome: "refused", reason: "replayed" })
+    expect((await deployV2(w, { rosters, ...deploy })).result).toEqual({
+      outcome: "refused",
+      reason: "replayed",
+    })
   })
 
   test("a missing Docker is a failed start, not a crash", async () => {
     const { home, trust, serverId, signer, rosters } = await world()
-    const result = await runner(home, "/nonexistent/docker", "apply", {
-      rosters,
-      deploy: await buildDeploy({ trust, serverId, signer, sequence: 1 }),
-    })
-    expect(result.json).toEqual({
+    const result = await deployV2(
+      { home, docker: { path: "/nonexistent/docker" } },
+      {
+        rosters,
+        ...(await buildDeployV2({ trust, serverId, signer, previous: 0 })),
+      }
+    )
+    expect(result.result).toEqual({
       outcome: "start_failed",
       app: "web",
       sequence: 1,
@@ -145,8 +154,10 @@ describe("the runner", () => {
   })
 
   test("never acts on damaged or missing state", async () => {
-    const { home, docker, trust, serverId, signer, rosters } = await world()
-    const deploy = await buildDeploy({ trust, serverId, signer, sequence: 1 })
+    const w = await world()
+    const { home, docker, trust, serverId, signer, rosters } = w
+    const built = await buildDeployV2({ trust, serverId, signer, previous: 0 })
+    const deploy = { rosters, ...built }
     const state = join(home, "state.json")
     const good = readFileSync(state, "utf8")
 
@@ -161,9 +172,10 @@ describe("the runner", () => {
       JSON.stringify({ ...JSON.parse(good), lastSequence: { web: "9" } }),
     ]) {
       writeFileSync(state, damaged)
-      expect(
-        (await runner(home, docker.path, "apply", { rosters, deploy })).json
-      ).toEqual({ outcome: "refused", reason: "invalid_state" })
+      expect((await deployV2(w, deploy)).result).toEqual({
+        outcome: "refused",
+        reason: "invalid_state",
+      })
       expect((await runner(home, docker.path, "status")).json).toEqual({
         outcome: "refused",
         reason: "invalid_state",
@@ -171,10 +183,7 @@ describe("the runner", () => {
     }
     expect(docker.calls()).toEqual([])
     writeFileSync(state, good)
-    expect(
-      (await runner(home, docker.path, "apply", { rosters, deploy })).json
-        ?.outcome
-    ).toBe("started")
+    expect((await deployV2(w, deploy)).result.outcome).toBe("started")
   })
 
   test("a runner that was never set up says so", async () => {
@@ -199,17 +208,19 @@ describe("the runner", () => {
   })
 
   test("one run at a time: a held lock reports busy, a stale lock is taken over", async () => {
-    const { home, docker, trust, serverId, signer, rosters } = await world()
-    const deploy = await buildDeploy({ trust, serverId, signer, sequence: 1 })
+    const w = await world()
+    const { home, trust, serverId, signer, rosters } = w
+    const deploy = {
+      rosters,
+      ...(await buildDeployV2({ trust, serverId, signer, previous: 0 })),
+    }
     writeFileSync(join(home, "lock"), String(process.pid)) // this test process is alive
-    expect(
-      (await runner(home, docker.path, "apply", { rosters, deploy })).json
-    ).toEqual({ outcome: "refused", reason: "busy" })
+    expect((await deployV2(w, deploy)).result).toEqual({
+      outcome: "refused",
+      reason: "busy",
+    })
     writeFileSync(join(home, "lock"), "999999") // no such process
-    expect(
-      (await runner(home, docker.path, "apply", { rosters, deploy })).json
-        ?.outcome
-    ).toBe("started")
+    expect((await deployV2(w, deploy)).result.outcome).toBe("started")
     expect(filesUnder(home).some((file) => file.path.endsWith("/lock"))).toBe(
       false
     )
