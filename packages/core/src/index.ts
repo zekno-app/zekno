@@ -60,16 +60,45 @@ export {
   type VerifiedSecret,
 } from "./secrets/secret-record"
 export {
+  peekSecretStatement,
+  verifySecretStatement,
+  type VerifiedStatement,
+} from "./secrets/statement"
+export { secretsForDeploy, type BlockedSecret } from "./secrets/for-deploy"
+export {
   createDeploy,
-  initialRunnerState,
-  openSecrets,
-  parseRunnerState,
   readSignedDeploy,
   verifyDeploy,
-  type RunnerState,
   type Deploy,
   type VerifiedDeploy,
 } from "./deploy/deploy"
+export {
+  afterVersionOneDeploy,
+  initialRunnerState,
+  newRunnerState,
+  parseRunnerState,
+  readRunnerState,
+  takesVersionOne,
+  versionOneView,
+  type RunnerState,
+  type StoredRunnerState,
+} from "./deploy/state"
+export { openSecrets } from "./deploy/open"
+export {
+  createDeployV2,
+  readSignedDeployV2,
+  verifyDeployV2,
+  type VerifiedDeployV2,
+} from "./deploy/deploy-v2"
+export {
+  readDeployV2Payload,
+  type Build,
+  type DeployV2,
+  type Health,
+  type Predeploy,
+  type Route,
+} from "./deploy/message"
+export { buildKey } from "./deploy/later-fields"
 export { createLink, verifyLink, type VerifiedLink } from "./deploy/link"
 export {
   parseMessage,
@@ -98,6 +127,9 @@ export {
   SessionRequestSchema,
   SessionResultSchema,
   RunnerApplyRequestSchema,
+  RunnerDeployRequestSchema,
+  RunnerRecordsRequestSchema,
+  RunnerRecordsSchema,
   RunnerReportSchema,
   RunnerSetupRequestSchema,
   RunnerSetupResponseSchema,
@@ -123,6 +155,8 @@ export {
   type RegisterServerRequest,
   type RosterChainResponse,
   type RunnerApplyRequest,
+  type RunnerDeployRequest,
+  type RunnerRecords,
   type RunnerReport,
   type RunnerSetupRequest,
   type RunnerSetupResponse,
@@ -142,6 +176,7 @@ export {
 export {
   CoreError,
   DEPLOY_REFUSALS,
+  DEPLOY_V2_REFUSALS,
   LINK_REFUSALS,
   MESSAGE_REFUSALS,
   OPEN_REFUSALS,
@@ -149,6 +184,7 @@ export {
   SECRET_REFUSALS,
   type CoreErrorCode,
   type DeployRefusal,
+  type DeployV2Refusal,
   type LinkRefusal,
   type MessageRefusal,
   type OpenRefusal,

@@ -37,23 +37,9 @@ import {
   SERVER_ID,
   type SealedSecret,
 } from "./secrets"
+import { secretVersion, verifySecretStatement } from "./statement"
 
-export const secretVersion = z
-  .number()
-  .int()
-  .min(1)
-  .max(Number.MAX_SAFE_INTEGER)
-
-const SecretStatementSchema = z.strictObject({
-  v: z.literal(1),
-  teamId: z.string().regex(TEAM_ID),
-  serverId: z.string().regex(SERVER_ID),
-  app: z.string().regex(APP_NAME),
-  name: secretName,
-  version: secretVersion,
-  hash: z.string().regex(/^[0-9a-f]{64}$/),
-  createdAt: isoTime,
-})
+export { secretVersion }
 
 /**
  * A sealed secret together with a team member's signed statement that they
@@ -172,44 +158,19 @@ export function verifySecret(input: {
       return read
     return refuse("malformed", "Not a secret record.")
   }
-  const opened = openEnvelope(
-    record.data.envelope,
-    PAYLOAD_TYPES.secret,
-    (keyId) => memberByKeyId(input.trust.members, keyId)?.publicKey
-  )
-  if (!opened.ok) return opened
-  const signer = input.trust.members.find(
-    (member) => member.publicKey === opened.value.signerKey
-  )!
+  // The statement first: signed by a current member, for this team, server and app.
+  const statement = verifySecretStatement({
+    envelope: record.data.envelope,
+    trust: input.trust,
+    serverId: input.serverId,
+    app: input.app,
+  })
+  if (!statement.ok) return statement
 
-  const json = parseJson(opened.value.payload)
-  if (json === undefined)
-    return refuse("malformed", "The secret statement is not valid JSON.")
-  if (hasOtherVersion(json)) {
-    return refuse(
-      "unsupported_version",
-      "This secret uses a format version this library does not know."
-    )
-  }
-  const statement = SecretStatementSchema.safeParse(json)
-  if (!statement.success)
-    return refuse(
-      "malformed",
-      "The secret statement does not match its definition."
-    )
-
-  if (statement.data.teamId !== input.trust.teamId) {
-    return refuse("wrong_team", "This secret belongs to another team.")
-  }
-  if (statement.data.serverId !== input.serverId) {
-    return refuse("wrong_server", "This secret was set for another server.")
-  }
-  if (statement.data.app !== input.app) {
-    return refuse("wrong_app", "This secret was set for another app.")
-  }
+  // Then the ciphertext: exactly the one the statement describes, under its name.
   if (
-    statement.data.name !== record.data.sealed.name ||
-    statement.data.hash !== sealedSecretHash(record.data.sealed)
+    statement.value.name !== record.data.sealed.name ||
+    statement.value.hash !== sealedSecretHash(record.data.sealed)
   ) {
     return refuse(
       "secrets_mismatch",
@@ -218,10 +179,10 @@ export function verifySecret(input: {
   }
   return ok(
     Object.freeze({
-      name: statement.data.name,
-      version: statement.data.version,
-      hash: statement.data.hash,
-      signer,
+      name: statement.value.name,
+      version: statement.value.version,
+      hash: statement.value.hash,
+      signer: statement.value.signer,
       sealed: record.data.sealed,
     })
   )

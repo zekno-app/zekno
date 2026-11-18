@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { utf8, wipe } from "../crypto/encoding"
+import { utf8 } from "../crypto/encoding"
 import {
   hasOtherVersion,
   openEnvelope,
@@ -9,21 +9,13 @@ import {
   signEnvelope,
   type Envelope,
 } from "../crypto/envelope"
-import {
-  decodeKey,
-  serverIdOf,
-  serverPublicKeyOf,
-  tryDecodeKey,
-  type ServerSecretKey,
-  type Signer,
-} from "../crypto/keys"
+import type { Signer } from "../crypto/keys"
 import { LIMITS } from "../protocol/limits"
 import {
   CoreError,
   ok,
   refuse,
   type DeployRefusal,
-  type OpenRefusal,
   type Result,
 } from "../protocol/result"
 import {
@@ -32,7 +24,6 @@ import {
   memberByKeyId,
   serverKeyOf,
   TEAM_ID,
-  TeamTrustSchema,
   type Member,
   type Role,
   type TeamTrust,
@@ -45,13 +36,14 @@ import {
 } from "../secrets/secret-record"
 import {
   APP_NAME,
-  openSealedSecret,
   sealedSecretHash,
   SealedSecretSchema,
   secretName,
   SERVER_ID,
   type SealedSecret,
 } from "../secrets/secrets"
+import { registerVerified } from "./open"
+import { readVersionOneState, type RunnerState } from "./state"
 
 const sequence = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
 
@@ -83,63 +75,6 @@ const DeploySchema = z.strictObject({
 /** What one server should run for one app, and the secrets that belong to it. */
 export type Deploy = z.infer<typeof DeploySchema>
 
-/**
- * What a runner remembers between deploys. The runner stores it; this library
- * only reads it and returns the next value.
- */
-export type RunnerState = {
-  readonly serverId: string
-  readonly team: TeamTrust
-  /** The last accepted deploy number for each app. */
-  readonly lastSequence: Readonly<Record<string, number>>
-  /**
-   * The latest version accepted for each secret, keyed by "app/NAME", with
-   * its ciphertext hash, or null when that version was a removal.
-   */
-  readonly secrets: Readonly<
-    Record<string, { readonly version: number; readonly hash: string | null }>
-  >
-}
-
-const RunnerStateSchema = z.strictObject({
-  serverId: z.string().regex(SERVER_ID),
-  team: TeamTrustSchema,
-  lastSequence: z.record(
-    z.string().regex(APP_NAME),
-    z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
-  ),
-  secrets: z.record(
-    z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}\/[A-Za-z_][A-Za-z0-9_]*$/),
-    z.strictObject({
-      version: secretVersion,
-      hash: z
-        .string()
-        .regex(/^[0-9a-f]{64}$/)
-        .nullable(),
-    })
-  ),
-})
-
-/** The state of a server that has just pinned its team and accepted nothing yet. */
-export function initialRunnerState(input: {
-  serverId: string
-  team: TeamTrust
-}): RunnerState {
-  const state = {
-    serverId: input.serverId,
-    team: input.team,
-    lastSequence: {},
-    secrets: {},
-  }
-  if (!RunnerStateSchema.safeParse(state).success) {
-    throw new CoreError(
-      "invalid_argument",
-      "The server id or team trust is not valid."
-    )
-  }
-  return state
-}
-
 /** A deploy that passed every check. The only thing `openSecrets` accepts. */
 export type VerifiedDeploy = {
   readonly deploy: Deploy
@@ -148,9 +83,6 @@ export type VerifiedDeploy = {
   /** Persist this before running the deploy, so the same deploy cannot be accepted twice. */
   readonly nextState: RunnerState
 }
-
-/** Deploys that came out of `verifyDeploy`, with the sealed secrets that were checked. */
-const verified = new WeakMap<VerifiedDeploy, readonly SealedSecret[]>()
 
 /** The roles that may deploy. A link (link.ts) counts only from a member with one of them. */
 export const DEPLOY_ROLES: readonly Role[] = ["admin", "deployer"]
@@ -332,23 +264,6 @@ export function readSignedDeploy(input: {
 }
 
 /**
- * Validates state a runner read back from disk. Throws `CoreError` when it is
- * damaged or incomplete, so a runner never mistakes a broken file for an
- * empty one.
- */
-export function parseRunnerState(value: unknown): RunnerState {
-  return readState(value as RunnerState)
-}
-
-/** Stored state is checked in full, so a damaged or incomplete file is an error, not a weaker check. */
-function readState(state: RunnerState): RunnerState {
-  const parsed = RunnerStateSchema.safeParse(state)
-  if (!parsed.success)
-    throw new CoreError("invalid_argument", "The runner state is not valid.")
-  return parsed.data as RunnerState
-}
-
-/**
  * The runner-side gate. A deploy is accepted only when it is signed by a
  * current team member allowed to deploy, addressed to this team and this
  * server, numbered higher than the last deploy accepted for its app,
@@ -360,7 +275,7 @@ export function verifyDeploy(input: {
   secrets: unknown
   state: RunnerState
 }): Result<VerifiedDeploy, DeployRefusal> {
-  const state = readState(input.state)
+  const state = readVersionOneState(input.state)
 
   // 1. Signature, against the team list this runner already trusts.
   const opened = openEnvelope(
@@ -522,55 +437,6 @@ export function verifyDeploy(input: {
       secrets: Object.freeze(secrets),
     }),
   })
-  verified.set(result, Object.freeze(checked))
+  registerVerified(result, Object.freeze(checked))
   return ok(result)
-}
-
-/**
- * Decrypts the secrets of a verified deploy. Accepts only an object returned
- * by `verifyDeploy`, so there is no path to plaintext that skips the checks.
- * Either every secret opens or none is returned.
- */
-export function openSecrets(
-  deploy: VerifiedDeploy,
-  serverSecretKey: ServerSecretKey
-): Result<Record<string, string>, OpenRefusal> {
-  const sealed = verified.get(deploy)
-  if (!sealed) {
-    return refuse(
-      "not_verified",
-      "Secrets can only be opened for a deploy returned by verifyDeploy."
-    )
-  }
-  const secretKey = tryDecodeKey("serverSecret", serverSecretKey)
-  if (!secretKey)
-    return refuse("wrong_server_key", "Expected this server's secret key.")
-  try {
-    const publicKey = serverPublicKeyOf(secretKey)
-    if (serverIdOf(publicKey) !== deploy.deploy.serverId) {
-      return refuse(
-        "wrong_server_key",
-        "This key does not belong to the server the deploy is addressed to."
-      )
-    }
-    const publicKeyBytes = decodeKey("serverPublic", publicKey)
-    // No prototype, so a secret named "__proto__" or "constructor" is just a key.
-    const values: Record<string, string> = Object.create(null) as Record<
-      string,
-      string
-    >
-    for (const secret of sealed) {
-      const opened = openSealedSecret(
-        secret,
-        { serverId: deploy.deploy.serverId, app: deploy.deploy.app },
-        publicKeyBytes,
-        secretKey
-      )
-      if (!opened.ok) return opened
-      values[secret.name] = opened.value
-    }
-    return ok(values)
-  } finally {
-    wipe(secretKey)
-  }
 }

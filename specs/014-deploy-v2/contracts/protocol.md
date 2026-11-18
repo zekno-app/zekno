@@ -22,7 +22,7 @@ FR-033, FR-037, FR-022, FR-023. Every message is a strict schema in
 | Command | Input | Events | Result | Frame bound (`SESSION_FRAME_BYTES`) | Lock |
 |---|---|---|---|---|---|
 | `deploy` | `RunnerDeployRequestSchema` | `progress`, Docker's lines, as `apply` | `RunnerReportSchema` | 64 KiB | the deploy lock |
-| `records` | `RunnerRecordsRequestSchema` | none | `RunnerRecordsSchema`, or a refusal | 8 MiB | none |
+| `records` | `RunnerRecordsRequestSchema` | none | `RunnerRecordsSchema`, or a refusal | 4 MiB | none |
 
 ### `deploy`
 
@@ -88,4 +88,4 @@ unknown field, a missing field, a wrong type, 257 records or statements; the fra
 longest answer each allows. `apps/runner/test/session/session.test.ts`: `deploy` with progress
 events then its result; `records` answers; both refused by name as one-shot commands (exit 2).
 `apps/cli/test/server/session.test.ts`: a `deploy` answer with progress; a `records` answer past
-8 MiB is `TOO_LARGE`.
+4 MiB is `TOO_LARGE`. (As built: the core library's rule that every frame bound is at most an eighth of a message's limit gives 4 MiB, not the design's 8. A real answer is about 0.2 MiB. The schema alone does not bound an answer's size, so the runner checks the bytes of the answer it builds.)

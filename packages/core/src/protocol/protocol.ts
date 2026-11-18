@@ -6,6 +6,7 @@ import { isKey, serverIdOf, type ServerPublicKey } from "../crypto/keys"
 import { LIMITS } from "./limits"
 import {
   DEPLOY_REFUSALS,
+  DEPLOY_V2_REFUSALS,
   ok,
   refuse,
   ROSTER_REFUSALS,
@@ -153,6 +154,19 @@ export const RunnerApplyRequestSchema = z.strictObject({
 })
 export type RunnerApplyRequest = z.infer<typeof RunnerApplyRequestSchema>
 
+/**
+ * CLI to runner, in a session only: newer team lists, one version-2 deploy
+ * (kind `zekno.deploy.v2`), and the whole records (statement and sealed
+ * value) of the listed secrets the runner lacks. The records are not signed
+ * by the deploy: the runner verifies each against the team list it holds.
+ */
+export const RunnerDeployRequestSchema = z.strictObject({
+  rosters: rosterChain,
+  envelope: EnvelopeSchema,
+  records: z.array(SecretRecordSchema).max(LIMITS.secretsPerDeploy),
+})
+export type RunnerDeployRequest = z.infer<typeof RunnerDeployRequestSchema>
+
 /** Reasons that come from the runner itself, not from a check in this library. */
 export const RUNNER_REFUSALS = [
   "invalid_request",
@@ -179,7 +193,12 @@ export const RunnerReportSchema = z
     app: z.string().regex(APP_NAME).optional(),
     sequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
     reason: z
-      .enum([...DEPLOY_REFUSALS, ...ROSTER_REFUSALS, ...RUNNER_REFUSALS])
+      .enum([
+        ...DEPLOY_REFUSALS,
+        ...DEPLOY_V2_REFUSALS,
+        ...ROSTER_REFUSALS,
+        ...RUNNER_REFUSALS,
+      ])
       .optional(),
   })
   .refine(
@@ -249,6 +268,9 @@ export const SESSION_COMMANDS = [
   "state",
   "logs",
   "version",
+  // Feature 014: they exist only inside a session, never as one-shot commands.
+  "deploy",
+  "records",
 ] as const
 export type SessionCommand = (typeof SESSION_COMMANDS)[number]
 
@@ -320,6 +342,11 @@ export const SESSION_FRAME_BYTES: Readonly<Record<SessionCommand, number>> = {
   state: 1 * MiB,
   // At most 1024 apps and 8192 secrets: about 2.1 MiB.
   status: 4 * MiB,
+  // As apply: a progress event, at most about 24 KiB written out, or a report.
+  deploy: 64 * KiB,
+  // At most 256 secret statements of about 0.8 KiB each: about 0.2 MiB. The
+  // design allows 8 MiB; every bound here stays within an eighth of a message.
+  records: 4 * MiB,
 }
 
 export const SERVICE_STATES = [
@@ -378,6 +405,23 @@ export const RunnerLogsRequestSchema = z.strictObject({
   follow: z.boolean().optional(),
 })
 export type RunnerLogsRequest = z.infer<typeof RunnerLogsRequestSchema>
+
+/** CLI to runner, in a session: the statements the runner holds for one app. */
+export const RunnerRecordsRequestSchema = z.strictObject({
+  app: z.string().regex(APP_NAME),
+})
+export type RunnerRecordsRequest = z.infer<typeof RunnerRecordsRequestSchema>
+
+/**
+ * Runner to CLI: the statement of each record the runner holds for the app,
+ * sorted by name. Never a sealed value: a statement says a secret's name,
+ * version and hash and who set it. The CLI verifies each one; the runner's
+ * word is not enough.
+ */
+export const RunnerRecordsSchema = z.strictObject({
+  statements: z.array(EnvelopeSchema).max(LIMITS.secretsPerDeploy),
+})
+export type RunnerRecords = z.infer<typeof RunnerRecordsSchema>
 
 /**
  * Validates a message from outside. Raw text or bytes are checked for size

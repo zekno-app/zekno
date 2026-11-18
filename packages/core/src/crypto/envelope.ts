@@ -9,6 +9,8 @@ import { sodium } from "./sodium"
 /** The kinds of signed message. A signature for one kind never verifies as another. */
 export const PAYLOAD_TYPES = {
   deploy: "zekno.deploy.v1",
+  /** The signed deploy's version 2 (deploy/message.ts). Its own kind, so neither version's signature verifies as the other. */
+  deployV2: "zekno.deploy.v2",
   roster: "zekno.roster.v1",
   secret: "zekno.secret.v1",
   secretRemoval: "zekno.secret-removal.v1",

@@ -3,15 +3,23 @@ import { sodium } from "./sodium"
 
 /**
  * Every use of the hash has its own domain, so a hash made for one purpose
- * can never be mistaken for a hash made for another.
+ * can never be mistaken for a hash made for another. The last three are the
+ * signed deploy's version 2 (design, part 3): a whole source pack, one sealed
+ * chunk of it, and a build key. Only the build key is computed in this step.
  */
-export type HashDomain =
-  | "zekno/v1/key-id"
-  | "zekno/v1/server-id"
-  | "zekno/v1/secret"
-  | "zekno/v1/roster"
-  | "zekno/v1/confirm/server"
-  | "zekno/v1/confirm/roster"
+export const HASH_DOMAINS = [
+  "zekno/v1/key-id",
+  "zekno/v1/server-id",
+  "zekno/v1/secret",
+  "zekno/v1/roster",
+  "zekno/v1/confirm/server",
+  "zekno/v1/confirm/roster",
+  "zekno/v1/pack",
+  "zekno/v1/pack-chunk",
+  "zekno/v1/build",
+] as const
+
+export type HashDomain = (typeof HASH_DOMAINS)[number]
 
 const SEPARATOR = new Uint8Array([0])
 

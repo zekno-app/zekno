@@ -35,7 +35,7 @@ import { APP_NAME, SERVER_ID } from "../secrets/secrets"
  * no `.` or `..` part. A client that resolves it must then not leave the
  * folder through it, whatever it does with symbolic links.
  */
-const staysInside = (path: string): boolean =>
+export const staysInside = (path: string): boolean =>
   !path.startsWith("/") &&
   !path.includes("\\") &&
   !path.split("/").some((part) => part === "." || part === "..")

@@ -38,6 +38,22 @@ export const DEPLOY_REFUSALS = [
 ] as const
 export type DeployRefusal = (typeof DEPLOY_REFUSALS)[number]
 
+/**
+ * Reasons only a version-2 deploy can be refused for, on top of
+ * `DEPLOY_REFUSALS`. A runner gives them only in answers to `deploy`, so a
+ * client that knows only version 1 never reads one.
+ */
+export const DEPLOY_V2_REFUSALS = [
+  /** A listed secret was neither supplied nor held with every field equal. */
+  "secret_missing",
+  /** A listed secret's statement does not verify against the team list held now. */
+  "untrusted_secret",
+  /** The deploy's time to run has passed, or it has none where one is required. */
+  "expired",
+] as const
+export type DeployV2Refusal =
+  DeployRefusal | (typeof DEPLOY_V2_REFUSALS)[number]
+
 /** Reasons a team list is refused. */
 export const ROSTER_REFUSALS = [
   "malformed",

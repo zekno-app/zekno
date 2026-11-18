@@ -36,6 +36,53 @@ export const LIMITS = {
   servicesPerServer: 4096,
   /** Characters in the Compose file's path a signed link names, relative to the linked folder. */
   linkComposeLength: 255,
+
+  // The signed deploy's version 2 (contracts/message.md, "New limits"). The
+  // limits of its later fields are fixed now with the format, though a runner
+  // carries those fields out only in later steps.
+
+  /** Builds in one deploy. */
+  buildsPerDeploy: 8,
+  /** One build's source pack, before it is cut into chunks. */
+  packBytes: 512 * 1024 * 1024,
+  /** One chunk of a pack, before it is sealed. A pack has exactly ceil(size / chunkBytes) chunks. */
+  chunkBytes: 8 * 1024 * 1024,
+  /** Distinct chunks across all builds of one deploy. */
+  chunksPerDeploy: 64,
+  /** Build arguments of one build. */
+  argsPerBuild: 32,
+  /** One build argument's value, as UTF-8. */
+  argValueBytes: 4 * 1024,
+  /** Every build argument's value of one deploy together, as UTF-8. */
+  argBytesPerDeploy: 64 * 1024,
+  /** Secrets one build may read. */
+  buildSecretsPerBuild: 32,
+  /** Characters in a build's Dockerfile path, inside its pack. */
+  dockerfileLength: 255,
+  /** Seconds one build may take. */
+  buildSeconds: 7200,
+  /** Words of the pre-deploy command. */
+  predeployWords: 64,
+  /** Characters in one word of the pre-deploy command. */
+  predeployWordLength: 4096,
+  /** Every word of the pre-deploy command together, as UTF-8. */
+  predeployBytes: 16 * 1024,
+  /** Seconds the pre-deploy command may take. */
+  predeploySeconds: 3600,
+  /** Services one health check looks at. */
+  healthServices: 16,
+  /** Characters in a health check's HTTP path. */
+  healthPathLength: 1024,
+  /** Seconds a health check may wait for every service. */
+  healthSeconds: 1800,
+  /** Routes in one deploy. */
+  routesPerDeploy: 64,
+  /** Characters in a routed domain. */
+  domainLength: 253,
+  /** Sealed secret records one runner keeps, across its apps, as stored. A runner refuses a deploy that would make it more. */
+  recordBytesPerServer: 64 * 1024 * 1024,
+  /** How far after the runner's clock a deploy's expiry may be, in milliseconds. */
+  expiryWindowMs: 7 * 24 * 60 * 60 * 1000,
 } as const
 
 /** Longest base64url text that can encode `bytes` bytes. */

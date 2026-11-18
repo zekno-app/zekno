@@ -3,7 +3,7 @@
 FR-006, FR-007, FR-009, FR-013, FR-014, FR-016 to FR-020, FR-024 to FR-026, FR-036, FR-038,
 FR-040 to FR-044. The design's part 6, restricted to what this step carries out, with one lock
 (decision 5 (b)). The request is handled by `deploy` in `apps/runner/src/commands/deploy.ts`; K4 to
-K12 are `verifyDeployV2` in `packages/core/src/deploy/deploy-v2.ts`; the rest is the runner's.
+K14 are `verifyDeployV2` in `packages/core/src/deploy/deploy-v2.ts` (K11 to K14 in `listed-secrets.ts` beside it; the runner hands it the records it holds as a function). K15, which reads file sizes, is the runner's. K16 is `openSecrets`.
 
 ## The order
 

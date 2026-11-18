@@ -80,7 +80,7 @@ Nothing else was run; no server, no network, no file of the repository but these
 - **Decision.** Both are session commands only; `main.ts`'s one-shot `COMMANDS` do not change. The
   `records` answer is the statements only (envelopes of `zekno.secret.v1`), never a sealed value,
   at most 256, sorted by name (contracts/protocol.md). Frame bounds: `deploy` 64 KiB (as `apply`),
-  `records` 8 MiB (the design's; a real answer is under 256 KiB). `records` takes no lock, as
+  `records` 4 MiB (the design says 8; the core library's existing rule on frame bounds allows 4; a real answer is under 256 KiB). `records` takes no lock, as
   `status`.
 - **Rationale.** FR-022 and FR-023: a statement carries name, version, hash and signer; the value,
   even sealed, need not pass through the CLI. Every protocol-3 runner speaks sessions.
