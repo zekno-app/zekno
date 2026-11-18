@@ -69,6 +69,31 @@ install", unless the runner already has this version.
 zekno server update prod --yes
 ```
 
+### Updating is one way
+
+Replacing runner 0.1.0 with a runner that speaks protocol 3 (see
+[An older or a newer runner](/docs/deploying#an-older-or-a-newer-runner))
+cannot be undone. The new runner reads the state runner 0.1.0 left, and
+changes nothing in it until it first writes: a team list update, or a deploy
+from any `zekno`, older ones included. From then on:
+
+- Runner 0.1.0 cannot read the state. Put back by hand, it refuses every
+  request but `version`, and `zekno` says
+  `The runner's stored state is damaged or incomplete, so it refuses to act.`
+  The state is not damaged; it is newer.
+- A `zekno` from before the new deploy format can deploy only the apps the
+  server held before the update and that have had no deploy in the new format
+  since. A new app, or one deployed in the new format, is refused, and that
+  `zekno` says `The runner refused the request (unsupported_version).` Its
+  `zekno status` still reads the server.
+
+No runner release speaks protocol 3 yet, so `zekno server update` does not
+take this step today. When `zekno` runs from a checkout of the repository,
+not as a compiled file, a runner on your machine (`--local`) is the
+checkout's own runner, which speaks protocol 3. Going back by restoring a
+runner's folder from a backup is not supported (see the
+[runner page](/docs/runner#what-to-know-before-you-rely-on-it)).
+
 ## zekno server ls
 
 Lists the connected servers: name, SSH destination (or "this machine") and

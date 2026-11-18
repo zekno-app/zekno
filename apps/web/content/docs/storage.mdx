@@ -17,6 +17,7 @@ On your machine:
 | Team lists, connected servers | `~/.zekno/profile.json` (or `ZEKNO_HOME`). Public keys and signatures only. |
 | Secrets | `~/.zekno/secrets/<server id>/<app>.json`, as encrypted, signed records. A value cannot be shown again after it is set. |
 | Deploy history | `~/.zekno/history/<server id>/<app>.json`: the last 50 signed deploys of each app, for rollback. |
+| What the server holds | `~/.zekno/held/<server id>/<app>.json`: the secret statements and versions the server reported to the last deploy of each app in the new deploy format. A statement says a secret's name, its version, the hash of its sealed value and who set it, never a value. `zekno secret set` and `rm` read it, offline, for the next version. |
 | Project files used here | `~/.zekno/links.json`: the real path and SHA-256 of each `zekno.json` used on your machine, at most 500. |
 | A runner on your machine | `~/.zekno/runner/<name>`, unless `--home` named another folder. |
 | Which app a folder deploys | `zekno.json` in the project folder. |
@@ -44,4 +45,11 @@ team code in the keychain, and checks each secret and each history entry
 against it. A file changed by something other than `zekno` is refused or
 ignored, never signed. The folder holds no command to run.
 
-On the server, see the [runner page](/docs/runner#its-folder).
+What the server holds is written by a deploy in the new deploy format, right
+after it reads the server, and is replaced whole each time; nothing else
+writes it. A file that cannot be read counts as empty. It can only raise the
+next version of a secret: it never gives a value, and never decides what a
+deploy lists.
+
+On the server, including the secret records it keeps, see the
+[runner page](/docs/runner#its-folder).

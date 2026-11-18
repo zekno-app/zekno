@@ -72,7 +72,9 @@ A deploy from a Compose file draws the panel as before. Plain output and
 `--json` are the same for both.
 
 Exit status 1 when the runner accepted the deploy but the app did not start.
-The deploy number is used either way.
+The deploy number is used either way. A deploy in the new deploy format that
+the runner refuses uses no number (see
+[The deploy it is made after](#the-deploy-it-is-made-after)).
 
 ```bash
 zekno deploy --app api --server prod -f compose.yaml
@@ -109,11 +111,122 @@ Esc or Ctrl-C leaves any question. What was made before it is kept, and running
 linked folder is never asked for. With no terminal, `zekno deploy` asks nothing
 and stops as before.
 
+### The deploy it is made after
+
+With a runner that speaks protocol 3 (see
+[An older or a newer runner](#an-older-or-a-newer-runner)), `zekno deploy`
+signs in the new deploy format, deploy format 2. On the deploy's own
+connection it reads the app's last deploy number from the runner, and signs a
+deploy made after that one, numbered one above it. The runner takes it only
+while that number is still its last for the app. So a deploy that another
+deploy of the app overtook never runs, even one held back and delivered
+later. This machine keeps no number of its own for it, and sets no limit on
+how far ahead the runner's number may be.
+
+A deploy in the new format that the runner refuses uses no number and runs
+nothing: the next deploy is made after the same one. When another deploy of
+the app reached the runner first, `zekno` reads the runner again on the same
+connection and says which one, under the stage row at `✖ Starting`:
+
+```text
+Another deploy of <app> reached <server> first, as deploy <n>. Nothing of this one ran. Run zekno deploy again to deploy on top of it.
+```
+
+When this machine also signed a deploy with that number whose answer never
+came, here or in another terminal, it cannot tell which of the two ran:
+
+```text
+<server> holds deploy <n> of <app>, and this machine signed a deploy <n> whose answer never came. zekno cannot tell which of the two ran. Run zekno deploy again to settle it.
+```
+
+When the runner cannot be read again, the sentence names no deploy:
+`Another deploy of this app reached the runner first. Nothing of this one ran. Run zekno deploy again to deploy on top of it.`
+With no terminal, or with `--json`, each of these is one line on standard
+error, and `--json`'s object keeps its shape. On the app's deploy screen it
+is the result line, and `Number <n> is used, so the next deploy will be <n+1>.`
+is not shown after a deploy in the new format that was refused or got no
+answer.
+
+A deploy `zekno` signs carries no expiry. It is kept in this machine's deploy
+history and sent only on the connection it was signed for.
+
+### When the runner refuses
+
+Each reason the runner may refuse a deploy in the new format with is said in
+one sentence:
+
+| The runner's reason | `zekno` says |
+| --- | --- |
+| `replayed` | One of the sentences above |
+| `sequence_jump` | This deploy was made after a deploy the runner does not hold. Nothing of it ran. Run zekno status to see what the runner holds. |
+| `secrets_mismatch` | The deploy does not account for every secret the runner holds for this app. Nothing of it ran. Run zekno deploy again. |
+| `secret_missing` | The runner does not hold a secret this deploy lists, and it was not sent with it. Nothing of it ran. Run zekno deploy again. |
+| `untrusted_secret` | A secret of this app was set by someone who is no longer in the team. Nothing of this deploy ran. Set it again with zekno secret set, or remove it with zekno secret rm. |
+| `expired` | The time this deploy had to run had passed by the server's clock. Nothing of it ran. Deploy again, and check the server's clock if it says so again. |
+| `unsupported_version` | The runner on that server does not carry out everything this deploy asks for. Nothing of it ran. Run zekno status to compare its version with this zekno's. |
+| `malformed`, `wrong_payload_type` | The runner could not read this deploy. Nothing of it ran. Run zekno status to compare its version with this zekno's. |
+
+The last two rows are said for a deploy in either format. For a deploy in the
+older format, `replayed`, `sequence_jump` and `secrets_mismatch` keep the
+sentences they had. `sequence_jump` in the new format means the runner holds
+a lower number than it said, as a runner folder restored from a backup would,
+and that is not supported (see the
+[runner page](/docs/runner#what-to-know-before-you-rely-on-it)). What the
+secrets rows mean is on [Secrets](/docs/secrets#what-the-server-keeps).
+
+### An older or a newer runner
+
+`zekno` asks the runner its version first, on the deploy's own connection,
+and signs in the format the runner speaks:
+
+| The runner | The deploy |
+| --- | --- |
+| Speaks protocol 3 | Signed in the new format |
+| Speaks an older protocol, as every released runner does, 0.1.0 included | Signed in the older format, as before |
+| From before sessions, so it reports no version | Signed in the older format, as before |
+| Speaks a newer protocol than this `zekno` | Not signed |
+
+No runner release speaks protocol 3 yet. A `zekno` built from the repository
+still installs runner 0.1.0, so on a server with a released runner every
+deploy is signed in the older format, as before: numbered one above the
+runner's number and the highest this machine signed, with every secret sent
+each time. A runner built from the repository speaks protocol 3.
+
+When a runner of an older protocol reports a version older than the one this
+`zekno` carries, the deploy says so once it is signed, and goes on. At a
+terminal the warning is drawn above the deploy's panel, on the app's deploy
+screen it is a warning notice, and with no terminal it is a line on standard
+error, never in `--json`'s object:
+
+```text
+The runner on <server> is version <version>, older than this zekno's <carried>, so this deploy was signed in the older format. Run `zekno server update <server>` to bring it to <carried>.
+```
+
+`<carried>` is the runner release this `zekno` carries. A runner of that same
+version, such as runner 0.1.0 with a `zekno` that carries 0.1.0, gets the older
+format and no warning.
+
+A runner that speaks a newer protocol than this `zekno` stops `zekno deploy`
+and `zekno rollback` before anything is signed, and nothing goes into the
+deploy history:
+
+```text
+The runner on <server> is version <version>, newer than this zekno's <carried>, and speaks a newer protocol. Update zekno to deploy to <server>. Nothing was signed.
+```
+
 ## zekno rollback
 
 Deploys an earlier service definition again, under the next number, with the
 current secrets. Only deploys your machine signed and the runner answered for
-count. Without `--to`, it returns to the one before the latest.
+count, in either format. Without `--to`, it returns to the one before the
+latest.
+
+In the new deploy format a rollback is a new deploy made after the current
+one, like any other: it names the app's last number and is signed one above
+it, even when it returns to a deploy made in the older format. When another
+deploy reached the server first, its sentence ends
+`Run zekno rollback again to deploy on top of it.` Against an older or a newer
+runner it does what `zekno deploy` does.
 
 ```bash
 zekno rollback --app api --server prod --to 3
@@ -127,7 +240,8 @@ runner is older or newer than the one this `zekno` carries, a warning says
 so, and what works until they match: an older runner is brought up to date
 with `zekno server update`, and for a newer one you update `zekno`. Deploys
 still work, unless the newer runner speaks a newer protocol; then you are told
-to update `zekno` first.
+to update `zekno` first, and `zekno deploy` stops before signing (see
+[An older or a newer runner](#an-older-or-a-newer-runner)).
 
 ```bash
 zekno status --server prod

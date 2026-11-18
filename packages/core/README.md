@@ -13,14 +13,27 @@ The control plane between a client and a server is treated as hostile. With this
 
 - read a secret: values are sealed for one server's public key;
 - make a server run something: a deploy needs a current team member's signature;
-- replay or redirect: deploys are numbered per app and addressed to one team and one server;
+- replay, reorder or redirect: every deploy is addressed to one team and one server. A deploy in
+  deploy format 2 (`zekno.deploy.v2`) names the deploy of the app it was made after
+  (`previous`), and `verifyDeployV2` accepts it only while that is still the runner's last number
+  for the app, so a deploy that another one overtook never runs, however long it was held back.
+  Deploy format 1 (`zekno.deploy.v1`) is numbered per app, and the runner takes a number only
+  above its last;
 - swap, plant, roll back or revive secrets: each secret is signed by the member who set it, bound
   to its name, app and server, and versioned; retiring one is a signed removal the server remembers;
+- drop a secret without a word: a deploy in format 2 must account for every secret the runner
+  holds a live version of, by version, as current or as removed, and a secret whose statement was
+  signed by someone the current team list no longer includes stops counting, on a record the
+  runner keeps as on one sent with the deploy (`untrusted_secret`);
 - change the team: each team list is signed by an admin of the list before it, in order;
 - substitute a server's key: server keys are in the admin-signed team list, added by an admin
   who compared a short code with the one shown on the server;
 - substitute the team: a new server or teammate pins the team by a short code any member can
   read out from their own client.
+
+The order of deploys never depends on a clock. A deploy in format 2 may carry an expiry, checked
+against the time the runner passes in; one taken from the hosted service, when it exists, must
+carry one.
 
 It cannot stop the control plane from withholding messages, and it does not protect against a
 compromised team member's machine or a compromised server.
@@ -38,13 +51,15 @@ full list of functions, message formats and refusal codes is in
 
 Two rules shape the interface:
 
-1. **Nothing decrypts before it is verified.** `openSecrets` accepts only what `verifyDeploy`
-   returned.
+1. **Nothing decrypts before it is verified.** `openSecrets` accepts only what `verifyDeploy` or
+   `verifyDeployV2` returned.
 2. **Nothing unsigned is trusted.** There is no public way to seal a secret without signing it,
-   and `createDeploy` verifies every secret it is given.
+   and `createDeploy` and `createDeployV2` verify every secret they are given.
 
-The library does no I/O and keeps no state. The runner stores the state `verifyDeploy` hands back;
-clients store keys however they choose and pass in a `Signer`.
+The library does no I/O and keeps no state. The runner stores the state `verifyDeploy` or
+`verifyDeployV2` hands back, with the records the latter says to write, and hands `verifyDeployV2`
+the records it holds; clients store keys however they choose and pass in a `Signer`. Deploy format
+2 and its checks are in [`specs/014-deploy-v2/contracts/`](../../specs/014-deploy-v2/contracts/).
 
 A runner must process deploys one at a time (verify, persist `nextState`, open, run). What was
 reviewed, what was fixed and what remains open is in
