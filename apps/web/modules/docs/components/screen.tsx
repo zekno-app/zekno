@@ -33,6 +33,41 @@ function classesOf(look: string): string | undefined {
   return classes.length > 0 ? classes.join(" ") : undefined
 }
 
+/**
+ * A character the site's monospace font may not hold: anything outside
+ * plain ASCII and outside the box-drawing and block characters. The browser
+ * then takes it from another font, where it can be wider than a cell (on the
+ * built site `●` came out 10px wide and `←` 17px, against a cell of 7.5px),
+ * and every border after it on that row moves.
+ */
+const OUTSIDE = /([^\x20-\x7e\u2500-\u259f])/u
+
+/** The site's monospace font, then the system's, so such a character still comes from a monospace font. */
+const CELL_FONT =
+  '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace'
+
+/**
+ * A run's text with each such character held to one cell: an inline block
+ * one `ch` wide. An inline block keeps the row's text in one piece when it is
+ * selected and copied, which an inline flex box does not.
+ */
+function cells(text: string) {
+  if (!OUTSIDE.test(text)) return text
+  return text.split(OUTSIDE).map((part, at) =>
+    at % 2 === 1 ? (
+      <span
+        key={at}
+        className="inline-block w-[1ch] text-center"
+        style={{ fontFamily: CELL_FONT }}
+      >
+        {part}
+      </span>
+    ) : (
+      part
+    )
+  )
+}
+
 /** One row of the screen: its runs side by side, 15px high even when empty. */
 function Row({ runs }: { runs: Run[] }) {
   return (
@@ -41,10 +76,10 @@ function Row({ runs }: { runs: Run[] }) {
         const className = classesOf(look)
         return className ? (
           <span key={at} className={className}>
-            {text}
+            {cells(text)}
           </span>
         ) : (
-          text
+          <span key={at}>{cells(text)}</span>
         )
       })}
     </div>
