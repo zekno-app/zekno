@@ -28,9 +28,14 @@ const frameBytes = (answer: RunnerRecords) =>
  * For each secret of `app` with a live version, sorted by name, the statement
  * of its record file when that file exists and reads. An app the runner does
  * not hold, and one still at format 1 (its secrets came by version 1, which
- * keeps no record), have none. An answer that would not fit its frame
- * (`SESSION_FRAME_BYTES.records`) or its schema is refused `too_large`
- * instead of sent: a reader would refuse it anyway.
+ * keeps no record), have none. A statement longer than
+ * `LIMITS.statementPayloadLength` is left out, as a file that does not read
+ * is: a runner from before that limit may keep one, padded, and it would
+ * otherwise make every answer too large for good; the deployer then stops
+ * with C5 for that name, whose fix works offline (security review S2). An
+ * answer that would not fit its frame (`SESSION_FRAME_BYTES.records`) or its
+ * schema is refused `too_large` instead of sent: a reader would refuse it
+ * anyway. Within the statement limit only the schema's count can be passed.
  */
 export function records(
   dir: string,
@@ -56,7 +61,11 @@ export function records(
   const statements: Envelope[] = []
   for (const { hash } of live) {
     const record = readRecord(dir, app, hash)
-    if (record) statements.push(record.envelope)
+    if (
+      record &&
+      record.envelope.payload.length <= LIMITS.statementPayloadLength
+    )
+      statements.push(record.envelope)
   }
   const answer: RunnerRecords = { statements }
   if (

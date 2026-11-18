@@ -10,7 +10,7 @@
  */
 import { z } from "zod"
 
-import { utf8 } from "../crypto/encoding"
+import { fromUtf8, utf8 } from "../crypto/encoding"
 import { LIMITS } from "../protocol/limits"
 import { ok, refuse, type Result } from "../protocol/result"
 import { APP_NAME, secretName, SERVER_ID } from "../secrets/secrets"
@@ -116,19 +116,41 @@ export function readDeployV2Format(
 }
 
 /**
- * Reads a version-2 payload, already parsed from JSON, in the order of
- * contracts/message.md: its format (F4 to F6, `malformed`), and only then
- * whether it asks for a field this library does not carry out yet (F7,
- * `unsupported_version`). A later field that breaks its own rule is so
- * refused `malformed` first.
+ * F4 to F6 from the signed bytes, with F41: the payload in its one
+ * spelling. Its text must be exactly `JSON.stringify` of what the reader
+ * gives for it, the text `createDeployV2` signs. So a key written twice
+ * (which `JSON.parse` reads last-wins, where another reader may keep the
+ * first), a number written another way (`-0`, `1e0`, `1.0`), whitespace, an
+ * escape `JSON.stringify` does not write, or keys in another order than the
+ * format's is `malformed`: one signed text is one deploy to every reader
+ * (security review S5, S6). No object of the payload has keys of free text,
+ * so the order JavaScript gives keys that look like numbers never comes into
+ * it. Used by both readers of signed bytes; version 1 and the secret
+ * statements are read as before (FR-003).
  */
-export function readDeployV2Payload(
-  json: unknown
-): Result<DeployV2, "malformed" | "unsupported_version"> {
+export function readDeployV2Bytes(
+  bytes: Uint8Array
+): Result<DeployV2, "malformed"> {
+  const text = fromUtf8(bytes)
+  let json: unknown
+  try {
+    json = text === undefined ? undefined : (JSON.parse(text) as unknown)
+  } catch {
+    json = undefined
+  }
   const read = readDeployV2Format(json)
   if (!read.ok) return read
+  if (JSON.stringify(read.value) !== text)
+    return refuse("malformed", "The deploy is not written in its one spelling.")
+  return read
+}
+
+/** F7: builds, the pre-deploy command, the health check and routes come in later steps. */
+function carriedOut(
+  read: Result<DeployV2, "malformed">
+): Result<DeployV2, "malformed" | "unsupported_version"> {
+  if (!read.ok) return read
   const deploy = read.value
-  // F7. Builds, the pre-deploy command, the health check and routes come in later steps.
   if (
     deploy.builds.length > 0 ||
     deploy.predeploy !== null ||
@@ -141,4 +163,24 @@ export function readDeployV2Payload(
     )
   }
   return read
+}
+
+/**
+ * Reads a version-2 payload, already parsed from JSON, in the order of
+ * contracts/message.md: its format (F4 to F6, `malformed`), and only then
+ * whether it asks for a field this library does not carry out yet (F7,
+ * `unsupported_version`). A later field that breaks its own rule is so
+ * refused `malformed` first.
+ */
+export function readDeployV2Payload(
+  json: unknown
+): Result<DeployV2, "malformed" | "unsupported_version"> {
+  return carriedOut(readDeployV2Format(json))
+}
+
+/** `readDeployV2Payload` from the signed bytes: F4 to F6 with F41 (`readDeployV2Bytes`), then F7. */
+export function readDeployV2PayloadBytes(
+  bytes: Uint8Array
+): Result<DeployV2, "malformed" | "unsupported_version"> {
+  return carriedOut(readDeployV2Bytes(bytes))
 }

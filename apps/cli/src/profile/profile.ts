@@ -103,9 +103,6 @@ const HistorySchema = z.array(
 )
 export type History = z.infer<typeof HistorySchema>
 
-/** The longest payload of a statement kept in `held/`. A real statement is under 1 KiB. */
-export const HELD_PAYLOAD_LENGTH = 4096
-
 /**
  * What a server said it holds for one app, as the last version-2 deploy of
  * it read on its own connection (specs/014-deploy-v2, data-model.md; research
@@ -114,13 +111,14 @@ export const HELD_PAYLOAD_LENGTH = 4096
  * value or a sealed value. It is only a floor: `zekno secret set` and
  * `zekno secret rm` take the next version above it and know a name from it,
  * offline; nothing here is ever signed as a hash or listed in a deploy, which
- * takes only statements verified at deploy time.
+ * takes only statements verified at deploy time. A statement is held to the
+ * core library's `LIMITS.statementPayloadLength`, the length a runner takes.
  */
 const HeldSchema = z.strictObject({
   statements: z
     .array(
       EnvelopeSchema.refine(
-        (envelope) => envelope.payload.length <= HELD_PAYLOAD_LENGTH
+        (envelope) => envelope.payload.length <= LIMITS.statementPayloadLength
       )
     )
     .max(LIMITS.secretsPerDeploy),

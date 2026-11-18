@@ -22,7 +22,7 @@ import {
   stateBytes,
   stateOf,
 } from "../support/deploys"
-import { COMPOSE_V1, ready, twin } from "../support/helpers"
+import { COMPOSE_V1, ready, serverIdOf, twin } from "../support/helpers"
 import { asReleased } from "../support/older-runner"
 import { wire } from "../support/wire"
 
@@ -267,5 +267,48 @@ describe("CL21, the chain: set or rm, offline, then the deploy goes through", ()
       version: 4,
       hash: null,
     })
+  })
+})
+
+describe("a version nobody signed, in held/ (security review S1)", () => {
+  test("2^53 - 2 written into held/ is ignored: the secret is still set, deployed and removed, here and on a second machine (probe 2)", async () => {
+    const m = await ready()
+    await set(m, "API_KEY", "first-value")
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    expect(heldOf(m, "web")!.versions).toEqual([
+      { name: "API_KEY", version: 1, removed: false },
+    ])
+    // Attacker B, or the answer of a server that lies: one number in a plain file.
+    m.tamper(join("held", serverIdOf(m), "web.json"), (held) => ({
+      ...held,
+      versions: [
+        {
+          name: "API_KEY",
+          version: Number.MAX_SAFE_INTEGER - 1,
+          removed: false,
+        },
+      ],
+    }))
+
+    await set(m, "API_KEY", "rotated-value")
+    expect(m.lastOut()).toBe(
+      "Set API_KEY (version 2) for web on dev. It takes effect on the next deploy."
+    )
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    expect(stateOf(m).secrets["web/API_KEY"]!.version).toBe(2)
+    await set(m, "API_KEY", "rotated-again")
+    expect(m.lastOut()).toContain("(version 3)")
+    expect(await offline(m, "rm", "API_KEY", ...where)).toBe(0)
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    expect(stateOf(m).secrets["web/API_KEY"]).toEqual({
+      version: 4,
+      hash: null,
+    })
+
+    // A second machine of the member, with no held/ file: it can set and remove the secret too.
+    const other = await twin(m)
+    await set(other, "API_KEY", "from-the-twin")
+    expect(await offline(other, "rm", "API_KEY", ...where)).toBe(0)
   })
 })

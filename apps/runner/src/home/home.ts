@@ -80,21 +80,38 @@ const paths = (dir: string) => ({
 
 const token = () => randomBytes(12).toString("hex")
 
-/** Makes a folder only its owner can enter, if it is not there yet, and makes it so if it is. */
+/**
+ * Makes a folder only its owner can enter, if it is not there yet. The mode
+ * of a folder that is already there is left as it is: making an open folder
+ * private would hide that it was ever open, and the check that refuses it
+ * would then pass (security review S3).
+ */
 export function ensureDir(dir: string): void {
+  if (mkdirSync(dir, { recursive: true, mode: 0o700 }) !== undefined)
+    chmodSync(dir, 0o700)
+}
+
+/**
+ * Takes a folder for a runner being set up: made if it is not there, and made
+ * private if it is, so an empty folder made with ordinary permissions serves.
+ * Only `setup` calls it, for a folder that holds no key and no state yet.
+ */
+export function takeDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   chmodSync(dir, 0o700)
 }
 
 /**
- * True when the folder and the key file belong to this user and nobody else
- * can read or write them. A runner started with someone else's folder, or
- * with a key others can read, refuses to act.
+ * True when the folder, the key file and the state belong to this user and
+ * nobody else can read or write them. A runner started with someone else's
+ * folder, or with a folder, key or state others could change or read,
+ * refuses to act.
  */
 export function isPrivate(dir: string): boolean {
   const mine =
     typeof process.getuid === "function" ? process.getuid() : undefined
-  for (const path of [dir, paths(dir).secretKey]) {
+  const at = paths(dir)
+  for (const path of [dir, at.secretKey, at.state]) {
     if (!existsSync(path)) continue
     const info = statSync(path)
     if (mine !== undefined && info.uid !== mine) return false

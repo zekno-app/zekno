@@ -8,10 +8,11 @@
  * cannot account for one.
  */
 import { describe, expect, test } from "bun:test"
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import {
   createDeployV2,
+  createSecret,
   RunnerReportSchema,
   type Envelope,
   type SecretRecord,
@@ -32,6 +33,7 @@ import {
   twin,
 } from "../support/helpers"
 import { asReleased } from "../support/older-runner"
+import { signAs } from "../support/signing-team"
 import { wire } from "../support/wire"
 
 type Machine = Awaited<ReturnType<typeof ready>>
@@ -243,6 +245,74 @@ describe("US2: every secret the server holds is accounted for", () => {
       explainDeploy("secrets_mismatch", 2)
     )
     expect(stateBytes(m)).toBe(state)
+  })
+})
+
+describe("statements a runner kept before their limit (security review S2, probe 4)", () => {
+  test("`records` leaves them out: the deploy stops with C5 for each, and `zekno secret set` then fixes it", async () => {
+    const m = await ready()
+    await set(m, "GREETING", "hello")
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    // What a runner from before the limit kept of a member's deploy: four statements padded to 1 MiB each.
+    const team = await openTeam(m.deps)
+    const serverId = serverIdOf(m)
+    const names = ["PAD_A", "PAD_B", "PAD_C", "PAD_D"]
+    const statePath = join(m.runnerHome, "state.json")
+    const state = JSON.parse(readFileSync(statePath, "utf8"))
+    for (const name of names) {
+      const plain = await team.withSigner((signer) =>
+        createSecret({
+          trust: team.trust,
+          serverId,
+          app: "web",
+          name,
+          value: "x",
+          version: 1,
+          signer,
+        })
+      )
+      const json = JSON.stringify(payloadOf(plain.envelope))
+      const envelope = await team.withSigner((signer) =>
+        signAs(
+          "zekno.secret.v1",
+          `${json.slice(0, -1)}${" ".repeat(1000 * 1024)}}`,
+          signer
+        )
+      )
+      const hash = payloadOf(plain.envelope).hash as string
+      writeFileSync(
+        join(m.runnerHome, "records", "web", `${hash}.json`),
+        JSON.stringify({ envelope, sealed: plain.sealed }),
+        { mode: 0o600 }
+      )
+      state.secrets[`web/${name}`] = { version: 1, hash }
+    }
+    state.lastSequence.web = 2
+    writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 })
+
+    const before = stateBytes(m)
+    expect(await m.zekno("deploy", ...where)).toBe(1)
+    expect(m.lastErr()).toBe(
+      `${names
+        .map((name) =>
+          C5(name, "web", "dev").replace(" Nothing was signed.", "")
+        )
+        .join("\n")} Nothing was signed.`
+    )
+    expect(stateBytes(m)).toBe(before)
+
+    // The fix C5 names, then a deploy that replaces the padded records.
+    for (const name of names) {
+      await set(m, name, `${name} again`)
+      expect(m.lastOut()).toContain("(version 2)")
+    }
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    expect(m.lastOut()).toBe(
+      "Deploy 3 of web is running on dev with 5 secrets."
+    )
+    expect(recordFiles(m.runnerHome)).toHaveLength(5)
+    for (const file of recordFiles(m.runnerHome))
+      expect(file.content.length).toBeLessThan(64 * 1024)
   })
 })
 

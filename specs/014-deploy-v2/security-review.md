@@ -418,3 +418,185 @@ I would not merge without S1's CLI bound (a few lines in `floorVersion` and a se
 and I would add the runner's bound at K12 with it so no later client or relay can do the same. S2 is
 cheap to close at the same time and removes the one wedge zekno cannot repair. S3 to S5 can be
 answered in writing; S3 and S4 predate this feature.
+
+## 8. Answers
+
+Written for T071 after the review, by the lead's decisions; the reviewer's text above is as it was.
+Every fix has a test that failed before it and passes after it. Nothing is committed with this
+answer; the commit that closes T071 carries the fixes and these tests.
+
+| Id | Answer |
+|----|--------|
+| S1 | Fixed in the CLI; the runner's bound deferred (below) |
+| S2 | Fixed in the core library, the runner and the CLI |
+| S3 | Fixed in the runner |
+| S4 | Fixed in the CLI, without a lock |
+| S5, S6 | Fixed in the core library: one spelling (contracts/message.md, F41) |
+| S7 | Open, for feature 015 |
+| S8 | Accepted |
+| S9 | Accepted |
+
+### S1. Fixed in the CLI; the runner's bound deferred
+
+`floorVersion` and `remembersName` (`apps/cli/src/ops/secret-versions.ts`) count a version that
+only an unverified source gives (`held/`'s statements and versions, a record here that does not
+verify) only up to `MAX_CLAIMED_AHEAD`, 1,000, above the highest version of the name that verifies
+on this machine (0 when none). A claim beyond it is ignored, as if it were not there: it raises
+nothing, `zekno secret set` and `zekno secret rm` sign one above what the other sources give, and
+`rm` does not know a name only such a claim names. 1,000 is the bound version 1 puts on a
+runner's word for deploy numbers (`MAX_AHEAD`). No sentence is new or changed. At 2^53 - 1 the core
+library still refuses, which now takes a verified version within 1,000 of it.
+
+Tests: `apps/cli/test/scenarios/held.test.ts`, "a version nobody signed, in held/ (security review
+S1)" > "2^53 - 2 written into held/ is ignored: the secret is still set, deployed and removed,
+here and on a second machine (probe 2)"; `apps/cli/test/ops/secret-versions-reach.test.ts`, every
+test: a claim at exactly 1,000 above counts and at 1,001 is ignored, for `held/`'s version, a
+statement `held/` remembers and a record here that does not verify; `rm` at 1,000 and 1,001; 2^53 -
+2 in `held/` as a version and as a statement, for `set` and `rm`; the core library's refusal at
+2^53 - 1, for `set` and `rm`. The chains of `held.test.ts` and `removed-member.test.ts` (C5, C5b,
+C4, then `set` or `rm` offline, then the deploy goes through) pass unchanged.
+
+Changed: `apps/cli/test/ops/secret-versions.test.ts` loses its two tests "a held/ version of 2^53 -
+1: `That could not be done (invalid_argument).`, and nothing stored" (set and rm). With nothing
+verified here, that version is now ignored: `set` signs version 1, and `rm` says
+`<A> on <S> has no secret named <NAME>.`. The refusal at the highest version is tested in
+`secret-versions-reach.test.ts` from a verified record at 2^53 - 1001.
+
+Deferred: the runner's refusal at K12 of a listed version far above the one it holds. It needs a
+new refusal sentence, and it guards only against a team member's own modified client, who may
+already do anything on the server. It goes to the feature that limits keys and adds deploys from
+CI.
+
+### S2. Fixed
+
+`LIMITS.statementPayloadLength` is 4,096 characters (`packages/core/src/protocol/limits.ts`).
+K13 refuses a supplied record whose statement is longer with `too_large`, before it is verified,
+and nothing is kept (`deploy/listed-secrets.ts`). `records` leaves out a kept statement that is
+longer, as it leaves out a file that does not read (`apps/runner/src/commands/records.ts`), so a
+server that already keeps one answers, and zekno stops with C5 for that name, which `zekno secret
+set` then fixes. `held/` and CL3b use the core's limit (the CLI's `HELD_PAYLOAD_LENGTH` is gone),
+so there is one number. This zekno never signs a statement near the limit: the longest app name,
+secret name, version and time give fewer than 1,024 characters.
+
+Tests: `packages/core/test/deploy/statement-size.test.ts` (4,096 taken; 4,098, the shortest
+base64url text past it, and 1,365,000 `too_large`; the longest statement `createSecret` can sign
+is under 1,024 characters); `apps/runner/test/scenarios/secrets-v2-bounds.test.ts`, "K13: a
+supplied record's statement is at most 4,096 characters (security review S2)" (refused,
+`state.json` and `records/` as they were; at 4,096 kept and answered) and "a kept statement
+longer than 4,096 characters is left out, the others are sent, and nothing changes (security
+review S2)"; `apps/cli/test/scenarios/secrets-v2.test.ts`, "statements a runner kept before their
+limit (security review S2, probe 4)": probe 4's state, `zekno deploy` says C5 for each padded
+name, and after `zekno secret set` for each the deploy goes through and the padded files are
+gone.
+
+Changed: in `secrets-v2-bounds.test.ts`, "an answer of exactly 4 MiB is sent; one byte more is
+too_large, and nothing changes" is replaced. Its statements of 1,300,000 characters are now left
+out, and 256 statements within the limit come to about 1 MiB, so no answer reaches the 4 MiB
+frame; the new test "the longest answer of statements within the limit fits its frame" says so.
+The frame and the 256-statement refusal stay in the code; the second keeps its test.
+
+Not changed, and outside this fix: a member can still fill the 64 MiB of record files (K15) with
+large values within the limits, after which a deploy that supplies a new record is `too_large`.
+Unlike the wedge, ordinary commands repair it: a removal deletes the file at the next deploy.
+
+### S3. Fixed
+
+`locked` (`apps/runner/src/commands/commands.ts`) checks `isPrivate` before it takes the lock, so
+`sync`, `apply` and `deploy` refuse a folder others could write with `invalid_state`, as the reads
+do. `ensureDir` (`home/home.ts`) sets the mode only of a folder it creates, never of one that is
+there. `isPrivate` also refuses a `state.json` not owned by this user or with group or other
+permission bits. A refused folder and its `state.json` keep their modes.
+
+`setup` behaves as before: on a folder that does not exist, and on an empty one made with ordinary
+permissions (0755), it makes the folder 0700 (`takeDir`, called only by `setup`, for a folder that
+holds no key and no state), and the runner then acts in it. No existing test or doc sentence
+changed for it.
+
+Tests: `apps/runner/test/scenarios/private-folder.test.ts`: a folder of 0777 (every command
+refuses it, its mode stays), a folder of 0770, a `state.json` of 0666, 0644 or 0640 (refused by
+the reads and the locked commands, its mode stays; at 0600 again the runner acts), and probe 3's
+`formats` set back by hand (`apply` of a version-1 deploy is `invalid_state`, nothing changes); and
+`setup` on a missing folder and on an empty 0755 folder (both 0700 after, as before). The docs
+(`apps/web/content/docs/runner.mdx`, `apps/runner/README.md`, "What it refuses") say it in one
+sentence.
+
+### S4. Fixed
+
+`recordSent` (`apps/cli/src/ops/deploy-send.ts`) reads the history from the store right before it
+writes the `sent` entry, in either format, as `answered` does, so a deploy another terminal
+recorded meanwhile stays. For the same reason the answer of a version-1 deploy is now written by
+`answered` too (the `sent` entry read again and replaced), as version 2's was: with one terminal it
+writes what it wrote before. No lock.
+
+Test: `apps/cli/test/scenarios/deploy-v2.test.ts`, "two terminals: a deploy A recorded while B
+waited stays in the history, and a rollback goes back to the one before it (security review S4,
+probe 5)": after B's refusal (C1, deploy 3) the history holds 1, 2 and 3, and `zekno rollback`
+says `Rolling back web to what deploy 2 ran.`
+
+### S5 and S6. Fixed: one spelling
+
+Both readers of a version-2 deploy's signed bytes, `verifyDeployV2` (K6) and `readSignedDeployV2`
+(the history's), read them through `readDeployV2Bytes` (`packages/core/src/deploy/message.ts`):
+after F4 to F6 and before F7, the payload's text must equal `JSON.stringify` of what the reader
+gives for it, else `malformed` (contracts/message.md, F41). That is the text `createDeployV2`
+signs, and it now checks its own text with the same function. One rule refuses a key written twice,
+`-0`, `1e0`, `1.0`, whitespace, an escape `JSON.stringify` does not write (`a`, `\/`), and
+keys in another order than the format's: the reader gives the fields in the schema's order, so
+the rule also fixes the order. Version 1 and the secret statements read as before (FR-003).
+
+Keys that look like numbers: every object of the payload, the later fields included, is a strict
+object with fixed field names (`DeployV2Schema`, `BuildSchema` and its `pack` and `args`,
+`PredeploySchema`, `HealthSchema` and its `services` and `http`, `RouteSchema`); none of them looks
+like a number, and no object has keys of free text (no record or map; names, domains and words are
+values). A key that looks like a number is an unknown field, refused by F5 first. So the order
+JavaScript gives such keys never decides anything, and no payload that reads today is refused for
+it.
+
+Tests: `packages/core/test/deploy/one-spelling.test.ts`: `"previous":5,"previous":0`,
+`"previous":-0`, `"sequence":1e0`, `"sequence":1.0`, a space after a colon, a line feed between
+fields, `a` in a key, `w` in a value, `\/`, whitespace around the payload and the keys
+in another order, each signed by a member: `malformed` at both readers; a later field in another
+spelling is `malformed` before it is `unsupported_version`; every fixture of
+`test/support/payload-v2.ts` (with every later field, 256 secrets, the highest numbers, an expiry,
+and a Compose text with tabs, quotes, a backslash, U+2028, `é`, an emoji, U+0001 and `/`), signed as
+`createDeployV2` signs it, reads as itself; deploys made by `createDeployV2` read at both readers; a
+version-1 deploy with `1e0` and a statement with a key written twice still read.
+
+### S7. Open, for feature 015
+
+Routes are refused in this step (F7), so no domain is carried out. Feature 015 must decide the
+A-label rule (emoji labels; `xn--fa-hia` and `fass` under transitional processing) before it
+carries routes out.
+
+### S8. Accepted
+
+This zekno never causes the three checks that also give `secrets_mismatch` (K13's version
+mismatch, K14, K16), so R3 misleads only for another client's deploy. The sentence is revisited
+when another client exists.
+
+### S9. Accepted
+
+As the design's T18: an impostor at the SSH destination, whose host key the person accepted, can
+collect deploys signed against numbers it names, with no expiry. It is no wider than version 1,
+which gave it deploys up to 1,001 ahead.
+
+### The tests of part 4
+
+Each is now a test; those of the first list passed when written, as the property held.
+
+| Part 4 | Test |
+|--------|------|
+| A folder others could write, for the locked commands | `apps/runner/test/scenarios/private-folder.test.ts` (S3) |
+| `records` beside a `deploy` that replaces record files | `apps/runner/test/scenarios/deploy-v2-review.test.ts`, "records takes no lock" (it answers while a deploy holds the lock); `apps/cli/test/scenarios/deploy-v2-review.test.ts`, "an answer that misses a live secret's statement, … stops with C5 and signs nothing" |
+| An app named `constructor` end to end | `apps/cli/test/scenarios/deploy-v2-review.test.ts`, "an app named `constructor`" (deploy twice, `records`, `status`, rollback) |
+| `-0`, `1e0`, a key written twice | `packages/core/test/deploy/one-spelling.test.ts` (S5, S6) |
+| A `records` statement of another app or team, or with a broken signature | `apps/cli/test/scenarios/deploy-v2-review.test.ts`, "a statement for another app, one of another team, and one whose signature does not verify are each left out, with today's warning" |
+| `writeRecord` failing part way | `apps/runner/test/scenarios/deploy-v2-review.test.ts`, "a deploy whose record writes fail part way" (`invalid_state`, no number used, no Docker call; the file left goes at the next deploy, made against the same number) |
+| S1's `held/` at 2^53 - 2 and a statement at it, for `set` and `rm` | `apps/cli/test/ops/secret-versions-reach.test.ts`, "2^53 - 2 remembered (the review's probe 2)" |
+| S2's padded statements | `statement-size.test.ts`, `secrets-v2-bounds.test.ts`, `secrets-v2.test.ts` (above) |
+| S3's folder | `private-folder.test.ts` |
+| S4's two terminals | `deploy-v2.test.ts` (above) |
+| S5's doubled key | `one-spelling.test.ts` |
+
+None high or medium is left open (SC-009): S1, the one medium, is fixed where it was found; the
+runner's further bound is a defence for other clients, deferred as written above.

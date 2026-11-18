@@ -33,6 +33,23 @@ Pure; no signature, no state. Returns the payload, or `malformed`, or `unsupport
    not `[]` is `unsupported_version` (FR-036). A later field that breaks its own rule was refused
    `malformed` at step 2 or 3 first.
 
+Where the signed bytes are read, F41 comes between step 3 and step 4.
+
+## One spelling (F41)
+
+- **F41.** A version-2 payload has one spelling. Where its signed bytes are read
+  (`readDeployV2Bytes` in `deploy/message.ts`, used by `verifyDeployV2` at K6 and by
+  `readSignedDeployV2`), after F4 to F6 and before F7: the payload's text must equal
+  `JSON.stringify` of what the reader gives for it, which is the text `createDeployV2` signs;
+  otherwise `malformed`. One rule refuses a key written twice (`JSON.parse` keeps the last; another
+  reader may keep the first), a number written another way (`-0`, `1e0`, `1.0`), whitespace
+  anywhere, an escape `JSON.stringify` does not write (`\u0061` for `a`, `\/`), and keys in
+  another order than the format's: the reader gives the fields in the order of the tables below.
+  Every object of the payload is a strict object with fixed field names, none of which looks like
+  a number, and none has keys of free text, so the order JavaScript gives keys that look like
+  numbers never comes into it (such a key is an unknown field, refused at F5). Version 1 and the
+  secret statements are read as before (FR-003). Security review S5 and S6.
+
 ## Fields carried out in this step
 
 | # | Field | Type and rule | Limit |
@@ -110,6 +127,13 @@ build's chunk hashes within one build.
 `expiryWindowMs` 7 days. Part 8's other limits (domains per server, staging, kept builds, the build
 cache, `up` time) join with the features that use them.
 
+`statementPayloadLength` 4,096: the characters of a secret statement's payload, as base64url,
+where a runner takes a supplied record (K13), where it answers `records`, and in what a client
+keeps (`held/`). A real statement is under 1 KiB: the longest app name, secret name, version and
+time give fewer than 1,024 characters, so nothing `createSecret` signs comes near it. A longer
+statement is padding, which a runner would keep and hand out at every `records` read (security
+review S2).
+
 ## The hash domains (`crypto/hash.ts`)
 
 `HashDomain` gains `zekno/v1/pack`, `zekno/v1/pack-chunk` and `zekno/v1/build`. None contains a
@@ -136,13 +160,13 @@ createDeployV2(input: {
 It refuses a signer not in `trust` (`not_member`), a server not in it (`unknown_server`), a
 Compose text past 256 KiB (`too_large`), a statement or removal that does not verify for this team,
 server and app (`untrusted_secret`, with the reason in its message), a name given twice
-(`invalid_argument`), and a payload `readDeployV2Payload` would not read as itself
-(`invalid_argument`). The listing is taken only from the statements it verified (FR-021): `name`,
+(`invalid_argument`), and a payload the readers would not read as itself, in its one spelling
+(`readDeployV2Bytes`, F41; `invalid_argument`). The listing is taken only from the statements it verified (FR-021): `name`,
 `version`, `hash` from each, sorted. `expiresAt` is written with `toISOString()`. The CLI never
 passes `later`.
 
 ## Reading: `readSignedDeployV2({ envelope, trust })`
 
 As `readSignedDeploy`: the signer must be a member of `trust`, and the payload must pass F4 to F6
-(`malformed` otherwise). F7 is not applied: a reader of the history does not judge what a runner
+and F41 (`malformed` otherwise). F7 is not applied: a reader of the history does not judge what a runner
 carries out. Gives `{ deploy, signer }`.

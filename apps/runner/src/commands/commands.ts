@@ -34,6 +34,7 @@ import {
   isSetUp,
   readKeys,
   readState,
+  takeDir,
   writeCompose,
   writeKeys,
   writeState,
@@ -59,7 +60,7 @@ type Loaded = {
  */
 export function load(dir: string): Loaded | RunnerReport {
   if (!isSetUp(dir)) return refused("not_set_up")
-  // Someone else's folder, or a key others can read, is not a state to act on.
+  // Someone else's folder, or a key or state others can read, is not a state to act on.
   if (!isPrivate(dir)) return refused("invalid_state")
   try {
     const keys = readKeys(dir)
@@ -121,6 +122,8 @@ export function setup(
   )
   if (!team.ok) return refused(team.error.code)
 
+  // The folder is taken now, and made private, before the lock is made in it.
+  takeDir(dir)
   const release = acquireLock(dir)
   if (!release) return refused("busy")
   try {
@@ -166,12 +169,17 @@ export function status(dir: string): RunnerStatus | RunnerReport {
   }
 }
 
-/** Runs one piece of work while holding the lock, so two runs never interleave. */
+/**
+ * Runs one piece of work while holding the lock, so two runs never
+ * interleave. The folder is checked before the lock is made in it: a folder
+ * others could write is refused, and left as it is (security review S3).
+ */
 export async function locked(
   dir: string,
   work: () => Promise<RunnerReport>
 ): Promise<RunnerReport> {
   if (!isSetUp(dir)) return refused("not_set_up")
+  if (!isPrivate(dir)) return refused("invalid_state")
   const release = acquireLock(dir)
   if (!release) return refused("busy")
   try {

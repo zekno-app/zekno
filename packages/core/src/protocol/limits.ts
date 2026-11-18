@@ -81,6 +81,15 @@ export const LIMITS = {
   domainLength: 253,
   /** Sealed secret records one runner keeps, across its apps, as stored. A runner refuses a deploy that would make it more. */
   recordBytesPerServer: 64 * 1024 * 1024,
+  /**
+   * Characters of a secret statement's signed payload, as base64url, where a
+   * runner takes a supplied record (K13), where it answers `records`, and
+   * what a client keeps in `held/`. A real statement is under 1 KiB of JSON:
+   * the longest names, version and time make about 600 characters. A longer
+   * one is padding, which a runner would keep and hand out at every `records`
+   * read (security review S2).
+   */
+  statementPayloadLength: 4096,
   /** How far after the runner's clock a deploy's expiry may be, in milliseconds. */
   expiryWindowMs: 7 * 24 * 60 * 60 * 1000,
 } as const

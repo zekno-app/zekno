@@ -9,7 +9,6 @@
 import { utf8 } from "../crypto/encoding"
 import {
   openEnvelope,
-  parseJson,
   PAYLOAD_TYPES,
   signEnvelope,
   type Envelope,
@@ -40,8 +39,9 @@ import { DEPLOY_ROLES } from "./deploy"
 import type { Build, Health, Predeploy, Route } from "./later-fields"
 import { checkListedSecrets } from "./listed-secrets"
 import {
+  readDeployV2Bytes,
   readDeployV2Format,
-  readDeployV2Payload,
+  readDeployV2PayloadBytes,
   type DeployV2,
 } from "./message"
 import { registerVerified } from "./open"
@@ -186,12 +186,10 @@ export async function createDeployV2(input: {
     health: input.later?.health ?? null,
     routes: input.later?.routes ?? [],
   }
-  // What is signed is what the reader gives, and reads again as itself.
+  // What is signed is what the reader gives, and reads again as itself, in the one spelling both readers take (F41).
   const read = readDeployV2Format(deploy)
   const text = read.ok ? JSON.stringify(read.value) : undefined
-  const again =
-    text === undefined ? undefined : readDeployV2Format(JSON.parse(text))
-  if (!again?.ok || JSON.stringify(again.value) !== text) {
+  if (text === undefined || !readDeployV2Bytes(utf8(text)).ok) {
     throw new CoreError(
       "invalid_argument",
       "The deploy would not be read as it is signed: an app name, a number or a field is not valid."
@@ -217,7 +215,7 @@ export function readSignedDeployV2(input: {
     (keyId) => memberByKeyId(input.trust.members, keyId)?.publicKey
   )
   if (!opened.ok) return opened
-  const read = readDeployV2Format(parseJson(opened.value.payload))
+  const read = readDeployV2Bytes(opened.value.payload)
   if (!read.ok) return read
   const signer = input.trust.members.find(
     (member) => member.publicKey === opened.value.signerKey
@@ -271,8 +269,8 @@ export function verifyDeployV2(input: {
     (member) => member.publicKey === opened.value.signerKey
   )!
 
-  // K6, K7. Only now is the payload read: its format, then a later field.
-  const read = readDeployV2Payload(parseJson(opened.value.payload))
+  // K6, K7. Only now is the payload read: its format in its one spelling, then a later field.
+  const read = readDeployV2PayloadBytes(opened.value.payload)
   if (!read.ok) return read
   const deploy = read.value
   const app = deploy.app

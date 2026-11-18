@@ -4,7 +4,8 @@
  * (specs/014-deploy-v2, contracts/cli.md CL18 to CL20; research R9; decision
  * B; tasks T047). Every command here runs with `deps.connect` made to throw:
  * neither ever connects. `held/` is a floor only: it raises the next version
- * and makes `rm` know a name, and never gives what is signed.
+ * and makes `rm` know a name, and never gives what is signed. How far a
+ * floor nobody verified may raise it is in secret-versions-reach.test.ts.
  */
 import { beforeAll, describe, expect, test } from "bun:test"
 import {
@@ -206,23 +207,6 @@ describe("zekno secret set: one above the highest this machine holds or remember
     expect(remembered).not.toContain(made.hash)
     expect(made.sealed.name).toBe("DATABASE_URL")
   })
-
-  test("a held/ version of 2^53 - 1: `That could not be done (invalid_argument).`, and nothing stored", async () => {
-    remember("floor-max", {
-      versions: [
-        {
-          name: "DATABASE_URL",
-          version: Number.MAX_SAFE_INTEGER,
-          removed: false,
-        },
-      ],
-    })
-    expect(await set("floor-max", "DATABASE_URL")).toEqual({
-      code: 1,
-      said: "That could not be done (invalid_argument).",
-    })
-    expect(storeOf("floor-max")).toEqual({ records: [], removals: [] })
-  })
 })
 
 describe("zekno secret rm: a name this machine holds or remembers (CL19)", () => {
@@ -309,23 +293,6 @@ describe("zekno secret rm: a name this machine holds or remembers (CL19)", () =>
       said: S1("DATABASE_URL", "rm-again"),
     })
     expect(lastRemoval("rm-again").version).toBe(4)
-  })
-
-  test("a held/ version of 2^53 - 1: `That could not be done (invalid_argument).`, and nothing stored", async () => {
-    remember("rm-max", {
-      versions: [
-        {
-          name: "DATABASE_URL",
-          version: Number.MAX_SAFE_INTEGER,
-          removed: false,
-        },
-      ],
-    })
-    expect(await rm("rm-max", "DATABASE_URL")).toEqual({
-      code: 1,
-      said: "That could not be done (invalid_argument).",
-    })
-    expect(storeOf("rm-max")).toEqual({ records: [], removals: [] })
   })
 })
 

@@ -176,7 +176,9 @@ or other detail of the server.
   is never overwritten.
 - **A folder it cannot trust**: a `state.json` that is damaged or incomplete, or a folder or key
   file that belongs to another user or that anyone else can read or write, is refused with
-  `invalid_state`. A broken file is never treated as "nothing accepted yet".
+  `invalid_state`. A broken file is never treated as "nothing accepted yet". Every command refuses
+  to act in a folder other users could write to, or with a `state.json` they could change, and
+  leaves both as they are.
 - **Another run at work**: `busy`.
 - **A deploy it cannot verify**: a deploy not signed by a current member of the team, one meant
   for another server, one whose number is not newer than the last it accepted, or one whose

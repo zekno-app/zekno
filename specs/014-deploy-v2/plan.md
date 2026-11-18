@@ -328,10 +328,13 @@ Each phase leaves `bun test` green in every package it touched, `bun run lint` c
 - **The first version-2 write is one way**: runner 0.1.0 then refuses everything (`invalid_state`).
   Mitigation: no real server is used; the docs say so; the pairing test proves it fails closed.
 - **A remembered version that lies.** A runner, or attacker B editing `held/`, can report any
-  version, which only raises this machine's next version for that name; at 2^53 - 1 the name cannot
-  be set or removed from this machine until a later deploy reads an honest answer. Mitigation:
-  accepted as the same floor risk as `status`'s, denial only, named for the review (T070; research
-  R9).
+  version. This plan accepted it as denial only on this machine, until a later deploy read an
+  honest answer. The security review (S1) showed it was not: signed by `zekno secret set` and
+  deployed, a version of 2^53 - 1 freezes the secret on the honest server for good, never set again
+  or removed. Mitigation: a version only `held/` or a record here that does not verify gives counts
+  up to 1,000 above the highest version of the name that verifies here (0 for none), and is ignored
+  beyond (research R9; contracts/cli.md CL18). The runner's own bound on a version's jump is
+  deferred to the feature that limits keys and adds deploys from CI.
 - **`held/` goes stale between deploys.** It is what the last version-2 deploy read. Mitigation: it
   is only a floor and a hint; every deploy reads the server again, verifies what it lists, and stops
   with C4, C5 or C5b when this machine's view is behind, after writing `held/` anew.

@@ -154,6 +154,38 @@ describe("US1: each deploy is made after the runner's number", () => {
     await noLaterFields(m)
   })
 
+  test("two terminals: a deploy A recorded while B waited stays in the history, and a rollback goes back to the one before it (security review S4, probe 5)", async () => {
+    const m = await ready()
+    await set(m, "GREETING", "hello")
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    m.compose(COMPOSE_V2)
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    // B has read the history, and waits at its `records` request, before it signs.
+    const b = secondTerminal(m)
+    const line = wire(b.deps).hold("records")
+    const bRun = b.zekno("deploy", ...where)
+    await line.reached
+
+    m.compose(COMPOSE_V1.replace("web:1", "web:3"))
+    expect(await m.zekno("deploy", ...where)).toBe(0)
+    line.release()
+    expect(await bRun).toBe(1)
+    expect(b.err).toEqual([C1("web", "dev", 3, false)])
+    expect(
+      (await entriesOf(m, "web")).map((entry) => [
+        entry!.deploy.sequence,
+        entry!.outcome,
+      ])
+    ).toEqual([
+      [1, "started"],
+      [2, "started"],
+      [3, "started"],
+    ])
+    expect(stateOf(m).lastSequence.web).toBe(3)
+    expect(await m.zekno("rollback", ...where)).toBe(0)
+    expect(m.out).toContain("Rolling back web to what deploy 2 ran.")
+  })
+
   test("the spec's first edge case: B's request reaching the runner while A is starting is `busy`, and leaves the history", async () => {
     const m = await atFortyOne()
     const b = secondTerminal(m)

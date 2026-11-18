@@ -53,7 +53,10 @@ FR-033, FR-037, FR-022, FR-023. Every message is a strict schema in
   ```
 
   For each entry `<app>/<NAME>` of the stored state with a hash, the `envelope` of
-  `records/<app>/<hash>.json` when that file exists and reads, sorted by name. An app the runner does
+  `records/<app>/<hash>.json` when that file exists and reads and its statement is within
+  `LIMITS.statementPayloadLength` (4,096 characters), sorted by name. A kept statement over that
+  limit is left out, not refused (security review S2), so the answer always fits and the CLI
+  reaches its stop for that name. An app the runner does
   not hold, and an app at format 1, answer `{"statements":[]}`. Never a sealed value (FR-022), so
   the answer says names, versions, hashes and the setter's key id only (FR-023). Not set up:
   `not_set_up`; a folder or state it cannot trust: `invalid_state`. Anyone who can start the runner

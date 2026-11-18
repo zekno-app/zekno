@@ -49,7 +49,11 @@ export function checkListedSecrets(input: {
   held: (app: string, hash: string) => unknown
 }): Result<
   ListedSecrets,
-  "secrets_mismatch" | "stale_secret" | "untrusted_secret" | "secret_missing"
+  | "secrets_mismatch"
+  | "stale_secret"
+  | "untrusted_secret"
+  | "secret_missing"
+  | "too_large"
 > {
   const { deploy, state } = input
   const app = deploy.app
@@ -126,7 +130,14 @@ export function checkListedSecrets(input: {
       )
     }
     if (given.length === 1) {
-      // Supplied: it must verify against the team list held now, and be the listed version and hash.
+      // Supplied: no longer than a statement is, so nothing padded is kept and handed out at `records`.
+      if (given[0]!.envelope.payload.length > LIMITS.statementPayloadLength) {
+        return refuse(
+          "too_large",
+          "A secret sent with the deploy has a statement longer than a statement may be."
+        )
+      }
+      // It must verify against the team list held now, and be the listed version and hash.
       const checked = check(given[0])
       if (!checked.ok) {
         return refuse(

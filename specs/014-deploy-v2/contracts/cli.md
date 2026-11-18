@@ -53,7 +53,9 @@ chooseFormat(input: { server: string; mode: SessionMode; runner: RunnerVersion |
 7. **CL7.** Sign. Version 2: `createDeployV2({ trust, serverId, app, previous, compose, statements,
    removals, expiresAt: null, signer })`; version 1: `createDeploy` as today. A `CoreError` is
    `The deploy could not be signed (<code>).` (today's).
-8. **CL8.** Save the history with the entry `sent`; stage `signed`; with `older`, warn C6.
+8. **CL8.** Save the history with the entry `sent`, the history read again from the store right
+   before, in either format, so a deploy another terminal recorded while this one listed and signed
+   is kept (security review S4; no lock); stage `signed`; with `older`, warn C6.
 9. **CL9.** Send. Version 2: `deploy` with `{ rosters: team.profile.rosters, envelope, records:
    supply }`; version 1: `apply` as today. Stage `sent`; stage `starting` at the first progress line.
 10. **CL10.** The answer. A refusal of a version-2 deploy: the history is read again from the store,
@@ -63,7 +65,9 @@ chooseFormat(input: { server: string; mode: SessionMode; runner: RunnerVersion |
     deploy: `RunnerRefused(reason, explainDeploy(reason, 1))`, the entry stays `sent` (today). No
     answer: the entry stays `sent`, today's error.
 11. **CL11.** `started` or `start_failed` with this `app` and `sequence`: the entry gets that
-    outcome; stage `started` or `failed`; the result lines are today's.
+    outcome, in the history as read again from the store (either format: the `sent` entry is
+    replaced, what another terminal wrote stays); stage `started` or `failed`; the result lines are
+    today's.
 
 **Expiry (FR-015).** This CLI signs `expiresAt: null` only. The envelope goes to the history file and
 into the one `deploy` request of the session it was signed on, and nowhere else.
@@ -120,12 +124,20 @@ Both never connect, in any case (decision B): the frozen scenes of
   read with `peekSecretStatement`; the statements of the name in `held/`, read with
   `peekSecretStatement`; the version of the name in `held/`'s `versions` (`floorVersion` in
   `ops/secret-versions.ts`). A floor only: nothing of `held/` is signed as a hash or listed.
+  - **The bound.** Each of the last three, a version only an unverified source gives, counts only
+    up to 1,000 (`MAX_CLAIMED_AHEAD`) above the first, the highest version of the name that
+    verifies on this machine (0 when none). A claim beyond it is ignored, as if it were not there:
+    it raises nothing, and the version is one above what the other sources give. 1,000 is the
+    bound version 1 puts on a runner's word for deploy numbers (`MAX_AHEAD`, CL5). No sentence is
+    said for it (security review S1; research R9).
   - `set`: S3's words, with that version.
   - At `Number.MAX_SAFE_INTEGER` the core library refuses the next version: today's
-    `That could not be done (invalid_argument).`, nothing stored (research R9).
+    `That could not be done (invalid_argument).`, nothing stored (research R9). With the bound,
+    that takes a verified version of the name within 1,000 of it.
 - **CL19. `rm`.** Signs the removal at that version and says S1 when this machine holds a current
   secret of the name (today), or a record of it that does not verify, or `held/` names it (a
-  statement, or a version not removed). Otherwise today's `<A> on <S> has no secret named <NAME>.`
+  statement, or a version not removed), each of the last two above this machine's verified version
+  and within CL18's bound. Otherwise today's `<A> on <S> has no secret named <NAME>.`
 - **CL20.** `secret ls`, `secret import` and `zekno add` do not change.
 - **CL21. The chain** (FR-028). A version-2 deploy that stops with C4, C5 or C5b has written
   `held/` (CL3b); `zekno secret set <NAME>` then signs a version above everything the server

@@ -194,15 +194,24 @@ Nothing else was run; no server, no network, no file of the repository but these
   `zekno secret rm NAME` signs a removal above it, and the next deploy lists the removal. This holds
   for a secret only the server holds, for one a removed member set (from this machine or another),
   and for a version-1 secret with no statement (its version comes from `status`).
-- **Known and accepted** (for the review): a lying runner, or attacker B editing `held/`, can report
-  any version, which only raises this machine's next version for that name. `secretVersion` allows
-  1 to `Number.MAX_SAFE_INTEGER` (2^53 - 1); at that floor `createSecret` and
-  `createSecretRemoval` refuse (`invalid_argument`), the CLI says today's
-  `That could not be done (invalid_argument).` and stores nothing, and the name cannot be set or
-  removed from this machine until a later version-2 deploy replaces `held/` with an honest answer.
-  Denial only, from the server SSH checked, which already holds every value. The same floor risk
-  as `status`'s version. `secret import` and `zekno add` keep today's rule (decision B names set
-  and rm).
+- **Accepted at first, and wrong** (security review S1): a lying runner, or attacker B editing
+  `held/`, can report any version. This decision first accepted that as denial only, raising this
+  machine's next version for that name until a later version-2 deploy read an honest answer. The
+  review showed it was not: `zekno secret set` signs the raised version, the next deploy carries
+  it, and the honest server then holds it. At 2^53 - 1 (`secretVersion`'s highest) no higher
+  version exists, so the secret can never be set again or removed on that server, from any
+  machine (probe 2).
+- **What bounds it now.** A version only an unverified source gives (`held/`'s statements and
+  versions, this machine's records that do not verify) counts only up to 1,000 above the highest
+  version of the name that verifies on this machine (0 when none), the bound version 1 puts on a
+  runner's deploy numbers; beyond it, it is ignored, with no new sentence (`MAX_CLAIMED_AHEAD`,
+  contracts/cli.md CL18). A lie now raises one name's next version by at most 1,000 at each
+  `secret set` a person runs, far from 2^53 - 1. At a verified version within 1,000 of 2^53 - 1,
+  `createSecret` and `createSecretRemoval` still refuse (`invalid_argument`), the CLI says today's
+  `That could not be done (invalid_argument).` and stores nothing. The runner's own bound on how
+  far a listed version may jump (K12) is deferred to the feature that limits keys and adds deploys
+  from CI: it needs a new refusal sentence, and guards only against a member's own modified client.
+  `secret import` and `zekno add` keep today's rule (decision B names set and rm).
 - **Alternatives.** Reading the server in set and rm (6 (a)): changes the frozen scenes and makes a
   new name need SSH. Taking a hash from the memory: would let a runner choose what is signed.
 

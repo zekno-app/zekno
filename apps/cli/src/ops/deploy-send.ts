@@ -11,6 +11,7 @@ import {
   CoreError,
   createDeploy,
   createDeployV2,
+  LIMITS,
   peekSecretStatement,
   RunnerRecordsSchema,
   RunnerReportSchema,
@@ -22,11 +23,7 @@ import {
 } from "@workspace/core"
 
 import { CliError, explainDeploy, RunnerRefused } from "../cli/errors"
-import {
-  HELD_PAYLOAD_LENGTH,
-  type Held,
-  type History,
-} from "../profile/profile"
+import type { Held, History } from "../profile/profile"
 import type { Session } from "../server/session"
 import type { DeployInfo } from "../shared/deploy"
 import { C6 } from "../shared/deploy-words"
@@ -72,35 +69,45 @@ function sign<T>(
 }
 
 /**
+ * The history as it is on disk now, or the copy read once `status` answered
+ * when it cannot be read again. Another terminal of this machine may have
+ * written since: a deploy it recorded, or the entry of a refused deploy it
+ * took out (deploy-answer.ts), which that copy does not know of.
+ */
+function historyNow(going: Going): History {
+  const { team, server, app } = going.plan
+  try {
+    return team.store.history(server.serverId, app)
+  } catch {
+    return going.history
+  }
+}
+
+/**
  * CL8: the history with this deploy's entry `sent`, saved before it leaves:
- * once signed, it may run, whatever comes back. Gives the entry's time.
+ * once signed, it may run, whatever comes back. The history is read again
+ * right before, in either format, so a deploy another terminal recorded
+ * while this one listed and signed is kept (security review S4). Gives the
+ * entry's time.
  */
 function recordSent(going: Going, envelope: Envelope): string {
   const { team, server, app } = going.plan
   const at = new Date().toISOString()
   team.store.saveHistory(server.serverId, app, [
-    ...going.history,
+    ...historyNow(going),
     { envelope, at, outcome: "sent" },
   ])
   return at
 }
 
 /**
- * The history with a version-2 deploy's answer in place of its `sent` entry,
- * as the history is on disk now: another terminal may have written since,
- * and a refused deploy of that terminal has taken its own entry out
- * (deploy-answer.ts), which the copy read before signing still holds. A
- * history that cannot be read again is the copy with the answer added, as
- * version 1 records it.
+ * The history with a deploy's answer in place of its `sent` entry, as the
+ * history is on disk now (`historyNow`), in either format: the `sent` entry
+ * read again, never the copy from before signing, so what another terminal
+ * wrote meanwhile stays.
  */
 function answered(going: Going, entry: History[number]): History {
-  const { team, server, app } = going.plan
-  let now: History
-  try {
-    now = team.store.history(server.serverId, app)
-  } catch {
-    return [...going.history, entry]
-  }
+  const now = historyNow(going)
   const index = now.findIndex((kept) =>
     sameEnvelope(kept.envelope, entry.envelope)
   )
@@ -158,7 +165,7 @@ async function deliver(
   plan.team.store.saveHistory(
     plan.server.serverId,
     plan.app,
-    info.format === 2 ? answered(going, entry) : [...going.history, entry]
+    answered(going, entry)
   )
   callbacks.stage?.(outcome === "started" ? "started" : "failed", info)
   return { ...info, outcome, report, mode: session.mode }
@@ -167,17 +174,17 @@ async function deliver(
 /**
  * CL3b: what the server said it holds for the app, as this deploy read it on
  * its own connection: the statements of its `records` answer that read as
- * statements, each within `HELD_PAYLOAD_LENGTH`, and the app's entries of its
- * `status` answer. Kept so that `zekno secret set` and `zekno secret rm` can
- * take their version above it offline (research R9); never a value, and never
- * read as what a deploy lists.
+ * statements, each within `LIMITS.statementPayloadLength`, and the app's
+ * entries of its `status` answer. Kept so that `zekno secret set` and
+ * `zekno secret rm` can take their version above it offline (research R9);
+ * never a value, and never read as what a deploy lists.
  */
 function heldOf(going: Going, statements: readonly Envelope[]): Held {
   const prefix = `${going.plan.app}/`
   return {
     statements: statements.filter(
       (envelope) =>
-        envelope.payload.length <= HELD_PAYLOAD_LENGTH &&
+        envelope.payload.length <= LIMITS.statementPayloadLength &&
         peekSecretStatement(envelope) !== undefined
     ),
     versions: Object.entries(going.status.secrets).flatMap(([key, entry]) => {
