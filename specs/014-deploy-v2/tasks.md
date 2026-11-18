@@ -1,0 +1,334 @@
+# Tasks: Deploy version 2, the first step
+
+**Input**: Design documents from `/specs/014-deploy-v2/`
+
+**Prerequisites**: plan.md, spec.md, design/ (lines.md and the four boards, binding), research.md,
+data-model.md, contracts/ (message.md, runner-checks.md, protocol.md, state.md, cli.md), quickstart.md
+
+**Tests**: included. The constitution requires unit tests for logic with branches (Principle VII);
+the spec requires a test for every refusal reason, every check of part 6 for this step and every
+pairing of old and new programs (FR-038, FR-039, SC-001 to SC-011), and an independent review
+(FR-045).
+
+**Organization**: Setup; Foundational (the core library); one phase per user story in priority
+order (US1 to US4 P1, US5 P2, US6 and US7 P3), each with tests first, then the runner, then the CLI,
+then the lines; docs; the review; polish. Paths are from the repository root. Within a pair the test
+task comes first and is seen to fail. At the end of every task: `bun test` passes in each package
+the task touched, `bun run lint` there finds nothing, `bun run format` there changes nothing but the
+task's files. At the end of every phase every package's `bun test` passes.
+
+**Before you start**: read plan.md, "Needs the maintainer": N1 holds T047's last step only; N2
+changes nothing unless answered yes. Every decision not settled by the spec is a numbered item of
+research.md; the task that builds it names it.
+
+**Words**: every sentence a person sees is quoted from contracts/cli.md by its id (R1 to R8, C1 to
+C8, S1 to S3, M1, M2), copied exactly from there; they live in `apps/cli/src/cli/errors.ts` and
+`apps/cli/src/shared/deploy-words.ts`. "Runner", never "agent". No em dash in any sentence. Every
+code file under 500 lines.
+
+**Never**: add a package; edit or run anything under `apps/cli/tests/` or `apps/cli/e2e.config.ts`;
+edit `apps/cli/test/plain/plain-at-head.ts`; read `apps/cli/.env.local`; use the real keychain or
+`~/.zekno` (tests use `memoryKeyStore()` and temporary folders); `ssh` anywhere, contact a server or
+the network; make a release or change `apps/cli/src/version/runner-release.json` or
+`apps/runner/package.json`'s version; run `next dev` or `next build`; use ports 3000 or 3100. Docker
+only in `apps/cli/test/scenarios/real-docker.test.ts` (T041), with an image already present.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: can run beside the other [P] tasks of its group: different files, nothing in common.
+- **[USn]**: the user story it serves.
+
+---
+
+## Phase 1: Setup
+
+**Purpose**: make room in the files that are full, with no behaviour change; the test helpers that
+take the older programs from git and write a state as runner 0.1.0 leaves it.
+
+- [ ] T001 In `packages/core/src/deploy/` create `state.ts` holding, moved unchanged from `deploy.ts`: the type `RunnerState`, `RunnerStateSchema` (now exported from the file, not from the package), `initialRunnerState`, `parseRunnerState`, and `readState` (exported from the file as `readVersionOneState`); and `open.ts` holding the private `verified` WeakMap, `registerVerified(deploy: object, sealed: readonly SealedSecret[]): void` and `openSecrets`, moved unchanged. `deploy.ts` imports them (`verifyDeploy` calls `registerVerified`; `VerifiedDeploy` stays in `deploy.ts`, imported as a type by `open.ts`). `packages/core/src/index.ts` exports the same public names from their new files. No name, message or behaviour changes: `bun test` in `packages/core` passes with no test changed, and `deploy.ts` is under 450 lines (research R1)
+- [ ] T002 [P] Create `packages/core/src/secrets/statement.ts` holding `SecretStatementSchema`, moved unchanged from `packages/core/src/secrets/secret-record.ts`, which imports it; in `packages/core/src/deploy/link.ts` export `staysInside` unchanged. No behaviour changes; `bun test` in `packages/core` passes unchanged
+- [ ] T003 [P] Create `apps/cli/src/ops/secret-versions.ts` holding `latestVersions` and `latestVersion`, moved unchanged from `apps/cli/src/ops/secret.ts` and both exported; `ops/secret.ts` imports them and re-exports `latestVersions` for `apps/cli/src/ops/add.ts`. `bun test` in `apps/cli` passes, `bun test test/layers` included
+- [ ] T004 [P] Create `apps/runner/test/support/older-programs.ts` (research R22): `OLDER_RUNNER = "runner-v0.1.0"`, `BEFORE = "e7b0146d33a4683aace174f2e0c3d1e4ee1e3b19"`; `olderTree(ref): string | undefined` runs `git cat-file -e <ref>^{commit}` from the repository root and, when it fails, prints `Skipping the pairing tests: <ref> is not in this clone's history.` once and returns undefined; otherwise extracts `packages/core`, `apps/runner` and `apps/cli` with `git archive <ref> | tar -x` into a temporary folder (once per ref per process), links every entry of `node_modules` of the root, `apps/cli`, `apps/runner` and `packages/core` into the same places of the copy except `@workspace`, and links `node_modules/@workspace/core` to the copy's `packages/core`; `olderRunner(tree, docker): string[]` (the command: `env ZEKNO_DOCKER=<docker> <bun> <tree>/apps/runner/src/main.ts`); `olderZekno(tree)` importing the copy's `apps/cli/src/cli/cli.ts` (`run`), `ui/plain/plain.ts` (`plainUi`), `server/transport.ts` (`connect`) and `profile/keystore.ts` (`memoryKeyStore`). Start `apps/runner/test/scenarios/pairing.test.ts` with its first case, skipped when a tree is undefined: runner 0.1.0's `version` prints `{"version":"0.1.0","protocol":2}`, and the older zekno's `run(["--version"])` succeeds. Record the two refs and this run under "Results" in `specs/014-deploy-v2/quickstart.md` ("Base")
+- [ ] T005 [P] Create `apps/runner/test/support/deploy-v2.ts` with `signPayload(kind: string, payload: string | Uint8Array, signer: Signer): Envelope` (signs `zekno-sig-v1\n<kind>\n<length>\n` then the bytes with `signer.sign`, base64url without padding, `keyIdOf`), `olderState(home, lastSequence: Record<string, number>)` (rewrites `state.json` as `{ serverId, team, lastSequence, secrets }` with no `v` and no `formats`: the shape runner 0.1.0 writes, research R2) and `recordFiles(home)` (each `records/<app>/<hash>.json` with its mode). Test in `apps/runner/test/scenarios/versions.test.ts`: `signPayload` of a version-1 deploy's payload gives exactly the envelope `createDeploy` gave (Ed25519 is deterministic)
+
+**Checkpoint**: every package's `bun test` passes; nothing behaves differently.
+
+---
+
+## Phase 2: Foundational (the core library)
+
+**Purpose**: the message, its verifier, the stored state, statements, the listing rule, the hash
+domains, the reasons and the protocol's messages. `RUNNER_PROTOCOL` stays 2 (T025 sets 3).
+
+**⚠️ CRITICAL**: no user story starts before this phase is done.
+
+- [ ] T006 [P] Add `zekno/v1/pack`, `zekno/v1/pack-chunk` and `zekno/v1/build` to `HashDomain` in `packages/core/src/crypto/hash.ts` (research R28). Write `packages/core/test/crypto/hash.test.ts`: the nine labels differ, none holds a zero byte, and `hash(d, x)` differs for every pair of domains on the same `x`
+- [ ] T007 [P] In `packages/core/src/protocol/result.ts` add `DEPLOY_V2_REFUSALS = ["secret_missing", "untrusted_secret", "expired"] as const` and `DeployV2Refusal` (data-model.md, "Refusal reasons"), `DEPLOY_REFUSALS` unchanged; in `packages/core/src/protocol/limits.ts` add every limit of contracts/message.md, "New limits", each with a comment; in `packages/core/src/crypto/envelope.ts` add `deployV2: "zekno.deploy.v2"` to `PAYLOAD_TYPES`
+- [ ] T008 Write `packages/core/test/deploy/message.test.ts` (fails until T009), table-driven from contracts/message.md: a good payload (all later fields empty) reads; for each of F4 to F6 and F8 to F40, a payload breaking only that rule is `malformed`, and each limit passes at its value and fails one past it; F16 (`2026-11-20T10:00:00Z` without milliseconds and `2026-02-30T00:00:00.000Z` are `malformed`, `null` reads); F17 at 256 KiB of UTF-8 with a three-byte character across the edge; the domain rule with every case its paragraph names plus `xn--bcher-kva.example.com`, `xn--d1acpjx3f.xn--p1ai` (read), `xn--zz.com`, `xn--ab.com`, `XN--BCHER-KVA.com`, `a..com`, `-a.com`, `a-.com`, `com`, `1.2.3.4`, `a.com.`, `*.a.com`, a 254-character name (each `malformed`); the path rule (`/health` and `/a?b=%20` read; `/a b`, `/a#b`, `health`, `/%zz`, 1,025 characters do not); the build key: `buildKey` of the design's part 3.2 build (with real hex values) is what a hand-written `JSON.stringify` of its array hashes to, a key one hex digit off, a build secret not in `secrets`, 65 distinct chunks across two builds, and a chunk count other than `ceil(size / 8 MiB)` are each `malformed`; F7: each later field alone and valid is `unsupported_version`, and the same field breaking its rule is `malformed`; the part 3.2 example with real hex values reads to `unsupported_version`
+- [ ] T009 Create `packages/core/src/deploy/later-fields.ts` (zod strict schemas `Build`, `Predeploy`, `Health`, `Route`; the domain rule with `domainToUnicode` and `domainToASCII` from `node:url`, research R10; the path rule; `buildKey(build, secrets)`) and `packages/core/src/deploy/message.ts` (the strict payload schema of contracts/message.md and `readDeployV2Payload(json: unknown): Result<DeployV2, "malformed" | "unsupported_version">` in the order F4 to F7; types `DeployV2`, `Build`, `Predeploy`, `Health`, `Route`), with a comment at the top of each naming the design's part 5 and contracts/message.md. T008 passes; each file under 300 lines
+- [ ] T010 [P] Write `packages/core/test/deploy/state.test.ts` (fails until T011), contracts/state.md ST1 to ST6 and ST8: a state from `initialRunnerState` with `lastSequence: { a: 3, b: 0 }` and no `v` reads as `v: 2`, `formats: { a: 1, b: 2 }`, and the input object is not changed; a marked state reads back equal; each of `v: 3`, `v: "2"`, no `formats`, a `formats` key not in `lastSequence`, a `lastSequence` key not in `formats`, an extra field, a format of `3`, and a broken `team` throws `CoreError`; `newRunnerState` gives `v: 2` and `formats: {}`; `afterVersionOneDeploy` keeps `v`, `serverId`, `team` and `formats` and takes `lastSequence` and `secrets`; `versionOneView` passes `parseRunnerState`; `takesVersionOne` is true only for a format of 1
+- [ ] T011 Add to `packages/core/src/deploy/state.ts`: `StoredRunnerState`, its strict schema (private), `readRunnerState(value: unknown): StoredRunnerState`, `newRunnerState`, `versionOneView`, `afterVersionOneDeploy`, `takesVersionOne`, as contracts/state.md says (research R2). T010 passes
+- [ ] T012 [P] Write `packages/core/test/secrets/statement.test.ts` (fails until T013): `verifySecretStatement` of a `createSecret` record's envelope gives `{ name, version, hash, signer, envelope }`; it refuses `malformed` (not an envelope), `wrong_payload_type` (a removal's envelope), `unknown_signer`, `bad_signature`, `unsupported_version` (a statement with `v: 2` signed with `signPayload`'s method), `malformed` (an unknown field), `wrong_team`, `wrong_server`, `wrong_app`; `peekSecretStatement` gives `{ name, version, keyId }` of a statement signed by a key no list has and of one with a broken signature, and `undefined` for a removal, for a payload that is not JSON, and for a name that breaks `SECRET_NAME`
+- [ ] T013 In `packages/core/src/secrets/statement.ts` add `verifySecretStatement({ envelope, trust, serverId, app })` (the statement half of `verifySecret`: `openEnvelope` against `trust`, JSON, `hasOtherVersion`, the schema, team, server, app) and `peekSecretStatement(envelope: unknown)` (`readEnvelope` for `zekno.secret.v1`, JSON, the schema; no signature). Make `verifySecret` in `secret-record.ts` call `verifySecretStatement`, then check the sealed name and hash as today, with the same reasons in the same order. T012 passes and every existing test of `packages/core/test` passes unchanged
+- [ ] T014 Write `packages/core/test/deploy/deploy-v2.test.ts` (fails until T015). `createDeployV2` (contracts/message.md, "Signing"): the listing comes from the statements and removals given, sorted; each refusal the contract names; the payload reads back by `readDeployV2Payload` as itself; `later` makes a deploy with later fields. `readSignedDeployV2`: a member's deploy reads, a non-member's is `unknown_signer`, F7 is not applied. `verifyDeployV2` (contracts/runner-checks.md): for each of K4 to K16 a deploy that fails only it gives its reason, and one failing two gives the earlier; SC-002: the six pairings of kind (`zekno.deploy.v1`, `zekno.deploy.v2`) and `v` (1, 2, 3) through `verifyDeploy`, `readSignedDeploy`, `verifyDeployV2` and `readSignedDeployV2` (built with `signEnvelope` from `src/crypto/envelope`) land on a refusal except the two matching pairs; K9 lower and higher; K10 with `now` given: a minute ago, exactly now, 7 days and one millisecond ahead (each `expired`), 7 days ahead and `null` (accepted), `null` with `via: "hosted service"` (`expired`); K11 to K14 with supplied records and held ones (`held` a function over a `Map`): a held file whose statement's version, name or hash differs is `secret_missing`, a held or supplied record by a member the list no longer has is `untrusted_secret`, a supplied record whose version differs from the listing, one not listed, and two for one name are `secrets_mismatch`; the result's `nextState`, `write` and `keep` are those of runner-checks.md, "The next state"; `openSecrets` opens the values of a `VerifiedDeployV2` and refuses a copy of one (`not_verified`), another server's key, and a value sealed for another app; the state given is frozen and never changed
+- [ ] T015 Create `packages/core/src/deploy/deploy-v2.ts` with `createDeployV2`, `readSignedDeployV2` and `verifyDeployV2(input: { envelope; records; held: (app: string, hash: string) => unknown; state: StoredRunnerState; now: Date; via: "session" | "hosted service" })`, in the order of contracts/runner-checks.md K4 to K16 (research R7, R11); make `openSecrets` in `deploy/open.ts` accept a `VerifiedDeployV2` too (registered by `verifyDeployV2`). T014 passes; every existing core test passes unchanged; the file under 400 lines
+- [ ] T016 [P] Write `packages/core/test/secrets/for-deploy.test.ts` (fails until T017), contracts/cli.md CL12 to CL17 with the team, server and records of `packages/core/test/support/helpers.ts`: for version 1 with no runner statements, `secretsForDeploy`'s `supply` and `removals` equal `currentSecrets`'s `secrets` and `removals` for every case of the file; a conflict is left out with `conflict`; C4: an own record and a runner statement by a former member that are the newest are blocked `former_member`, an older one is left out with its warning only, a key no list ever had is not `former_member`; C5 (version 2): a live name with nothing verified, and one whose `chosen` is below `status`'s version, are `cannot_check`, and not on version 1; supply: an own record whose hash a runner statement has is not supplied, a runner statement chosen supplies nothing; every list sorted by name
+- [ ] T017 Create `packages/core/src/secrets/for-deploy.ts` with `secretsForDeploy(input: { trust; serverId; app; records; removals; held; live: readonly { name: string; version: number }[]; former: readonly string[]; format: 1 | 2 })` giving `{ statements, removals, supply, blocked, ignored }` (data-model.md, "What a deploy lists"; research R7, R8). T016 passes
+- [ ] T018 In `packages/core/src/protocol/protocol.ts` add `RunnerDeployRequestSchema`, `RunnerRecordsRequestSchema` and `RunnerRecordsSchema` (contracts/protocol.md P3, P5, P6); add `"deploy"` and `"records"` to `SESSION_COMMANDS` after `"version"`; `SESSION_FRAME_BYTES.deploy = 64 * KiB` and `.records = 8 * MiB`, each with a comment saying what bounds it; add `DEPLOY_V2_REFUSALS` to `RunnerReportSchema`'s reasons. `RUNNER_PROTOCOL` stays 2. Extend `packages/core/test/scenarios/messages.test.ts`: each new schema reads its example and refuses an unknown field, a missing field, a wrong type and 257 records or statements; the longest answer each command allows fits its frame bound, as the existing case checks; `RunnerReportSchema` takes the three reasons only with `refused`; `StatusReportSchema` still refuses them. (Until T023 a session request `deploy` has no handler on the runner; no test sends one)
+- [ ] T019 Export from `packages/core/src/index.ts`: `createDeployV2`, `readSignedDeployV2`, `verifyDeployV2`, `readDeployV2Payload`, `buildKey`, `readRunnerState`, `newRunnerState`, `versionOneView`, `afterVersionOneDeploy`, `takesVersionOne`, `verifySecretStatement`, `peekSecretStatement`, `secretsForDeploy`, `DEPLOY_V2_REFUSALS`, `RunnerDeployRequestSchema`, `RunnerRecordsRequestSchema`, `RunnerRecordsSchema` and the types `DeployV2`, `VerifiedDeployV2`, `Build`, `Predeploy`, `Health`, `Route`, `StoredRunnerState`, `DeployV2Refusal`, `RunnerDeployRequest`, `RunnerRecords`. Extend `packages/core/test/scenarios/messages.test.ts` with a case that each of these names is exported by `src/index`
+- [ ] T020 Write `packages/core/test/scenarios/order.test.ts` (SC-001): from `newRunnerState`, sets of up to three deploys of one app (three made against 0; a chain made against 0, 1 and 2; a chain of two and one more made against 0), and for every order of delivery of every non-empty subset, `verifyDeployV2` with `nextState` taken on each acceptance: once a deploy numbered `s` was accepted, no deploy made against a number below `s` is accepted; every acceptance's `previous` is the number before it; every refusal is `replayed` or `sequence_jump` and leaves the state the same object, deep-equal
+
+**Checkpoint**: the core library signs, reads and checks version 2, and every existing core test
+passes unchanged. Nothing uses it yet.
+
+---
+
+## Phase 3: User Story 1 - A deploy that was overtaken can never run (Priority: P1) 🎯 MVP
+
+**Goal**: the runner takes `deploy` with the order rule and the stored state; protocol 3; the CLI
+signs one above the runner's number on the deploy's own connection, and says C1, C2 or R1 when it
+was overtaken (FR-006 to FR-012, FR-029, FR-037, FR-038, US1 scenarios 1 to 6).
+
+**Independent Test**: `bun test test/scenarios/deploy-v2.test.ts test/session` in `apps/runner`;
+`bun test test/scenarios/deploy-v2.test.ts test/ops/deploy-answer.test.ts` in `apps/cli`; quickstart
+step 1.
+
+- [ ] T021 [US1] Add to `apps/runner/test/support/deploy-v2.ts`: `buildDeployV2({ trust, serverId, signer, previous, app?, compose?, values?, secretVersion?, removals?, expiresAt?, later? })` giving `{ envelope, records }` (each value made with `createSecret`, its envelope given to `createDeployV2` as a statement) and `deployV2(w, input, { env? })` that opens `session()` of `apps/runner/test/support/helpers.ts`, sends `{ command: "deploy", input }` and returns `{ events, result }` once closed, and `recordsOf(w, app)` for `{ command: "records" }`
+- [ ] T022 [US1] Write `apps/runner/test/scenarios/deploy-v2.test.ts` (fails until T023): `describe("the order")`: a first deploy against 0 starts; one against 1 after it starts; another against 1 is `replayed`; one against 5 is `sequence_jump`; a first deploy (against 0) of an app the runner holds is `replayed` (US1 scenario 4); after `olderState` holding `web` at 3, a deploy against 3 starts and the state's `formats.web` is 2. `describe("each refusal, in order")`: one case per K1, K2 (not set up, a lock held, a damaged state), K3 (a team list the attacker signed), K4, K5, K6, K8 (each reason), K9, K11, K12, K13 with supplied records only (a record by a key no list has: `untrusted_secret`; a version other than the listing: `secrets_mismatch`), K14, K15 (one app past 1,024, as `hardening.test.ts` builds it) and K16 (a sealed value for another app), each built to fail there and nowhere earlier; after each: the result `{"outcome":"refused","reason":…}`, `state.json`'s bytes, `apps/web/compose.yaml`'s bytes and the stand-in Docker's calls as before. `describe("Docker Compose's working folder")`: `deploy` and one-shot `apply` both run `docker compose … up` with the stand-in's `CWD` equal to the runner's folder's real path, and the secrets only in its environment (research R14)
+- [ ] T023 [US1] In `apps/runner/src/commands/commands.ts`: `load` reads with `readRunnerState` (its `state` becomes a `StoredRunnerState`); `setup` writes `newRunnerState`; `sync` writes `{ ...state, team }` whole; `apply` checks with `verifyDeploy` against `versionOneView(followed)` and saves `afterVersionOneDeploy(followed, verified.value.nextState)` (no gate yet: T051); `status` is built from `versionOneView` (same answer); export `locked`, `follow`, `withinLimits`. In `apps/runner/src/home/home.ts` export `writeAtomic` and `ensureDir`. In `apps/runner/src/docker/compose.ts` give `composeUp` a `dir` and pass `cwd: dir` to both `Bun.spawn` calls (research R14), and pass the runner's folder from `apply`. Create `apps/runner/src/commands/deploy.ts` with `deploy(dir, input, onProgress?)`: K1 to K17 of contracts/runner-checks.md, `verifyDeployV2` with `held: () => undefined` and `now: new Date()`, `via: "session"`, no record file written yet (T037). In `apps/runner/src/session/session.ts` add `case "deploy"` sending Docker's lines as `progress` events, as `apply`. T022 passes; every existing runner test passes; every file under 500 lines
+- [ ] T024 [US1] Extend `apps/runner/test/session/session.test.ts`: a `deploy` sends Docker's lines as progress events, then its result; a failed start sends what Docker said, then `start_failed`; a refusal is answered and the next request on the same session is answered; a `deploy` whose input closes while it runs carries on to its end; `zekno-runner deploy` and `zekno-runner records` print the usage and exit 2 with nothing on standard output
+- [ ] T025 [US1] Protocol 3 (contracts/protocol.md P1; research R4, R23 (a)). Set `RUNNER_PROTOCOL = 3` in `packages/core/src/protocol/protocol.ts`, and in the same task make every test that names a protocol number say what it means: `RUNNER_PROTOCOL` (or `RUNNER_PROTOCOL + 1` for "newer") where it means this zekno's, and `2` kept where it means runner 0.1.0: `apps/cli/test/ops/doctor.test.ts` (its cases with `2` and `3`), `apps/cli/test/support/stand-in-server.ts` (`fakeRunner`, `releasedRunner`), `apps/cli/test/scenarios/first-run.test.tsx`, `apps/runner/test/compiled/compiled.test.ts`, and any other the full suites name. The CLI still signs version 1 here. Every package's `bun test` passes. Done by one person, after T023, before T032
+- [ ] T026 [P] [US1] Write `apps/cli/test/shared/history.test.ts` (fails until T027): `readDeployEntry` reads a version-1 and a version-2 envelope (format, the shared fields, `previous` for version 2) and gives `undefined` for a tampered one, another team's, a removal's envelope and a version-2 payload with an unknown field; extend `apps/cli/test/shared/views.test.ts`: a history of version-1 then version-2 entries gives Home's row, the app's deploy rows (rollback marks across the two kinds) and secret rows from a version-2 latest
+- [ ] T027 [US1] Create `apps/cli/src/shared/history.ts` with `readDeployEntry(envelope, trust)` (research R32); use it in `verifiedDeploys` (`apps/cli/src/shared/views.ts`), `deployedSecrets` (`apps/cli/src/ops/secret.ts`), and `sentDeploys` and `prepareRollback` (`apps/cli/src/ops/deploy.ts`). Make the tests that read the history with `readSignedDeploy` read with `readDeployEntry` (research R23 (b)): `apps/cli/test/scenarios/add-settings.test.ts`, `settings-compose.test.ts`, `settings-deploy.test.ts`, `settings-which-file.test.ts`. T026 passes; every CLI test passes
+- [ ] T028 [P] [US1] Write (fail until T029) `apps/cli/test/shared/deploy-words.test.ts`: C1 (both forms), C2, C6 and C7 with `shop`, `prod-1`, `42`, `0.1.0`, `0.1.1`, `0.1.2` equal the words of contracts/cli.md exactly; each refusal's first sentence is at most 98 characters with those values; no em dash, no "agent". `apps/cli/test/cli/errors.test.ts` (SC-011, research R15): for every reason of `DEPLOY_REFUSALS`, `DEPLOY_V2_REFUSALS` and `RUNNER_REFUSALS`, `explainDeploy(reason, 2)` is its own sentence (R1 to R8 where they apply, today's otherwise) and never starts `The runner refused the request`; `explainDeploy(reason, 1)` is today's for `replayed`, `sequence_jump` and `secrets_mismatch` and R7 or R8 where they apply; `explain` gives today's sentence for each of today's reasons (copied from `REASONS` at `e7b0146` into the test); `new RunnerRefused("busy", "x")` keeps `reason`. `apps/cli/test/ops/deploy-format.test.ts`: every row of contracts/cli.md, "The format", with `RUNNER_PROTOCOL + 1` for "above 3", C7's words on the throw
+- [ ] T029 [US1] Create `apps/cli/src/shared/deploy-words.ts` with `C1(app, server, n, rollback)`, `C2(app, server, n)`, `C6(server, version, carried)` and `C7(server, version, carried)`, each with its id in a comment; in `apps/cli/src/cli/errors.ts` add R4, R5 and R6 to `REASONS` (`secret_missing`, `untrusted_secret`, `expired`), `explainDeploy(reason: string, format: 1 | 2)` (R1 to R3 for format 2, R7 for `unsupported_version`, R8 for `malformed` and `wrong_payload_type`, `REASONS` otherwise), and give `RunnerRefused` a second parameter `message = explain(reason)`; create `apps/cli/src/ops/deploy-format.ts` with `chooseFormat` (contracts/cli.md: above `RUNNER_PROTOCOL` throws C7, 3 or more gives 2, else 1 with `older` when the runner's version is older than `carried`; research R18). T028 passes
+- [ ] T030 [US1] Write `apps/cli/test/ops/deploy-answer.test.ts` (fails until T032) with a stand-in `Session` (the `Session` type of `apps/cli/src/server/session.ts`): on `replayed`, a second `status` with the app above `previous` gives C1 (and C1's rollback form); with another `sent` entry numbered `N` in the history, C2; a second `status` refused, unreadable, of another server, or not above `previous` gives R1; another reason gives `RunnerRefused` with `explainDeploy(reason, 2)`; every refusal reads the history again from the store and saves it without the entry whose envelope was refused, keeping an entry another call wrote meanwhile; an answer that never came leaves it `sent` (research R6, R30)
+- [ ] T031 [US1] Write `apps/cli/test/scenarios/deploy-v2.test.ts` (fails until T032) with `ready()` of `apps/cli/test/support/helpers.ts` and the plain interface: US1 scenario 1 (after 41 deploys, the 42nd is signed `previous` 41, `sequence` 42, read back with `readDeployEntry`, and the line is `Deploy 42 of web is running on dev with 2 secrets.`); scenario 2 and the spec's first edge case (two deploys B and A of one machine signed against 41, B's `deploy` request line held by a wrapper of `deps.connect`'s transport until A has finished: B is C1 on standard error, exit 1, `up` ran once, `lastSequence` 42, the history has A's entry and none for B; B's line released while A is held in the stand-in Docker's `up`: `busy`); scenario 3 (the same, with A's answer cut off by the wrapper after its request was written, so A's entry stays `sent`: B is C2); scenario 4 (`AppTaken` for a name typed as new that the runner holds, nothing signed); scenario 5 (`zekno rollback` says `Rolling back web to what deploy 41 ran.` and signs version 2 after 42 with the current secrets; a rollback to a version-1 entry is signed version 2, FR-012); scenario 6 (a local runner whose `status` says a lower number: R1's case through `replayed`; a higher one: R2), each with `state.json`'s bytes unchanged
+- [ ] T032 [US1] Create `apps/cli/src/ops/deploy-answer.ts` (contracts/cli.md, "C1, C2 and R1 after `replayed`", and CL10). In `apps/cli/src/ops/deploy.ts` make `sendDeploy` follow CL1 to CL11 for version 2, listing this machine's secrets with `currentSecrets` (statements from the chosen records' envelopes, every record supplied) until T040, and keep version 1 as today with `RunnerRefused(reason, explainDeploy(reason, 1))`; add `rollback?: true` to `DeployPlan`, set by `prepareRollback`. In `apps/cli/src/shared/deploy.ts` add `format: 1 | 2` and `secretNames: string[]` to `DeployInfo` and `format?: 1 | 2` to `DeployProgress`. In `apps/cli/src/server/session.ts` add `deploy: "progress"` to `EVENTS`. Move the tests whose subject is version 1 onto a runner that answers protocol 2 over `olderState` (research R23 (c)): `apps/cli/test/scenarios/hardening.test.ts`'s "The runner's memory goes back" (now signed `previous` 1, deploy 2, on version 2, with a version-1 twin case keeping deploy 3). T030 and T031 pass; every CLI test passes; `ops/deploy.ts` under 500 lines
+- [ ] T033 [P] [US1] Extend (fail until T034) `apps/cli/test/ui/ink/single-commands.test.tsx`: a deploy refused with C1 draws the panel, `✔ Checked  ✔ Signed  ✔ Sent  ✖ Starting`, then `✖` and C1's first sentence bold and the rest dim, as the board `Deploy2Overtaken`; C2 the same; plain output is the sentence on standard error; with `--json` standard output holds only today's object. Extend `apps/cli/test/app/app-operate.test.tsx` and `apps/cli/test/app/app-state.test.ts`: the app's deploy screen shows C1 as its result line in the error colour and leaves out `Number <N> is used, so the next deploy will be <N+1>.` after a version-2 refusal (C8, research R19), and keeps it for `start_failed` and for a version-1 refusal
+- [ ] T034 [US1] In `apps/cli/src/ui/parts/deploy-summary.tsx` make `numberUsed` false when `deploy.format === 2` and `deploy.outcome === "error"`; in `apps/cli/src/ui/ink/deploy-live.ts` keep `info.format` in the deploy's progress; in `apps/cli/src/app/state/events.ts` add `format` and `secretNames` to `deploy-stage`; in `apps/cli/src/app/state/deploy.ts` keep both in `deployStage`; in `apps/cli/src/app/effects/deploys.ts` dispatch them from the stage info (research R20). T033 passes
+- [ ] T035 [US1] Run `bun run screens --check` in `apps/cli`. If it names a screen, run `bun run screens`, read the redrawn `apps/web/content/screens/<name>.json` line by line against lines.md (only approved lines may differ), and record it in quickstart.md; research R21 expects none
+
+**Checkpoint**: a deploy made against a number the runner no longer holds is refused, uses no
+number and says so; the CLI signs version 2 against the runner of this repository.
+
+---
+
+## Phase 4: User Story 2 - Secrets are sent once, and every secret is accounted for (Priority: P1)
+
+**Goal**: the runner keeps each secret's latest record and answers `records`; the CLI lists every
+secret the server holds, supplies only what it lacks, and says C5 when it cannot (FR-017 to FR-025,
+US2 scenarios 1 to 5).
+
+**Independent Test**: `bun test test/scenarios/secrets-v2.test.ts` in `apps/runner` and in
+`apps/cli`; quickstart step 2.
+
+- [ ] T036 [US2] Write `apps/runner/test/scenarios/secrets-v2.test.ts` (fails until T037): a deploy's supplied records are kept as `records/<app>/<hash>.json`, mode 0600, holding the record as sent, and no file holds a value (searched with `filesUnder`); a second deploy listing the same versions with no record starts from the held files, and Docker's environment holds every value; a secret set again: its new file is kept and the old one deleted after the state was saved; a removal: hash `null` and the file deleted; K11 (a live name left out: `secrets_mismatch`); K13 held (a missing file, a file whose statement's name, version or hash differs: `secret_missing`; a held record whose signature was broken on disk: `untrusted_secret`); K15 (8,192 live records, and 64 MiB of record files, each with one more: `too_large`); a file of the app no state names (as a crash leaves) is deleted at the app's next deploy (research R13); `records` answers the statements of the held files sorted by name, `[]` for an app it does not hold and for an app at format 1 (contracts/protocol.md P6); every refusal leaves `records/` as before (contracts/runner-checks.md, "What a refusal leaves")
+- [ ] T037 [US2] Create `apps/runner/src/home/records.ts` (`readRecord(dir, app, hash)`, `writeRecord(dir, app, record)` with `writeAtomic` in 0700 folders, `removeUnnamed(dir, app, keep)`, `recordBytes(dir, named)`) and `apps/runner/src/commands/records.ts` (`records(dir, input)`, no lock, P5, P6); in `apps/runner/src/commands/deploy.ts` give `verifyDeployV2` `held` from `readRecord`, add K15's record bounds, and at K17 write `write`, save the state, then `removeUnnamed` with `keep`; in `apps/runner/src/session/session.ts` add `case "records"`. T036 passes
+- [ ] T038 [P] [US2] Write `apps/cli/test/ops/deploy-secrets.test.ts` (fails until T040) for `listForDeploy` (`apps/cli/src/ops/deploy-secrets.ts`) with a team from `apps/cli/test/support/helpers.ts`: CL12 to CL14 and CL16 to CL17 (C4 in T045): version 2 lists this machine's records and the runner's statements, supplies only records whose hash the runner lacks, lists a secret only the runner holds without supplying it, stops with C5 for a live name with nothing verified and for one whose `chosen` is below `status`'s version, keeps today's warning for an item that blocks nothing; version 1 gives exactly what `currentSecrets` gives
+- [ ] T039 [P] [US2] Write `apps/cli/test/scenarios/secrets-v2.test.ts` (fails until T040) with `ready()`, recording the lines the CLI writes to the runner by wrapping `deps.connect`'s transport: three secrets and two deploys with nothing changed: the second `deploy` request's `records` is empty and the stand-in Docker's environment holds all three (SC-004, US2 scenario 1); one set again: one record (scenario 2); `zekno secret rm` then deploy: the removal listed, the runner's file gone (scenario 4); a `twin()` machine with an empty secret store deploys: every secret listed from the runner, 0 records sent, the twin's store still empty (scenario 5, FR-022); an app deployed only with version 1 (a runner answering protocol 2 over `olderState`, then this runner): the first version-2 deploy supplies this machine's records (FR-024), and a twin without them stops with C5, exit 1, nothing signed; a deploy signed in the test that leaves a live secret out is refused with R3 (scenario 3)
+- [ ] T040 [US2] Create `apps/cli/src/ops/deploy-secrets.ts` with `listForDeploy({ team, server, app, status, held, format })` calling `secretsForDeploy` (with `live` from `status.secrets` of the app and `former` from `formerKeyIds(team)`: key ids of members of an earlier list of `team.chain` the current list lacks) and throwing a `CliError` of the blocked lines (research R8, "Several blocked names"); add `C5(name, app, server)` to `apps/cli/src/shared/deploy-words.ts` and its case to `apps/cli/test/shared/deploy-words.test.ts`; in `apps/cli/src/ops/deploy.ts` read `records` for version 2 (CL3) and list with `listForDeploy` (CL4) for both formats, replacing T032's `currentSecrets` listing. Until T046 a `former_member` name is left out with today's warning. T038 and T039 pass
+- [ ] T041 [US2] SC-008: add to `apps/cli/test/scenarios/secrets-v2.test.ts` a run with values that hold the marker `zk_SENTINEL_7c3e`: deploy, deploy again, roll back, `secret rm`, deploy; the marker, as text and as base64url, is in no line of `m.out` or `m.err`, no file of the profile folder but the secret store's sealed records, no file of the runner's folder (records are sealed), no history entry, and appears only in the stand-in Docker's log of the environment it was started with. Extend `apps/cli/test/scenarios/real-docker.test.ts`: after its deploy, a second `zekno deploy` with nothing changed starts the container again with the secret in its environment (from the held record); run it with Docker and record the result in quickstart.md, step 7
+- [ ] T042 [US2] Extend `apps/cli/test/ui/ink/single-commands.test.tsx` and `apps/cli/test/app/app-operate.test.tsx` (lines; no source change expected): C5 at a terminal is the sentence alone with `✖` (nothing drawn before Checked, research R17), in plain output one line on standard error, and on the app's deploy screen the result line under the panel and `✖ Checked  ○ Signed  ○ Sent  ○ Starting` as the board `Deploy2Secrets`; two blocked names give two lines and `Nothing was signed.` once; R3 and R4 at `✖ Starting`; the app's panel names, from Checked on, the secrets the deploy lists, a secret only the server holds among them
+
+**Checkpoint**: a second deploy carries no sealed value; a deploy that leaves a live secret out is
+refused; a machine without a secret's record deploys it from the server's.
+
+---
+
+## Phase 5: User Story 3 - A secret set by someone no longer in the team stops the deploy (Priority: P1)
+
+**Goal**: the runner refuses a removed member's statement (`untrusted_secret`); the CLI stops with C4
+on both paths; `zekno secret set` and `rm` fix it (FR-026 to FR-028, US3 scenarios 1 to 4).
+
+**Independent Test**: `bun test test/scenarios/removed-member.test.ts test/ops/deploy-secrets.test.ts test/ops/secret-versions.test.ts` in `apps/cli`; quickstart step 3.
+
+- [ ] T043 [P] [US3] Create `apps/cli/test/support/team-of-two.ts`: from `ready()`, a second member's key (`generateMemberKeyPair`, `createSigner`) added to the team list with role `deployer` by the admin (`proposeRoster`, saved to the profile's `rosters` as `zekno` would), a record that member sets for an app (`createSecret`), put in this machine's store or delivered to the runner by a deploy, then a team list without the member, synced to the runner or not, as the test chooses. The CLI has no command for this; the helper writes the profile as `addServer` does (`team.store.save`)
+- [ ] T044 [P] [US3] Extend `apps/runner/test/scenarios/secrets-v2.test.ts` (tests the checks of T015 and T037; no source change expected), with a second member added and then removed by `proposeRoster` in the test itself: after a team list without the member who set a held secret, a deploy listing it is `untrusted_secret` (R5's case, US3 scenario 2), and so is one supplying that member's record; no number used, `state.json` and `records/` unchanged
+- [ ] T045 [US3] Write (fail until T046) the C4 cases of `apps/cli/test/ops/deploy-secrets.test.ts` (CL15 on both formats) and `apps/cli/test/scenarios/removed-member.test.ts` with `team-of-two.ts`: `zekno deploy` stops with C4 for `DATABASE_URL`, exit 1, nothing signed, the history and the runner as before (scenario 1); the same on a runner answering protocol 2 over `olderState` (the version-1 path, decision 8); two such secrets give two lines then `Nothing was signed.` once; a deploy signed anyway (`createDeployV2` with the member's statement) is refused with R5 (scenario 2); after `zekno secret set DATABASE_URL` the deploy starts (scenario 3); after `zekno secret rm DATABASE_URL` it starts without it and lists the removal (scenario 4)
+- [ ] T046 [US3] Add `C4(name, app)` and the joining of several blocked names to `apps/cli/src/shared/deploy-words.ts` (with their cases in `apps/cli/test/shared/deploy-words.test.ts`); throw C4 for `former_member` in `listForDeploy` (`apps/cli/src/ops/deploy-secrets.ts`) on both formats. T045 passes but its scenarios 3 and 4, which need T047
+- [ ] T047 [US3] `zekno secret set` and `zekno secret rm` read the server when they must (contracts/cli.md CL18 to CL20; research R9; N1). Write `apps/cli/test/ops/secret-versions.test.ts` first: offline (no `deps.connect` call) when this machine holds a verifying record or removal of the name; otherwise one session, `status` then `records` (protocol 3) or `status` alone (protocol 2), and the version one above the highest of this machine's, the runner's verified statements and `status`'s; `rm` of a name only the server holds signs the removal and says S1; `rm` of a name neither holds says `<A> on <S> has no secret named <NAME>.`; an unreachable server says today's unreachable sentence and stores nothing; the value is asked only after the server was read. Then add `serverVersion(deps, team, server, app, name)` and `holdsVerifiable(...)` to `apps/cli/src/ops/secret-versions.ts` and use them in `prepareSecretSet` (a `floor` on `SecretPlan`, used by `setSecret`) and `removeSecret` in `apps/cli/src/ops/secret.ts`, after every check each makes today, so a usage or name error still connects to nothing. T045's scenarios 3 and 4 pass. A test whose subject is the connections of a flow that sets a brand-new name (`apps/cli/test/asking/first-deploy.test.ts`, the app's set-secret cases in `apps/cli/test/app/`) gains exactly that one read and nothing else. **With N1's yes only**: in `apps/cli/test/plain/plain-unchanged.test.ts` allow exactly one `connect local` call after `keychain.get` in the scenes `secret set GREETING --app web --server dev`, `secret set OTHER --app web --server dev`, `secret set MULTI --app web --server dev` and `secret rm NEVER --app web --server dev` (a list beside `ADDED_TO_HELP`, with a comment naming feature 014 and N1), compared against `AT_HEAD` with that call taken out, and nothing else allowed
+- [ ] T048 [US3] Extend `apps/cli/test/ui/ink/single-commands.test.tsx` and `apps/cli/test/app/app-operate.test.tsx` (lines; no source change expected): C4 at a terminal, `✖` and its first sentence bold, then `Set it again with zekno secret set DATABASE_URL, or remove it with zekno secret rm DATABASE_URL.` and `Nothing was signed.` dim (backticks dropped), as the board `Deploy2Secrets`; in plain output the backticks kept; R5 at `✖ Starting` as the board's fourth panel; the app's set-secret notice after a server read names the version the server gave
+
+**Checkpoint**: a removed member's secret stops every deploy, by the CLI before signing or by the
+runner, until it is set again or removed.
+
+---
+
+## Phase 6: User Story 4 - Old and new programs say plainly what to do (Priority: P1)
+
+**Goal**: the version-1 path only for apps held before; the marked state kept by every write; C6
+and C7; every pairing proved with the released programs (FR-029 to FR-035, SC-005 to SC-007, US4
+scenarios 1 to 5).
+
+**Independent Test**: `bun test test/scenarios/versions.test.ts test/scenarios/pairing.test.ts` in
+`apps/runner`; `bun test test/scenarios/deploy-versions.test.ts test/scenarios/pairing.test.ts` in
+`apps/cli`; quickstart steps 4 and 6.
+
+- [ ] T049 [US4] Extend `apps/runner/test/scenarios/versions.test.ts` (the gate cases fail until T051): ST3 (after `setup`, `state.json` has `"v": 2` and `"formats": {}`); ST4 (after `sync`, `apply` and `deploy`, the file has `v` and every part); SC-007 (a version-1 `apply` of an app held in `olderState` leaves `v: 2` and every app's format as they were, ST5); ST6 and FR-031 (`apply` of a new app, and of an app after its first version-2 deploy, is `unsupported_version` with `state.json`'s bytes unchanged); ST10 (`status` on an older state answers as today and leaves its bytes unchanged); `status`'s answer has exactly the keys of `RunnerStatusSchema` after a version-2 deploy (FR-033)
+- [ ] T050 [US4] Move the runner's existing tests off `apply` to a new app, keeping each assertion (research R23 (d)): in `apps/runner/test/support/helpers.ts` make `deployed(apps)` deploy with `deployV2` (against 0); in `apps/runner/test/scenarios/runner.test.ts`, `refusals.test.ts`, `hardening.test.ts` and `apps/runner/test/session/session.test.ts`, a case whose subject is a deploy uses `deploy` (`buildDeployV2`), and a case whose subject is `apply` itself starts from `olderState` holding its app; `hardening.test.ts`'s L3 states gain the `formats` entries their `lastSequence` has. Every runner test passes before and after T051
+- [ ] T051 [US4] In `apply` (`apps/runner/src/commands/commands.ts`), after `verifyDeploy` passes, refuse `unsupported_version` unless `takesVersionOne(followed, app)` (contracts/runner-checks.md, "The version-1 path"; research R3). T049 passes; every runner test passes
+- [ ] T052 [US4] Extend `apps/runner/test/scenarios/pairing.test.ts` (skipped without the trees of T004): runner 0.1.0 sets up a server and accepts a deploy; this runner reads that state, answers `status` and `records` without writing, and runner 0.1.0 still reads it (ST10); this runner's first write (`sync` or `deploy`); then runner 0.1.0 answers `status`, `sync`, `apply`, `state` and `logs` with `invalid_state` and `setup` with `already_set_up` (ST9, FR-034, US4 scenario 5)
+- [ ] T053 [US4] Write `apps/cli/test/scenarios/deploy-versions.test.ts` (fails until T054) with stand-ins that run in every clone: a runner answering `{"version":"0.1.0","protocol":2}` (`reportingRunner` of `apps/cli/test/support/stand-in-server.ts`) over `olderState` holding the app, this zekno carrying `0.1.1` (`deps.release`): `zekno deploy` signs version 1, says C6 on standard error after signing and before the result, and starts; the same for `zekno rollback`; carrying `0.1.0`: no C6 (research R18); `zekno status` and `zekno server add` say W3; `zekno doctor`'s Runner line says `0.1.0, older than this zekno's 0.1.1` (US4 scenario 1); `apply` of a new app on this runner through the version-1 path says R7; a runner answering `RUNNER_PROTOCOL + 1`: `zekno deploy` and `zekno rollback` say C7, exit 1, the history unchanged (decision 2); `zekno status` still says W5 (US4 scenario 4)
+- [ ] T054 [US4] In `apps/cli/src/ops/deploy.ts` warn C6 (`callbacks.warning`) right after the version-1 deploy is signed and saved, when `chooseFormat` gave `older`, with `carried` from `deps.release ?? RUNNER_RELEASE` (contracts/cli.md CL8; research R16, R18). T053 passes
+- [ ] T055 [US4] Write `apps/cli/test/scenarios/pairing.test.ts` (skipped without the trees of T004; research R22, R24): this zekno carrying `0.1.1` with runner 0.1.0 (`olderRunner`): the deploy flows of `apps/cli/tests/deploy.e2e.ts`, `rollback.e2e.ts` and `link.e2e.ts` as plain commands (a linked folder; one with a secret, its value only in the stand-in Docker's environment; two deploys and a rollback to deploy 1, `lastSequence` 3 and three `up` calls; two apps), each saying C6 (SC-005); the zekno of `e7b0146` (`olderZekno`, in this process, with a memory key store) with runner 0.1.0, then this runner on the same folder: the app held before deploys (US4 scenario 2); a new app, and that app after this zekno deployed it, are refused with `The runner refused the request (unsupported_version).`, `state.json` byte for byte as before each (SC-006, scenario 3); its `zekno status` against this runner succeeds (FR-033); this runner's state with runner 0.1.0 put back: this zekno says `The runner's stored state is damaged or incomplete, so it refuses to act.` (scenario 5); the older zekno reading a history with version-2 entries says its `Ignored <n> entries…` warning (lines.md, O; research R6)
+- [ ] T056 [US4] Extend `apps/cli/test/ui/ink/single-commands.test.tsx` and `apps/cli/test/app/app-operate.test.tsx` (lines; no source change expected): C6 at a terminal is `!` and the sentence above the deploy's panel, the deploy then `✔ Started`, as the board `Deploy2Versions`; C6 is not in `--json`'s object; on the app's deploy screen C6 is a warning notice; C7 at a terminal is the sentence alone with `✖`, and in the app under the panel with `✖ Checked`. Run `bun run screens --check` again
+
+**Checkpoint**: every pairing of old and new programs works or says which to update; an older
+runner put back refuses everything.
+
+---
+
+## Phase 7: User Story 5 - A deploy that asks for what the runner does not do yet is refused (Priority: P2)
+
+**Goal**: each later field refused `unsupported_version`, its own rule `malformed` first (FR-036,
+SC-003).
+
+**Independent Test**: `bun test test/scenarios/deploy-v2.test.ts` in `apps/runner`; quickstart step 5.
+
+- [ ] T057 [US5] Extend `apps/runner/test/scenarios/deploy-v2.test.ts` (tests T015 and T023; no source change expected), `describe("what this runner does not carry out yet")`: a deploy with one route, one with one build, one with a health check, one with a pre-deploy command (each made with `buildDeployV2`'s `later`), each alone: `unsupported_version`, no number used, Docker not called, `state.json` and `records/` unchanged (SC-003, 4 of 4); a route to `demo.invalid`, a build whose key is one digit off, an unknown top-level field and `v: 3` (made with `signPayload`): `malformed` (US5 scenario 2)
+- [ ] T058 [US5] Add to `apps/cli/test/ops/deploy-answer.test.ts` a case that `sendDeploy` never passes `later` to `createDeployV2` (the signed payload's later fields are `[]` and `null` in every scenario of T031), and to `apps/cli/test/ui/ink/single-commands.test.tsx` R7 and R8 at `✖ Starting` as the board `Deploy2Refusals`, from runner answers given by a stand-in session
+
+---
+
+## Phase 8: User Story 6 - Deploys can carry an expiry (Priority: P3)
+
+**Goal**: the runner refuses an expired deploy by its own clock; this CLI signs none (FR-013 to
+FR-016; decision 3).
+
+**Independent Test**: `bun test test/scenarios/deploy-v2.test.ts` in `apps/runner`.
+
+- [ ] T059 [US6] Extend `apps/runner/test/scenarios/deploy-v2.test.ts` (no source change expected), `describe("expiry")`: `expiresAt` a minute ago, and 8 days ahead: `expired`, no number used, nothing changed (US6 scenario 1); 6 days ahead and `null`: accepted; a deploy whose `previous` is wrong and whose expiry passed is `replayed` (K9 before K10: the order never depends on the clock)
+- [ ] T060 [US6] Add to `apps/cli/test/scenarios/deploy-v2.test.ts`: every deploy this CLI signs has `expiresAt: null` (read back with `readDeployEntry`), and its envelope's signature appears in the history file and in the one `deploy` request line of its session and in no other file or line (FR-015, US6 scenario 2); add R6 to `apps/cli/test/ui/ink/single-commands.test.tsx` at `✖ Starting`
+
+---
+
+## Phase 9: User Story 7 - The README says what the hosted service can read, and the docs (Priority: P3)
+
+**Goal**: M1 and M2 as the board `Deploy2Refusals` draws them; the docs say what changed
+(FR-047, FR-051, FR-052; research R25, R27).
+
+**Independent Test**: `bun test test/docs` in `apps/cli`.
+
+- [ ] T061 [US7] Write `apps/cli/test/docs/metadata-note.test.ts` (fails until T062 and T063): the note under "What Zekno does not protect against" in `README.md` and the callout "Metadata" in `apps/web/content/docs/security.mdx` hold the same words, item for item: the board's two lead sentences and its seven items, in order (research R25)
+- [ ] T062 [US7] In `README.md`, "Security model", replace the `> [!NOTE]` under "What Zekno does not protect against" with M1 as the board `Deploy2Refusals` draws it: `The control plane, when it exists, will never see a secret's value. It will see:`, a list of its four items, `With domains, building from source and health checks, it will also see:`, a list of its three items
+- [ ] T063 [US7] In `apps/web/content/docs/security.mdx` replace the callout "Metadata"'s text with M2, the same words as T062 in the callout's markup. T061 passes
+- [ ] T064 [P] [US7] In `apps/web/content/docs/deploying.mdx`: under `zekno deploy`, that a deploy names the deploy it was made after and is signed one above the server's number on the same connection; that a refused deploy uses no number and says C1 (or C2); that against an older runner the deploy is signed in the older format and says C6, and against a newer one it stops before signing with C7; replace `The deploy number is used either way.` only where it is no longer true (a refusal); under `zekno rollback`, that it is a new deploy made after the current one
+- [ ] T065 [P] [US7] In `apps/web/content/docs/secrets.mdx`: that the server keeps each secret's latest sealed record, so a deploy sends a record only when the server lacks it; that every deploy accounts for every secret the server holds, and a secret is left out only by `zekno secret rm`; C4 and C5 and their two commands; when `zekno secret set` and `rm` read the server (CL18, CL19)
+- [ ] T066 [P] [US7] In `apps/web/content/docs/runner.mdx` and `apps/runner/README.md` (the two say the same): the commands table and the session's table gain `deploy` and `records` (session only; contracts/protocol.md); "Its folder" gains `records/<app>/<hash>.json` and says `state.json` carries a version mark; "What it refuses" gains `secret_missing`, `untrusted_secret`, `expired`, the order rule (`replayed` and `sequence_jump` without a number used), a deploy naming a later field (`unsupported_version`), and that a version-1 deploy is taken only for an app the runner held before it was updated; that runner 0.1.0 put back after this runner has written refuses everything; that restoring the runner's folder from a backup is not supported: set the server up again (spec, Edge Cases); keep the `version` example of 0.1.0 and add that a runner of protocol 3 carries out version 2
+- [ ] T067 [P] [US7] In `apps/web/content/docs/servers.mdx`, where `zekno server update` is described: updating to a runner of protocol 3 is one way: once it has written its state, runner 0.1.0 refuses it, and a zekno from before it can deploy only the apps that have had no version-2 deploy
+- [ ] T068 [P] [US7] In `packages/core/README.md`, "What it guarantees": replay is stopped by the order rule (each deploy names the one it was made after), and secrets by version (every live secret accounted for; a removed member's secret stops counting); keep "Unaudited"
+- [ ] T069 [US7] Docs check: `bun test test/docs` in `apps/cli` passes; every page and README that said "pre-alpha" or "unaudited" at `e7b0146` still says it as often; `git grep -n -i "agent" -- README.md apps/web/content/docs apps/runner/README.md packages/core/README.md` prints nothing new; no em dash added for an aside; the desktop app named nowhere
+
+---
+
+## Phase 10: The security review (FR-045, SC-009)
+
+- [ ] T070 Independent internal security review, by a person or an agent that wrote none of this feature's code, of: the message and its verifier (`deploy/message.ts`, `later-fields.ts`, `deploy-v2.ts`: every pairing of kind and `v`, every rule of contracts/message.md, the build key's bytes, the domain rule's A-labels, sizes against 1 MiB); the runner's checks and their order (K1 to K17: every refusal before the number, what a refusal leaves, the clock, one lock and V20); the stored state (the mark, migration, every write whole, V21, an older runner failing closed, a state restored or edited); stored records (paths from signed values, modes, write and delete order, a crash between, the bounds, a held record that differs in any field, re-verification at each use); the version-1 path (the gate, a new app, an app at version 2, a team list changing); the `records` read (what it gives, to whom, its bound); the CLI's choice of format (a runner that lies about its protocol or its number, C7), `secretsForDeploy` (taking versions only from verified statements, C4 and C5, what `status`'s word can decide), `secret set` and `rm` reading the server; the history (both kinds, a refused entry removed, C2). Try the design's part 11 and threats T1, T5, T7, T9, T12, T15, T25, T29, T31, T33, T34 against the code. Check every item of plan.md, "What does not change". Record every finding with its rating and state in `specs/014-deploy-v2/security-review.md`, in the form of `specs/012-templates/security-review.md`
+- [ ] T071 Fix every finding rated high or medium, each with a test that fails before the fix; answer every finding in `specs/014-deploy-v2/security-review.md` (fixed with its commit and test, or accepted with its reason); none high or medium left open (SC-009)
+
+---
+
+## Phase 11: Polish & Cross-Cutting Concerns
+
+- [ ] T072 [P] Write `apps/runner/test/scenarios/no-network.test.ts` (SC-010, research R26): no file of `apps/runner/src` or `packages/core/src` names `Bun.serve`, `Bun.listen`, `Bun.connect`, `Bun.udpSocket`, `fetch(`, `WebSocket`, `node:net`, `node:http`, `node:https`, `node:http2`, `node:dgram` or `node:tls` (read as text after `Bun.Transpiler`'s `transformSync`, as `apps/cli/test/layers/layers.test.ts` reads code); and, when `lsof` is on `PATH` (else skipped with a printed reason), while a `deploy` is held in the stand-in Docker's `up`, `lsof -nP -a -i -p <runner pid>` lists nothing
+- [ ] T073 Check plan.md, "What does not change", item by item: `git diff e7b0146 -- apps/cli/src/version/runner-release.json apps/runner/package.json apps/cli/tests apps/cli/e2e.config.ts apps/cli/test/plain/plain-at-head.ts .github` prints nothing (but N2's line, if answered yes); the schemas it names are unchanged (`git diff e7b0146 -- packages/core/src/protocol/protocol.ts` touches none of them); `git diff --stat e7b0146 -- packages/core/test` lists only new files and `scenarios/messages.test.ts` (FR-003: every other core test is as it was and passes); tick each item and record it in quickstart.md
+- [ ] T074 In `apps/cli`: `bun run screens --check`; `bun run compile`, then `./dist/zekno --version` run from `/` with a temporary `ZEKNO_HOME` (no command that needs a key: the compiled zekno reads the system keychain); in `apps/runner`: `bun run compile` and `./dist/zekno-runner version` prints `{"version":"0.1.0","protocol":3}` (the compiled files are not kept or published). Record in quickstart.md
+- [ ] T075 The pseudo-terminal walkthrough of the four boards of `specs/014-deploy-v2/design/` (`Deploy2Overtaken`, `Deploy2Secrets`, `Deploy2Versions`, `Deploy2Refusals`) against the real program at 100 columns, once on a light terminal: a driver script in the session's scratchpad that calls `run` from `apps/cli/src/cli/cli.ts` with `inkUi()` and `memoryKeyStore()`, a temporary `ZEKNO_HOME`, the runner of this repository with the stand-in Docker (and a reporting runner for `Deploy2Versions`), never the keychain; compare line by line: words, marks, the bold first sentence, the dim rest, what is above the panel; record each result, any difference with the screen as read, and what was not checked (the panel's rows the single commands do not fill, research R20)
+- [ ] T076 From the repository root: `bun run typecheck`, `bun run lint`, `bun run test --force`, `bun run format`, then `git diff --stat` (no change from `format`); record the test totals per package in quickstart.md, "Results", and that `bun run build` was not run (`next build`, the maintainer's rule) and the end-to-end tests under `apps/cli/tests/` were not run
+
+---
+
+## Maintainer steps
+
+- Answer N1 (plan.md): yes, and T047's last step is done; no, and the spec's FR-028 is changed.
+- Answer N2 (plan.md) if wanted: yes adds `fetch-depth: 0` to the checkout of
+  `.github/workflows/pull-request-checks.yml` (one line, in T073's diff).
+- Push `014-deploy-v2` when the feature is done. Merging into `dev`, and runner release 0.1.1 with
+  its proof on a real server, belong to the maintainer and to feature 015.
+
+## Dependencies
+
+### Phase dependencies
+
+- **Setup (Phase 1)**: none. T001 first in `packages/core`; T002, T003, T004, T005 beside it.
+- **Foundational (Phase 2)**: after T001 and T002. T006, T007, T010, T012 side by side; T008 after
+  T007; T009 after T008; T011 after T010; T013 after T012; T014 after T009, T011, T013; T015 after
+  T014; T016 after T013; T017 after T016; T018 after T007 and T013; T019 after T015, T017, T018;
+  T020 after T019. Blocks every story.
+- **US1 (Phase 3)**: after Phase 2. Runner: T021, then T022, then T023, then T024. T025 after T023
+  (one person, touches core and every package's tests). CLI: T026 and T028 any time after Phase 2,
+  side by side; T027 after T026; T029 after T028; T030 and T031 after T029; T032 after T025, T027,
+  T030, T031. Lines: T033 after T032; T034 after T033; T035 after T034.
+- **US2 (Phase 4)**: after US1. T036 then T037; T038 and T039 side by side after T037's runner and
+  T032; T040 after both; T041 after T040; T042 after T040 and T034.
+- **US3 (Phase 5)**: after US2. T043 and T044 side by side; T045 after T043; T046 after T045; T047
+  after T046; T048 after T047.
+- **US4 (Phase 6)**: after US1 (T049 to T052 need only the runner of US1 and US2; T053 to T056 the
+  CLI of US1). T049, then T050, then T051; T052 after T051 and T004. T053 then T054; T055 after
+  T054, T051 and T004; T056 after T054.
+- **US5, US6 (Phases 7, 8)**: after US1. T057, T059 (runner test file, one after another); T058,
+  T060 after T032.
+- **US7 and docs (Phase 9)**: T061 any time; T062 and T063 after T061; T064 to T068 side by side,
+  after the behaviour they describe (US1 to US6); T069 last.
+- **Review (Phase 10)**: after Phases 3 to 9. T070, then T071.
+- **Polish (Phase 11)**: T072 any time after T037; T073 to T076 after T071, in that order.
+
+### Files more than one task edits (one after another, never side by side)
+
+- `packages/core/src/deploy/deploy.ts`, `open.ts`, `state.ts`: T001, T011, T015.
+- `packages/core/src/protocol/protocol.ts`: T018, T025. `packages/core/src/index.ts`: T001, T019.
+- `packages/core/test/scenarios/messages.test.ts`: T018, T019, T025.
+- `apps/runner/src/commands/commands.ts`: T023, T051. `apps/runner/src/commands/deploy.ts`,
+  `session/session.ts`: T023, T037.
+- `apps/runner/test/support/deploy-v2.ts`: T005, T021. `apps/runner/test/scenarios/deploy-v2.test.ts`:
+  T022, T057, T059. `apps/runner/test/scenarios/secrets-v2.test.ts`: T036, T044.
+  `apps/runner/test/scenarios/versions.test.ts`: T005, T049. `apps/runner/test/scenarios/pairing.test.ts`:
+  T004, T052. `apps/runner/test/session/session.test.ts`: T024, T050.
+- `apps/cli/src/ops/deploy.ts`: T027, T032, T040, T054. `apps/cli/src/ops/secret.ts`: T003, T027,
+  T047. `apps/cli/src/ops/deploy-secrets.ts`: T040, T046.
+- `apps/cli/src/shared/deploy-words.ts` and its test: T028, T029, T040, T046.
+  `apps/cli/src/cli/errors.ts`: T029.
+- `apps/cli/test/ui/ink/single-commands.test.tsx`: T025, T033, T042, T048, T056, T058, T060.
+  `apps/cli/test/app/`: T033, T042, T047 (set-secret cases only), T048, T056.
+- `apps/cli/test/ops/deploy-secrets.test.ts`: T038, T045. `apps/cli/test/ops/deploy-answer.test.ts`:
+  T030, T058. `apps/cli/test/scenarios/deploy-v2.test.ts`: T031, T060.
+  `apps/cli/test/scenarios/secrets-v2.test.ts`: T039, T041.
+- `specs/014-deploy-v2/quickstart.md`: T004, T035, T041, T073, T074, T075, T076.
+
+### Within each story
+
+The test first, seen to fail; the runner; the CLI; the lines and their drawing tests.
+
+## Implementation strategy
+
+### MVP first
+
+Phases 1 to 3: the core library, the runner's `deploy`, protocol 3, and the CLI signing version 2
+with the order rule and C1, C2. A developer deploys as before, and an overtaken deploy never runs.
+
+### Incremental delivery
+
+1. Setup and Foundational: version 2 exists in the core library, nothing uses it.
+2. US1: the order. 3. US2: secrets kept on the server. 4. US3: a removed member's secret.
+5. US4: the version-1 gate, C6, C7, pairing. 6. US5, US6: later fields and expiry, mostly tests.
+7. US7 and docs. 8. The review. 9. Polish. Commit at the end of each phase, when the maintainer asks.
+
+## Parts for parallel work
+
+Five builders can work at once without touching the same files. Each part owns its files; a task
+outside them is listed with the part that does it.
+
+| Part | Owns | Tasks | Needs first |
+|---|---|---|---|
+| **A. Core** | `packages/core/src/**`, `packages/core/test/**` | T001, T002, T006 to T020, T025 (the one task that also edits other parts' test files; done when B reaches it, with B and C told) | nothing |
+| **B. Runner** | `apps/runner/src/**`, `apps/runner/test/**` | T004, T005, T021 to T024, T036, T037, T044, T049 to T052, T057, T059, T072 | A's T019 (T004 and T005 can start at once) |
+| **C. CLI operations** | `apps/cli/src/ops/**`, `apps/cli/src/server/session.ts`, `apps/cli/src/shared/{deploy,history,views,deploy-words}.ts`, `apps/cli/src/cli/errors.ts`; tests under `apps/cli/test/{ops,shared,cli,server,scenarios,support,plain,asking}/**` | T003, T026 to T032, T038 to T041, T043, T045 to T047, T053 to T055, T058 (its `deploy-answer` case), T060 (its scenario case) | A's T019; B's T023 for T031 and T032, T037 for T039, T051 for T053 and T055; T025 before T032 |
+| **D. CLI lines and screens** | `apps/cli/src/ui/**`, `apps/cli/src/app/**`, `apps/cli/test/ui/**`, `apps/cli/test/app/**`, `apps/web/content/screens/*.json` | T033 to T035, T042, T048, T056, T058 (its drawing case), T060 (its R6 case), T074's screens step | C's T029 (the words) and T032 (the `DeployInfo` fields); C's T040, T046, T054 for the lines of US2 to US4. `single-commands.test.tsx` is edited by T025 first |
+| **E. Docs** | `README.md`, `apps/web/content/docs/*.mdx`, `apps/runner/README.md`, `packages/core/README.md`, `apps/cli/test/docs/metadata-note.test.ts` | T061 to T069 | the contracts only; T064 to T067 are checked against the built behaviour before T069 |
+
+Two tasks reach into another part's files, one after the other, never side by side: T025 (A) edits the protocol literals of B's and C's tests and of `single-commands.test.tsx`; T047 (C) edits the set-secret cases of D's `apps/cli/test/app/` tests, after D's T042. The review (T070, T071) is done by someone outside parts A to E. T073 to T076 are done by whoever
+brings the parts together, after T071.
+
+Totals: 76 tasks. Setup 5, Foundational 15, US1 15, US2 7, US3 6, US4 8, US5 2, US6 2, US7 and docs
+9, review 2, polish 5. Only T047's last step waits for the maintainer (N1).
