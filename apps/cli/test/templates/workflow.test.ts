@@ -4,7 +4,9 @@
  * research R13; plan.md, D29; tasks T038): read as text and with
  * `Bun.YAML.parse`, and held to each property the maintainer approved, so a
  * change that loosens one fails here. It is the contract's file, byte for
- * byte.
+ * byte, with the one addition of specs/014-deploy-v2 (N2, decided yes; tasks
+ * T082): the checkout fetches the whole history, which the pairing tests
+ * read. The contract stays as that feature's record.
  */
 import { describe, expect, test } from "bun:test"
 import { existsSync, readFileSync } from "node:fs"
@@ -37,6 +39,15 @@ type Workflow = {
   jobs: Record<string, Job>
 }
 
+/** The line of the contract's file that feature 014's addition follows. */
+const CREDENTIALS = "          persist-credentials: false\n"
+/** Feature 014's addition (N2): the whole history, for the pairing tests. Nothing else of the file changes. */
+const WHOLE_HISTORY = [
+  "          # The whole history, which is the repository's own and public: the pairing tests\n",
+  "          # (specs/014-deploy-v2) read runner-v0.1.0 and e7b0146 from it.\n",
+  "          fetch-depth: 0\n",
+].join("")
+
 const text = existsSync(FILE) ? readFileSync(FILE, "utf8") : ""
 const workflow = (text === "" ? { jobs: {} } : Bun.YAML.parse(text)) as Workflow
 const jobs = Object.values(workflow.jobs ?? {})
@@ -53,14 +64,15 @@ const PINNED = new Map(
 )
 
 describe("the check on GitHub (contracts/contributing.md, CW1 to CW8)", () => {
-  test("the file is there, and is the contract's file byte for byte", () => {
+  test("the file is there, and is the contract's file byte for byte, with feature 014's addition only", () => {
     expect(existsSync(FILE)).toBe(true)
     const contract = readFileSync(CONTRACT, "utf8")
     const block = /## The check[^\n]*\n[\s\S]*?```yaml\n([\s\S]*?)```/.exec(
       contract
     )?.[1]
     expect(block).toBeDefined()
-    expect(text).toBe(block!)
+    expect(block!.split(CREDENTIALS)).toHaveLength(2)
+    expect(text).toBe(block!.replace(CREDENTIALS, CREDENTIALS + WHOLE_HISTORY))
   })
 
   test("CW1: it runs on pull_request only, never pull_request_target", () => {
@@ -101,12 +113,15 @@ describe("the check on GitHub (contracts/contributing.md, CW1 to CW8)", () => {
     )
   })
 
-  test("CW4: the checkout keeps no credentials", () => {
+  test("CW4: the checkout keeps no credentials, and fetches the whole history (specs/014-deploy-v2, N2)", () => {
     const checkout = steps.filter((step) =>
       step.uses?.startsWith("actions/checkout@")
     )
     expect(checkout).toHaveLength(1)
-    expect(checkout[0]!.with).toEqual({ "persist-credentials": false })
+    expect(checkout[0]!.with).toEqual({
+      "persist-credentials": false,
+      "fetch-depth": 0,
+    })
   })
 
   test("CW5: no secret, and nothing of the event but the pull request's number, which no shell reads", () => {

@@ -1,10 +1,17 @@
 /** Something the person can fix: shown as one sentence, exit status 1. */
 export class CliError extends Error {}
 
-/** The runner said no. The reason is one of the fixed words the runner can answer with. */
+/**
+ * The runner said no. The reason is one of the fixed words the runner can
+ * answer with. The sentence is `explain`'s unless the caller knows a better
+ * one, such as `explainDeploy`'s for the deploy it signed.
+ */
 export class RunnerRefused extends CliError {
-  constructor(readonly reason: string) {
-    super(explain(reason))
+  constructor(
+    readonly reason: string,
+    message: string = explain(reason)
+  ) {
+    super(message)
   }
 }
 
@@ -73,8 +80,61 @@ const REASONS: Record<string, string> = {
     "The deploy carries an older version of a secret than the runner already accepted.",
   too_large:
     "The deploy is larger than the runner accepts, or the server already holds as many apps or secrets as a runner can.",
+  // Feature 014 (specs/014-deploy-v2, contracts/cli.md): reasons only a version-2 deploy is refused for.
+  /** R4 */
+  secret_missing:
+    "The runner does not hold a secret this deploy lists, and it was not sent with it. Nothing of it ran. Run zekno deploy again.",
+  /** R5 */
+  untrusted_secret:
+    "A secret of this app was set by someone who is no longer in the team. Nothing of this deploy ran. Set it again with zekno secret set, or remove it with zekno secret rm.",
+  /** R6 */
+  expired:
+    "The time this deploy had to run had passed by the server's clock. Nothing of it ran. Deploy again, and check the server's clock if it says so again.",
 }
 
 export function explain(reason: string): string {
   return REASONS[reason] ?? `The runner refused the request (${reason}).`
+}
+
+/**
+ * What a version-2 deploy's refusal means, where it means something new
+ * (specs/014-deploy-v2, contracts/cli.md, R1 to R3): the order rule, and
+ * every secret accounted for. A version-1 deploy keeps today's sentences.
+ */
+const VERSION_TWO: Record<string, string> = {
+  /** R1 */
+  replayed:
+    "Another deploy of this app reached the runner first. Nothing of this one ran. Run zekno deploy again to deploy on top of it.",
+  /** R2 */
+  sequence_jump:
+    "This deploy was made after a deploy the runner does not hold. Nothing of it ran. Run zekno status to see what the runner holds.",
+  /** R3 */
+  secrets_mismatch:
+    "The deploy does not account for every secret the runner holds for this app. Nothing of it ran. Run zekno deploy again.",
+}
+
+/** R8, for a deploy the runner could not read, whatever its format. */
+const UNREADABLE =
+  "The runner could not read this deploy. Nothing of it ran. Run zekno status to compare its version with this zekno's."
+
+/** Sentences for a deploy of either format, for reasons that until feature 014 were said only by their word (R7, R8). */
+const EITHER_FORMAT: Record<string, string> = {
+  /** R7 */
+  unsupported_version:
+    "The runner on that server does not carry out everything this deploy asks for. Nothing of it ran. Run zekno status to compare its version with this zekno's.",
+  malformed: UNREADABLE,
+  wrong_payload_type: UNREADABLE,
+}
+
+/**
+ * The sentence for a refusal of a deploy this machine signed in `format`
+ * (research R15): R1 to R3 for version 2; R7 and R8 for either; `explain`'s
+ * otherwise, so a version-1 deploy says what it says today.
+ */
+export function explainDeploy(reason: string, format: 1 | 2): string {
+  return (
+    (format === 2 ? VERSION_TWO[reason] : undefined) ??
+    EITHER_FORMAT[reason] ??
+    explain(reason)
+  )
 }

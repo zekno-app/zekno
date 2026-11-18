@@ -3,17 +3,17 @@
  * (FR-026, FR-027, SC-002; contracts/commands.md, "Tests"; tasks T061). For
  * design.md's file and every good file of the test set, the standard output
  * of `zekno settings compose` is, byte for byte, the Compose text inside the
- * deploy `zekno deploy` signs for the same folder, as `readSignedDeploy`
+ * deploy `zekno deploy` signs for the same folder, as `readDeployEntry`
  * reads it from this machine's history; and a second run prints the same.
  */
 import { describe, expect, test } from "bun:test"
-import { readSignedDeploy } from "@workspace/core"
 import { readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { openTeam } from "../../src/cli/context"
 import { composeText } from "../../src/settings/compose"
 import { SH1, SH3 } from "../../src/settings/words"
+import { readDeployEntry } from "../../src/shared/history"
 import type { Cell } from "../../src/ui/types"
 import { COMPOSE_V1, machine, ready } from "../support/helpers"
 import {
@@ -54,9 +54,9 @@ async function lastSigned(m: Machine): Promise<string> {
   const team = await openTeam(m.deps)
   const server = team.profile.servers[0]!
   const entry = team.store.history(server.serverId, "demo").at(-1)!
-  const read = readSignedDeploy({ envelope: entry.envelope, trust: team.trust })
-  if (!read.ok) throw new Error("the last deploy did not verify")
-  return read.value.deploy.compose
+  const read = readDeployEntry(entry.envelope, team.trust)
+  if (!read) throw new Error("the last deploy did not verify")
+  return read.deploy.compose
 }
 
 describe("zekno settings compose prints what zekno deploy signs (FR-027, SC-002)", () => {

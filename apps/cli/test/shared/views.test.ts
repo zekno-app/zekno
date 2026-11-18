@@ -23,7 +23,8 @@ import {
   type History,
   type Server,
 } from "../../src/profile/profile"
-import { lastDeployedCompose } from "../../src/shared/views"
+import { appDetails, appsOf, lastDeployedCompose } from "../../src/shared/views"
+import { payloadOf, signingTeam } from "../support/signing-team"
 
 /** A team of one, with a server `dev`, that signs deploys. */
 async function team() {
@@ -130,5 +131,131 @@ describe("lastDeployedCompose", () => {
     expect(
       lastDeployedCompose(profileStore(home), trust, server, "demo")
     ).toBeUndefined()
+  })
+})
+
+describe("a history of version-1 then version-2 entries (specs/014-deploy-v2, tasks T026)", () => {
+  const A = "services:\n  web:\n    image: example/web:1\n"
+  const B = A.replace("web:1", "web:2")
+  const C = A.replace("web:1", "web:3")
+
+  test("Home's row, the app's deploy rows with rollback marks across the two kinds, and secret rows from a version-2 latest", async () => {
+    const t = await signingTeam()
+    const db1 = await t.secret("DATABASE_URL", "postgres://one", 1)
+    const db2 = await t.secret("DATABASE_URL", "postgres://two", 2)
+    const old = await t.secret("OLD", "old", 1)
+    const pay = await t.secret("PAYMENTS_KEY", "demo-key", 1)
+    const oldGone = await t.removal("OLD", 2)
+    const five = await t.deployV2(4, C, [db2.envelope, pay.envelope], [oldGone])
+    t.team.store.saveHistory(t.server.serverId, "demo", [
+      entry(await t.deployV1(1, A, [db1, old]), "started"),
+      entry(await t.deployV1(2, B, [db1, old]), "started"),
+      // 3 runs deploy 1's definition again, 4 deploy 2's: rollbacks across the two kinds.
+      entry(await t.deployV2(2, A, [db1.envelope, old.envelope]), "started"),
+      entry(
+        await t.deployV2(3, B, [db1.envelope, pay.envelope], [oldGone]),
+        "start_failed"
+      ),
+      // Its answer never came.
+      entry(five, "sent"),
+    ])
+    t.team.store.saveSecrets(t.server.serverId, "demo", {
+      records: [db1, db2, old, pay],
+      removals: [oldGone],
+    })
+
+    expect(appsOf(t.team, t.server, t.home)).toEqual([
+      {
+        name: "demo",
+        deploy: 5,
+        at: payloadOf(five).createdAt as string,
+        state: "unknown",
+        outcome: "sent",
+        signer: "Ada",
+        secrets: 2,
+        previous: 3,
+      },
+    ])
+
+    const { deploys, secrets } = appDetails(t.team, t.server, "demo")
+    expect(
+      deploys.map((row) => ({
+        sequence: row.sequence,
+        outcome: row.outcome,
+        rollbackTo: row.rollbackTo,
+        teamVersion: row.teamVersion,
+        signer: row.signer,
+        services: row.services,
+        secrets: row.secrets,
+      }))
+    ).toEqual([
+      {
+        sequence: 5,
+        outcome: "sent",
+        rollbackTo: undefined,
+        teamVersion: 2,
+        signer: "Ada",
+        services: ["web (example/web:3)"],
+        secrets: [
+          { name: "DATABASE_URL", version: 2 },
+          { name: "PAYMENTS_KEY", version: 1 },
+        ],
+      },
+      {
+        sequence: 4,
+        outcome: "start_failed",
+        rollbackTo: 2,
+        teamVersion: 2,
+        signer: "Ada",
+        services: ["web (example/web:2)"],
+        secrets: [
+          { name: "DATABASE_URL", version: 1 },
+          { name: "PAYMENTS_KEY", version: 1 },
+        ],
+      },
+      {
+        sequence: 3,
+        outcome: "started",
+        rollbackTo: 1,
+        teamVersion: 2,
+        signer: "Ada",
+        services: ["web (example/web:1)"],
+        secrets: [
+          { name: "DATABASE_URL", version: 1 },
+          { name: "OLD", version: 1 },
+        ],
+      },
+      {
+        sequence: 2,
+        outcome: "started",
+        rollbackTo: undefined,
+        teamVersion: 2,
+        signer: "Ada",
+        services: ["web (example/web:2)"],
+        secrets: [
+          { name: "DATABASE_URL", version: 1 },
+          { name: "OLD", version: 1 },
+        ],
+      },
+      {
+        sequence: 1,
+        outcome: "started",
+        rollbackTo: undefined,
+        teamVersion: 2,
+        signer: "Ada",
+        services: ["web (example/web:1)"],
+        secrets: [
+          { name: "DATABASE_URL", version: 1 },
+          { name: "OLD", version: 1 },
+        ],
+      },
+    ])
+    // Against deploy 4, the latest the runner answered, a version-2 deploy.
+    expect(secrets).toEqual([
+      { name: "DATABASE_URL", version: 2, removed: false, afterDeploy: true },
+      { name: "PAYMENTS_KEY", version: 1, removed: false, afterDeploy: false },
+      { name: "OLD", version: 2, removed: true, afterDeploy: false },
+    ])
+    expect(lastDeployedCompose(t.team.store, t.trust, t.server, "demo")).toBe(B)
   })
 })

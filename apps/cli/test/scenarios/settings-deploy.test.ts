@@ -7,12 +7,12 @@
  * a later setting or a fault stops everything before anything is signed.
  */
 import { describe, expect, test } from "bun:test"
-import { readSignedDeploy } from "@workspace/core"
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { openTeam } from "../../src/cli/context"
 import { DP2 } from "../../src/settings/words"
+import { readDeployEntry } from "../../src/shared/history"
 import {
   answering,
   COMPOSE_V1,
@@ -59,12 +59,9 @@ async function signed(m: Machine, app = "demo"): Promise<string[]> {
   const team = await openTeam(m.deps)
   const server = team.profile.servers[0]!
   return team.store.history(server.serverId, app).map((entry) => {
-    const read = readSignedDeploy({
-      envelope: entry.envelope,
-      trust: team.trust,
-    })
-    if (!read.ok) throw new Error("a history entry did not verify")
-    return read.value.deploy.compose
+    const read = readDeployEntry(entry.envelope, team.trust)
+    if (!read) throw new Error("a history entry did not verify")
+    return read.deploy.compose
   })
 }
 

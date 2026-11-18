@@ -4,9 +4,9 @@
  *
  * The folder is ordinary files that something other than zekno could have
  * changed (attacker B in specs/003-cli-runner/security-review.md), so
- * nothing is taken as it stands. A deploy counts only when it is signed by a
- * current team member for this team, server and app, exactly as
- * ops/deploy.ts reads the history for a rollback, and its number, time,
+ * nothing is taken as it stands. A deploy of either kind counts only when it
+ * is signed by a current team member for this team, server and app, exactly
+ * as ops/deploy.ts reads the history for a rollback, and its number, time,
  * signer, service definition and secrets are read from under that
  * signature. Only whether the runner accepted it is the file's word. A
  * secret counts only when its record verifies. A file name counts only when
@@ -14,10 +14,8 @@
  */
 import {
   currentSecrets,
-  readSignedDeploy,
   verifySecret,
   verifySecretRemoval,
-  type Deploy,
   type TeamTrust,
 } from "@workspace/core"
 import { readdirSync } from "node:fs"
@@ -27,6 +25,7 @@ import { aliasesTooMany, COMPOSE_READ_BYTES } from "../project/compose-file"
 import type { Team } from "../cli/context"
 import type { History, ProfileStore, Server } from "../profile/profile"
 import { sanitize } from "../server/sanitize"
+import { readDeployEntry, type HistoryDeploy } from "./history"
 
 /** Whether an app's services are running, as the runner last said (data-model.md). */
 export type RunState = "running" | "stopped" | "partly running" | "unknown"
@@ -82,16 +81,17 @@ export type SecretRow = {
 const HISTORY_FILE = /^([a-z0-9][a-z0-9-]{0,62})\.json$/
 
 type Verified = {
-  deploy: Deploy
+  deploy: HistoryDeploy
   signer: string
   outcome: History[number]["outcome"]
 }
 
 /**
  * The deploys this machine sent for one app on one server that verify,
- * oldest first, one per number. A history file that cannot be read shows no
- * deploys here; the deploy and rollback operations say what is wrong with it.
- * Only the profile's files and the team list are needed, never the keychain.
+ * oldest first, one per number, of either kind (`readDeployEntry`). A history
+ * file that cannot be read shows no deploys here; the deploy and rollback
+ * operations say what is wrong with it. Only the profile's files and the team
+ * list are needed, never the keychain.
  */
 export function verifiedDeploys(
   team: Pick<Team, "store" | "trust">,
@@ -106,12 +106,9 @@ export function verifiedDeploys(
   }
   const byNumber = new Map<number, Verified>()
   for (const entry of history) {
-    const read = readSignedDeploy({
-      envelope: entry.envelope,
-      trust: team.trust,
-    })
-    if (!read.ok) continue
-    const { deploy, signer } = read.value
+    const read = readDeployEntry(entry.envelope, team.trust)
+    if (!read) continue
+    const { deploy, signer } = read
     if (
       deploy.teamId !== team.trust.teamId ||
       deploy.serverId !== server.serverId ||
@@ -256,7 +253,7 @@ function secretRows(
   team: Team,
   server: Server,
   app: string,
-  latest: Deploy | undefined
+  latest: HistoryDeploy | undefined
 ): SecretRow[] {
   const { trust } = team
   const serverId = server.serverId

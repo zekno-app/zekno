@@ -5,21 +5,21 @@ import {
   currentSecrets,
   isReservedSecretName,
   LIMITS,
-  readSignedDeploy,
   SECRET_NAME,
   verifySecret,
-  verifySecretRemoval,
   type SecretRecord,
-  type TeamTrust,
 } from "@workspace/core"
 
 import { teamOf, type OpDeps, type Team } from "../cli/context"
 import { CliError, UsageError } from "../cli/errors"
 import { findServer, type SecretStore, type Server } from "../profile/profile"
 import type { ImportEntry } from "../secrets/import-file"
+import { readDeployEntry } from "../shared/history"
 import { checkApp, type Where } from "./deploy"
+import { floorVersion, latestVersions, remembersName } from "./secret-versions"
 
 export type { Where }
+export { latestVersions }
 
 async function locate(deps: OpDeps, where: Where) {
   const team = await teamOf(deps)
@@ -32,49 +32,6 @@ async function locate(deps: OpDeps, where: Where) {
     app,
     secrets: team.store.secrets(server.serverId, app),
   }
-}
-
-/** The highest version this machine has seen for each name, set or removed: `latestVersion` for every name at once, in one pass. */
-export function latestVersions(
-  trust: TeamTrust,
-  serverId: string,
-  app: string,
-  held: SecretStore
-): Map<string, number> {
-  const latest = new Map<string, number>()
-  const seen = (name: string, version: number) =>
-    latest.set(name, Math.max(latest.get(name) ?? 0, version))
-  for (const record of held.records) {
-    const checked = verifySecret({ record, trust, serverId, app })
-    if (checked.ok) seen(checked.value.name, checked.value.version)
-  }
-  for (const removal of held.removals) {
-    const checked = verifySecretRemoval({ removal, trust, serverId, app })
-    if (checked.ok) seen(checked.value.name, checked.value.version)
-  }
-  return latest
-}
-
-/** The highest version this machine has seen for a name, set or removed. */
-function latestVersion(
-  trust: TeamTrust,
-  serverId: string,
-  app: string,
-  held: SecretStore,
-  name: string
-): number {
-  let latest = 0
-  for (const record of held.records) {
-    const checked = verifySecret({ record, trust, serverId, app })
-    if (checked.ok && checked.value.name === name)
-      latest = Math.max(latest, checked.value.version)
-  }
-  for (const removal of held.removals) {
-    const checked = verifySecretRemoval({ removal, trust, serverId, app })
-    if (checked.ok && checked.value.name === name)
-      latest = Math.max(latest, checked.value.version)
-  }
-  return latest
 }
 
 /** Said for a name that cannot be a secret's. It states the rule and never repeats what was typed, which may be a value. */
@@ -146,7 +103,12 @@ export async function prepareSecretSet(
   return { team, server, app, name: checkSecretName(name), secrets }
 }
 
-/** Seals and signs a value and keeps the record. The value goes nowhere else. */
+/**
+ * Seals and signs a value and keeps the record. The value goes nowhere else.
+ * Nothing connects (specs/014-deploy-v2, decision B): the version is one
+ * above the highest this machine holds or remembers of the server
+ * (`floorVersion`, CL18).
+ */
 export async function setSecret(
   plan: SecretPlan,
   value: string
@@ -156,7 +118,9 @@ export async function setSecret(
   // Enter pressed by accident, or an empty pipe, is not a value someone meant to store.
   if (value === "")
     throw new CliError("No value was given, so nothing was set.")
-  const version = latestVersion(trust, server.serverId, app, secrets, name) + 1
+  const held = team.store.held(server.serverId, app)
+  const version =
+    floorVersion(trust, server.serverId, app, secrets, held, name) + 1
   const record = await team
     .withSigner((signer) =>
       createSecret({
@@ -332,7 +296,13 @@ export async function storeSecrets(plan: ImportPlan): Promise<SecretChange[]> {
   }))
 }
 
-/** Signs the removal of a secret the app has now. */
+/**
+ * Signs the removal of a secret the app has now, or of one this machine
+ * holds a record of that does not verify, or remembers the server holding
+ * (`remembersName`, CL19). Nothing connects (specs/014-deploy-v2, decision
+ * B): the version is one above the highest this machine holds or remembers
+ * (`floorVersion`, CL18).
+ */
 export async function removeSecret(
   deps: OpDeps,
   name: string | undefined,
@@ -340,16 +310,12 @@ export async function removeSecret(
 ): Promise<SecretChange> {
   const { team, trust, server, app, secrets } = await locate(deps, where)
   if (!name) throw new UsageError(sayWhichSecret("rm"))
-  const current = currentSecrets({
-    trust,
-    serverId: server.serverId,
-    app,
-    ...secrets,
-  })
-  if (!current.secrets.some((record) => record.sealed.name === name)) {
+  const held = team.store.held(server.serverId, app)
+  if (!remembersName(trust, server.serverId, app, secrets, held, name)) {
     throw new CliError(`${app} on ${server.name} has no secret named ${name}.`)
   }
-  const version = latestVersion(trust, server.serverId, app, secrets, name) + 1
+  const version =
+    floorVersion(trust, server.serverId, app, secrets, held, name) + 1
   const removal = await team
     .withSigner((signer) =>
       createSecretRemoval({
@@ -372,8 +338,9 @@ export async function removeSecret(
 /**
  * The secrets the latest deploy the runner accepted carries, by name and
  * version, from this machine's history; undefined when there is none. Only a
- * deploy signed for this team, server and app counts, read from under its
- * signature, as the app screen reads the history (shared/views.ts). A history
+ * deploy of either kind signed for this team, server and app counts, read
+ * from under its signature, as the app screen reads the history
+ * (shared/views.ts, `readDeployEntry`). A history
  * that cannot be read counts as no deploy: this only adds a note to a list.
  */
 function deployedSecrets(
@@ -395,11 +362,7 @@ function deployedSecrets(
     | undefined
   for (const entry of history) {
     if (entry.outcome === "sent") continue
-    const read = readSignedDeploy({
-      envelope: entry.envelope,
-      trust: team.trust,
-    })
-    const deploy = read.ok ? read.value.deploy : undefined
+    const deploy = readDeployEntry(entry.envelope, team.trust)?.deploy
     if (
       deploy?.teamId !== team.trust.teamId ||
       deploy.serverId !== server.serverId ||

@@ -9,7 +9,6 @@
  * zekno.json names another settings file gets the service in that file.
  */
 import { beforeAll, describe, expect, test } from "bun:test"
-import { readSignedDeploy } from "@workspace/core"
 import {
   mkdirSync,
   readFileSync,
@@ -21,6 +20,7 @@ import { join } from "node:path"
 
 import { openTeam } from "../../src/cli/context"
 import { listSecrets } from "../../src/ops/secret"
+import { readDeployEntry } from "../../src/shared/history"
 import { composeText } from "../../src/settings/compose"
 import { checkSettings } from "../../src/settings/schema"
 import type { Settings } from "../../src/settings/types"
@@ -57,12 +57,9 @@ async function signed(app = "demo", machine = m): Promise<string[]> {
   const team = await openTeam(machine.deps)
   const server = team.profile.servers[0]!
   return team.store.history(server.serverId, app).map((entry) => {
-    const read = readSignedDeploy({
-      envelope: entry.envelope,
-      trust: team.trust,
-    })
-    if (!read.ok) throw new Error("a history entry did not verify")
-    return read.value.deploy.compose
+    const read = readDeployEntry(entry.envelope, team.trust)
+    if (!read) throw new Error("a history entry did not verify")
+    return read.deploy.compose
   })
 }
 

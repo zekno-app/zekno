@@ -37,6 +37,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+          # The whole history, which is the repository's own and public: the pairing tests
+          # (specs/014-deploy-v2) read runner-v0.1.0 and e7b0146 from it.
+          fetch-depth: 0
 
       - name: Read the Bun version
         id: pin

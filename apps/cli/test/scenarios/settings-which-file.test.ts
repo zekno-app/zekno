@@ -8,7 +8,6 @@
  * is left aside as the deploy leaves it, and nothing is recorded.
  */
 import { describe, expect, test } from "bun:test"
-import { readSignedDeploy } from "@workspace/core"
 import {
   mkdirSync,
   readFileSync,
@@ -22,6 +21,7 @@ import { shownFile, shownPath } from "../../src/project/shown"
 import { composeText } from "../../src/settings/compose"
 import { settingsText } from "../../src/settings/text"
 import { IN6, SH3, SH4 } from "../../src/settings/words"
+import { readDeployEntry } from "../../src/shared/history"
 import { openTeam } from "../../src/cli/context"
 import { answering, machine, ready, twin } from "../support/helpers"
 import {
@@ -353,12 +353,9 @@ describe("a zekno.json the deploy leaves aside", () => {
     const team = await openTeam(other.deps)
     const server = team.profile.servers[0]!
     const entry = team.store.history(server.serverId, "demo").at(-1)!
-    const read = readSignedDeploy({
-      envelope: entry.envelope,
-      trust: team.trust,
-    })
-    if (!read.ok) throw new Error("the deploy did not verify")
-    expect(read.value.deploy.compose).toBe(composeText(runs(HIDDEN)))
+    const read = readDeployEntry(entry.envelope, team.trust)
+    if (!read) throw new Error("the deploy did not verify")
+    expect(read.deploy.compose).toBe(composeText(runs(HIDDEN)))
   }, 60_000)
 })
 

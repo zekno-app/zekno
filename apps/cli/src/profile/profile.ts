@@ -1,14 +1,19 @@
 /**
  * What the CLI keeps on the developer's machine. Everything here is public
  * or already encrypted and signed: team lists, server addresses, secret
- * records and the deploys that were sent. The signing key is not here; it is
- * in the keychain.
+ * records, the deploys that were sent, and the secret statements and versions
+ * a server said it holds. The signing key is not here; it is in the keychain.
  *
  * Nothing in these files is trusted as it stands. Team lists, secrets and
  * deploys are signed and are verified again every time they are read; see
  * `openTeam` in context.ts.
  */
-import { EnvelopeSchema, LIMITS, SecretRecordSchema } from "@workspace/core"
+import {
+  EnvelopeSchema,
+  LIMITS,
+  SECRET_NAME,
+  SecretRecordSchema,
+} from "@workspace/core"
 import { randomBytes } from "node:crypto"
 import {
   chmodSync,
@@ -98,6 +103,39 @@ const HistorySchema = z.array(
 )
 export type History = z.infer<typeof HistorySchema>
 
+/** The longest payload of a statement kept in `held/`. A real statement is under 1 KiB. */
+const HELD_PAYLOAD_LENGTH = 4096
+
+/**
+ * What a server said it holds for one app, as the last version-2 deploy of
+ * it read on its own connection (specs/014-deploy-v2, data-model.md; research
+ * R9): the signed secret statements of its `records` answer, and the app's
+ * versions from its `status` answer. It holds what the server said, never a
+ * value or a sealed value. It is only a floor: `zekno secret set` and
+ * `zekno secret rm` take the next version above it and know a name from it,
+ * offline; nothing here is ever signed as a hash or listed in a deploy, which
+ * takes only statements verified at deploy time.
+ */
+const HeldSchema = z.strictObject({
+  statements: z
+    .array(
+      EnvelopeSchema.refine(
+        (envelope) => envelope.payload.length <= HELD_PAYLOAD_LENGTH
+      )
+    )
+    .max(LIMITS.secretsPerDeploy),
+  versions: z
+    .array(
+      z.strictObject({
+        name: z.string().max(LIMITS.secretNameLength).regex(SECRET_NAME),
+        version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+        removed: z.boolean(),
+      })
+    )
+    .max(LIMITS.secretsPerServer),
+})
+export type Held = z.infer<typeof HeldSchema>
+
 function read<Schema extends z.ZodType>(
   path: string,
   schema: Schema,
@@ -121,6 +159,8 @@ export function profileStore(home: string) {
     join(home, "secrets", serverId, `${app}.json`)
   const historyPath = (serverId: string, app: string) =>
     join(home, "history", serverId, `${app}.json`)
+  const heldPath = (serverId: string, app: string) =>
+    join(home, "held", serverId, `${app}.json`)
 
   /** Writes a whole file or nothing: a new file under a name nobody can predict, then a rename. */
   function write(path: string, value: unknown): void {
@@ -165,6 +205,30 @@ export function profileStore(home: string) {
       [],
     saveHistory: (serverId: string, app: string, history: History) =>
       write(historyPath(serverId, app), history.slice(-HISTORY_LENGTH)),
+    /**
+     * What the server said it holds for the app. A file that is missing,
+     * unreadable or does not match `HeldSchema` is read as empty, never an
+     * error: it is only a floor, and the next version-2 deploy writes it again.
+     */
+    held(serverId: string, app: string): Held {
+      try {
+        return (
+          read(
+            heldPath(serverId, app),
+            HeldSchema,
+            "What the server holds"
+          ) ?? {
+            statements: [],
+            versions: [],
+          }
+        )
+      } catch {
+        return { statements: [], versions: [] }
+      }
+    },
+    /** Replaces what the server said it holds for the app, whole. */
+    saveHeld: (serverId: string, app: string, held: Held) =>
+      write(heldPath(serverId, app), held),
   }
 }
 export type ProfileStore = ReturnType<typeof profileStore>

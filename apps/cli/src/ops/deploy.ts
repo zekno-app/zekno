@@ -2,7 +2,6 @@ import {
   CoreError,
   createDeploy,
   currentSecrets,
-  readSignedDeploy,
   RunnerReportSchema,
   RunnerStatusSchema,
   type RunnerReport,
@@ -22,6 +21,7 @@ import {
 } from "../server/session"
 import { appTaken } from "../shared/app-names"
 import type { DeployInfo, DeployStage } from "../shared/deploy"
+import { readDeployEntry } from "../shared/history"
 import { checkIdentity } from "./status"
 
 export type DeployCallbacks = {
@@ -109,9 +109,10 @@ type Sent = {
 
 /**
  * The deploys this machine sent for one app on one server, oldest first. The
- * history file is not trusted: each entry counts only if it is a deploy
- * signed by a current team member for this app and this server, and its
- * number and service definition are read from under that signature.
+ * history file is not trusted: each entry counts only if it is a deploy, of
+ * either kind (`readDeployEntry`), signed by a current team member for this
+ * app and this server, and its number and service definition are read from
+ * under that signature.
  */
 function sentDeploys(
   team: Team,
@@ -123,11 +124,7 @@ function sentDeploys(
   const sent: Sent[] = []
   let ignored = 0
   for (const entry of history) {
-    const read = readSignedDeploy({
-      envelope: entry.envelope,
-      trust: team.trust,
-    })
-    const deploy = read.ok ? read.value.deploy : undefined
+    const deploy = readDeployEntry(entry.envelope, team.trust)?.deploy
     if (
       deploy?.teamId === team.trust.teamId &&
       deploy.serverId === server.serverId &&
