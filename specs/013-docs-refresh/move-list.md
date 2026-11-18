@@ -803,3 +803,36 @@ stay in the desktop app" became "those stay on your machine"; the roadmap's "Des
 server, set secrets, deploy, roll back, logs" is removed, and so is "One-day spike: window,
 keychain access, signed build, verified auto-update (macOS and Windows)", which was the desktop
 app's.
+
+## After the cloud session: the templates page made one
+
+Done on the maintainer's computer on 2026-11-18, at the maintainer's word, because the page opened twice and listed twice what a template does not do (one text from the old templates page, one from "zekno add").
+
+- Under "zekno add", the second paragraph no longer repeats the page's opening ("Each one is a data file inside `zekno`, reviewed before it ships with a release. Nothing is downloaded when you use one"). Its other sentences stay.
+- Under "The templates", the short table of connection secrets is removed; the fuller table under "zekno add" has the same four rows. One sentence points at it. The sentences about `postgres` and `mysql` both offering `DATABASE_URL` stay.
+- "What adding one does" is removed: each of its statements is under "zekno add" ("Adding one", "Whole or not at all").
+- "What a template does not do" is removed: "What it does not do", under "zekno add", says each point in more detail. Its last words, "and in no settings file", were added to the sentence about Redis there, which is the only statement the fuller list lacked.
+
+The row above that renamed "What it does not do" to "What a template does not do" no longer applies: that second heading is gone.
+
+## After the cloud session: the landing page
+
+The maintainer asked for the desktop app to be left out of the landing page too (2026-11-18). In `apps/web/modules/landing/content/index.ts`:
+
+| Before | After |
+|---|---|
+| Card title "Desktop app" (on "Your machine") | "The zekno CLI" |
+| "The desktop app encrypts each secret for your server's public key before anything leaves your machine." | "The CLI encrypts each secret …" |
+| "If we are offline, the desktop app deploys to the runner directly." | "If we are offline, the CLI deploys to the runner directly." |
+| "A desktop app, teammates with roles and a full deploy history." | "One command to deploy, teammates with roles and a full deploy history." |
+| Open-source list: "Desktop app" | "Command-line tool" |
+| "While we are offline, the desktop app can deploy to the runner directly." | "While we are offline, the CLI can deploy to the runner directly." |
+| "A Zekno app or runner release is tampered with" | "A Zekno release (the CLI or the runner) is tampered with" |
+| "A tampered Zekno app or runner release, which public code …" | "A tampered Zekno release, the CLI or the runner, which public code …" |
+
+The page test that refuses the term now reads the landing page's content as well.
+
+## After the cloud session: rule 1 and the roadmap
+
+- **Rule 1's last sentence.** The cloud session wrote that the test "does not check the full-screen app's screens yet". A test was added on the maintainer's computer, `apps/cli/test/layers/screens-hold-no-key.test.ts`: no file of `src/ui/` or `src/app/screens/` loads `src/profile/` or `@workspace/core`. The sentence now reads: "Tests in `apps/cli/test/layers/` check that no file that draws (`src/ui/`, and the full-screen app's screens in `src/app/screens/`) loads the keychain code or the core library, that `src/ui/` takes only types from the code that encrypts and signs (`src/ops/`), and that `src/ops/` imports nothing that draws." The rest of rule 1 is unchanged, including "the screens and the code that signs run in one program".
+- **Roadmap, Later.** "Two-person approval for production deploys" is back, and the dashboard is named with the hosted service: "The hosted service, teammates and the signed-in dashboard". The local mock of the control plane stays out: it is a tool for developing Zekno, not something a user gets.

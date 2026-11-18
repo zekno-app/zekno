@@ -187,7 +187,7 @@ The control plane is closed because it is the hosted service we sell. The design
 
 These protect the security promise. Changes that break them need a very good reason.
 
-1. **Private keys stay out of the interface.** The code that draws screens asks a separate part of the program to encrypt or sign, and never holds a key. This is a rule for any interface. In the CLI today the separation is in the code, not in separate processes: the screens and the code that signs run in one program. [`apps/cli/test/layers/layers.test.ts`](apps/cli/test/layers/layers.test.ts) checks that the single commands' interface (`src/ui/`) takes only types from the code that encrypts and signs (`src/ops/`), and that `src/ops/` imports nothing that draws; it does not check the full-screen app's screens yet.
+1. **Private keys stay out of the interface.** The code that draws screens asks a separate part of the program to encrypt or sign, and never holds a key. This is a rule for any interface. In the CLI today the separation is in the code, not in separate processes: the screens and the code that signs run in one program. Tests in [`apps/cli/test/layers/`](apps/cli/test/layers/) check that no file that draws (`src/ui/`, and the full-screen app's screens in `src/app/screens/`) loads the keychain code or the core library, that `src/ui/` takes only types from the code that encrypts and signs (`src/ops/`), and that `src/ops/` imports nothing that draws.
 2. **Keys are stored in the operating system's keychain**, never in a plain file.
 3. **Nothing in this repository depends on closed code.** The CLI, the runner and the website reach the control plane only through the public protocol in `packages/core`.
 4. **No secret editing in a browser.** A web page is code served fresh on every visit, so a compromised server could serve a page that steals keys. The website's dashboard is read-only for anything secret.
@@ -315,7 +315,8 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 
 **Later**
 
-- [ ] The hosted service and teammates
+- [ ] The hosted service, teammates and the signed-in dashboard
+- [ ] Two-person approval for production deploys
 - [ ] An external audit
 
 ## Contributing

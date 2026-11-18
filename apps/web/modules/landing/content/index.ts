@@ -67,7 +67,7 @@ export const parties: Party[] = [
   {
     id: "machine",
     label: "Your machine",
-    title: "Desktop app",
+    title: "The zekno CLI",
     holds: ["Holds the team signing key", "Encrypts secrets", "Signs each deploy"],
   },
   {
@@ -94,7 +94,7 @@ export const steps: DeployStep[] = [
     label: "Encrypt",
     party: "machine",
     description:
-      "The desktop app encrypts each secret for your server's public key before anything leaves your machine.",
+      "The CLI encrypts each secret for your server's public key before anything leaves your machine.",
   },
   {
     id: "sign",
@@ -223,12 +223,12 @@ export const features: FeatureBlock[] = [
   {
     id: "uptime",
     heading: "We go down, you stay up",
-    body: "Your servers never depend on Zekno at runtime. If we are offline, the desktop app deploys to the runner directly.",
+    body: "Your servers never depend on Zekno at runtime. If we are offline, the CLI deploys to the runner directly.",
   },
   {
     id: "team",
     heading: "A real team platform, on servers you rent yourself",
-    body: "A desktop app, teammates with roles and a full deploy history. You pay your provider directly for the servers.",
+    body: "One command to deploy, teammates with roles and a full deploy history. You pay your provider directly for the servers.",
   },
 ]
 
@@ -371,7 +371,7 @@ export const threats = {
     },
     {
       id: "release",
-      title: "A Zekno app or runner release is tampered with",
+      title: "A Zekno release (the CLI or the runner) is tampered with",
       outcome: "unprotected",
       outcomeLabel: "Not protected",
       result: notProtected,
@@ -458,7 +458,7 @@ export const openSource = {
   parts: [
     { label: "Core library", status: "open" },
     { label: "Server runner", status: "open" },
-    { label: "Desktop app", status: "open" },
+    { label: "Command-line tool", status: "open" },
     { label: "Website and dashboard", status: "open" },
     { label: "Control plane (hosted by Zekno)", status: "closed" },
   ] satisfies OpenPart[],
@@ -488,13 +488,13 @@ export const faq = {
       id: "down",
       question: "What happens if Zekno goes down?",
       answer:
-        "Your apps keep running, because your servers don't depend on Zekno at runtime. While we are offline, the desktop app can deploy to the runner directly.",
+        "Your apps keep running, because your servers don't depend on Zekno at runtime. While we are offline, the CLI can deploy to the runner directly.",
     },
     {
       id: "limits",
       question: "What does Zekno not protect against?",
       answer:
-        "A compromised team member's machine, because it holds a signing key. A compromised server of yours, because secrets are plaintext in memory where the app runs. A tampered Zekno app or runner release, which public code and checksum-verified releases reduce but do not remove.",
+        "A compromised team member's machine, because it holds a signing key. A compromised server of yours, because secrets are plaintext in memory where the app runs. A tampered Zekno release, the CLI or the runner, which public code and checksum-verified releases reduce but do not remove.",
     },
     {
       id: "providers",
