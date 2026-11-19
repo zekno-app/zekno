@@ -18,7 +18,7 @@ They follow `zekno settings set`: the change line, the question, `✔ Written`.
 | A4 | Written (today's) | `✔ Written  Run zekno deploy to use it.` |
 | A5 | After A4, the record to create | `Before you deploy, create this DNS record at your DNS provider:` then, on its own line, `A  shop.example.com  203.0.113.7` |
 | A6 | After A4, when the server's public address is not known | `Before you deploy, point shop.example.com at the public address of prod-1 at your DNS provider.` |
-| A7 | Several services have a port | `? Which service answers for shop.example.com?` and the list of services that have a port |
+| A7 | Several services have a port | `? Which service answers for shop.example.com?` and the list of services that have a port. Once answered it is drawn as every list question of zekno is, `✔ Service  web` (approved as built on 2026-11-19; the board kept the question with its answer after it) |
 | A8 | The change, removing | `web · domains  shop.example.com → none` |
 | A9 | Written, after a removal | `✔ Written  Run zekno deploy to release it.` |
 
@@ -88,7 +88,7 @@ The runner's own refusal, in the pattern of feature 014's R-lines (no backticks;
 | C2 | While it waits, live, under the stage row | `waiting for web to answer GET /health` and the seconds, dim |
 | C3 | Not healthy in time, with a path | `web did not answer GET /health with success within 60 seconds. shop is running as deployed, and nothing was rolled back. Run `zekno logs` to see why, or `zekno rollback` to go back.` |
 | C4 | Not healthy in time, without a path | `web did not stay up within 60 seconds. shop is running as deployed, and nothing was rolled back. Run `zekno logs` to see why, or `zekno rollback` to go back.` |
-| C5 | In `zekno settings`, under Deploy | `health    GET /health, within 60s`, or `health    not set` |
+| C5 | In `zekno settings`, under Deploy | `health    GET /health, within 60s`, or `health    not set`. `not set` is drawn by the settings screen only: at a terminal `zekno settings` prints the settings that are set (approved as built on 2026-11-19) |
 | C6 | In `zekno settings`, without a path | `health    stays up, within 60s` |
 
 A deploy without a health check keeps today's four stages.
@@ -116,7 +116,7 @@ With no terminal: one line a domain, tab-separated: the domain, the service, the
 
 | # | Where | Line |
 |---|---|---|
-| E1 | `zekno settings`, under Networking | `domains   shop.example.com`, one a row, or `domains   none` |
+| E1 | `zekno settings`, under Networking | `domains   shop.example.com`, one a row, or `domains   none`. `none` is drawn by the settings screen only, as C5's `not set` is (approved as built on 2026-11-19) |
 | E2 | `zekno status`, after the app's line | `shop  https://shop.example.com` |
 | E3 | `zekno doctor`, per server with a routed app | `✔ Proxy          answers for 2 domains` |
 | E4 | `zekno doctor`, the proxy is not running | `✖ Proxy          not running` and under it `Deploy an app with a domain to start it again` |
