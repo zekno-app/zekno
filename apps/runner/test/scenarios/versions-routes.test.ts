@@ -11,6 +11,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
+import runnerPackage from "../../package.json"
 import { leftAsItWas, olderState } from "../support/deploy-v2"
 import {
   buildDeploy,
@@ -212,7 +213,8 @@ describe("the programs of feature 014 beside this runner (US7)", () => {
       )
       expect(code).not.toBe(0)
       expect(err.at(-1)).toBe(
-        "The runner on dev is version 0.1.0, newer than this zekno's 0.1.0, and speaks a newer protocol. Update zekno to deploy to dev. Nothing was signed."
+        // The runner's version is this repository's; 0.1.0 is what the zekno of feature 014 carries.
+        `The runner on dev is version ${runnerPackage.version}, newer than this zekno's 0.1.0, and speaks a newer protocol. Update zekno to deploy to dev. Nothing was signed.`
       )
       // Nothing was signed, sent or started.
       expect(readFileSync(join(runnerHome, "state.json"), "utf8")).toBe(before)
