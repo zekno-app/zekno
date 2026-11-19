@@ -365,9 +365,10 @@ Written on 2026-11-19, when every task was done. The numbers and the details are
 
 **Decided after the plan**: secrets stay offline (decision B) with the sentence C5b; the pull-request check fetches the whole history; and the review's fixes (a claimed version counts only 1,000 above a verified one; a statement is at most 4,096 characters; the runner checks its folder before the lock; the history is read again before it is written; a version-2 deploy has one spelling).
 
+**Fixed after the feature closed** (2026-11-19, asked for by the maintainer): the app drew a long error as one text, with its backticks, without the bold first sentence, and with a row that could start one space in. The app now draws every notice from the parts single commands use at a terminal (`apps/cli/src/app/notice.tsx`): an error is `✖`, its first sentence in bold, the rest dim below and in line with it, commands without backticks, as every approved board draws one. This holds on the deploy screen, on the line above the key hints of every screen, and for why the logs stopped; the screens count the rows the line is really drawn in. Tests: `apps/cli/test/app/notice.test.tsx`.
+
 **Left, on purpose**:
 
 - The runner's own bound on how far a secret's version may jump: with the feature that limits keys (it needs a new refusal sentence).
 - Two notes of the review on domain names (S7): to be decided in feature 015, before routes are carried out.
-- The app draws a long error with its backticks, without the bold first sentence, and with a row that can start one space in. It is how the app draws any long error today; it shows now because these sentences are long.
 - Four source files were already over 500 lines before this feature (`ops/doctor.ts`, `settings/words.ts`, `asking/first-deploy.ts`, `ops/server.ts`); none was made longer.

@@ -15,12 +15,13 @@ import type { ReactNode } from "react"
 
 import type { KeyHint } from "../../../ui/parts/key-hints"
 import { Frame, Header, PRE_ALPHA } from "../../frame"
+import { noticeRows } from "../../notice"
 import { selectedApp, selectedServer } from "../../state/home"
 import type { Screen, State } from "../../state/types"
 import { AppsPane } from "./apps"
 import { DetailsPane, linkedFile } from "./details"
 import { homeHints } from "./hints"
-import { inkRows, widthOf } from "./rows"
+import { widthOf } from "./rows"
 import { ServersPane } from "./servers"
 import { UPDATE_HINTS, UpdateQuestion } from "./update"
 import { HOME_WIDE } from "./widths"
@@ -53,10 +54,7 @@ function hintRows(hints: readonly KeyHint[], columns: number): number {
 function statusRows(state: State, columns: number): number {
   if (state.quitting) return 1
   if (!state.notice) return 0
-  return inkRows(
-    state.notice.tone === "info" ? state.notice.text : `✖ ${state.notice.text}`,
-    columns - 2
-  )
+  return noticeRows(state.notice, columns - 2)
 }
 
 export function HomeScreen({

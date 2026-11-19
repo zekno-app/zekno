@@ -7,7 +7,8 @@ import { numberUsed, stagesOf, Summary } from "../../ui/parts/deploy-summary"
 import type { KeyHint } from "../../ui/parts/key-hints"
 import { Panel } from "../../ui/parts/panel"
 import { Stages } from "../../ui/parts/stages"
-import { Frame, Header, NoticeLine, Trail } from "../frame"
+import { Frame, Header, Trail } from "../frame"
+import { NoticeLine, noticeRows } from "../notice"
 import {
   CHOICES,
   elsewhereChoices,
@@ -91,11 +92,17 @@ function DockerLines({
 }
 
 /** How it ended: the result line and, when its number was used without the app starting, that the number is used. */
-function Outcome({ deploy }: { deploy: DeployProgress }) {
+function Outcome({
+  deploy,
+  columns,
+}: {
+  deploy: DeployProgress
+  columns: number
+}) {
   if (!deploy.result) return null
   return (
     <Box flexDirection="column">
-      <NoticeLine notice={deploy.result} />
+      <NoticeLine notice={deploy.result} columns={columns} />
       {numberUsed(deploy) ? (
         <Box paddingLeft={2}>
           <Text dimColor>
@@ -111,17 +118,21 @@ function Outcome({ deploy }: { deploy: DeployProgress }) {
 /**
  * Lines of the window the deploy screen uses besides Docker's lines: the
  * app's margin rows, the header and the key hints with the gaps between,
- * the summary panel, the stage row, the result and the gaps between them.
+ * the summary panel, the stage row, the result in the rows it is drawn in
+ * (`width` columns) and the gaps between them.
  */
 function outputRows(
   rows: number,
   deploy: DeployProgress,
-  status: boolean
+  status: boolean,
+  width: number
 ): number {
   const panel =
     2 + 2 + (deploy.from ? 1 : 0) + 1 + (deploy.replaces !== undefined ? 1 : 0)
   const frame = 3 + 1 + 1 + 1 + (status ? 2 : 0)
-  const result = deploy.running ? 2 : numberUsed(deploy) ? 3 : 2
+  const said =
+    deploy.running || !deploy.result ? 1 : noticeRows(deploy.result, width)
+  const result = said + 1 + (numberUsed(deploy) ? 1 : 0)
   const footer = deploy.running ? 2 : 0
   return Math.max(1, rows - frame - panel - 1 - 1 - 1 - result - 1 - 2 - footer)
 }
@@ -151,7 +162,9 @@ export function DeployScreen({
   // Once it ended, the result is drawn in full here; a line about it below would say it twice.
   const shownStatus = deploy.running || state.quitting ? status : undefined
   const showLines = (screen.output || failed) && deploy.lines.length > 0
-  const count = outputRows(rows, deploy, shownStatus !== undefined)
+  // The window less the app's margins and this body's padding.
+  const room = columns - 2 - 4
+  const count = outputRows(rows, deploy, shownStatus !== undefined, room)
   const hints: readonly KeyHint[] = [
     ["o", screen.output ? "hide Docker's output" : "show Docker's output"],
     ["esc", deploy.running ? "back, deploy keeps going" : "back"],
@@ -178,7 +191,7 @@ export function DeployScreen({
             </Text>
           )
         ) : (
-          <Outcome deploy={deploy} />
+          <Outcome deploy={deploy} columns={room} />
         )}
         {showLines ? (
           <Panel

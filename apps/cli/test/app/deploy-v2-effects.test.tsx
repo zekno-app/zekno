@@ -21,6 +21,7 @@ import type { AppEvent } from "../../src/app/state/events"
 import { initialState } from "../../src/app/state/state"
 import type { State } from "../../src/app/state/types"
 import { C1, C5, C6, C7 } from "../../src/shared/deploy-words"
+import { withoutBackticks } from "../../src/ui/ink/marks"
 import { setNumber } from "../support/deploys"
 import { ready, twin, type machine } from "../support/helpers"
 import { asReleased, reportingAs } from "../support/older-runner"
@@ -260,6 +261,9 @@ describe("the app's deploys against a runner", () => {
     const screen = app.draw()
     expect(screen).toMatch(/╭─ Deploy ─+╮/)
     expect(screen).toMatch(/✖ Checked +○ Signed +○ Sent +○ Starting/)
-    expect(words(screen)).toContain(`✖ ${C5("API_KEY", "web", "dev")}`)
+    // Its commands are drawn without their backticks, as at a terminal (test/app/notice.test.tsx).
+    expect(words(screen)).toContain(
+      `✖ ${withoutBackticks(C5("API_KEY", "web", "dev"))}`
+    )
   }, 30_000)
 })

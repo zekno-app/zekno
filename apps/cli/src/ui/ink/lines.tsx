@@ -35,9 +35,12 @@ import type {
 import { AdditionBlock, HandBlock } from "./addition-report"
 import { TemplateListBlock, TemplateViewBlock } from "./templates"
 import { hiddenPieces } from "./hidden-prompts"
-import { COLOR, inside, MARK, MarkedLine, withoutBackticks } from "./marks"
+import { COLOR, ErrorLine, MARK, MarkedLine } from "./marks"
 import { yesOrNoPieces } from "./yes-or-no"
 import { Wrapped, type Piece } from "./wrap"
+
+/** The error line, drawn by `Line` below and by the app (app/notice.tsx). */
+export { ErrorLine }
 
 export type Item =
   | { id: number; kind: "info" | "error" | "remote" | "note"; text: string }
@@ -86,46 +89,6 @@ export type Item =
   | { id: number; kind: "hand"; lines: HandLines }
   | { id: number; kind: "templates"; rows: readonly TemplateRow[] }
   | { id: number; kind: "template"; view: TemplateView }
-
-/** A sentence's end: a full stop before a space or a line break. */
-const SENTENCE_END = /\.(?=\s)/
-
-/**
- * An error as the board "Status, lists, errors and piped output" draws it:
- * its first sentence, in bold after ✖, and the rest faint on the lines
- * below, in line with that sentence. Commands are drawn as the board draws
- * them, without the backticks plain output keeps around them.
- */
-export function ErrorLine({
-  text,
-  columns,
-}: {
-  text: string
-  columns?: number
-}) {
-  const shown = withoutBackticks(text)
-  const end = shown.search(SENTENCE_END)
-  const first = end === -1 ? shown : shown.slice(0, end + 1)
-  const rest = end === -1 ? "" : shown.slice(end + 1).trim()
-  return (
-    <Box flexDirection="column">
-      <MarkedLine
-        mark={MARK.error}
-        color={COLOR.error}
-        pieces={[{ text: first, bold: true }]}
-        columns={columns}
-      />
-      {rest ? (
-        <Box paddingLeft={2}>
-          <Wrapped
-            pieces={[{ text: rest, dim: true }]}
-            columns={inside(columns, 2)}
-          />
-        </Box>
-      ) : null}
-    </Box>
-  )
-}
 
 /**
  * One line of `zekno logs` at a terminal, as on the board "Live logs": the

@@ -14,7 +14,8 @@ import { wrapPieces, type Piece } from "../../ui/ink/wrap"
 import type { KeyHint } from "../../ui/parts/key-hints"
 import { LOGO_HEIGHT } from "../../ui/terminal/logo"
 import type { Notice } from "../../shared/notice"
-import { inkRows, widthOf } from "./home/rows"
+import { noticeRows } from "../notice"
+import { widthOf } from "./home/rows"
 
 /** The Services pane's width, at every size (contracts/app-screen.md). */
 export const SERVICES_WIDTH = 22
@@ -75,15 +76,14 @@ export function hintRows(hints: readonly KeyHint[], width: number): number {
   return rows
 }
 
-/** The lines of the line above the hints: waiting for a deploy, or a notice, as Ink wraps it; none without either. */
+/** The lines of the line above the hints: waiting for a deploy, or a notice, as it is drawn (app/notice.tsx); none without either. */
 export function statusRows(
   status: { notice?: Notice; quitting: boolean },
   width: number
 ): number {
   if (status.quitting) return 1
   if (!status.notice) return 0
-  const { tone, text } = status.notice
-  return inkRows(tone === "info" ? text : `✖ ${text}`, width)
+  return noticeRows(status.notice, width)
 }
 
 /**

@@ -35,6 +35,7 @@ import {
   C6,
   C7,
 } from "../../src/shared/deploy-words"
+import { withoutBackticks } from "../../src/ui/ink/marks"
 import { numberUsed } from "../../src/ui/parts/deploy-summary"
 import { drawnInColour, plainOf, runsOf } from "../support/colour"
 
@@ -262,7 +263,8 @@ describe("the deploy screen after a refusal (board Deploy2Refusals, 'One line of
       const screen = draw(state)
       expect(screen).toMatch(/╭─ Deploy ─+╮/)
       expect(screen).toMatch(/✖ Checked +○ Signed +○ Sent +○ Starting/)
-      expect(words(screen)).toContain(`✖ ${text}`)
+      // Drawn as an error at a terminal is: its commands without their backticks (test/app/notice.test.tsx).
+      expect(words(screen)).toContain(`✖ ${withoutBackticks(text)}`)
       expect(screen).not.toContain("is used")
       const lines = screen.split("\n")
       expect(

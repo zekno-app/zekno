@@ -4,7 +4,8 @@ FR-005, FR-006, FR-008, FR-010 to FR-012, FR-015, FR-017, FR-021, FR-022, FR-027
 FR-035, FR-039. The words are `design/lines.md`'s and the boards', copied exactly; where they
 differ the board is used. Commands are written as lines.md writes them: in backticks inside C4, C5,
 C5b and C6, without them in the R-lines, C1, C2 and C7. At a terminal `ErrorLine` drops backticks and
-draws the first sentence bold; plain output prints the text as it is.
+draws the first sentence bold, and the app draws an error with it too (`apps/cli/src/app/notice.tsx`);
+plain output prints the text as it is.
 
 ## The format (`chooseFormat`, `apps/cli/src/ops/deploy-format.ts`)
 

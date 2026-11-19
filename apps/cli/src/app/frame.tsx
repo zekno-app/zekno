@@ -3,8 +3,6 @@ import type { ReactNode } from "react"
 
 import { KeyHints, type KeyHint } from "../ui/parts/key-hints"
 import { Logo } from "../ui/terminal/logo"
-import { useTheme } from "../ui/terminal/theme"
-import type { Notice } from "../shared/notice"
 
 /** FR-005: shown on every screen that has nothing of its own on the right of its header. */
 export const PRE_ALPHA = "pre-alpha, unaudited"
@@ -55,22 +53,6 @@ export function Header({
       </Box>
       <Box flexShrink={0}>{right}</Box>
     </Box>
-  )
-}
-
-/** A line on the current screen about something done elsewhere: a mark and a sentence, never colour alone. */
-export function NoticeLine({ notice }: { notice: Notice }) {
-  const theme = useTheme()
-  if (notice.tone === "info") return <Text dimColor>{notice.text}</Text>
-  const mark = {
-    success: ["✔", theme.success],
-    error: ["✖", theme.danger],
-    warning: ["!", theme.warning],
-  }[notice.tone]
-  return (
-    <Text>
-      <Text color={mark[1]}>{mark[0]}</Text> {notice.text}
-    </Text>
   )
 }
 

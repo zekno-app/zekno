@@ -19,7 +19,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react"
 import { Spinner } from "../ui/parts/stages"
 import { ThemeProvider, themeFor, type Background } from "../ui/terminal/theme"
 import { createEffects, type AppDeps, type Effects } from "./effects/effects"
-import { NoticeLine } from "./frame"
+import { NoticeLine } from "./notice"
 import type { Terminal } from "./hand-over"
 import { emptyHiddenValue, hiddenPromptKey } from "./hidden-prompt"
 import { toAppKey } from "./keys"
@@ -66,7 +66,7 @@ export function createStore(initial: State, run: (effect: Effect) => void) {
 export type Store = ReturnType<typeof createStore>
 
 /** The line above the key hints: waiting for a deploy before closing, or a line about something done elsewhere. */
-function Status({ state }: { state: State }) {
+function Status({ state, columns }: { state: State; columns: number }) {
   if (state.quitting) {
     const which =
       state.deploy?.sequence === undefined
@@ -78,7 +78,9 @@ function Status({ state }: { state: State }) {
       </Text>
     )
   }
-  return state.notice ? <NoticeLine notice={state.notice} /> : null
+  return state.notice ? (
+    <NoticeLine notice={state.notice} columns={columns} />
+  ) : null
 }
 
 /** The screen on top of the stack, or the "too small" message in its place. */
@@ -94,7 +96,8 @@ export function Screen({
   if (columns < MIN_COLUMNS || rows < MIN_ROWS)
     return <TooSmall columns={columns} rows={rows} />
   const screen = top(state)
-  const status = <Status state={state} />
+  // The window less the app's margins (`AppView`).
+  const status = <Status state={state} columns={columns - 2} />
   // Asked when a deploy's plan reaches it, which is a moment after `d`: shown over whatever screen is open by then.
   if (state.question?.kind === "remember-folder" && !hiddenPromptOpen(state)) {
     return (

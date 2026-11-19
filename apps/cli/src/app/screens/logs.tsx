@@ -4,9 +4,11 @@ import type { ReactNode } from "react"
 import type { KeyHint } from "../../ui/parts/key-hints"
 import { TextQuestion } from "../../ui/parts/text-input"
 import { useTheme, type Theme } from "../../ui/terminal/theme"
-import { Frame, Header, NoticeLine, Trail } from "../frame"
+import { Frame, Header, Trail } from "../frame"
+import { NoticeLine, noticeRows } from "../notice"
 import { servicesOf, visibleLines } from "../state/logs"
 import type { LogLine, Screen, State } from "../state/types"
+import type { Notice } from "../../shared/notice"
 import { logClock } from "../../shared/time"
 import { HINTS } from "./placeholder"
 
@@ -155,19 +157,27 @@ export function LogsScreen({
   const hints = logsHints(screen)
   const visible = visibleLines(screen)
   const filterLine = screen.filtering || screen.filter !== ""
-  const problem = screen.dropped && screen.problem !== undefined
+  const problem: Notice | undefined =
+    screen.dropped && screen.problem !== undefined
+      ? { tone: "error", text: screen.problem }
+      : undefined
+  // The window less the app's margins.
+  const room = columns - 2
   const shownStatus = problem ? (
-    <NoticeLine notice={{ tone: "error", text: screen.problem! }} />
+    <NoticeLine notice={problem} columns={room} />
   ) : (
     status
   )
-  // The line above the hints is there when it says something; its gap is there whenever the frame has one.
+  // The line above the hints is there when it says something, in the rows it is drawn in; its gap is there whenever the frame has one.
+  const said = problem ?? (state.quitting ? undefined : state.notice)
   const statusRows =
     shownStatus === undefined
       ? 0
-      : problem || state.notice !== undefined || state.quitting
-        ? 2
-        : 1
+      : said !== undefined
+        ? 1 + noticeRows(said, room)
+        : state.quitting
+          ? 2
+          : 1
   const page = logRows(rows, hintRows(hints, columns), filterLine, statusRows)
   // `scroll` lines, the newest, are below the view. Near the top of more lines than fit, the view is the first full page.
   const end = visible.length - Math.min(screen.scroll, visible.length)
