@@ -27,13 +27,13 @@
 
 | Today you can | With | Docs |
 | --- | --- | --- |
-| Deploy a Docker Compose app to a server you own, signed on your machine | `zekno deploy` | [Deploying](https://zekno.dev/docs/deploying#zekno-deploy) |
-| Keep secrets encrypted for that one server | `zekno secret set`, `zekno secret import` | [Secrets](https://zekno.dev/docs/secrets) |
-| Describe an app by settings in place of a Compose file | `zekno settings` | [App settings](https://zekno.dev/docs/settings) |
-| Add a database, its passwords made on your machine | `zekno add postgres` | [Templates](https://zekno.dev/docs/templates#zekno-add) |
-| See what is running, read logs, roll back | `zekno`, `zekno logs`, `zekno rollback` | [The terminal app](https://zekno.dev/docs/app), [Deploying](https://zekno.dev/docs/deploying#zekno-logs) |
-| Give an app a domain, served over HTTPS with a certificate the server obtains itself | `zekno domain add`, `zekno domain` | [Domains and HTTPS](https://zekno.dev/docs/domains) |
-| Make a deploy wait until the app answers | `zekno settings set web.health /health` | [Health checks](https://zekno.dev/docs/health-checks) |
+| Deploy a Docker Compose app to a server you own, signed on your machine | `zekno deploy` | [Deploying](https://www.zekno.dev/docs/deploying#zekno-deploy) |
+| Keep secrets encrypted for that one server | `zekno secret set`, `zekno secret import` | [Secrets](https://www.zekno.dev/docs/secrets) |
+| Describe an app by settings in place of a Compose file | `zekno settings` | [App settings](https://www.zekno.dev/docs/settings) |
+| Add a database, its passwords made on your machine | `zekno add postgres` | [Templates](https://www.zekno.dev/docs/templates#zekno-add) |
+| See what is running, read logs, roll back | `zekno`, `zekno logs`, `zekno rollback` | [The terminal app](https://www.zekno.dev/docs/app), [Deploying](https://www.zekno.dev/docs/deploying#zekno-logs) |
+| Give an app a domain, served over HTTPS with a certificate the server obtains itself | `zekno domain add`, `zekno domain` | [Domains and HTTPS](https://www.zekno.dev/docs/domains) |
+| Make a deploy wait until the app answers | `zekno settings set web.health /health` | [Health checks](https://www.zekno.dev/docs/health-checks) |
 
 Domains and health checks need runner 0.1.1, which is not published yet. Not built yet: teammates, the hosted service, building from source. See the [roadmap](#roadmap).
 
@@ -45,7 +45,7 @@ cd apps/cli && bun run compile   # dist/zekno: one file, for the system you are 
 cd ~/my-app && zekno deploy      # with dist/zekno on your PATH; asks for your name, the server, the app
 ```
 
-The [quick start](https://zekno.dev/docs/quick-start) shows each step with what you will see. Zekno is not packaged yet, so it is built from this repository with [Bun](https://bun.sh) 1.4.4.
+The [quick start](https://www.zekno.dev/docs/quick-start) shows each step with what you will see. Zekno is not packaged yet, so it is built from this repository with [Bun](https://bun.sh) 1.4.4.
 
 ## Overview
 
@@ -188,7 +188,7 @@ The mechanism is end-to-end encryption plus digital signatures. Zekno does not u
 
 Which domain reaches which app is part of the signed deploy, and one app holds a domain on a server at a time. A hosted service, when one exists, could carry a deploy but never add, change or move a domain; it would learn every domain, as the note above says.
 
-The server holds the TLS certificate and private key of each domain it serves, in the storage of the proxy the runner starts there (Caddy, pinned by digest). They are made on the server and never pass through your machine or Zekno. A released domain's certificate and key are deleted, also when the proxy is stopped or gone. The proxy ends TLS for every app with a domain on that server. Apps on one server are not kept apart: a deploy your team signed runs its Compose text with all that Docker allows there, so one app's deploy could read the key of every domain on that server. Certificates come from Let's Encrypt only, and `zekno` never changes DNS. See [what the server holds](https://zekno.dev/docs/domains#what-the-server-holds).
+The server holds the TLS certificate and private key of each domain it serves, in the storage of the proxy the runner starts there (Caddy, pinned by digest). They are made on the server and never pass through your machine or Zekno. A released domain's certificate and key are deleted, also when the proxy is stopped or gone. The proxy ends TLS for every app with a domain on that server. Apps on one server are not kept apart: a deploy your team signed runs its Compose text with all that Docker allows there, so one app's deploy could read the key of every domain on that server. Certificates come from Let's Encrypt only, and `zekno` never changes DNS. See [what the server holds](https://www.zekno.dev/docs/domains#what-the-server-holds).
 
 ### Open-source boundary
 
@@ -227,10 +227,10 @@ A Turborepo monorepo on Bun workspaces.
 
 | Path | What it is | Read more |
 | --- | --- | --- |
-| `apps/cli` | The command-line tool, `zekno`, and its full-screen terminal app. Built and in use, for one developer deploying directly over SSH; internal reviews only, unaudited. | [Commands](https://zekno.dev/docs/cli), [its README](apps/cli/README.md) |
-| `apps/runner` | The program on your servers: it verifies, decrypts, starts Docker Compose, and reports running state and logs. Built from the repository, it also serves an app's domains over HTTPS through a proxy it manages, and waits for health checks. The first release is 0.1.0; internal reviews only, unaudited. | [Server runner](https://zekno.dev/docs/runner), [how a release is made](apps/runner/RELEASING.md) |
+| `apps/cli` | The command-line tool, `zekno`, and its full-screen terminal app. Built and in use, for one developer deploying directly over SSH; internal reviews only, unaudited. | [Commands](https://www.zekno.dev/docs/cli), [its README](apps/cli/README.md) |
+| `apps/runner` | The program on your servers: it verifies, decrypts, starts Docker Compose, and reports running state and logs. Built from the repository, it also serves an app's domains over HTTPS through a proxy it manages, and waits for health checks. The first release is 0.1.0; internal reviews only, unaudited. | [Server runner](https://www.zekno.dev/docs/runner), [how a release is made](apps/runner/RELEASING.md) |
 | `packages/core` | Key generation, secret encryption, signed deploys, team membership and protocol types. First version built, unaudited; the control-plane client is not written yet. | [its README](packages/core/README.md) |
-| `apps/web` | The website: the landing page and the docs. | [Docs](https://zekno.dev/docs) |
+| `apps/web` | The website: the landing page and the docs. | [Docs](https://www.zekno.dev/docs) |
 | `packages/ui` | Shared React components. Scaffolded. | |
 | `packages/eslint-config`, `packages/typescript-config` | Shared ESLint and TypeScript configuration. | |
 

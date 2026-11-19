@@ -300,14 +300,14 @@ A deploy whose app has no route and no health check, and held none, makes no Doc
 make before. A deploy that stops before its start leaves the app's routes as they were. When
 `docker compose up` fails, the outcome is `start_failed`, as before, and the routes are still
 carried out as far as they go, so a domain the deploy leaves out is released. What it means for an
-app is in the [docs](https://zekno.dev/docs/domains#what-the-server-holds).
+app is in the [docs](https://www.zekno.dev/docs/domains#what-the-server-holds).
 
 ## Install on a server
 
 The server needs Docker with Compose, and Linux on x86-64 (a processor with SSE4.2: Intel
 Nehalem, AMD Bulldozer or newer) or on ARM64, with the GNU C library (glibc) 2.17 or newer. Alpine
 and other systems with musl are not supported yet. The rest of what a server needs, and what was
-tried, is in the [docs](https://zekno.dev/docs/servers#supported-servers). `ZEKNO_DOCKER` names the
+tried, is in the [docs](https://www.zekno.dev/docs/servers#supported-servers). `ZEKNO_DOCKER` names the
 Docker command if it is not `docker`.
 
 ### With `zekno server add`
@@ -317,7 +317,7 @@ the runner release that build of zekno carries, checks its SHA-256 against the v
 checks that it starts, and only then puts it in place. A zekno built from `main` installs a prod
 release, such as `0.1.0`; one built from `dev` installs a development release, such as
 `0.1.0-dev.1`. The steps and their limits are in the
-[docs](https://zekno.dev/docs/servers#installing-the-runner).
+[docs](https://www.zekno.dev/docs/servers#installing-the-runner).
 
 | Who the CLI logs in as | Runner | Its folder |
 |------------------------|--------|------------|
@@ -407,7 +407,7 @@ request into it, that carries a development version. It reports; it holds a push
 
 The workflow does not record checksums in zekno. Only the maintainer's second build does, once a
 build of the same commit on their own machine gave the same files
-([docs](https://zekno.dev/docs/servers#how-a-release-is-trusted)).
+([docs](https://www.zekno.dev/docs/servers#how-a-release-is-trusted)).
 
 How to cut a release, from start to end, and how to withdraw one: [RELEASING.md](./RELEASING.md).
 
@@ -428,7 +428,7 @@ How to cut a release, from start to end, and how to withdraw one: [RELEASING.md]
   runner 0.1.0 cannot read it. Put back by hand, it refuses `status`, `sync`, `apply`, `state` and `logs`
   with `invalid_state`, and `setup` with `already_set_up`, and never reads the state as empty. A
   zekno from before deploy format 2 can then deploy only the apps that have had no deploy in
-  format 2 ([docs](https://zekno.dev/docs/servers#updating-is-one-way)).
+  format 2 ([docs](https://www.zekno.dev/docs/servers#updating-is-one-way)).
 - **Restoring its folder from a backup is not supported.** A folder put back from a backup holds
   lower deploy numbers and the team list of that time, so deploys the runner accepted since could
   be delivered to it again, in order, and run again. Set the server up again instead: its new key
