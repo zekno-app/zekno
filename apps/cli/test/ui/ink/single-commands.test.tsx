@@ -896,10 +896,13 @@ describe("a zekno and a runner one release apart still deploy (FR-021)", () => {
       expect(said(err)).toEqual([
         `The runner on prod is version ${own}, newer than this zekno's ${before}. It works with this zekno. Update zekno to match it; \`zekno server update\` never replaces a newer runner.${dev(own, before)}`,
       ])
-      expect(m.docker.calls().map((call) => call.env.GREETING)).toEqual([
-        "hello",
-        "hello",
-      ])
+      // The deploys' `up`: `zekno status` also has the runner read its proxy with `docker inspect` (specs/015-domains-https, CL6).
+      expect(
+        m.docker
+          .calls()
+          .filter((call) => / up -d /.test(call.args))
+          .map((call) => call.env.GREETING)
+      ).toEqual(["hello", "hello"])
     })
   }, 60_000)
 })

@@ -46,43 +46,43 @@ Tests are part of each task: a test that fails first wherever a contract fixes t
 
 ## Phase 3: CLI, settings and commands
 
-- [ ] T035 The CLI builds and its tests pass against protocol 4 with no route in use: `VERSION_TWO_PROTOCOL`, C7's cases, fixtures that pin protocol 3
-- [ ] T036 [P] `apps/cli/src/domains/rule.ts` and `words.ts`: lowering, A10 and A11 over the core's rule; every sentence of lines.md parts A, B, C, D and E as functions, with `test/domains/words.test.ts` pinning each word for word
-- [ ] T037 [US1] `domains` and the health check in `settings/shape.ts`, `types.ts`, `schema.ts` (the cross-service rules), `values.ts` (CL1)
-- [ ] T038 [US1] The two refusal sentences go from `settings/words.ts`; `CS5`, `settingWords`, `NOT_SET`; templates keep refusing both (`templates/*`)
-- [ ] T039 [US1] `settings/change.ts`: `domains`, `health`, `health-timeout` for `set` and `unset`
-- [ ] T040 [US1] `settings/text.ts`, `write.ts` (`FIELDS`), `piped.ts`: written, read back, printed
-- [ ] T041 [US3] `settings/rows.ts`: the `health` row and the `domains` rows, one a row, for `zekno settings` and the settings screen
-- [ ] T042 [US3] The history keeps `routes` and `health` of a version-2 deploy (`shared/history.ts`, `profile/profile.ts`); `lastDeployedSettings` feeds the "changed, not deployed" mark in `ops/settings.ts` and `app/effects/settings.ts`
-- [ ] T043 Update the settings tests and supports that pin the old sentences (`test/settings/*`, `test/support/settings-files.ts`, `test/scenarios/settings-deploy.test.ts`, `test/templates/read.test.ts`, `test/app/settings-effects.test.ts`)
-- [ ] T044 Split `apps/cli/src/cli/cli.ts`: `cli/help.ts` and `cli/options.ts`, `HELP` still exported from `cli/cli`; the layers test's lists
-- [ ] T045 [US1] [US4] `apps/cli/src/ops/domain.ts`: prepare `add` and `rm` (CL2), with `test/ops/domain.test.ts`
-- [ ] T046 [US1] [US4] `apps/cli/src/commands/domain.ts` for `add` and `rm`; the help lines; `WITHOUT_TEAM`; `--service`; the list of added help lines in `test/plain/plain-unchanged.test.ts` and `NEVER_FETCHES` (plan, "Needs the maintainer", 1)
-- [ ] T047 [US1] `apps/cli/src/domains/routes.ts`: routes and health from settings (R14), the checks against a Compose text; `settings/source.ts` and `DeployPlan` carry them
-- [ ] T048 [US1] `deployVersionTwo` signs them; `deliver` accepts the new outcomes far enough to record them (their lines come in phase 4)
-- [ ] T049 [US7] B10 in `ops/deploy-format.ts` (`ROUTES_PROTOCOL = 4`), with the cases: protocol 3 with and without a route, a runner run one request at a time
-- [ ] T050 Scenario: `zekno domain add`, then `zekno deploy` against the test runner signs the route and the runner holds it (`apps/cli/test/scenarios/domains.test.ts`, stand-in Docker); type check, lint, format, tests
+- [x] T035 The CLI builds and its tests pass against protocol 4 with no route in use: `VERSION_TWO_PROTOCOL`, C7's cases, fixtures that pin protocol 3
+- [x] T036 [P] `apps/cli/src/domains/rule.ts` and `words.ts`: lowering, A10 and A11 over the core's rule; every sentence of lines.md parts A, B, C, D and E as functions, with `test/domains/words.test.ts` pinning each word for word
+- [x] T037 [US1] `domains` and the health check in `settings/shape.ts`, `types.ts`, `schema.ts` (the cross-service rules), `values.ts` (CL1)
+- [x] T038 [US1] The two refusal sentences go from `settings/words.ts`; `CS5`, `settingWords`, `NOT_SET`; templates keep refusing both (`templates/*`)
+- [x] T039 [US1] `settings/change.ts`: `domains`, `health`, `health-timeout` for `set` and `unset`
+- [x] T040 [US1] `settings/text.ts`, `write.ts` (`FIELDS`), `piped.ts`: written, read back, printed
+- [x] T041 [US3] `settings/rows.ts`: the `health` row and the `domains` rows, one a row, for `zekno settings` and the settings screen
+- [x] T042 [US3] The history keeps `routes` and `health` of a version-2 deploy (`shared/history.ts`, `profile/profile.ts`); `lastDeployedSettings` feeds the "changed, not deployed" mark in `ops/settings.ts` and `app/effects/settings.ts`
+- [x] T043 Update the settings tests and supports that pin the old sentences (`test/settings/*`, `test/support/settings-files.ts`, `test/scenarios/settings-deploy.test.ts`, `test/templates/read.test.ts`, `test/app/settings-effects.test.ts`)
+- [x] T044 Split `apps/cli/src/cli/cli.ts`: `cli/help.ts` and `cli/options.ts`, `HELP` still exported from `cli/cli`; the layers test's lists
+- [x] T045 [US1] [US4] `apps/cli/src/ops/domain.ts`: prepare `add` and `rm` (CL2), with `test/ops/domain.test.ts`
+- [x] T046 [US1] [US4] `apps/cli/src/commands/domain.ts` for `add` and `rm`; the help lines; `WITHOUT_TEAM`; `--service`; the list of added help lines in `test/plain/plain-unchanged.test.ts` and `NEVER_FETCHES` (plan, "Needs the maintainer", 1)
+- [x] T047 [US1] `apps/cli/src/domains/routes.ts`: routes and health from settings (R14), the checks against a Compose text; `settings/source.ts` and `DeployPlan` carry them
+- [x] T048 [US1] `deployVersionTwo` signs them; `deliver` accepts the new outcomes far enough to record them (their lines come in phase 4)
+- [x] T049 [US7] B10 in `ops/deploy-format.ts` (`ROUTES_PROTOCOL = 4`), with the cases: protocol 3 with and without a route, a runner run one request at a time
+- [x] T050 Scenario: `zekno domain add`, then `zekno deploy` against the test runner signs the route and the runner holds it (`apps/cli/test/scenarios/domains.test.ts`, stand-in Docker); type check, lint, format, tests
 
 ## Phase 4: CLI, the checks and what is told
 
-- [ ] T051 [US2] The three effects in `cli/context.ts` and `main.ts`; `test/support/domain-stand-ins.ts`; a test of who may use them (CL5)
-- [ ] T052 [P] [US2] `apps/cli/src/domains/server-address.ts`: `ssh -G` read, the ranges, "not known"
-- [ ] T053 [P] [US2] `apps/cli/src/domains/dns.ts`: the lookup and the comparison
-- [ ] T054 [P] [US1] `apps/cli/src/domains/https.ts`: the TLS probe and the wait
-- [ ] T055 [US2] `apps/cli/src/ops/deploy-domains.ts`: the stops and warnings before signing, in CL3's order, called from `sendDeploy`; `--skip-dns-check`
-- [ ] T056 [US2] Tests for B1, B7 to B15 and the new "could not look up" warning: nothing signed on a stop, nothing sent, the exit status, the lines with no terminal
-- [ ] T057 [US1] The wait for HTTPS after a start with new domains: B4, B5, B6 (`commands/deploy.ts`, `app/effects/deploys.ts`)
-- [ ] T058 [US1] [US5] The outcomes: `routes_failed` (B16 to B19), `unhealthy` (C3, C4), R9, R10 in `cli/errors.ts`, `shared/deploy.ts`, `shared/views.ts`, `profile/profile.ts`; exit statuses
-- [ ] T059 [US5] The `health` event reaches the deploy view (`server/session.ts`, `ops/deploy-send.ts`)
-- [ ] T060 [US6] Rollback: the server's routes, this machine's health check, B12 (`ops/deploy.ts`), with tests for a domain added after the deploy rolled back to
-- [ ] T061 [US3] `apps/cli/src/domains/state.ts`: the nine states from the three sources (CL4), with a table test
-- [ ] T062 [US3] `zekno domain`: `ops/domain.ts` (list), `commands/domain.ts`, terminal, plain and `--json`
-- [ ] T063 [US3] `zekno status`: asked with routes, the lines E2, plain and JSON (`ops/status.ts`, `commands/status.ts`)
-- [ ] T064 [US3] `apps/cli/src/ops/doctor-proxy.ts`: the `Proxy` check (E3, E4, the other-image warning), wired into doctor without making `doctor.ts` longer
-- [ ] T065 [US7] `zekno server update` sends `proxy` when needed (`ops/server.ts` is over 500 lines: the new code goes in a file of its own)
-- [ ] T066 Scenarios against the test runner with stand-in Docker and the stand-in effects: US1 to US7's acceptance scenarios that the CLI can show (`test/scenarios/domains-*.test.ts`)
-- [ ] T067 A deploy of an app with no route and no health check: no lookup, no `ssh -G`, no TLS connection, the same requests; the frozen plain scenes pass (CL7)
-- [ ] T068 CLI: type check, lint, format, all tests
+- [x] T051 [US2] The three effects in `cli/context.ts` and `main.ts`; `test/support/domain-stand-ins.ts`; a test of who may use them (CL5)
+- [x] T052 [P] [US2] `apps/cli/src/domains/server-address.ts`: `ssh -G` read, the ranges, "not known"
+- [x] T053 [P] [US2] `apps/cli/src/domains/dns.ts`: the lookup and the comparison
+- [x] T054 [P] [US1] `apps/cli/src/domains/https.ts`: the TLS probe and the wait
+- [x] T055 [US2] `apps/cli/src/ops/deploy-domains.ts`: the stops and warnings before signing, in CL3's order, called from `sendDeploy`; `--skip-dns-check`
+- [x] T056 [US2] Tests for B1, B7 to B15 and the new "could not look up" warning: nothing signed on a stop, nothing sent, the exit status, the lines with no terminal
+- [x] T057 [US1] The wait for HTTPS after a start with new domains: B4, B5, B6 (`commands/deploy.ts`, `app/effects/deploys.ts`)
+- [x] T058 [US1] [US5] The outcomes: `routes_failed` (B16 to B19), `unhealthy` (C3, C4), R9, R10 in `cli/errors.ts`, `shared/deploy.ts`, `shared/views.ts`, `profile/profile.ts`; exit statuses
+- [x] T059 [US5] The `health` event reaches the deploy view (`server/session.ts`, `ops/deploy-send.ts`)
+- [x] T060 [US6] Rollback: the server's routes, this machine's health check, B12 (`ops/deploy.ts`), with tests for a domain added after the deploy rolled back to
+- [x] T061 [US3] `apps/cli/src/domains/state.ts`: the nine states from the three sources (CL4), with a table test
+- [x] T062 [US3] `zekno domain`: `ops/domain.ts` (list), `commands/domain.ts`, terminal, plain and `--json`
+- [x] T063 [US3] `zekno status`: asked with routes, the lines E2, plain and JSON (`ops/status.ts`, `commands/status.ts`)
+- [x] T064 [US3] `apps/cli/src/ops/doctor-proxy.ts`: the `Proxy` check (E3, E4, the other-image warning), wired into doctor without making `doctor.ts` longer
+- [x] T065 [US7] `zekno server update` sends `proxy` when needed (`ops/server.ts` is over 500 lines: the new code goes in a file of its own)
+- [x] T066 Scenarios against the test runner with stand-in Docker and the stand-in effects: US1 to US7's acceptance scenarios that the CLI can show (`test/scenarios/domains-*.test.ts`)
+- [x] T067 A deploy of an app with no route and no health check: no lookup, no `ssh -G`, no TLS connection, the same requests; the frozen plain scenes pass (CL7)
+- [x] T068 CLI: type check, lint, format, all tests
 
 ## Phase 5: CLI, the screens
 

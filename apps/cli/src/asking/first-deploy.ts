@@ -44,7 +44,7 @@ import {
   UsageError,
 } from "../cli/errors"
 import type { InstallEvent } from "../server/install/lines"
-import { AppTaken, checkApp, prepareDeploy } from "../ops/deploy"
+import { AppTaken, checkApp, prepareDeploy, type Where } from "../ops/deploy"
 import { createTeam } from "../ops/init"
 import {
   linkFolder,
@@ -119,8 +119,8 @@ export const SERVER_NAME_RULE =
 export const serverTaken = (name: string): string =>
   `A server named "${name}" is already connected.`
 
-/** What `zekno deploy` was typed with. */
-export type DeployFlags = { app?: string; server?: string; file?: string }
+/** What `zekno deploy` was typed with, `--skip-dns-check` too (specs/015-domains-https, CL3). */
+export type DeployFlags = Where & { file?: string; skipDnsCheck?: boolean }
 
 /**
  * F1: the opening line, only when the key or a server is missing. It counts
@@ -444,7 +444,7 @@ export async function deployAtTerminal(
   try {
     return await send(
       ops(),
-      { ...plan, fresh },
+      { ...plan, fresh, skipDnsCheck: flags.skipDnsCheck === true },
       { typed },
       {
         app: plan.app,

@@ -24,6 +24,17 @@ const DONE: Record<DeployStage, number> = {
 }
 
 /**
+ * Whether the app of a deploy that ended started: `started`, and protocol
+ * 4's `routes_failed` and `unhealthy`, whose app started all the same
+ * (specs/015-domains-https, contracts/cli.md, CL3: their stage row ends
+ * `✔ Started`).
+ */
+const appStarted = (deploy: DeployProgress): boolean =>
+  deploy.outcome === "started" ||
+  deploy.outcome === "routes_failed" ||
+  deploy.outcome === "unhealthy"
+
+/**
  * The stage row: done, the one in progress, and those not reached yet. A
  * deploy that started ends with ✔ Started; one that did not start, or was
  * refused, marks the stage it stopped at with ✖ (data-model.md, "Stages of
@@ -35,13 +46,13 @@ export function stagesOf(deploy: DeployProgress): Stage[] {
     let state: StageState = "pending"
     if (index < done) state = "done"
     else if (index === done)
-      state = deploy.running
-        ? "active"
-        : deploy.outcome === "started"
-          ? "done"
-          : "failed"
+      state = deploy.running ? "active" : appStarted(deploy) ? "done" : "failed"
     return {
-      label: index === 3 && deploy.outcome === "started" ? "Started" : label,
+      // Started once the runner said so, also while the new domains are waited for (board `DomainsDeploy`).
+      label:
+        index === 3 && (appStarted(deploy) || deploy.stage === "started")
+          ? "Started"
+          : label,
       state,
     }
   })
@@ -57,7 +68,7 @@ export function stagesOf(deploy: DeployProgress): Stage[] {
 export function numberUsed(deploy: DeployProgress): boolean {
   return (
     !deploy.running &&
-    deploy.outcome !== "started" &&
+    !appStarted(deploy) &&
     !(deploy.format === 2 && deploy.outcome === "error") &&
     deploy.sequence !== undefined &&
     deploy.stage !== undefined &&

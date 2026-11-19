@@ -44,12 +44,18 @@ const FILE = JSON.stringify({
   },
 })
 
-/** A ready machine whose folder holds only the settings file above, linked to shop on dev. */
+/**
+ * A ready machine whose folder holds only the settings file above, linked to
+ * shop on dev. The stand-in Docker holds a running container of each of
+ * shop's services, as `up` leaves them, so the runner finds the routed and
+ * checked service and puts its route in force.
+ */
 async function shopFolder(): Promise<Machine> {
   const m = await ready()
   rmSync(join(m.project, "compose.yaml"))
   writeFileSync(join(m.project, "zekno.app.json"), FILE)
   expect(await m.zekno("link", ...WHERE)).toBe(0)
+  m.docker.app("shop", { web: 1, worker: 1 })
   return m
 }
 

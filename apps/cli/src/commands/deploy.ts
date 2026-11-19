@@ -6,6 +6,7 @@ import {
   type DeployPlan,
   type Where,
 } from "../ops/deploy"
+import { httpsAfter } from "../ops/deploy-https"
 import { shownFile } from "../project/shown"
 import { sanitize } from "../server/sanitize"
 import { DP3 } from "../settings/words"
@@ -38,6 +39,14 @@ export function flagsAgain(typed: Options["typed"]): string {
  * start. With `--json`, only the JSON object on standard output, and those
  * lines on standard error when the app did not start. `zekno deploy` at a
  * terminal sends through it too (asking/first-deploy.ts).
+ *
+ * With a domain or a health check (specs/015-domains-https,
+ * contracts/cli.md, CL3): B1 before anything is signed and the runner's
+ * `health` events reach the view; `routes_failed` and `unhealthy` end with
+ * their sentence, exit status 1; a start with domains new to the app waits
+ * for HTTPS before the view ends (B4 to B6), exit status 0 whatever it
+ * found. With `--json` nothing is waited for: standard output holds the one
+ * object.
  */
 export async function send(
   deps: Deps,
@@ -55,6 +64,9 @@ export async function send(
       stage: (stage, info) => view.stage(stage, info),
       progress: (line) => view.progress(line),
       warning: (text) => deps.ui.warn(text),
+      // Only a deploy with a domain or a health check calls these (CL7): a view without them is every other deploy's.
+      pointed: (domain, address) => view.pointed?.(domain, address),
+      health: (service) => view.health?.(service),
     })
   } catch (error) {
     // The stage it stopped at stays on the screen, and the reason is said below it.
@@ -62,15 +74,19 @@ export async function send(
     throw error
   }
   if (options.json) deps.ui.json({ ...result.report, server: result.server })
+  const ms = Date.now() - began
+  const https = options.json
+    ? undefined
+    : await httpsAfter(deps, result, (shown) => view.https?.(shown))
   await view.end({
-    // `routes_failed` and `unhealthy` (specs/015-domains-https, CL3): the app started; their own lines come with the
-    // next phase. The exit status is already CL3's: 1 for either.
-    outcome: result.outcome === "start_failed" ? "start_failed" : "started",
+    outcome: result.outcome,
     sequence: result.sequence,
     app: result.app,
     server: result.server,
     secrets: result.secrets,
-    ms: Date.now() - began,
+    ms,
+    ...(result.problem === undefined ? {} : { problem: result.problem }),
+    ...(https === undefined ? {} : { https }),
   })
   return result.outcome === "started" ? 0 : 1
 }
@@ -97,9 +113,12 @@ export function fromRow(
 
 export async function deploy(
   deps: Deps,
-  options: Options & { file?: string }
+  options: Options & { file?: string; skipDnsCheck?: boolean }
 ): Promise<number> {
-  const plan = await prepareDeploy(deps, options)
+  const plan = {
+    ...(await prepareDeploy(deps, options)),
+    skipDnsCheck: options.skipDnsCheck === true,
+  }
   const start: DeployStart = {
     app: plan.app,
     server: plan.server.name,

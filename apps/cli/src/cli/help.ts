@@ -21,6 +21,7 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno secret rm <NAME> [--app <app>] [--server <name>]
   zekno secret ls [--app <app>] [--server <name>]
   zekno deploy [--app <app>] [--server <name>] [-f <compose file>] [--json]
+  zekno deploy --skip-dns-check
   zekno rollback [--app <app>] [--server <name>] [--to <number>] [--json]
   zekno status [--server <name>] [--json]
   zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
@@ -30,6 +31,7 @@ export const HELP = `zekno: deploy to your own servers. Secrets are encrypted an
   zekno settings unset <service>.<setting> [--yes]
   zekno settings compose
   zekno settings init
+  zekno domain [--json]
   zekno domain add <domain> [--service <name>] [--yes]
   zekno domain rm <domain> [--yes]
   zekno add [<template>] [--name <service>] [--for <service>] [--app <app>] [--server <name>] [--yes]
@@ -62,7 +64,8 @@ export const WORDS: Record<string, number> = {
   "settings unset": 3,
   "settings compose": 2,
   "settings init": 2,
-  // specs/015-domains-https, contracts/cli.md, CL2.
+  // specs/015-domains-https, contracts/cli.md, CL2 and CL4.
+  domain: 1,
   "domain add": 3,
   "domain rm": 3,
   add: 2,

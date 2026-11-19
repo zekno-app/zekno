@@ -23,11 +23,7 @@
  * the newer-release check (version/newest.ts), once per run, beside the other
  * checks; its answer never fails the command.
  */
-import {
-  CoreError,
-  RunnerStatusSchema,
-  type RunnerVersion,
-} from "@workspace/core"
+import { CoreError, type RunnerVersion } from "@workspace/core"
 import { lstatSync } from "node:fs"
 import { join } from "node:path"
 
@@ -59,8 +55,11 @@ import { runCheck, type CheckRead } from "../server/check-script"
 import { openSession, type Session } from "../server/session"
 import { checkNewest, newerExists, type Latest } from "../version/newest"
 import { CLI_VERSION } from "../version/version"
+import { PROXY_LABEL } from "../domains/words"
+import { atMost } from "../shared/at-most"
+import { proxyLine } from "./doctor-proxy"
 import { runnerRelation } from "./server"
-import { checkIdentity } from "./status"
+import { askStatus, checkIdentity } from "./status"
 
 /** Which check a line is. */
 export type CheckId =
@@ -71,6 +70,7 @@ export type CheckId =
   | "reachable"
   | "docker"
   | "runner"
+  | "proxy"
   | "disk"
 
 /** How a check ended: a warning does not fail the command, a problem does. */
@@ -115,6 +115,7 @@ export const LABELS: Record<CheckId, string> = {
   reachable: "Reachable",
   docker: "Docker",
   runner: "Runner",
+  proxy: PROXY_LABEL,
   disk: "Disk",
 }
 
@@ -519,7 +520,7 @@ async function runnerCheck(
   server: Server,
   carried: string,
   limitMs: number
-): Promise<{ line: CheckLine; opened: boolean }> {
+): Promise<{ line: CheckLine; opened: boolean; proxy?: CheckLine }> {
   const local = server.target.kind === "local"
   const where =
     server.target.kind === "ssh" ? server.target.destination : ON_THIS_MACHINE
@@ -535,7 +536,8 @@ async function runnerCheck(
       ),
       { signal }
     )
-    const status = await session.request("status", RunnerStatusSchema)
+    // With the routes in force, from a runner of protocol 4: the Proxy line (specs/015-domains-https, CL6; doctor-proxy.ts).
+    const { status, held } = await askStatus(session, true)
     try {
       checkIdentity(team, server, status)
     } catch {
@@ -555,10 +557,12 @@ async function runnerCheck(
           `${session.runner === undefined ? "no version reported" : sanitize(session.runner.version)}, ${ON_THIS_MACHINE}`
         ),
         opened: true,
+        proxy: proxyLine(held, server.name),
       }
     return {
       line: relationLine(server.name, session.mode, session.runner, carried),
       opened: true,
+      proxy: proxyLine(held, server.name),
     }
   } catch (error) {
     const detail = signal.aborted ? NO_ANSWER : sessionSentence(error)
@@ -613,6 +617,7 @@ async function localChecks(
     good("reachable", ON_THIS_MACHINE),
     notChecked("docker"),
     runner.line,
+    ...(runner.proxy === undefined ? [] : [runner.proxy]),
     notChecked("disk"),
   ]
 }
@@ -683,34 +688,15 @@ async function sshChecks(
   }
   const runner =
     read.runner === "none"
-      ? problem("runner", runnerMissing(runnerPath), PUT_RUNNER_BACK)
-      : (await runnerCheck(deps, team, server, carried, limitMs)).line
+      ? { line: problem("runner", runnerMissing(runnerPath), PUT_RUNNER_BACK) }
+      : await runnerCheck(deps, team, server, carried, limitMs)
   return [
     good("reachable", OVER_SSH),
     docker,
-    runner,
+    runner.line,
+    ...("proxy" in runner && runner.proxy ? [runner.proxy] : []),
     diskLine(server.name, destination, read.space),
   ]
-}
-
-/** Runs `work` on each item, at most `limit` at a time, and gives the results in the items' order. */
-async function atMost<T, R>(
-  limit: number,
-  items: readonly T[],
-  work: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results = new Array<R>(items.length)
-  let next = 0
-  const lane = async () => {
-    while (next < items.length) {
-      const index = next++
-      results[index] = await work(items[index]!)
-    }
-  }
-  await Promise.all(
-    Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, lane)
-  )
-  return results
 }
 
 /**

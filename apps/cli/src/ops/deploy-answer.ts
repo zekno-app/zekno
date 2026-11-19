@@ -20,13 +20,20 @@ import {
 
 import type { Team } from "../cli/context"
 import { CliError, explainDeploy, RunnerRefused } from "../cli/errors"
+import { R10 } from "../domains/words"
 import type { History, Server } from "../profile/profile"
 import type { Session } from "../server/session"
 import { C1, C2 } from "../shared/deploy-words"
 import { readDeployEntry, sameEnvelope } from "../shared/history"
 import { checkIdentity } from "./status"
 
-/** What a version-2 deploy's answer is read against. `previous`: the number it was made after; `rollback`: it was signed by `zekno rollback`. */
+/**
+ * What a version-2 deploy's answer is read against. `previous`: the number
+ * it was made after; `rollback`: it was signed by `zekno rollback`;
+ * `overDomains`: with its domains the server would hold more than a runner
+ * keeps, by the routes `status` said were in force, so `too_large` is said
+ * as R10 (specs/015-domains-https, contracts/cli.md, CL3).
+ */
 export type Answering = {
   session: Pick<Session, "request">
   team: Pick<Team, "store" | "trust">
@@ -35,6 +42,7 @@ export type Answering = {
   previous: number
   envelope: Envelope
   rollback: boolean
+  overDomains?: boolean
 }
 
 /**
@@ -122,6 +130,9 @@ export async function deployAnswer(
     const history = forget(answering)
     if (error.reason === "replayed")
       throw await afterReplayed(answering, history)
+    // `too_large` is one fixed word for every limit; it is said as R10 when the domains are what is over.
+    if (error.reason === "too_large" && answering.overDomains === true)
+      throw new RunnerRefused(error.reason, R10)
     throw new RunnerRefused(error.reason, explainDeploy(error.reason, 2))
   }
 }

@@ -179,7 +179,8 @@ export const sha256 = (bytes: Uint8Array | string): string =>
  * by where it leads, a folder by its mode: what "byte for byte the same"
  * compares (specs/006-cli-small-features, SC-005). Under a stand-in server's
  * root the stand-ins' own logs are left out: they are the test's notes of
- * each call, not part of the server.
+ * each call, not part of the server; so is the cache of the stand-in Docker, a Bun program the runner
+ * starts to read its proxy (specs/015-domains-https, RN13): a real Docker leaves nothing in that home.
  */
 export function snapshot(root: string): string[] {
   const entries: string[] = []
@@ -189,6 +190,7 @@ export function snapshot(root: string): string[] {
       const path = join(dir, name)
       const relative = path.slice(root.length)
       if (/^\/state\/(.*\.log|wget\.urls)$/.test(relative)) continue
+      if (/^\/home\/(Library|\.cache)(\/|$)/.test(relative)) continue
       const stat = lstatSync(path)
       if (stat.isSymbolicLink())
         entries.push(`${relative} -> ${readlinkSync(path)}`)

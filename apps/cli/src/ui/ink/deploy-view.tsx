@@ -6,8 +6,9 @@
  * (ui/parts/deploy-summary.tsx), so the single command and the app look the same.
  */
 import { Box, Text } from "ink"
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 
+import { B4, B5, B6 } from "../../domains/words"
 import { seconds } from "../../shared/time"
 import {
   earlierLeftOut,
@@ -15,11 +16,13 @@ import {
   startedNext,
   type DeployProgress,
   type DeployStart,
+  type HttpsShown,
 } from "../../shared/deploy"
 import { numberUsed, stagesOf, Summary } from "../parts/deploy-summary"
 import { Panel } from "../parts/panel"
 import { Stages } from "../parts/stages"
 import { useTheme } from "../terminal/theme"
+import { ErrorLine, withoutBackticks } from "./marks"
 
 /** The widest the panels get, as the app's summary panel. Narrower windows get panels as wide as they are. */
 export const DEPLOY_PANEL_WIDTH = 64
@@ -30,8 +33,54 @@ export type DeployShown = {
   deploy: DeployProgress
   /** How many of Docker's lines came before those kept. */
   dropped: number
-  /** How long it took, once it ended. */
+  /** How long it took, once it ended, or once the wait for HTTPS began. */
   ms?: number
+  /** For `routes_failed` and `unhealthy`: their sentence (B16 to B19, C3, C4; specs/015-domains-https, CL3). */
+  problem?: string
+}
+
+const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+/** B4, live: a spinner, the words, and the seconds since `since`, dim (board `DomainsDeploy`). */
+function Waiting({ text, since }: { text: string; since: number }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 80)
+    return () => clearInterval(timer)
+  }, [])
+  const frame = Math.floor(now / 80) % FRAMES.length
+  return (
+    <Text>
+      <Text color="cyan">{FRAMES[frame]}</Text> {text}
+      <Text dimColor>
+        {"  "}
+        {Math.max(0, Math.floor((now - since) / 1000))}s
+      </Text>
+    </Text>
+  )
+}
+
+/** A new domain's line during and after the wait for HTTPS: B4, B5 or B6 (specs/015-domains-https, CL3). */
+function HttpsLine({ shown }: { shown: HttpsShown }) {
+  const theme = useTheme()
+  if (shown.state === "waiting")
+    return <Waiting text={B4(shown.domain)} since={shown.since} />
+  if (shown.state === "not_ready")
+    return (
+      <Lead mark="!" color={theme.warning}>
+        {withoutBackticks(B6(shown.domain))}
+      </Lead>
+    )
+  const live = B5(shown.domain, shown.until)
+  return (
+    <Lead mark="✔" color={theme.success}>
+      {live.text}
+      <Text dimColor>
+        {"  "}
+        {live.detail}
+      </Text>
+    </Lead>
+  )
 }
 
 /** A sentence that leads a result: its mark, and the sentence in bold. */
@@ -85,6 +134,9 @@ export function DeployBlock({
   const { start, deploy } = shown
   const width = Math.max(4, Math.min(columns, DEPLOY_PANEL_WIDTH))
   const failed = !deploy.running && deploy.outcome === "start_failed"
+  // The app started and new domains are waited for (B4): drawn as started while it lasts (board `DomainsDeploy`).
+  const waiting = deploy.running && deploy.https !== undefined
+  const live = waiting || (!deploy.running && deploy.outcome === "started")
   return (
     // A line's space before it, as on the board below the command typed, and once it ended, after it.
     <Box
@@ -96,7 +148,7 @@ export function DeployBlock({
     >
       <Summary deploy={deploy} width={width} tone="plain" />
       <Stages stages={stagesOf(deploy)} gap={2} />
-      {deploy.running ? (
+      {deploy.running && !waiting ? (
         // Docker's words, not zekno's: dim, and set in by two columns, so nothing a server says
         // starts at the left edge, where zekno's own lines start.
         <Box paddingLeft={LIVE_LINE_INDENT}>
@@ -105,7 +157,7 @@ export function DeployBlock({
           </Text>
         </Box>
       ) : null}
-      {!deploy.running && deploy.outcome === "started" ? (
+      {live ? (
         <Box flexDirection="column">
           <Lead mark="✔" color={theme.success}>
             <Text bold>
@@ -115,8 +167,14 @@ export function DeployBlock({
               <Text dimColor> in {seconds(shown.ms)}</Text>
             )}
           </Lead>
-          <After>{startedNext(start.flags)}</After>
+          {(deploy.https ?? []).map((each) => (
+            <HttpsLine key={each.domain} shown={each} />
+          ))}
+          {waiting ? null : <After>{startedNext(start.flags)}</After>}
         </Box>
+      ) : null}
+      {!deploy.running && shown.problem !== undefined ? (
+        <ErrorLine text={shown.problem} columns={columns} />
       ) : null}
       {failed ? (
         <Box flexDirection="column">

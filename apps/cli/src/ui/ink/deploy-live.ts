@@ -3,14 +3,22 @@
  * the runner has answered; then the block of deploy-view.tsx is drawn below
  * the lines and redrawn as it goes, its live line a few times a second at
  * most; once the deploy ends, its last frame becomes a line of its own.
+ *
+ * With a domain or a health check (specs/015-domains-https, contracts/cli.md,
+ * CL3): B1 is a line of its own before the block, as nothing is drawn yet;
+ * the domains and the health check it signs, the service the runner waits
+ * for and each new domain's wait for HTTPS are kept in the block's deploy,
+ * for the block to draw (deploy-view.tsx).
  */
 import type { Instance } from "ink"
 
+import { B1 } from "../../domains/words"
 import {
   keptLines,
   type DeployProgress,
   type DeployStart,
   type DeployView,
+  type HttpsShown,
 } from "../../shared/deploy"
 import type { DeployShown } from "./deploy-view"
 import type { Store } from "./store"
@@ -44,7 +52,13 @@ export function liveDeploy(
   const latest = (): string[] =>
     kept.lines.length > 0 ? [kept.lines.at(-1)!] : []
   const show = (deploy: DeployProgress) => {
-    shown = { start, deploy, dropped: 0 }
+    // How long it took is known once the wait for HTTPS began, and kept while the block is redrawn.
+    shown = {
+      start,
+      deploy,
+      dropped: 0,
+      ...(shown?.ms === undefined ? {} : { ms: shown.ms }),
+    }
     store.set({ deploy: shown })
   }
   return {
@@ -65,8 +79,45 @@ export function liveDeploy(
         sequence: info.sequence,
         secrets: info.secrets,
         format: info.format,
+        ...(info.domains === undefined ? {} : { domains: info.domains }),
+        ...(info.health === undefined ? {} : { health: info.health }),
         lines: latest(),
       })
+    },
+    // B1, before anything is signed, and so before the block is drawn: a line of its own above it.
+    pointed(domain, address) {
+      const said = B1(domain, start.server, address)
+      add({ kind: "success", text: said.text, detail: said.detail })
+    },
+    health(service) {
+      if (!shown || ended) return
+      const path = shown.deploy.health?.services.find(
+        (entry) => entry.service === service
+      )?.path
+      show({
+        ...shown.deploy,
+        waitingFor: {
+          service,
+          ...(path === undefined ? {} : { path }),
+          since: Date.now(),
+        },
+      })
+    },
+    // The block stays live while the new domains are waited for; it is drawn as started from the first.
+    https(state) {
+      if (!shown || ended) return
+      const was = shown.deploy.https ?? []
+      const https: HttpsShown[] = was.some(
+        (each) => each.domain === state.domain
+      )
+        ? was.map((each) => (each.domain === state.domain ? state : each))
+        : [...was, state]
+      shown = {
+        ...shown,
+        deploy: { ...shown.deploy, https },
+        ms: shown.ms ?? Date.now() - shown.deploy.since,
+      }
+      store.set({ deploy: shown })
     },
     progress(line) {
       kept.push(line)
@@ -90,11 +141,11 @@ export function liveDeploy(
         ending.outcome === "error" ? was?.sequence : ending.sequence
       const secrets = ending.outcome === "error" ? was?.secrets : ending.secrets
       const stage =
-        ending.outcome === "started"
-          ? "started"
+        ending.outcome === "error"
+          ? was?.stage
           : ending.outcome === "start_failed"
             ? "failed"
-            : was?.stage
+            : "started"
       const deploy: DeployProgress = {
         ...(was ?? {
           server: start.server,
@@ -108,6 +159,9 @@ export function liveDeploy(
         running: false,
         outcome: ending.outcome,
         lines: [...kept.lines],
+        ...(ending.outcome !== "error" && ending.https !== undefined
+          ? { https: ending.https }
+          : {}),
       }
       // The last frame becomes a line of its own, so whatever comes next is said below it.
       add({
@@ -117,6 +171,9 @@ export function liveDeploy(
           deploy,
           dropped: kept.dropped,
           ms: ending.outcome === "error" ? undefined : ending.ms,
+          ...(ending.outcome !== "error" && ending.problem !== undefined
+            ? { problem: ending.problem }
+            : {}),
         },
       })
       await app.waitUntilRenderFlush()

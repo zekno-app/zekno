@@ -12,7 +12,7 @@
  * or nothing for A6. `--json`: one object, the change and the record when
  * known, and nothing else on standard output.
  */
-import type { Deps } from "../cli/context"
+import { remoteThroughUi, type Deps } from "../cli/context"
 import { Left, WrongInput } from "../cli/errors"
 import {
   A16,
@@ -22,10 +22,15 @@ import {
   A7,
   A7_COLLAPSED,
   A9,
+  D10,
   recordPlain,
+  STATE_MARKS,
 } from "../domains/words"
+import { listTitle } from "../domains/words-extra"
+import type { Where } from "../ops/deploy"
 import {
   domainChange,
+  listDomains,
   prepareAdd,
   prepareRemove,
   recordFor,
@@ -35,7 +40,7 @@ import {
 import { writeSettingChange } from "../ops/settings"
 import { SETTINGS_FILE } from "../settings/file"
 import { CS10, CS11_TO, CS9, IN6 } from "../settings/words"
-import { plainCell, strong } from "../ui/types"
+import { plainCell, quiet, strong } from "../ui/types"
 
 type Options = { yes: boolean; json: boolean }
 
@@ -149,4 +154,74 @@ export async function domainRemove(
   options: Options
 ): Promise<number> {
   return write(deps, prepareRemove(deps, typed), "rm", options)
+}
+
+/** A certificate's last day as plain output and `--json` write it: `2027-02-17`. */
+const isoDay = (day: Date): string => day.toISOString().slice(0, 10)
+
+/**
+ * `zekno domain [--json]` (contracts/cli.md, CL4; board `DomainsList`): the
+ * app's domains and whether each works. At a terminal the first line names
+ * the app and the server, dim and set in; then a line a domain, its columns
+ * lined up: the name, `service:port` dim, the state after its mark in its
+ * tone, the detail dim. With no terminal one line a domain,
+ * `domain<TAB>service<TAB>port<TAB>state word<TAB>last day or empty`, and
+ * nothing for an app with no domain; `--json`, a list of the same facts.
+ * A warning about a server that was not asked comes first, on standard
+ * error. Exit status 0 whatever the states.
+ */
+export async function domainList(
+  deps: Deps,
+  where: Where,
+  options: { json: boolean }
+): Promise<number> {
+  // Not animated, as `zekno status` asks a server over SSH: SSH may ask for a password on this terminal.
+  const list = await deps.ui.step(
+    `Asking ${where.server ?? "the server"}`,
+    () => listDomains(remoteThroughUi(deps), where),
+    { quiet: true }
+  )
+  if (list.warning !== undefined) deps.ui.warn(list.warning)
+  if (options.json) {
+    deps.ui.json(
+      list.rows.map((row) => ({
+        domain: row.domain,
+        service: row.service,
+        port: row.port,
+        state: row.state,
+        until: row.until === undefined ? null : isoDay(row.until),
+      }))
+    )
+    return 0
+  }
+  if (list.rows.length === 0) {
+    deps.ui.line(undefined, [quiet(`  ${D10(list.app)}`)])
+    return 0
+  }
+  deps.ui.line(undefined, [quiet(`  ${listTitle(list.app, list.server)}`)])
+  const reaches = list.rows.map((row) => `${row.service}:${row.port}`)
+  const width = (texts: readonly string[]) =>
+    Math.max(...texts.map((text) => text.length)) + 1
+  const domains = width(list.rows.map((row) => row.domain))
+  const services = width(reaches)
+  const states = width(list.rows.map((row) => row.words.state))
+  list.rows.forEach((row, index) => {
+    const { mark, tone } = STATE_MARKS[row.state]
+    deps.ui.line(
+      [
+        row.domain,
+        row.service,
+        String(row.port),
+        row.state,
+        row.until === undefined ? "" : isoDay(row.until),
+      ].join("\t"),
+      [
+        plainCell(row.domain.padEnd(domains)),
+        quiet(reaches[index]!.padEnd(services)),
+        { text: row.words.state.padEnd(states), mark, tone },
+        quiet(row.words.detail),
+      ]
+    )
+  })
+  return 0
 }

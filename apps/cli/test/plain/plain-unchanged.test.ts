@@ -36,6 +36,8 @@ const ADDED_TO_HELP = [
   // feature 015
   "  zekno domain add <domain> [--service <name>] [--yes]",
   "  zekno domain rm <domain> [--yes]",
+  "  zekno deploy --skip-dns-check",
+  "  zekno domain [--json]",
 ]
 
 describe("with no terminal, every command does what it did before feature 006 (FR-028)", () => {

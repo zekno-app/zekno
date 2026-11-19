@@ -41,6 +41,8 @@ export const OWN_OPTIONS: Record<string, readonly string[]> = {
   // specs/015-domains-https, CL2: `--json` gives the change, and the record when known.
   "domain add": ["service", "yes", "json"],
   "domain rm": ["yes", "json"],
+  // CL4: the folder's linked app and server, from its zekno.json only.
+  domain: ["json"],
 }
 
 /** The options every command read before feature 012, as `parseArgs` takes them. */
@@ -77,14 +79,20 @@ const DOMAIN_ONLY = {
   service: { type: "string" },
 } as const
 
+/** The option only `zekno deploy` reads (specs/015-domains-https, CL3): on another command it is an unknown option. */
+const DEPLOY_ONLY = {
+  "skip-dns-check": { type: "boolean" },
+} as const
+
 /**
  * The words and options of a run. Every command is parsed first with the
- * option table it had before the options of `zekno add` and of `zekno
- * domain` came, plus its own, so an option another command reads, or
- * anything else wrong, fails exactly as it did: the same sentence, status 2.
+ * option table it had before the options of `zekno add`, of `zekno domain`
+ * and of `zekno deploy --skip-dns-check` came, plus its own, so an option
+ * another command reads, or anything else wrong, fails exactly as it did:
+ * the same sentence, status 2.
  */
 export function parsed(args: string[]) {
-  const options = { ...OPTIONS, ...ADD_ONLY, ...DOMAIN_ONLY }
+  const options = { ...OPTIONS, ...ADD_ONLY, ...DOMAIN_ONLY, ...DEPLOY_ONLY }
   const at = { args, allowPositionals: true } as const
   const first = parseArgs({ ...at, strict: false, options }).positionals[0]
   const own =
@@ -92,7 +100,9 @@ export function parsed(args: string[]) {
       ? { ...OPTIONS, ...ADD_ONLY }
       : first === "domain"
         ? { ...OPTIONS, ...DOMAIN_ONLY }
-        : OPTIONS
+        : first === "deploy"
+          ? { ...OPTIONS, ...DEPLOY_ONLY }
+          : OPTIONS
   parseArgs({ ...at, strict: true, options: own })
   return parseArgs({ ...at, strict: true, options })
 }

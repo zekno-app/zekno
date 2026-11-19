@@ -7,6 +7,7 @@ import {
   runnerWarning,
   updateRunner,
 } from "../ops/server"
+import { proxyAfterUpdate } from "../ops/server-proxy"
 import { RUNNER_RELEASE } from "../version/runner-release"
 
 /** Said after a server reached over SSH is added: where its identity rests. The first deploy says it too (asking/first-deploy.ts, F4). */
@@ -113,6 +114,9 @@ export async function serverUpdate(
   deps.ui.success(
     `Updated the runner on ${server}${from} to ${version}. It matched the checksum this zekno holds.`
   )
+  // The new runner puts the proxy right when it holds a route (specs/015-domains-https, CL6); a failure is a warning.
+  const proxy = await proxyAfterUpdate(remoteThroughUi(deps), plan.server)
+  if (proxy !== undefined) deps.ui.warn(proxy)
 }
 
 export async function serverList(deps: Deps): Promise<void> {

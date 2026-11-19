@@ -12,6 +12,7 @@ import {
   sendDeploy,
   type DeployPlan,
 } from "../../ops/deploy"
+import { httpsAfter } from "../../ops/deploy-https"
 import { writeLink } from "../../ops/link"
 import { profileStore, type Server } from "../../profile/profile"
 import { expectedValues } from "../../project/compose-file"
@@ -407,9 +408,14 @@ export function createDeploys(context: Context) {
               secrets: info.secrets,
               format: info.format,
               secretNames: info.secretNames,
+              ...(info.domains === undefined ? {} : { domains: info.domains }),
+              ...(info.health === undefined ? {} : { health: info.health }),
             }),
           progress: (line) => lines.add(line),
           warning: (text) => notice("warning", text),
+          // C2: only a deploy with a health check is told (specs/015-domains-https, CL7).
+          health: (service) =>
+            dispatch({ type: "deploy-health", service, at: Date.now() }),
         })
       } catch (error) {
         lines.flush()
@@ -425,14 +431,17 @@ export function createDeploys(context: Context) {
       }
       lines.flush()
       const ended = Date.now()
-      // `routes_failed` and `unhealthy` (specs/015-domains-https, CL3): the app started; their own words and the
-      // fifth stage come with the screens' phase. Until then the screen says what is known, that it started.
-      const outcome =
-        result.outcome === "start_failed" ? "start_failed" : "started"
+      // A start with domains new to the app waits for HTTPS first, each domain's state an event (specs/015-domains-https,
+      // CL3; B4 to B6). `routes_failed` and `unhealthy` end with their sentence (B16 to B19, C3, C4).
+      await httpsAfter(ops, result, (shown) =>
+        dispatch({ type: "deploy-https", shown })
+      )
+      const { outcome } = result
       const text =
-        outcome === "started"
-          ? `${app} is live on ${server.name} in ${seconds(ended - started)}`
-          : `${server.name} accepted deploy ${result.sequence}, but the app did not start.`
+        result.problem ??
+        (outcome === "start_failed"
+          ? `${server.name} accepted deploy ${result.sequence}, but the app did not start.`
+          : `${app} is live on ${server.name} in ${seconds(ended - started)}`)
       dispatch({
         type: "deploy-ended",
         outcome,

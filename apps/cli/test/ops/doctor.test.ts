@@ -882,9 +882,10 @@ exec "${real}" "$@"
 `
     )
     expect(await doctor(f)).toEqual({ code: 0, out: BASELINE, err: [] })
+    // A runner of protocol 4 is asked `status` with the routes in force, for the Proxy line (specs/015-domains-https, CL6).
     expect(readFileSync(input, "utf8").trim().split("\n")).toEqual([
       '{"command":"version"}',
-      '{"command":"status"}',
+      '{"command":"status","input":{"routes":true}}',
     ])
   }, 60_000)
 

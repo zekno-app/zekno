@@ -3,7 +3,12 @@
  * (keys, the window's size, and what effects/ reports back), the effects it
  * asks for, and a step, the next state with those effects.
  */
-import type { DeployStage } from "../../shared/deploy"
+import type {
+  DeployHealth,
+  DeployOutcome,
+  DeployStage,
+  HttpsShown,
+} from "../../shared/deploy"
 import type { AppRow, DeployRow, RunState, SecretRow } from "../../shared/views"
 import type { SettingPath } from "../../settings/types"
 import type { AppKey } from "../keys"
@@ -165,12 +170,19 @@ export type AppEvent =
       secrets: number
       format?: 1 | 2
       secretNames?: string[]
+      /** The domains and the health check it signs, when it signs any (specs/015-domains-https, B2, C1). */
+      domains?: string[]
+      health?: DeployHealth
     }
+  /** The runner began to wait for `service` to be healthy (C2), at `at`. Only a deploy with a health check. */
+  | { type: "deploy-health"; service: string; at: number }
+  /** A new domain during the wait for HTTPS after the start (B4 to B6). Only a start with domains new to the app. */
+  | { type: "deploy-https"; shown: HttpsShown }
   /** Docker's lines during the deploy, cleaned, in the order it printed them. */
   | { type: "deploy-progress"; lines: readonly string[] }
   | {
       type: "deploy-ended"
-      outcome: "started" | "start_failed" | "error"
+      outcome: DeployOutcome | "error"
       notice: Notice
       at?: number
     }

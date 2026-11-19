@@ -1,8 +1,11 @@
 import {
   RunnerAppStatesSchema,
   RunnerStatusSchema,
+  RunnerStatusWithRoutesSchema,
+  type Route,
   type RunnerAppStates,
   type RunnerStatus,
+  type RunnerStatusWithRoutes,
   type RunnerVersion,
 } from "@workspace/core"
 
@@ -16,6 +19,7 @@ import {
   type SessionMode,
 } from "../server/session"
 import type { RunState } from "../shared/views"
+import { ROUTES_PROTOCOL } from "./deploy-format"
 
 /** A server of the verified team, found by name. Nothing has been asked of it yet. */
 export type Located = { team: Team; server: Server }
@@ -52,6 +56,52 @@ export function checkIdentity(
     )
   }
 }
+
+/**
+ * The routes in force on a server, by app, and its proxy's state, as `status`
+ * with routes answers them (specs/015-domains-https, contracts/core.md,
+ * "`status` with routes"). Only apps with a route are in `routes`.
+ */
+export type HeldRoutes = {
+  routes: Record<string, Route[]>
+  proxy: RunnerStatusWithRoutes["proxy"]
+}
+
+/** Whether a runner answers `status` with routes: it speaks sessions and protocol 4 or more. */
+export const answersRoutes = (
+  session: Pick<Session, "mode" | "runner">
+): boolean =>
+  session.mode === "session" &&
+  session.runner !== undefined &&
+  session.runner.protocol >= ROUTES_PROTOCOL
+
+/**
+ * Asks `status`: as every zekno asked it before feature 015, or, with
+ * `routes` and a runner that answers them (`answersRoutes`), with the input
+ * `{ "routes": true }` (CL3 step 2, CL6). The answer's own fields are given
+ * apart from the routes and the proxy, so what is shown or compared of
+ * `status` stays what it was. A command on an app with no route and no
+ * health check asks as before (CL7).
+ */
+export async function askStatus(
+  session: Pick<Session, "mode" | "runner" | "request">,
+  routes: boolean
+): Promise<{ status: RunnerStatus; held?: HeldRoutes }> {
+  if (!routes || !answersRoutes(session))
+    return { status: await session.request("status", RunnerStatusSchema) }
+  const answer = await session.request("status", RunnerStatusWithRoutesSchema, {
+    input: { routes: true },
+  })
+  const { routes: inForce, proxy, ...status } = answer
+  return { status, held: { routes: inForce, proxy } }
+}
+
+/** The routes in force for `app`, from a `status` with routes: none when the app has none, or the runner was not asked. */
+export const routesOfApp = (
+  held: HeldRoutes | undefined,
+  app: string
+): Route[] =>
+  held !== undefined && Object.hasOwn(held.routes, app) ? held.routes[app]! : []
 
 /** One service of an app, as the runner reports it: its name, state, exit code and health, nothing else. */
 export type ServiceState = RunnerAppStates["apps"][string]["services"][number]
@@ -100,6 +150,8 @@ export type StatusResult = {
    * not a state answer. Every app's state is then unknown.
    */
   states?: AppStates
+  /** The routes in force and the proxy's state, when they were asked and the runner answers them (`askStatus`). */
+  held?: HeldRoutes
 }
 
 /**
@@ -129,14 +181,15 @@ async function readStates(
  * Asks a server what it holds and what is running, over a session that is
  * open, and checks that it is the server that was connected and on this
  * team. The app keeps one session per server for this (app/effects/servers.ts); see
- * `readStates` for `whole`.
+ * `readStates` for `whole`. `routes`: the routes in force too, from a runner
+ * that answers them (`zekno status`, specs/015-domains-https, CL6).
  */
 export async function readOver(
   session: Session,
   { team, server }: Checked,
-  options: { whole?: boolean } = {}
+  options: { whole?: boolean; routes?: boolean } = {}
 ): Promise<StatusResult> {
-  const status = await session.request("status", RunnerStatusSchema)
+  const { status, held } = await askStatus(session, options.routes === true)
   checkIdentity(team, server, status)
   const states = await readStates(session, options.whole === true)
   return {
@@ -146,16 +199,18 @@ export async function readOver(
     mode: session.mode,
     runner: session.runner,
     ...(states === undefined ? {} : { states }),
+    ...(held === undefined ? {} : { held }),
   }
 }
 
 /** Asks a server what it holds and what is running, over one session of its own. */
 export async function readStatus(
   deps: OpDeps,
-  checked: Checked
+  checked: Checked,
+  options: { routes?: boolean } = {}
 ): Promise<StatusResult> {
   return withSession(reach(deps, checked.server.target), (session) =>
-    readOver(session, checked)
+    readOver(session, checked, options)
   ).catch((error: unknown) => {
     throw namedUnreachable(error, checked.server.name)
   })

@@ -23,6 +23,7 @@ import {
 } from "@workspace/core"
 
 import { CliError, explainDeploy, RunnerRefused } from "../cli/errors"
+import { problemOf } from "../domains/outcome"
 import type { Held, History } from "../profile/profile"
 import type { Session } from "../server/session"
 import type { DeployInfo } from "../shared/deploy"
@@ -30,6 +31,7 @@ import { C6 } from "../shared/deploy-words"
 import { sameEnvelope } from "../shared/history"
 import type { DeployCallbacks, DeployPlan, DeployResult } from "./deploy"
 import { deployAnswer } from "./deploy-answer"
+import type { Domained } from "./deploy-domains"
 import { listForDeploy, type Listing } from "./deploy-secrets"
 
 /**
@@ -45,6 +47,8 @@ export type Going = {
   accepted: number
   history: History
   callbacks: DeployCallbacks
+  /** What the checks before signing found of the deploy's domains (ops/deploy-domains.ts); the plan carries what is signed. */
+  domained?: Pick<Domained, "newDomains" | "overDomains">
 }
 
 /**
@@ -142,6 +146,11 @@ async function deliver(
   const answer = session.request(sending.command, RunnerReportSchema, {
     input: sending.input,
     onEvent: (event) => {
+      // The wait for a service's health begins after `up` (specs/015-domains-https, contracts/core.md, "Event"): C2.
+      if (event.event === "health") {
+        start()
+        return callbacks.health?.(event.service)
+      }
       if (event.event !== "progress") return
       start()
       return callbacks.progress?.(event.line)
@@ -168,10 +177,23 @@ async function deliver(
     plan.app,
     answered(going, entry)
   )
-  // `routes_failed` and `unhealthy`: the app started (specs/015-domains-https, CL3). Their own lines and the fifth stage
-  // come later; until then the stage row says what is known, that it started.
+  // `routes_failed` and `unhealthy`: the app started (specs/015-domains-https, CL3), and the stage row says so; their
+  // sentence (B16 to B19, C3, C4) is the result's.
   callbacks.stage?.(ran === "start_failed" ? "failed" : "started", info)
-  return { ...info, outcome: ran, report, mode: session.mode }
+  const problem = problemOf(report, {
+    app: plan.app,
+    server: plan.server.name,
+    routes: plan.routes ?? [],
+    health: plan.health ?? null,
+  })
+  return {
+    ...info,
+    outcome: ran,
+    report,
+    mode: session.mode,
+    ...(problem === undefined ? {} : { problem }),
+    newDomains: going.domained?.newDomains ?? [],
+  }
 }
 
 /**
@@ -228,20 +250,41 @@ const listing = (going: Going, format: 1 | 2, held: readonly Envelope[]) =>
     warning: going.callbacks.warning,
   })
 
-/** The stage info of a deploy numbered `sequence` that lists `listed`. */
+/**
+ * The stage info of a deploy numbered `sequence` that lists `listed`, with
+ * the domains and the health check it signs when it signs any
+ * (specs/015-domains-https, B2, C1): a deploy with neither has the info it
+ * always had.
+ */
 const infoOf = (
   going: Going,
   sequence: number,
   listed: Listing,
   format: 1 | 2
-): DeployInfo => ({
-  app: going.plan.app,
-  server: going.plan.server.name,
-  sequence,
-  secrets: listed.statements.length,
-  secretNames: listed.names,
-  format,
-})
+): DeployInfo => {
+  const { routes, health } = going.plan
+  return {
+    app: going.plan.app,
+    server: going.plan.server.name,
+    sequence,
+    secrets: listed.statements.length,
+    secretNames: listed.names,
+    format,
+    ...(routes === undefined || routes.length === 0
+      ? {}
+      : { domains: routes.map((route) => route.domain) }),
+    ...(health === undefined || health === null
+      ? {}
+      : {
+          health: {
+            timeout: health.timeout,
+            services: health.services.map(({ service, http }) =>
+              http === null ? { service } : { service, path: http.path }
+            ),
+          },
+        }),
+  }
+}
 
 /**
  * Version 1 (CL5, CL7 to CL11): one above both what the runner accepted and
@@ -366,6 +409,7 @@ export async function deployVersionTwo(going: Going): Promise<DeployResult> {
         previous,
         envelope,
         rollback: plan.rollback === true,
+        overDomains: going.domained?.overDomains === true,
       }),
   })
 }

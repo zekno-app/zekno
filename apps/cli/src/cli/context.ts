@@ -11,6 +11,8 @@ import { z } from "zod"
 
 import { CliError } from "./errors"
 import type { SshHost } from "../domains/address"
+import type { ResolveDomain } from "../domains/dns"
+import type { ProbeHttps } from "../domains/https"
 import type { KeyStore } from "../profile/keystore"
 import type { Fetch } from "../version/newest"
 import {
@@ -57,13 +59,20 @@ export type Deps = {
    */
   fetch?: Fetch
   /**
-   * The server's public addresses, as `ssh -G` names its host
-   * (specs/015-domains-https, contracts/cli.md, CL5), for the record
-   * `zekno domain add` names (A5). Only main.ts sets it, from a later phase
-   * on. Undefined: the address is not known, and nothing is run
-   * (domains/address.ts); tests give a stand-in.
+   * The three effects of feature 015 (specs/015-domains-https,
+   * contracts/cli.md, CL5), as `fetch` is: only main.ts sets them, and
+   * test/domains/effects.test.ts holds who may use them. Tests give
+   * stand-ins (test/support/domain-stand-ins.ts).
+   *
+   * `sshHost`: the server's public addresses, as `ssh -G` names its host
+   * (domains/server-address.ts), for the record `zekno domain add` names
+   * (A5) and the DNS check of a deploy. Undefined: not known, nothing run.
    */
   sshHost?: SshHost
+  /** `resolveDomain`: a domain's A and AAAA records from this machine (domains/dns.ts). Undefined: "cannot tell", no lookup made. */
+  resolveDomain?: ResolveDomain
+  /** `probeHttps`: what HTTPS answers for a domain (domains/https.ts). Undefined: not looked up, no connection made. */
+  probeHttps?: ProbeHttps
 }
 
 /**

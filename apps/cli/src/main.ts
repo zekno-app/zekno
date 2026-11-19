@@ -6,6 +6,9 @@ import { join } from "node:path"
 import { run } from "./cli/cli"
 import type { OpDeps } from "./cli/context"
 import { CliError } from "./cli/errors"
+import { resolveDomain } from "./domains/dns"
+import { probeHttps } from "./domains/https"
+import { sshHostOf } from "./domains/server-address"
 import { osKeychain } from "./profile/keystore"
 import { connect } from "./server/transport"
 import { processPlainUi, wantsPlain } from "./ui/plain/plain"
@@ -26,6 +29,10 @@ const deps: OpDeps = {
   localRunner,
   // The one way to the network that zekno itself has: only `zekno version` and `zekno doctor` use it (version/newest.ts).
   fetch: (input, init) => fetch(input, init),
+  // The three effects of domains (specs/015-domains-https, contracts/cli.md, CL5): set here and nowhere else.
+  resolveDomain,
+  probeHttps,
+  sshHost: sshHostOf({ resolveDomain }),
 }
 
 /**

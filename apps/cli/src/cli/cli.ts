@@ -5,7 +5,7 @@ import { deployAtTerminal } from "../asking/first-deploy"
 import { add, ADD_OPTIONS } from "../commands/add"
 import { deploy, rollback } from "../commands/deploy"
 import { doctor } from "../commands/doctor"
-import { domainAdd, domainRemove } from "../commands/domain"
+import { domainAdd, domainList, domainRemove } from "../commands/domain"
 import { init } from "../commands/init"
 import { link } from "../commands/link"
 import { logs, parseTail } from "../commands/logs"
@@ -275,10 +275,12 @@ export async function run(argv: string[], given: Deps): Promise<number> {
             app: values.app,
             server: values.server,
             file: values.file,
+            skipDnsCheck: values["skip-dns-check"] === true,
           })
         return await deploy(deps, {
           ...(await project(["app", "server", "file"])),
           typed: { app: values.app, server: values.server },
+          skipDnsCheck: values["skip-dns-check"] === true,
         })
       case "rollback":
         return await rollback(deps, {
@@ -311,6 +313,11 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         return 0
       case "settings init":
         return await settingsInit(deps)
+      case "domain":
+        // The folder's app and server come from its zekno.json, the only place it takes them from (specs/015-domains-https, CL4).
+        return await domainList(deps, await project(["app", "server"]), {
+          json: values.json === true,
+        })
       case "domain add":
         // It changes the settings file as `zekno settings set` does: no team, no server (specs/015-domains-https, CL2).
         return await domainAdd(deps, third, {

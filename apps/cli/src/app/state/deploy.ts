@@ -53,8 +53,46 @@ export function deployStage(
       secrets: event.secrets,
       format: event.format ?? state.deploy.format,
       secretNames: event.secretNames ?? state.deploy.secretNames,
+      ...(event.domains === undefined ? {} : { domains: event.domains }),
+      ...(event.health === undefined ? {} : { health: event.health }),
     },
   })
+}
+
+/** The runner waits for a service's health (specs/015-domains-https, C2): which, its path when it has one, since when. */
+export function deployHealth(
+  state: State,
+  event: EventOf<"deploy-health">
+): Step {
+  if (!state.deploy) return stay(state)
+  const path = state.deploy.health?.services.find(
+    (entry) => entry.service === event.service
+  )?.path
+  return stay({
+    ...state,
+    deploy: {
+      ...state.deploy,
+      waitingFor: {
+        service: event.service,
+        ...(path === undefined ? {} : { path }),
+        since: event.at,
+      },
+    },
+  })
+}
+
+/** A new domain during the wait for HTTPS (B4 to B6): its entry replaced, or added in the order they come. */
+export function deployHttps(
+  state: State,
+  event: EventOf<"deploy-https">
+): Step {
+  if (!state.deploy) return stay(state)
+  const was = state.deploy.https ?? []
+  const { shown } = event
+  const https = was.some((each) => each.domain === shown.domain)
+    ? was.map((each) => (each.domain === shown.domain ? shown : each))
+    : [...was, shown]
+  return stay({ ...state, deploy: { ...state.deploy, https } })
 }
 
 export function deployProgress(
@@ -84,10 +122,9 @@ export function deployEnded(
     endedAt: event.at,
     result: event.notice,
   }
-  // The runner just said it accepted this deploy, whether or not the app started.
+  // The runner just said it accepted this deploy, whether or not the app started, its routes are in force or it was healthy.
   const accepted =
-    sequence !== undefined &&
-    (event.outcome === "started" || event.outcome === "start_failed")
+    sequence !== undefined && event.outcome !== "error"
       ? withAppRows(state, server, (row) =>
           row.name === app ? { ...row, accepted: sequence } : row
         )

@@ -1,5 +1,6 @@
 /** Replacing a server's runner from the app (`u`), after its question was answered, then reading the server again. */
 import { prepareServerUpdate, updateRunner } from "../../ops/server"
+import { proxyAfterUpdate } from "../../ops/server-proxy"
 import { locateServer } from "../../ops/status"
 import type { Effect } from "../state/events"
 import type { Context } from "./context"
@@ -46,6 +47,11 @@ export function createRunnerUpdates(context: Context, servers: Servers) {
         ? `Updated the runner on ${result.server} to ${result.version}. It matched the checksum this zekno holds.`
         : `The runner on ${result.server} already has version ${result.version}.`
     )
+    // As `zekno server update`: the new runner puts the proxy right when it holds a route (specs/015-domains-https, CL6).
+    const proxy = result.updated
+      ? await proxyAfterUpdate(ops, plan.server)
+      : undefined
+    if (proxy !== undefined) notice("warning", proxy)
     const { team, server } = await locateServer(ops, effect.server)
     remember(team)
     // The kept session still runs the old runner: a new one is opened, on purpose, and kept instead.

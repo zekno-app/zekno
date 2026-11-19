@@ -102,12 +102,15 @@ export function namedUnreachable(error: unknown, server: string): unknown {
     : error
 }
 
-/** The one kind of event each request may send before its result. */
-const EVENTS: Partial<Record<SessionCommand, SessionEvent["event"]>> = {
-  apply: "progress",
+/** The kinds of event each request may send before its result. */
+const EVENTS: Partial<
+  Record<SessionCommand, readonly SessionEvent["event"][]>
+> = {
+  apply: ["progress"],
   // A version-2 deploy sends Docker's lines as `apply` does (specs/014-deploy-v2, contracts/protocol.md P9); `records` sends none.
-  deploy: "progress",
-  logs: "log",
+  // On protocol 4 it also says which service's health it waits for (specs/015-domains-https, contracts/core.md, "Event").
+  deploy: ["progress", "health"],
+  logs: ["log"],
 }
 
 /** How long a runner has to exit once its session is closed, before it is stopped. */
@@ -338,7 +341,8 @@ function live(
         if (!frame.ok) throw new CliError(UNEXPECTED)
         const value = frame.value
         if ("event" in value) {
-          if (EVENTS[command] !== value.event) throw new CliError(UNEXPECTED)
+          if (!EVENTS[command]?.includes(value.event))
+            throw new CliError(UNEXPECTED)
           const busy = onEvent?.(clean(value))
           if (busy instanceof Promise) await busy
           // Events can arrive faster than they are read. Keys, the screen, timers and signals still get their turn.

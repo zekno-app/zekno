@@ -31,6 +31,8 @@ import {
 import { onApp } from "./app"
 import {
   deployEnded,
+  deployHealth,
+  deployHttps,
   deployProgress,
   deployStage,
   deployStarted,
@@ -318,6 +320,10 @@ export function update(state: State, event: AppEvent): Step {
       return deployStage(state, event)
     case "deploy-progress":
       return deployProgress(state, event)
+    case "deploy-health":
+      return deployHealth(state, event)
+    case "deploy-https":
+      return deployHttps(state, event)
     case "deploy-ended":
       // A settings screen of that app marks what changed since this deploy: its last deploy is read again.
       return afterDeploy(state, deployEnded(state, event))

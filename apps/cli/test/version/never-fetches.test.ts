@@ -50,6 +50,8 @@ const NEVER_FETCHES: { [command: string]: string[][] } = {
   // specs/015-domains-https, CL2: they change the settings file only.
   "domain add": [["domain", "add", "shop.example.com", "--yes"]],
   "domain rm": [["domain", "rm", "shop.example.com", "--yes"]],
+  // CL4: the folder's file and its server, and what this machine looks up itself (CL5), never GitHub.
+  domain: [["domain"], ["domain", "--json"]],
   add: [
     ["add", "postgres", "--yes", "--app", "demo", "--server", "dev"],
     ["add", "--list"],

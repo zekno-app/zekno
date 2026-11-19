@@ -9,12 +9,42 @@
  * too: ops/deploy.ts reports them, and both this view and the app's deploy
  * screen show them (`DeployProgress`).
  */
+import { dnsPlain, httpsLivePlain, httpsWaitingPlain } from "../domains/words"
 import type { Ui } from "../ui/types"
 import type { Notice } from "./notice"
 
 /** data-model.md, "Stages of a deploy". A refusal ends a deploy at whatever stage it had reached. */
 export type DeployStage =
   "checked" | "signed" | "sent" | "starting" | "started" | "failed"
+
+/**
+ * How a deploy the runner answered ended. `routes_failed` and `unhealthy`
+ * (specs/015-domains-https, contracts/cli.md, CL3): it was accepted, its app
+ * started and it is the app's current one, but its routes are not in force,
+ * or it was not healthy in time.
+ */
+export type DeployOutcome =
+  "started" | "start_failed" | "routes_failed" | "unhealthy"
+
+/**
+ * The health check a deploy signed, as it is shown (specs/015-domains-https,
+ * C1, C2): the limit, and each service it waits for, with its path when it
+ * has one.
+ */
+export type DeployHealth = {
+  timeout: number
+  services: { service: string; path?: string }[]
+}
+
+/**
+ * A new domain during the wait for HTTPS after a start (CL3; B4 to B6):
+ * waited for since a time, live with its certificate's last day, or not
+ * ready when the wait was over.
+ */
+export type HttpsShown =
+  | { domain: string; state: "waiting"; since: number }
+  | { domain: string; state: "live"; until: Date }
+  | { domain: string; state: "not_ready" }
 
 /** What a deploy is, from the moment its number is known. */
 export type DeployInfo = {
@@ -27,6 +57,14 @@ export type DeployInfo = {
   secretNames: string[]
   /** The message format it is signed in: 2 for a runner that carries out version 2, 1 for an older one (contracts/cli.md, "The format"). */
   format: 1 | 2
+  /**
+   * The domains it signs, in domain order, for the panel's `domains` row
+   * (specs/015-domains-https, B2, B3): a rollback's are the server's (R29).
+   * Left out for a deploy with none.
+   */
+  domains?: string[]
+  /** The health check it signs, for the fifth stage (C1, C2). Left out for a deploy with none. */
+  health?: DeployHealth
 }
 
 /** What a deploy view is told before anything is sent. */
@@ -55,19 +93,33 @@ export type DeployStart = {
   from?: { file: string; detail: string }
 }
 
-/** How a deploy ended. `error`: refused, or failed before the runner answered; the error itself is said by whoever catches it. */
+/**
+ * How a deploy ended. `error`: refused, or failed before the runner
+ * answered; the error itself is said by whoever catches it. `problem`: for
+ * `routes_failed` and `unhealthy`, its sentence (B16 to B19, C3, C4;
+ * domains/outcome.ts). `https`: after a start with domains new to the app,
+ * each one's end of the wait (B5, B6), in domain order; left out when there
+ * was no wait.
+ */
 export type DeployEnding =
   | {
-      outcome: "started" | "start_failed"
+      outcome: DeployOutcome
       sequence: number
       app: string
       server: string
       secrets: number
       ms: number
+      problem?: string
+      https?: HttpsShown[]
     }
   | { outcome: "error" }
 
-/** A deploy as it happens, shown by a `Ui`. */
+/**
+ * A deploy as it happens, shown by a `Ui`. The three optional methods are
+ * feature 015's (specs/015-domains-https, contracts/cli.md, CL3), and are
+ * never called for a deploy without a domain or a health check (CL7), so a
+ * view without them is the view of every deploy before it.
+ */
 export type DeployView = {
   /** A stage was reached. From `checked` on, the number and the count of secrets are known. */
   stage(stage: DeployStage, deploy: DeployInfo): void
@@ -75,6 +127,12 @@ export type DeployView = {
   progress(line: string): void
   /** The deploy ended. Resolves once the view has said so. Called once. */
   end(ending: DeployEnding): Promise<void>
+  /** B1, before anything is signed: a new domain points to the server, at `address`. */
+  pointed?(domain: string, address: string): void
+  /** The runner began to wait for `service` to be healthy (C2). */
+  health?(service: string): void
+  /** The wait for HTTPS after the start: a domain is waited for (B4), or its wait is over (B5, B6). */
+  https?(shown: HttpsShown): void
 }
 
 /**
@@ -96,7 +154,15 @@ export type DeployProgress = {
   lines: string[]
   running: boolean
   /** How it ended. `error` is a refusal or a failure before the runner answered. */
-  outcome?: "started" | "start_failed" | "error"
+  outcome?: DeployOutcome | "error"
+  /** The domains it signs, from the "checked" stage on (B2, B3). Left out for a deploy with none. */
+  domains?: readonly string[]
+  /** The health check it signs, from the "checked" stage on (C1). Left out for a deploy with none. */
+  health?: DeployHealth
+  /** The service the runner waits for, its path when it has one, and since when (C2): from each `health` event. */
+  waitingFor?: { service: string; path?: string; since: number }
+  /** The wait for HTTPS after the start, each new domain as far as it got (B4 to B6). Left out when there is none. */
+  https?: HttpsShown[]
   /** When it began, in milliseconds, for the time shown beside it. */
   since: number
   /** When it ended, in milliseconds. */
@@ -262,9 +328,16 @@ export const failedNext = (
  * not start: on standard error, marked as the server's (`Ui.remote`), after
  * the failure sentence. With `say` false the result is not said at all, for
  * `--json`, where the command prints the one JSON object itself.
+ *
+ * A deploy with a domain or a health check (specs/015-domains-https,
+ * contracts/cli.md, CL3, "With no terminal"): B1 on standard output as
+ * `dns<TAB>shop.example.com<TAB>203.0.113.7`, before anything is signed;
+ * after the result line, B5 as `https<TAB>…<TAB>live<TAB>2027-02-17` and B6
+ * as `https<TAB>…<TAB>waiting`; `routes_failed` and `unhealthy` say their
+ * sentence on standard error, in place of the result line.
  */
 export function plainDeployView(
-  ui: Pick<Ui, "success" | "error" | "warn" | "remote">,
+  ui: Pick<Ui, "success" | "error" | "warn" | "remote" | "info">,
   say: boolean
 ): DeployView {
   const kept = keptLines()
@@ -272,11 +345,27 @@ export function plainDeployView(
   return {
     stage: () => {},
     progress: (line) => kept.push(line),
+    pointed: (domain, address) => {
+      if (say) ui.info(dnsPlain(domain, address))
+    },
     async end(ending) {
       if (ended) return
       ended = true
       if (ending.outcome === "started") {
-        if (say) ui.success(startedSentence(ending))
+        if (!say) return
+        ui.success(startedSentence(ending))
+        for (const shown of ending.https ?? [])
+          if (shown.state === "live")
+            ui.info(httpsLivePlain(shown.domain, shown.until))
+          else if (shown.state === "not_ready")
+            ui.info(httpsWaitingPlain(shown.domain))
+        return
+      }
+      if (
+        ending.outcome === "routes_failed" ||
+        ending.outcome === "unhealthy"
+      ) {
+        if (say && ending.problem !== undefined) ui.error(ending.problem)
         return
       }
       if (ending.outcome !== "start_failed") return

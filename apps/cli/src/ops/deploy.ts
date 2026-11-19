@@ -1,9 +1,4 @@
-import {
-  RunnerStatusSchema,
-  type Health,
-  type Route,
-  type RunnerReport,
-} from "@workspace/core"
+import type { Health, Route, RunnerReport } from "@workspace/core"
 import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
 import { CliError, MISSING_APP, UsageError, WrongInput } from "../cli/errors"
 import { isRouted } from "../domains/routes"
@@ -19,12 +14,13 @@ import {
   type SessionMode,
 } from "../server/session"
 import { appTaken } from "../shared/app-names"
-import type { DeployInfo, DeployStage } from "../shared/deploy"
+import type { DeployInfo, DeployOutcome, DeployStage } from "../shared/deploy"
 import { readDeployEntry } from "../shared/history"
 import { RUNNER_RELEASE } from "../version/runner-release"
+import { checkDomains, rollbackAsksRoutes } from "./deploy-domains"
 import { chooseFormat } from "./deploy-format"
 import { deployVersionOne, deployVersionTwo } from "./deploy-send"
-import { checkIdentity } from "./status"
+import { answersRoutes, askStatus, checkIdentity } from "./status"
 
 export type DeployCallbacks = {
   /** A stage was reached. */
@@ -38,6 +34,14 @@ export type DeployCallbacks = {
   progress?: (line: string) => void | Promise<void>
   /** Something the person should notice. The work carries on. */
   warning?: (text: string) => void
+  /**
+   * B1, before anything is signed: a domain new to the app points to the
+   * server, at `address` (specs/015-domains-https, contracts/cli.md, CL3).
+   * Only a deploy with a domain says it.
+   */
+  pointed?: (domain: string, address: string) => void
+  /** The runner began to wait for `service` to be healthy (C2). Only a deploy with a health check is told. */
+  health?: (service: string) => void
 }
 
 /**
@@ -56,13 +60,18 @@ export type DeployPlan = {
    * The routes the deploy signs, sorted by domain, and its health check
    * (specs/015-domains-https, contracts/cli.md, CL3; domains/routes.ts):
    * from a settings file, as `readSource` gives them. Left out: none, as for
-   * a Compose file written by hand, a rollback (until it carries the
-   * server's routes), and every deploy before feature 015.
+   * a Compose file written by hand and every deploy before feature 015. A
+   * rollback leaves them out too: it signs those in force on the server
+   * (ops/deploy-domains.ts).
    */
   routes?: readonly Route[]
   health?: Health | null
   fresh?: boolean
   rollback?: true
+  /** A rollback's: the deploy whose service definition it deploys again, as B12 names it. */
+  rollbackOf?: number
+  /** `zekno deploy --skip-dns-check`: no domain is looked up, and B14 says so for each new one (CL3, step 5). */
+  skipDnsCheck?: boolean
 }
 
 /**
@@ -84,11 +93,15 @@ export type DeployResult = DeployInfo & {
    * and its app started; its routes are not in force, or it was not healthy
    * in time.
    */
-  outcome: "started" | "start_failed" | "routes_failed" | "unhealthy"
+  outcome: DeployOutcome
   /** The runner's report, as it answered. */
   report: RunnerReport
   /** How the runner was reached. `one-shot` is a runner that does not speak sessions. */
   mode: SessionMode
+  /** For `routes_failed` and `unhealthy`: its sentence (B16 to B19, C3, C4; domains/outcome.ts). */
+  problem?: string
+  /** The domains it signed that the server did not hold for the app before: the wait for HTTPS is for them (B4 to B6). */
+  newDomains: readonly string[]
 }
 
 /**
@@ -275,6 +288,7 @@ export async function prepareRollback(
     compose: entry.compose,
     from: entry.sequence,
     rollback: true,
+    rollbackOf: entry.sequence,
   }
 }
 
@@ -284,6 +298,13 @@ export async function prepareRollback(
  * first, from the runner's answer to `version` (C7 stops here, before
  * anything is read or signed); then `status`, checked; then the deploy in
  * that format (deploy-send.ts).
+ *
+ * A deploy with a route or a health check asks `status` with the routes in
+ * force from a runner of protocol 4, and so does a rollback whose app may
+ * hold some, after asking as before; both check their domains before
+ * anything is signed (specs/015-domains-https, contracts/cli.md, CL3;
+ * ops/deploy-domains.ts). Any other deploy asks it as before, and checks
+ * nothing more (CL7).
  */
 export async function sendDeploy(
   deps: OpDeps,
@@ -296,27 +317,59 @@ export async function sendDeploy(
   return withSession(reach(deps, server.target), async (session) => {
     // CL1. Nothing is signed in a format the runner does not carry out, and nothing is downgraded unsaid. A route or a
     // health check needs a runner that carries them out: B10 (specs/015-domains-https, CL3 step 1).
+    const routed = isRouted(plan.routes, plan.health)
     const chosen = chooseFormat({
       server: server.name,
       mode: session.mode,
       runner: session.runner,
       carried,
-      routed: isRouted(plan.routes, plan.health),
+      routed,
     })
 
-    // CL2. Who answers, and the number it holds for the app.
-    const status = await session.request("status", RunnerStatusSchema)
+    // CL2. Who answers, and the number it holds for the app; with the routes in force when they matter (CL3 step 2).
+    let { status, held } = await askStatus(session, routed)
     checkIdentity(team, server, status)
+    const numberOf = () =>
+      Object.hasOwn(status.lastSequence, app) ? status.lastSequence[app]! : 0
+    // A rollback keeps the routes in force (CL3 step 4): asked again with them, unless this machine knows there are none.
+    if (
+      plan.rollback === true &&
+      answersRoutes(session) &&
+      rollbackAsksRoutes(team, server, app, numberOf())
+    ) {
+      ;({ status, held } = await askStatus(session, true))
+      checkIdentity(team, server, status)
+    }
     const history = team.store.history(server.serverId, app)
     const sent = sentDeploys(team, server, app, history, callbacks.warning)
-    const accepted = Object.hasOwn(status.lastSequence, app)
-      ? status.lastSequence[app]!
-      : 0
+    const accepted = numberOf()
     // Read on this connection, which the person's answers already made: a name typed as new is never one the runner holds.
     if (plan.fresh === true && accepted >= 1)
       throw new AppTaken(server.name, app)
 
-    const going = { session, plan, status, accepted, history, callbacks }
+    // CL3, steps 2 to 6: B9, B11, a rollback's routes and B12, the DNS check. What is signed of the domains comes from here.
+    const domained = await checkDomains({
+      deps,
+      plan,
+      held,
+      accepted,
+      answersRoutes: answersRoutes(session),
+      callbacks,
+    })
+    const signing: DeployPlan = {
+      ...plan,
+      routes: domained.routes,
+      health: domained.health,
+    }
+    const going = {
+      session,
+      plan: signing,
+      status,
+      accepted,
+      history,
+      callbacks,
+      domained,
+    }
     if (chosen.format === 2) return deployVersionTwo(going)
     return deployVersionOne({
       ...going,
