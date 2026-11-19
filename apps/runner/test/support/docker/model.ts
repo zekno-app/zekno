@@ -55,6 +55,8 @@ export type Script = {
   flood?: number
   /** How long each health check's curl takes before it answers, in milliseconds; kept, not used up. */
   checkMs?: number
+  /** How long each `caddy validate` takes, in milliseconds, as a first fetch of the image would; kept, not used up. */
+  validateMs?: number
   /** The pinned image is not on this machine until a `pull` brings it. */
   imageMissing?: boolean
   /** Each `pull` fails. */

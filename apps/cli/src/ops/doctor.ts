@@ -557,12 +557,12 @@ async function runnerCheck(
           `${session.runner === undefined ? "no version reported" : sanitize(session.runner.version)}, ${ON_THIS_MACHINE}`
         ),
         opened: true,
-        proxy: proxyLine(held, server.name),
+        proxy: proxyLine(held),
       }
     return {
       line: relationLine(server.name, session.mode, session.runner, carried),
       opened: true,
-      proxy: proxyLine(held, server.name),
+      proxy: proxyLine(held),
     }
   } catch (error) {
     const detail = signal.aborted ? NO_ANSWER : sessionSentence(error)

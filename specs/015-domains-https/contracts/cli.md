@@ -104,7 +104,7 @@ A test lists the files that may use each, as `never-fetches` does for `fetch`.
 ## CL6. Where else it shows
 
 - `zekno status`: after an app's line, a line a domain the server holds for it (E2). Asked with routes when the runner speaks protocol 4. Plain: `domain<TAB>app<TAB>domain`. JSON: the runner's `routes`.
-- `zekno doctor`: for each server whose runner speaks protocol 4 and holds a route: a `Proxy` check. `running`: E3 with the number of domains. `stopped` or `missing`: E4, a problem. `other_image`: a warning, `Proxy  an older version` with `Run zekno server update prod-1 to replace it` under it (new, in E4's pattern).
+- `zekno doctor`: for each server whose runner speaks protocol 4 and holds a route: a `Proxy` check. `running`: E3 with the number of domains. `stopped` or `missing`: E4, a problem. `other_image`: a warning, `Proxy  an older version` with `Deploy an app with a domain to replace it` under it (new, in E4's pattern).
 - `zekno server update`: after an update, when the runner speaks protocol 4 and holds a route, sends `proxy`; its failure is said with B16 or B19's words for the server.
 - The app: the settings screen's rows (E6), changed as other settings are; an app's screen with the `Domains` box under `Secrets` (E7), filled as CL4 fills its rows, shown only when the app has a domain in the file or on the server; the deploy screen (E8).
 - The help: `zekno domain`, `zekno domain add <domain> [--service <name>] [--yes]`, `zekno domain rm <domain> [--yes]`, and a line of its own for `zekno deploy --skip-dns-check`. The existing lines are not edited.

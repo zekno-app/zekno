@@ -106,6 +106,7 @@ function validate(
   mounts: FakeContainer["mounts"],
   command: string[]
 ): Answer {
+  if (model.script.validateMs) Bun.sleepSync(model.script.validateMs)
   if ((model.script.validateFails ?? 0) > 0) {
     model.script.validateFails! -= 1
     return fail(`${caddyLine("validate failed")}\n`)

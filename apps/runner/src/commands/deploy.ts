@@ -98,7 +98,6 @@ async function afterUp(
   dir: string,
   verified: VerifiedDeployV2,
   started: boolean,
-  upReturned: number,
   onHealth: (service: string) => void
 ): Promise<RunnerReport> {
   const { app, sequence, routes, health } = verified.deploy
@@ -121,7 +120,8 @@ async function afterUp(
       app,
       health,
       names: inForce.names,
-      deadline: upReturned + health.timeout * 1000,
+      // The limit is the app's: the time the routes took, such as a first fetch of the proxy's image, is not counted.
+      deadline: Date.now() + health.timeout * 1000,
       onHealth,
     })
     if (!waited.ok)
@@ -192,6 +192,6 @@ export function deploy(
       secrets.value,
       onProgress
     )
-    return afterUp(dir, verified.value, started, Date.now(), onHealth)
+    return afterUp(dir, verified.value, started, onHealth)
   })
 }

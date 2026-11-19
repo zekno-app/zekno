@@ -87,7 +87,7 @@ health check keeps the four stages.
 On the server, the runner waits once Docker Compose has started the app, for
 each service with a health check, in turn. It looks at every container of the
 service every 2 seconds, until all of them are healthy, or the time limit has
-passed since Docker Compose returned. A deploy has one limit: the largest of
+passed since the wait began. A deploy has one limit: the largest of
 its services' limits. The limit is looked at before each container, so the
 wait ends at its limit however many containers a service has.
 

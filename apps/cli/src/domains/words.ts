@@ -438,11 +438,16 @@ export const E5 = (server: string) => ({
   next: `Free ports 80 and 443 on ${server}`,
 })
 
-/** The proxy runs from another image than the one this runner pins: a warning in E4's pattern (contracts/cli.md, CL6). */
-export const OTHER_IMAGE = (server: string) => ({
+/**
+ * The proxy runs from another image than the one this runner pins: a warning
+ * in E4's pattern, with E4's way out (contracts/cli.md, CL6). Any deploy with
+ * a domain makes the proxy again; `zekno server update` does too, but only
+ * when it replaces the runner, so it is not what is said.
+ */
+export const OTHER_IMAGE = {
   detail: "an older version",
-  next: `Run zekno server update ${server} to replace it`,
-})
+  next: "Deploy an app with a domain to replace it",
+}
 
 /** E7: the title of the box under `Secrets` on an app's screen. */
 export const E7_TITLE = "Domains"

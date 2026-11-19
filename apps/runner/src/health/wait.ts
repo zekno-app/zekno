@@ -3,8 +3,8 @@
  * runner.md, RN11; research R13). For each service of the signed `health`,
  * in order, the event `health` says the wait for it has begun; then one round
  * every 2 seconds looks at every container of the service, until all are
- * healthy or `timeout` seconds have passed since `docker compose up`
- * returned. Not in time: the outcome is `unhealthy`, with the service and
+ * healthy or `timeout` seconds have passed since the wait began, once the
+ * routes were put in force. Not in time: the outcome is `unhealthy`, with the service and
  * whether its check had a path. Nothing is stopped, rolled back or released:
  * going back is a signed rollback (deploy-v2.md part 4.3).
  *
@@ -56,7 +56,7 @@ async function steady(
 
 /**
  * Waits for each service of `health`, in order, until `deadline` (the time
- * `up` returned plus the signed `timeout`). `names` holds each checked
+ * the wait began plus the signed `timeout`). `names` holds each checked
  * service's containers and their names on the route network (RN5).
  */
 export async function waitHealthy(input: {

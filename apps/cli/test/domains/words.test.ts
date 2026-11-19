@@ -302,9 +302,9 @@ describe("E. Where else domains show", () => {
       detail: "port 80 is in use by another program",
       next: "Free ports 80 and 443 on prod-1",
     })
-    expect(w.OTHER_IMAGE("prod-1")).toEqual({
+    expect(w.OTHER_IMAGE).toEqual({
       detail: "an older version",
-      next: "Run zekno server update prod-1 to replace it",
+      next: "Deploy an app with a domain to replace it",
     })
     expect(w.E7_TITLE).toBe("Domains")
     // The box's foot, as the board `DomainsApp` draws it, a line each.

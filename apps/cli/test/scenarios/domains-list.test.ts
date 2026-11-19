@@ -254,7 +254,7 @@ describe("zekno doctor's Proxy line (CL6; E3, E4)", () => {
     expect(await s.zekno("deploy")).toBe(0)
     expect(await proxyLines()).toEqual([`prod-1\tproxy\tgood\t${E3(2)}`])
     s.m.docker.change("zekno-proxy", { image: "caddy:2.10.0" })
-    const older = OTHER_IMAGE("prod-1")
+    const older = OTHER_IMAGE
     expect(await proxyLines()).toEqual([
       `prod-1\tproxy\twarning\t${older.detail}\t${older.next}`,
     ])

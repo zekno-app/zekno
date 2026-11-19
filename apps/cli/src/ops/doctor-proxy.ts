@@ -9,7 +9,7 @@
  * - `running`: E3, good, with the number of domains the server holds;
  * - `stopped` or `missing`: E4, a problem;
  * - `other_image`: a warning in E4's pattern, `an older version`, with
- *   `Run zekno server update prod-1 to replace it` under it.
+ *   `Deploy an app with a domain to replace it` under it.
  *
  * E5, a taken port, is not a line of doctor: the runner cannot know it
  * without starting the proxy, and the deploy that tried says it (B16;
@@ -20,10 +20,7 @@ import type { CheckLine } from "./doctor"
 import type { HeldRoutes } from "./status"
 
 /** The Proxy line for a server whose runner answered `held`, or undefined when there is none to show. */
-export function proxyLine(
-  held: HeldRoutes | undefined,
-  server: string
-): CheckLine | undefined {
+export function proxyLine(held: HeldRoutes | undefined): CheckLine | undefined {
   if (held === undefined) return undefined
   const domains = Object.values(held.routes).reduce(
     (total, routes) => total + routes.length,
@@ -34,12 +31,11 @@ export function proxyLine(
   if (held.proxy === "running")
     return { ...line, result: "good", detail: E3(domains) }
   if (held.proxy === "other_image") {
-    const older = OTHER_IMAGE(server)
     return {
       ...line,
       result: "warning",
-      detail: older.detail,
-      next: older.next,
+      detail: OTHER_IMAGE.detail,
+      next: OTHER_IMAGE.next,
     }
   }
   // `stopped`, `missing`, and `none` though an app holds a route: nothing answers for its domains.

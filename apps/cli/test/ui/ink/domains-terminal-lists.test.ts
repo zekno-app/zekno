@@ -109,7 +109,7 @@ describe("zekno domain (board DomainsList)", () => {
               {
                 name: "prod-1",
                 where: "deploy@203.0.113.7",
-                checks: [proxyLine(held, "prod-1")],
+                checks: [proxyLine(held)],
               },
             ],
             serversSkipped: false,

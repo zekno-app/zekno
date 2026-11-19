@@ -96,7 +96,7 @@ Before the first check with a path, the pinned image is looked for once (`docker
 - **With `http`**: for each container's name, `docker run --rm --network zekno-route-<app> --read-only --cap-drop ALL --security-opt no-new-privileges --user 65534:65534 --memory 32m --pids-limit 16 --dns-search . <image> curl -sS -o /dev/null --max-time 5 --max-filesize 1024 --proto =http -w '%{http_code}|%{exitcode}' http://<name>:<port><path>`. Healthy: curl's exit is 0 or 63 and the status is 200 to 399. The path has matched the path rule; the URL is one argument.
 - **Without**: `docker inspect` of each container: running and, if it has a health check, `healthy`; if it has none, running with the same restart count 10 seconds later.
 
-One round every 2 seconds until every container of every listed service is healthy, or `timeout` seconds have passed since `up` returned. The limit is looked at before each container, and a check is given the time left, at most 30 seconds (security review S3). Not in time: the outcome is `unhealthy` with the service that was not healthy and whether its check had a path. Nothing is stopped, rolled back or released.
+One round every 2 seconds until every container of every listed service is healthy, or `timeout` seconds have passed since the wait began (not since `up` returned: the time RN4 to RN10 took, which can hold a first fetch of the proxy's image, is not the app's). The limit is looked at before each container, and a check is given the time left, at most 30 seconds (security review S3). Not in time: the outcome is `unhealthy` with the service that was not healthy and whether its check had a path. Nothing is stopped, rolled back or released.
 
 ## RN12. The outcome
 

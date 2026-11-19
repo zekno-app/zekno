@@ -332,6 +332,21 @@ describe("security review S3: the wait keeps to its limit", () => {
     expect(Date.now() - started).toBeLessThan(6000)
   }, 40_000)
 
+  test("the limit counts from when the wait begins: route steps that take longer than the limit, as a first fetch of the proxy's image does, leave it whole", async () => {
+    const w = await world()
+    w.docker.app("web", { web: 1 })
+    w.docker.script({ validateMs: 3000 })
+    const { result } = await deployRoutes(w, 0, {
+      routes: [route("app.example.com")],
+      health: {
+        timeout: 2,
+        services: [{ service: "web", http: { port: 3000, path: "/" } }],
+      },
+    })
+    expect(result).toEqual({ outcome: "started", app: "web", sequence: 1 })
+    expect(checks(w).length).toBe(1)
+  }, 40_000)
+
   test("the pinned image is looked for once, before the first event, and pulled only when it is missing", async () => {
     const w = await world()
     w.docker.app("web", { web: 2 })
