@@ -11,6 +11,7 @@
   "lines": [
     [["dim","$ zekno domain"]],
     [["dim","  shop on prod-1"]],
+    [],
     [["","api.example.com   "],["dim","api:8080 "],[""," "],["yellow","● no certificate yet   "],[""," "],["dim","prod-1 is asking for one"]],
     [["","new.example.com   "],["dim","web:3000 "],[""," "],["dim","○ not deployed         "],[""," "],["dim","run zekno deploy"]],
     [["","shop.example.com  "],["dim","web:3000 "],[""," "],["green","● live                 "],[""," "],["dim","certificate until 17 Feb 2027"]],

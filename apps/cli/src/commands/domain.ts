@@ -200,6 +200,8 @@ export async function domainList(
     return 0
   }
   deps.ui.line(undefined, [quiet(`  ${listTitle(list.app, list.server)}`)])
+  // An empty row under the title, as the board `DomainsList` draws it.
+  deps.ui.gap()
   for (const { plain, cells } of domainLines(list.rows))
     deps.ui.line(plain, cells)
   return 0
