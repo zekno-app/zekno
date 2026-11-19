@@ -15,6 +15,7 @@ import type { AppKey } from "../keys"
 import type { Notice } from "../../shared/notice"
 import type {
   AddStepName,
+  AppDomainRow,
   Linked,
   LogLine,
   RunnerRow,
@@ -116,6 +117,8 @@ export type AppEvent =
       deploys: DeployRow[]
       secrets: SecretRow[]
     }
+  /** The Domains box of an app's screen, as just read (E7): no rows for an app without a domain. */
+  | { type: "app-domains"; server: string; app: string; rows: AppDomainRow[] }
   | { type: "notice"; notice: Notice }
   /**
    * An effect failed with a reason a person can act on. What was waiting for
@@ -178,6 +181,8 @@ export type AppEvent =
   | { type: "deploy-health"; service: string; at: number }
   /** A new domain during the wait for HTTPS after the start (B4 to B6). Only a start with domains new to the app. */
   | { type: "deploy-https"; shown: HttpsShown }
+  /** B1, before anything is signed: a domain new to the app points to the server, at `address`. */
+  | { type: "deploy-pointed"; domain: string; address: string }
   /** Docker's lines during the deploy, cleaned, in the order it printed them. */
   | { type: "deploy-progress"; lines: readonly string[] }
   | {

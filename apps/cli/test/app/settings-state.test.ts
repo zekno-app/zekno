@@ -40,18 +40,10 @@ const settingsScreen = (state: State) => {
 }
 
 /** The rows of design.md's web service, in order: as screenRows gives them. */
-const WEB_ROWS = [
-  "image",
-  "start",
-  "restart",
-  "memory",
-  "cpus",
-  "port",
-  "published",
-  "secrets",
-  "plain",
-  "uploads",
-]
+const WEB_ROWS =
+  "image start restart memory cpus health port published domains secrets plain uploads".split(
+    " "
+  )
 
 describe("browsing", () => {
   test("e on the app screen pushes the settings screen and asks for its settings and the last deploy", () => {
@@ -109,9 +101,9 @@ describe("browsing", () => {
       service: 0,
       row: 0,
     })
-    // The worker's rows are its own: image, start, restart, memory, cpus, port, published, secrets, plain none, volumes none.
+    // The worker's rows are its own: image, start, restart, memory, cpus, health, port, published, domains, secrets, plain none, volumes none.
     const last = play(worker, ...Array.from({ length: 20 }, () => K.down))
-    expect(settingsScreen(last.state).row).toBe(9)
+    expect(settingsScreen(last.state).row).toBe(11)
   })
 
   test("d deploys as on the app screen, with the SHA-256 of the file the screen shows; nothing while a deploy runs", () => {
@@ -216,13 +208,13 @@ describe("browsing", () => {
     const worker = play(onBoard(), K.tab).state
     const downs = (n: number) => Array.from({ length: n }, () => K.down)
     // Drawn as every line of the app is at a terminal: the command without its backticks (the walkthrough's rough edge).
-    const plain = play(worker, ...downs(8), K.enter).state
+    const plain = play(worker, ...downs(10), K.enter).state
     expect(plain.notice).toEqual({
       tone: "info",
       text: "Add one with zekno settings set worker.plain.<NAME> <value>.",
     })
     expect(settingsScreen(plain).change).toBeUndefined()
-    const volume = play(worker, ...downs(9), K.enter).state
+    const volume = play(worker, ...downs(11), K.enter).state
     expect(volume.notice).toEqual({
       tone: "info",
       text: "Add one with zekno settings set worker.volumes.<name> <path>.",
@@ -355,7 +347,7 @@ describe("changing", () => {
       typed: "",
       now: "no limit",
     })
-    expect(settingsScreen(play(onRow(7), K.enter).state).change?.typed).toBe(
+    expect(settingsScreen(play(onRow(9), K.enter).state).change?.typed).toBe(
       "DATABASE_URL, SESSION_KEY"
     )
   })
@@ -447,7 +439,7 @@ describe("changing", () => {
       ],
     }
     // Leaving the port out while it is published.
-    const port = play(onRow(5, published), K.enter, ...erase(4), K.enter).state
+    const port = play(onRow(6, published), K.enter, ...erase(4), K.enter).state
     expect(settingsScreen(port).change).toMatchObject({
       stage: "typing",
       reason:
@@ -457,7 +449,7 @@ describe("changing", () => {
     const both = play(
       onRow(0, published),
       K.tab,
-      ...downs(6),
+      ...downs(7),
       K.enter,
       ...typing("80"),
       K.enter
@@ -607,7 +599,7 @@ describe("changing", () => {
 
   test("a secret is a name: the secrets row types names, never a value", () => {
     const secrets = play(
-      onRow(7),
+      onRow(9),
       K.enter,
       ...erase(40),
       ...typing("A, B"),
@@ -751,7 +743,7 @@ describe("keys dropped as a paste while a value is typed (the walkthrough's roug
     // A plain value says its own rule.
     const plain = play(
       onBoard(),
-      ...Array.from({ length: 5 }, () => K.down),
+      ...Array.from({ length: 7 }, () => K.down),
       K.enter
     ).state
     expect(settingsScreen(plain).change?.path).toEqual({

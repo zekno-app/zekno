@@ -18,6 +18,7 @@ import type { TeamTrust } from "@workspace/core"
 import { lstatSync } from "node:fs"
 
 import { CliError } from "../../cli/errors"
+import { healthOf } from "../../domains/routes"
 import { profileStore, type Server } from "../../profile/profile"
 import type { ComposeSource } from "../../project/compose-read"
 import { findProject } from "../../project/file"
@@ -184,6 +185,8 @@ export function createSettings(context: Context) {
         effect.deployed
       )
       const removed = removedServices(read.settings, before)
+      // The one limit the next deploy signs, which the `health` row is marked by (settings/rows.ts `healthRow`).
+      const seconds = healthOf(read.settings)?.timeout
       return {
         kind: "read",
         report: {
@@ -191,7 +194,7 @@ export function createSettings(context: Context) {
           file: read.shown,
           services: read.settings.services.map((service) => ({
             name: service[0],
-            rows: screenRows(service, before),
+            rows: screenRows(service, before, seconds),
           })),
           ...(removed.length > 0 ? { removed } : {}),
         },

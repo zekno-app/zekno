@@ -446,3 +446,13 @@ export const OTHER_IMAGE = (server: string) => ({
 
 /** E7: the title of the box under `Secrets` on an app's screen. */
 export const E7_TITLE = "Domains"
+
+/**
+ * E7: the box's last lines, dim, each a line of its own, as the board
+ * `DomainsApp` draws them under the domains: the states are what this
+ * machine found, and the settings screen (`e`) is where domains change.
+ */
+export const E7_NOTE = [
+  "Checked from this machine.",
+  "e settings to change them.",
+] as const

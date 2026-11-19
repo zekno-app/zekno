@@ -307,6 +307,11 @@ describe("E. Where else domains show", () => {
       next: "Run zekno server update prod-1 to replace it",
     })
     expect(w.E7_TITLE).toBe("Domains")
+    // The box's foot, as the board `DomainsApp` draws it, a line each.
+    expect(w.E7_NOTE).toEqual([
+      "Checked from this machine.",
+      "e settings to change them.",
+    ])
   })
 })
 

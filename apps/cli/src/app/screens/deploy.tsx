@@ -3,7 +3,13 @@ import type { ReactNode } from "react"
 
 import type { DeployProgress } from "../../shared/deploy"
 import { Confirm } from "../../ui/parts/confirm"
-import { numberUsed, stagesOf, Summary } from "../../ui/parts/deploy-summary"
+import { PANEL_DOMAINS } from "../../domains/words"
+import {
+  domainRowsIn,
+  numberUsed,
+  stagesOf,
+  Summary,
+} from "../../ui/parts/deploy-summary"
 import type { KeyHint } from "../../ui/parts/key-hints"
 import { Panel } from "../../ui/parts/panel"
 import { Stages } from "../../ui/parts/stages"
@@ -17,6 +23,13 @@ import {
 } from "../state/questions"
 import type { Question, Screen, State } from "../state/types"
 import { seconds } from "../../shared/time"
+import {
+  fitted,
+  HttpsLines,
+  LiveLines,
+  PointedLines,
+  type Fit,
+} from "./deploy-domains"
 import { HINTS } from "./placeholder"
 
 type DeployScreenState = Extract<Screen, { name: "deploy" }>
@@ -91,18 +104,25 @@ function DockerLines({
   )
 }
 
-/** How it ended: the result line and, when its number was used without the app starting, that the number is used. */
+/**
+ * How it ended: the result line, each new domain's end of the wait for HTTPS
+ * under it (B5, B6), and, when its number was used without the app starting,
+ * that the number is used.
+ */
 function Outcome({
   deploy,
   columns,
+  fit,
 }: {
   deploy: DeployProgress
   columns: number
+  fit: Fit
 }) {
   if (!deploy.result) return null
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" flexShrink={0}>
       <NoticeLine notice={deploy.result} columns={columns} />
+      <HttpsLines deploy={deploy} columns={columns} fit={fit} />
       {numberUsed(deploy) ? (
         <Box paddingLeft={2}>
           <Text dimColor>
@@ -116,22 +136,33 @@ function Outcome({
 }
 
 /**
+ * The rows that are surely free beside those `outputRows` gives Docker's
+ * lines, when its panel is not shown: none while the deploy runs, whose
+ * footer takes them; once it ended, the panel's two borders. A row may stay
+ * empty; none is ever pressed out of another.
+ */
+const FREE = { running: 0, ended: 2 }
+
+/**
  * Lines of the window the deploy screen uses besides Docker's lines: the
  * app's margin rows, the header and the key hints with the gaps between,
  * the summary panel, the stage row, the result in the rows it is drawn in
- * (`width` columns) and the gaps between them.
+ * (`width` columns), the gaps between them, and `extra`, the rows of the
+ * panel's `domains` rows and of the new domains' lines that fit (`Fit`).
  */
 function outputRows(
   rows: number,
   deploy: DeployProgress,
   status: boolean,
-  width: number
+  width: number,
+  extra: number
 ): number {
   const panel =
     2 + 2 + (deploy.from ? 1 : 0) + 1 + (deploy.replaces !== undefined ? 1 : 0)
   const frame = 3 + 1 + 1 + 1 + (status ? 2 : 0)
   const said =
-    deploy.running || !deploy.result ? 1 : noticeRows(deploy.result, width)
+    (deploy.running || !deploy.result ? 1 : noticeRows(deploy.result, width)) +
+    extra
   const result = said + 1 + (numberUsed(deploy) ? 1 : 0)
   const footer = deploy.running ? 2 : 0
   return Math.max(1, rows - frame - panel - 1 - 1 - 1 - result - 1 - 2 - footer)
@@ -164,7 +195,23 @@ export function DeployScreen({
   const showLines = (screen.output || failed) && deploy.lines.length > 0
   // The window less the app's margins and this body's padding.
   const room = columns - 2 - 4
-  const count = outputRows(rows, deploy, shownStatus !== undefined, room)
+  // Feature 015's rows take what Docker's output would have: all but one of its lines when it is shown, the rows free
+  // when it is not (`FREE`). The new domains' end of the wait first, which says what to do; then the panel's `domains`
+  // rows, one at least; then B1 (`Fit`).
+  const said = shownStatus !== undefined
+  const spare =
+    outputRows(rows, deploy, said, room, 0) +
+    (showLines ? -1 : deploy.running ? FREE.running : FREE.ended)
+  const named = deploy.domains?.length ?? 0
+  const waits = fitted(
+    { ...deploy, pointed: undefined },
+    spare - Math.min(1, named),
+    room
+  )
+  const domainsRoom = Math.min(PANEL_DOMAINS + 1, spare - waits.rows)
+  const panelDomains = domainRowsIn(named, domainsRoom)
+  const fit = fitted(deploy, spare - panelDomains, room)
+  const count = outputRows(rows, deploy, said, room, panelDomains + fit.rows)
   const hints: readonly KeyHint[] = [
     ["o", screen.output ? "hide Docker's output" : "show Docker's output"],
     ["esc", deploy.running ? "back, deploy keeps going" : "back"],
@@ -182,16 +229,22 @@ export function DeployScreen({
       status={shownStatus}
     >
       <Box flexDirection="column" flexGrow={1} rowGap={1} paddingX={2}>
-        <Summary deploy={deploy} width={Math.min(columns - 6, 64)} />
+        <PointedLines deploy={deploy} columns={room} fit={fit} />
+        <Summary
+          deploy={deploy}
+          width={Math.min(columns - 6, 64)}
+          domainsRoom={domainsRoom}
+        />
         <Stages stages={stagesOf(deploy)} />
         {deploy.running ? (
-          screen.output ? null : (
-            <Text dimColor wrap="truncate-end">
-              {deploy.lines.at(-1) ?? " "}
-            </Text>
-          )
+          <LiveLines
+            deploy={deploy}
+            output={screen.output}
+            columns={room}
+            fit={fit}
+          />
         ) : (
-          <Outcome deploy={deploy} columns={room} />
+          <Outcome deploy={deploy} columns={room} fit={fit} />
         )}
         {showLines ? (
           <Panel

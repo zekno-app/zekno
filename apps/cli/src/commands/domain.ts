@@ -36,11 +36,12 @@ import {
   recordFor,
   serviceFor,
   type DomainPlan,
+  type DomainRow,
 } from "../ops/domain"
 import { writeSettingChange } from "../ops/settings"
 import { SETTINGS_FILE } from "../settings/file"
 import { CS10, CS11_TO, CS9, IN6 } from "../settings/words"
-import { plainCell, quiet, strong } from "../ui/types"
+import { plainCell, quiet, strong, type Cell } from "../ui/types"
 
 type Options = { yes: boolean; json: boolean }
 
@@ -199,29 +200,41 @@ export async function domainList(
     return 0
   }
   deps.ui.line(undefined, [quiet(`  ${listTitle(list.app, list.server)}`)])
-  const reaches = list.rows.map((row) => `${row.service}:${row.port}`)
+  for (const { plain, cells } of domainLines(list.rows))
+    deps.ui.line(plain, cells)
+  return 0
+}
+
+/**
+ * `zekno domain`'s line a domain (board `DomainsList`): plain output's
+ * tab-separated facts, and the cells a terminal draws, lined up: the name,
+ * `service:port` dim, the state after its mark in its tone, the detail dim.
+ */
+export function domainLines(
+  rows: readonly DomainRow[]
+): { plain: string; cells: Cell[] }[] {
+  const reaches = rows.map((row) => `${row.service}:${row.port}`)
   const width = (texts: readonly string[]) =>
     Math.max(...texts.map((text) => text.length)) + 1
-  const domains = width(list.rows.map((row) => row.domain))
+  const domains = width(rows.map((row) => row.domain))
   const services = width(reaches)
-  const states = width(list.rows.map((row) => row.words.state))
-  list.rows.forEach((row, index) => {
+  const states = width(rows.map((row) => row.words.state))
+  return rows.map((row, index) => {
     const { mark, tone } = STATE_MARKS[row.state]
-    deps.ui.line(
-      [
+    return {
+      plain: [
         row.domain,
         row.service,
         String(row.port),
         row.state,
         row.until === undefined ? "" : isoDay(row.until),
       ].join("\t"),
-      [
+      cells: [
         plainCell(row.domain.padEnd(domains)),
         quiet(reaches[index]!.padEnd(services)),
         { text: row.words.state.padEnd(states), mark, tone },
         quiet(row.words.detail),
-      ]
-    )
+      ],
+    }
   })
-  return 0
 }

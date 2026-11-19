@@ -416,6 +416,9 @@ export function createDeploys(context: Context) {
           // C2: only a deploy with a health check is told (specs/015-domains-https, CL7).
           health: (service) =>
             dispatch({ type: "deploy-health", service, at: Date.now() }),
+          // B1: only a deploy with a domain new to the app is told.
+          pointed: (domain, address) =>
+            dispatch({ type: "deploy-pointed", domain, address }),
         })
       } catch (error) {
         lines.flush()
@@ -453,6 +456,7 @@ export function createDeploys(context: Context) {
       })
       dispatch({ type: "server-reached", server: server.name, reachable: true })
       refresh(team, server, app)
+      context.readDomains?.(team, server, app)
     } finally {
       deploying = false
     }

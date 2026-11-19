@@ -24,6 +24,7 @@ import type { Start } from "../state/types"
 import { createAdding } from "./add-server"
 import { createContext, reasonOf } from "./context"
 import { createDeploys } from "./deploys"
+import { createDomains } from "./domains"
 import { useLink } from "./links"
 import { createLogs } from "./logs"
 import { createKey } from "./profile"
@@ -93,6 +94,9 @@ export function createEffects(
   const adding = createAdding(context, servers)
   const updates = createRunnerUpdates(context, servers)
   const settings = createSettings(context)
+  const domains = createDomains(context)
+  context.readDomains = (team, server, app) =>
+    void domains.read(team, server, app).catch(fail)
 
   return {
     deps: ops,
@@ -111,6 +115,8 @@ export function createEffects(
               app: effect.app,
               ...appDetails(team, server, effect.app),
             })
+            // Its Domains box is read beside it, in the background (E7).
+            if (!context.closed) context.readDomains?.(team, server, effect.app)
             // A screen that opens reads what is running (contracts/app.md, "Refresh"), in the background.
             if (!context.closed) await servers.readInBackground(team, server)
           })

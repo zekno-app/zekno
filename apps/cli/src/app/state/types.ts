@@ -6,6 +6,7 @@
  */
 import type { TeamTrust } from "@workspace/core"
 
+import type { DomainState } from "../../domains/words"
 import type { DeployProgress } from "../../shared/deploy"
 import type { Notice } from "../../shared/notice"
 import type { AppRow, DeployRow, SecretRow } from "../../shared/views"
@@ -279,6 +280,9 @@ export type ScreenChange = {
   openedAt?: number
 }
 
+/** One domain of the app screen's Domains box (E7): the name, its state (for the mark and its tone) and the state's words. */
+export type AppDomainRow = { domain: string; state: DomainState; words: string }
+
 /** What the settings screen shows for one app, once read (effects/settings.ts). */
 export type SettingsView = {
   server: string
@@ -354,6 +358,12 @@ export type State = {
     deploys: DeployRow[]
     secrets: SecretRow[]
   }
+  /**
+   * The Domains box of the app screen, once read for that app
+   * (specs/015-domains-https, E7): each domain and its state, none for an
+   * app without a domain, whose screen has no such box.
+   */
+  appDomains?: { server: string; app: string; rows: AppDomainRow[] }
   /** What the settings screen shows, once read for that app. Names and values that are not secret only. */
   settingsView?: SettingsView
   size: { columns: number; rows: number }

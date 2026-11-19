@@ -82,6 +82,8 @@ export type Context = {
   perform(work: () => Promise<void>): Promise<void>
   /** Reads one app's history and secrets again, and its server's apps for Home. */
   refresh(team: Team, server: Server, app: string): void
+  /** Reads the Domains box of an app's screen again, in the background (effects/domains.ts). */
+  readDomains?: (team: Team, server: Server, app: string) => void
 }
 
 /**

@@ -86,15 +86,15 @@ Tests are part of each task: a test that fails first wherever a contract fixes t
 
 ## Phase 5: CLI, the screens
 
-- [ ] T069 [US1] The panel's `domains` row, three and "and N more" (`ui/parts/deploy-summary.tsx`, `shared/deploy.ts`, `ui/ink/deploy-live.ts`)
-- [ ] T070 [US5] The fifth stage and its live line at a terminal (`ui/parts/deploy-summary.tsx`, `ui/ink/deploy-view.tsx`)
-- [ ] T071 [US1] B1 before the panel, B4 to B6 and the outcomes' lines at a terminal, as the boards `DomainsDeploy`, `DomainsDns`, `DomainsHealth`
-- [ ] T072 [US1] [US5] The app's deploy screen: the row, the stage, the wait, the outcomes (`app/state/deploy.ts`, `app/effects/deploys.ts`, `app/screens/deploy.tsx`)
-- [ ] T073 [US3] The settings screen: the two rows, changed as other settings are (`app/state/settings*.ts`, `app/screens/settings*.tsx`)
-- [ ] T074 [US3] `app/screens/app-domains.tsx`: the `Domains` box under `Secrets`, shown only for an app with a domain; its data through the app's effects; `app.tsx` not made longer than 500 lines
-- [ ] T075 Tests of each screen in colour against the boards: marks, bold and dim, the rows' order (`test/app/domains-*.test.tsx`, `test/ui/ink/domains-terminal.test.ts`)
-- [ ] T076 The screens and `ui/` still load neither the profile nor the core library (`test/layers`)
-- [ ] T077 The app at 80 columns and in a window too small: nothing new overflows
+- [x] T069 [US1] The panel's `domains` row, three and "and N more" (`ui/parts/deploy-summary.tsx`, `shared/deploy.ts`, `ui/ink/deploy-live.ts`)
+- [x] T070 [US5] The fifth stage and its live line at a terminal (`ui/parts/deploy-summary.tsx`, `ui/ink/deploy-view.tsx`)
+- [x] T071 [US1] B1 before the panel, B4 to B6 and the outcomes' lines at a terminal, as the boards `DomainsDeploy`, `DomainsDns`, `DomainsHealth`
+- [x] T072 [US1] [US5] The app's deploy screen: the row, the stage, the wait, the outcomes (`app/state/deploy.ts`, `app/effects/deploys.ts`, `app/screens/deploy.tsx`)
+- [x] T073 [US3] The settings screen: the two rows, changed as other settings are (`app/state/settings*.ts`, `app/screens/settings*.tsx`)
+- [x] T074 [US3] `app/screens/app-domains.tsx`: the `Domains` box under `Secrets`, shown only for an app with a domain; its data through the app's effects; `app.tsx` not made longer than 500 lines
+- [x] T075 Tests of each screen in colour against the boards: marks, bold and dim, the rows' order (`test/app/domains-*.test.tsx`, `test/ui/ink/domains-terminal.test.ts`)
+- [x] T076 The screens and `ui/` still load neither the profile nor the core library (`test/layers`)
+- [x] T077 The app at 80 columns and in a window too small: nothing new overflows
 - [ ] T078 CLI: type check, lint, format, all tests, `screens --check` (differences expected only where a stored screen gained a row)
 
 ## Phase 6: Docs

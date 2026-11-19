@@ -12,8 +12,9 @@ export function Fields({
 }) {
   return (
     <Box flexDirection="column">
-      {rows.map(([label, value]) => (
-        <Box key={label}>
+      {/* Keyed by place: a label may be empty on the rows that go on from the one above (the panel's `domains`). */}
+      {rows.map(([label, value], index) => (
+        <Box key={`${index}-${label}`}>
           <Box width={labelWidth} flexShrink={0}>
             <Text dimColor wrap="truncate-end">
               {label}

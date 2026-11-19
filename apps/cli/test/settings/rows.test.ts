@@ -137,8 +137,10 @@ describe("screenRows: every row of the screen", () => {
       "Deploy restart on failure",
       "Deploy memory 1g",
       "Deploy cpus 1",
+      "Deploy health not set (not set)",
       "Networking port 3000",
       "Networking published not published (not set)",
+      "Networking domains none (not set)",
       "Variables secrets DATABASE_URL, SESSION_KEY",
       "Variables plain NODE_ENV=production",
       "Volumes uploads /data/uploads",
@@ -153,23 +155,28 @@ describe("screenRows: every row of the screen", () => {
       "Deploy restart always",
       "Deploy memory no limit (not set)",
       "Deploy cpus no limit (not set)",
+      "Deploy health not set (not set)",
       "Networking port none (not set)",
       "Networking published not published (not set)",
+      "Networking domains none (not set)",
       "Variables secrets DATABASE_URL",
       "Variables plain none (not set)",
       "Volumes  none (not set)",
     ])
-    expect(rows[8]!.path).toEqual({
+    expect(rows[10]!.path).toEqual({
       service: "worker",
       key: "plain",
       adding: true,
     })
-    expect(rows[9]!.path).toEqual({
+    expect(rows[11]!.path).toEqual({
       service: "worker",
       key: "volume",
       adding: true,
     })
-    expect(rows[6]!.path).toEqual({ service: "worker", key: "publish" })
+    expect(rows[7]!.path).toEqual({ service: "worker", key: "publish" })
+    // specs/015-domains-https, E6: the two rows of feature 015, after cpus and after published.
+    expect(rows[5]!.path).toEqual({ service: "worker", key: "health" })
+    expect(rows[8]!.path).toEqual({ service: "worker", key: "domains" })
   })
 
   test("a service with nothing but its image", () => {
@@ -180,8 +187,10 @@ describe("screenRows: every row of the screen", () => {
       "Deploy restart no (not set)",
       "Deploy memory no limit (not set)",
       "Deploy cpus no limit (not set)",
+      "Deploy health not set (not set)",
       "Networking port none (not set)",
       "Networking published not published (not set)",
+      "Networking domains none (not set)",
       "Variables secrets none (not set)",
       "Variables plain none (not set)",
       "Volumes  none (not set)",

@@ -177,16 +177,16 @@ describe("the board AppSettings, 100 by 30", () => {
         row("memory", "1g  ! changed, not deployed (was 512m)", true)
       ),
       twoPanes("", row("cpus", "1")),
+      twoPanes("", row("health", "not set")),
       twoPanes("", "Networking"),
       twoPanes("", row("port", "3000")),
       twoPanes("", row("published", "not published")),
+      twoPanes("", row("domains", "none")),
       twoPanes("", "Variables"),
       twoPanes("", row("secrets", "DATABASE_URL, SESSION_KEY")),
       twoPanes("", row("plain", "NODE_ENV=production")),
       twoPanes("", "Volumes"),
       twoPanes("", row("uploads", "/data/uploads")),
-      twoPanes("", ""),
-      twoPanes("", ""),
       twoPanes("", ""),
       twoPanes("One app, one file:", "─".repeat(71)),
       twoPanes("zekno.app.json", AS1),
@@ -364,7 +364,7 @@ describe("80 by 24", () => {
     expect(text).toContain(
       `│ ${row("image", "ghcr.io/acme/demo-web:1.4.2", true)}`
     )
-    expect(text).toMatch(/│ {3}↓ 5 more +│/)
+    expect(text).toMatch(/│ {3}↓ 7 more +│/)
     expect(text).not.toMatch(/↑ \d+ more/)
     expect(text).toContain("A change is written to the file. It runs after the")
     expect(lines.at(-1)).toBe(
@@ -374,18 +374,10 @@ describe("80 by 24", () => {
 
   test("moving down keeps the selected row in view, with ↑ <n> more above once rows are hidden there", () => {
     let state = play(opened(NARROW), settingsRead(DESIGN_SETTINGS)).state
-    const labels = [
-      "image",
-      "start",
-      "restart",
-      "memory",
-      "cpus",
-      "port",
-      "published",
-      "secrets",
-      "plain",
-      "uploads",
-    ]
+    const labels =
+      "image start restart memory cpus health port published domains secrets plain uploads".split(
+        " "
+      )
     let sawAbove = false
     for (const label of labels) {
       const lines = draw(state, 80, 24)
@@ -400,7 +392,7 @@ describe("80 by 24", () => {
     }
     expect(sawAbove).toBe(true)
     const last = draw(state, 80, 24).join("\n")
-    expect(last).toMatch(/│ {3}↑ 5 more +│/)
+    expect(last).toMatch(/│ {3}↑ 8 more +│/)
     expect(last).not.toMatch(/↓ \d+ more/)
   })
 
@@ -428,24 +420,24 @@ describe("80 by 24", () => {
       "  restart    on failure",
       "❯ memory     1g  ! changed, not deployed (was 512m)",
       "  cpus       1",
+      "  health     not set",
       "Networking",
       "  port       3000",
-      "  published  not published",
-      "  ↓ 5 more",
+      "  ↓ 7 more",
     ])
-    // port: Deploy kept on the line under ↑ 4 more (Source, image, start, restart), over memory.
-    expect(at(5)).toEqual([
-      "  ↑ 4 more",
+    // port: Deploy kept on the line under ↑ 5 more (Source, image, start, restart, memory), over cpus.
+    expect(at(6)).toEqual([
+      "  ↑ 5 more",
       "Deploy",
-      "  memory     1g  ! changed, not deployed (was 512m)",
       "  cpus       1",
+      "  health     not set",
       "Networking",
       "❯ port       3000",
       "  published  not published",
+      "  domains    none",
       "Variables",
       "  secrets    DATABASE_URL, SESSION_KEY",
-      "  plain      NODE_ENV=production",
-      "  ↓ 2 more",
+      "  ↓ 3 more",
     ])
   })
 
@@ -478,7 +470,7 @@ describe("80 by 24", () => {
         play(
           opened(NARROW),
           settingsRead(S3_NOW, { deployed: S3_DEPLOYED }),
-          ...Array.from({ length: 6 }, () => K.down)
+          ...Array.from({ length: 7 }, () => K.down)
         ).state,
         80,
         24
@@ -486,12 +478,13 @@ describe("80 by 24", () => {
     )
     // The walkthrough drew `512m)` under ↑ 6 more, the line before it hidden, and the removed variable's first line alone at the foot.
     expect(pane).toEqual([
-      "  ↑ 6 more",
+      "  ↑ 7 more",
       "Deploy",
-      "  cpus       no limit",
+      "  health     not set",
       "Networking",
       "  port       none",
       "❯ published  not published",
+      "  domains    none",
       "Variables",
       "  secrets    none",
       "  plain      NODE_ENV=production",
@@ -521,7 +514,7 @@ describe("80 by 24", () => {
         const state = play(
           opened(NARROW),
           settingsRead(settings),
-          ...Array.from({ length: 8 + variable }, () => K.down),
+          ...Array.from({ length: 10 + variable }, () => K.down),
           K.enter,
           ...stage
         ).state
@@ -655,8 +648,10 @@ describe("what the next deploy removes (security review S3)", () => {
     play(opened(size), settingsRead(S3_NOW, { deployed: S3_DEPLOYED })).state
 
   test("100 by 30: the service the file no longer has under the others with its mark; the variable and the volume as rows of their own, marked with what they were", () => {
-    const lines = draw(s3())
-    fits(lines, 100, 30)
+    // The last rows are drawn once the selection reaches them (audit, the 14th).
+    const drawn = [s3(), play(s3(), ...Array(13).fill(K.down)).state]
+    for (const state of drawn) fits(draw(state), 100, 30)
+    const lines = drawn.flatMap((state) => draw(state))
     for (const line of [
       twoPanes(
         "Services",
@@ -678,7 +673,11 @@ describe("what the next deploy removes (security review S3)", () => {
       twoPanes("", row("data", "/data")),
       twoPanes(
         "",
-        row("audit", "none  ! removed, not deployed (was /var/audit; its data")
+        row(
+          "audit",
+          "none  ! removed, not deployed (was /var/audit; its data",
+          true
+        )
       ),
       twoPanes("", row("", "stays)")),
     ])
@@ -700,8 +699,8 @@ describe("what the next deploy removes (security review S3)", () => {
 
   test("enter on a removed row adds one, as a none row does (AS7)", () => {
     let state = s3()
-    // image, start, restart, memory, cpus, port, published, secrets, plain, the removed variable.
-    for (let at = 0; at < 9; at++) state = play(state, K.down).state
+    // image, start, restart, memory, cpus, health, port, published, domains, secrets, plain, the removed variable.
+    for (let at = 0; at < 11; at++) state = play(state, K.down).state
     const after = play(state, K.enter).state
     expect(after.notice).toEqual({
       tone: "info",
@@ -998,7 +997,8 @@ describe("changing a value (board AppSettingsEdit)", () => {
       onePane(row("restart", "on failure")),
       onePane(row("memory", "512m", true)),
       onePane(row("cpus", "1")),
-      ...Array.from({ length: 9 }, () => onePane("")),
+      onePane(row("health", "not set")),
+      ...Array.from({ length: 8 }, () => onePane("")),
       onePane(`╭${"─".repeat(92)}╮`),
       inBox("Change a setting  web · memory limit"),
       inBox("now  512m"),
@@ -1078,7 +1078,7 @@ describe("changing a value (board AppSettingsEdit)", () => {
     const state = play(
       opened(),
       settingsRead(settings),
-      ...Array.from({ length: 8 }, () => K.down),
+      ...Array.from({ length: 10 }, () => K.down),
       K.enter
     ).state
     const text = draw(state).join("\n")

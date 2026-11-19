@@ -13,6 +13,7 @@ import type { Screen, State } from "../state/types"
 import type { DeployRow, RunState, SecretRow } from "../../shared/views"
 import { clockTime } from "../../shared/time"
 import { Fields } from "../../ui/parts/fields"
+import { appDomainsOf, DomainsPane } from "./app-domains"
 import { Cell, Marker, Pane, Rule, StateCell } from "./parts"
 import { HINTS } from "./placeholder"
 
@@ -271,6 +272,7 @@ function SecretsPane({
   latest,
   width,
   narrow,
+  compact = false,
 }: {
   secrets?: readonly SecretRow[]
   selected: number
@@ -279,56 +281,71 @@ function SecretsPane({
   width: number
   /** Below 100 columns: short versions and short last lines, as on the board "One app at 80 columns". */
   narrow: boolean
+  /** Above the Domains box: as tall as it needs, no taller (board `DomainsApp`). */
+  compact?: boolean
 }) {
   const theme = useTheme()
   const rows = secrets ?? []
   const at = clampIndex(selected, rows.length + 1)
   const note = changedNote(rows, latest)
-  return (
-    <Pane title="Secrets" focused={focused} width={width}>
-      <Box flexDirection="column" flexShrink={1} overflow="hidden">
-        {rows.map((secret, index) => (
-          <Box key={secret.name}>
-            <Marker selected={focused && index === at} />
-            <Cell>
-              <Text
-                bold={focused && index === at}
-                dimColor={secret.removed}
-                strikethrough={secret.removed}
-              >
-                {secret.name}
+  const list = (
+    <Box flexDirection="column" flexShrink={1} overflow="hidden">
+      {/* Each row whole or not at all: a box too short for the rows cuts them, it never draws one over another. */}
+      {rows.map((secret, index) => (
+        <Box key={secret.name} flexShrink={0}>
+          <Marker selected={focused && index === at} />
+          <Cell>
+            <Text
+              bold={focused && index === at}
+              dimColor={secret.removed}
+              strikethrough={secret.removed}
+            >
+              {secret.name}
+            </Text>
+          </Cell>
+          {narrow ? (
+            <ShortVersion secret={secret} />
+          ) : (
+            <Cell width={VERSION_WIDTH}>
+              <Text dimColor>
+                {secret.removed ? "removed" : `version ${secret.version}`}
               </Text>
             </Cell>
-            {narrow ? (
-              <ShortVersion secret={secret} />
-            ) : (
-              <Cell width={VERSION_WIDTH}>
-                <Text dimColor>
-                  {secret.removed ? "removed" : `version ${secret.version}`}
-                </Text>
-              </Cell>
-            )}
-          </Box>
-        ))}
-        <Box>
-          <Marker selected={focused && at === rows.length} />
-          <Text dimColor>+ set a secret</Text>
+          )}
         </Box>
+      ))}
+      <Box flexShrink={0}>
+        <Marker selected={focused && at === rows.length} />
+        <Text dimColor>+ set a secret</Text>
       </Box>
+    </Box>
+  )
+  const foot = narrow ? (
+    <Box flexDirection="column" flexShrink={0}>
+      {note ? <Text color={theme.warning}>! not deployed yet</Text> : null}
+      <Text dimColor>Values are never shown.</Text>
+    </Box>
+  ) : (
+    <Box flexDirection="column" flexShrink={0}>
+      <Text dimColor>Values are never shown. To change one, set it again.</Text>
+      {note ? <Text color={theme.warning}>! {note}</Text> : null}
+    </Box>
+  )
+  // Above the Domains box (board `DomainsApp`): as tall as what it holds, its foot right under its last row.
+  if (compact)
+    return (
+      <Pane title="Secrets" focused={focused} flexGrow={0} flexShrink={1}>
+        <Box flexDirection="column" flexShrink={1} overflow="hidden">
+          {list}
+          {foot}
+        </Box>
+      </Pane>
+    )
+  return (
+    <Pane title="Secrets" focused={focused} width={width}>
+      {list}
       <Box flexGrow={1} />
-      {narrow ? (
-        <Box flexDirection="column" flexShrink={0}>
-          {note ? <Text color={theme.warning}>! not deployed yet</Text> : null}
-          <Text dimColor>Values are never shown.</Text>
-        </Box>
-      ) : (
-        <Box flexDirection="column" flexShrink={0}>
-          <Text dimColor>
-            Values are never shown. To change one, set it again.
-          </Text>
-          {note ? <Text color={theme.warning}>! {note}</Text> : null}
-        </Box>
-      )}
+      {foot}
     </Pane>
   )
 }
@@ -422,6 +439,19 @@ export function AppScreen({
       </Frame>
     )
   }
+  const domains = appDomainsOf(state, screen)
+  const secretsWidth = narrow ? NARROW_SECRETS_WIDTH : SECRETS_WIDTH
+  const secrets = (
+    <SecretsPane
+      secrets={view?.secrets}
+      selected={screen.secret}
+      focused={screen.pane === "secrets"}
+      latest={latest}
+      width={secretsWidth}
+      narrow={narrow}
+      compact={domains !== undefined}
+    />
+  )
   return (
     <Frame header={header} hints={HINTS.app} status={status}>
       <Box flexGrow={1} columnGap={1}>
@@ -433,14 +463,15 @@ export function AppScreen({
           running={runningNow(view?.deploys, runState, row?.accepted)}
           narrow={narrow}
         />
-        <SecretsPane
-          secrets={view?.secrets}
-          selected={screen.secret}
-          focused={screen.pane === "secrets"}
-          latest={latest}
-          width={narrow ? NARROW_SECRETS_WIDTH : SECRETS_WIDTH}
-          narrow={narrow}
-        />
+        {domains === undefined ? (
+          secrets
+        ) : (
+          // The Domains box under Secrets, in the same column (specs/015-domains-https, E7).
+          <Box flexDirection="column" width={secretsWidth} flexShrink={0}>
+            {secrets}
+            <DomainsPane rows={domains} narrow={narrow} width={secretsWidth} />
+          </Box>
+        )}
       </Box>
     </Frame>
   )

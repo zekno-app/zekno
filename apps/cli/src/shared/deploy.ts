@@ -163,6 +163,8 @@ export type DeployProgress = {
   waitingFor?: { service: string; path?: string; since: number }
   /** The wait for HTTPS after the start, each new domain as far as it got (B4 to B6). Left out when there is none. */
   https?: HttpsShown[]
+  /** B1 in the app: each domain new to the app that points to the server, and the address, before anything was signed. */
+  pointed?: { domain: string; address: string }[]
   /** When it began, in milliseconds, for the time shown beside it. */
   since: number
   /** When it ended, in milliseconds. */

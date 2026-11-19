@@ -5,10 +5,10 @@
  * reported. The panel, the stage row and the words are the app's own
  * (ui/parts/deploy-summary.tsx), so the single command and the app look the same.
  */
-import { Box, Text } from "ink"
-import { useEffect, useState, type ReactNode } from "react"
+import { Box, Text, useAnimation } from "ink"
+import type { ReactNode } from "react"
 
-import { B4, B5, B6 } from "../../domains/words"
+import { B4, B5, B6, C2 } from "../../domains/words"
 import { seconds } from "../../shared/time"
 import {
   earlierLeftOut,
@@ -20,9 +20,10 @@ import {
 } from "../../shared/deploy"
 import { numberUsed, stagesOf, Summary } from "../parts/deploy-summary"
 import { Panel } from "../parts/panel"
-import { Stages } from "../parts/stages"
+import { Spinner, Stages } from "../parts/stages"
 import { useTheme } from "../terminal/theme"
-import { ErrorLine, withoutBackticks } from "./marks"
+import { ErrorLine, MARK, MarkedLine, withoutBackticks } from "./marks"
+import { wrapPieces, type Piece } from "./wrap"
 
 /** The widest the panels get, as the app's summary panel. Narrower windows get panels as wide as they are. */
 export const DEPLOY_PANEL_WIDTH = 64
@@ -39,49 +40,95 @@ export type DeployShown = {
   problem?: string
 }
 
-const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-
-/** B4, live: a spinner, the words, and the seconds since `since`, dim (board `DomainsDeploy`). */
-function Waiting({ text, since }: { text: string; since: number }) {
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 80)
-    return () => clearInterval(timer)
-  }, [])
-  const frame = Math.floor(now / 80) % FRAMES.length
+/** The whole seconds since `since`, dim, two spaces after the words: B4's and C2's count, redrawn as it goes. */
+function SecondsSince({ since }: { since: number }) {
+  useAnimation({ interval: 250 })
   return (
-    <Text>
-      <Text color="cyan">{FRAMES[frame]}</Text> {text}
-      <Text dimColor>
-        {"  "}
-        {Math.max(0, Math.floor((now - since) / 1000))}s
-      </Text>
+    <Text dimColor>
+      {"  "}
+      {Math.max(0, Math.floor((Date.now() - since) / 1000))}s
     </Text>
   )
 }
 
-/** A new domain's line during and after the wait for HTTPS: B4, B5 or B6 (specs/015-domains-https, CL3). */
-function HttpsLine({ shown }: { shown: HttpsShown }) {
+/** B4, live, on one line: the spinner of the stage row, the words, and the seconds since `since`, dim (board `DomainsDeploy`). */
+function Waiting({ text, since }: { text: string; since: number }) {
+  return (
+    <Text wrap="truncate-end">
+      <Spinner /> {text}
+      <SecondsSince since={since} />
+    </Text>
+  )
+}
+
+/** The words of B5 and B6 after their mark, as pieces: B5's detail dim, B6's command without its backticks. */
+const httpsPieces = (
+  shown: Exclude<HttpsShown, { state: "waiting" }>
+): Piece[] => {
+  if (shown.state === "not_ready")
+    return [{ text: withoutBackticks(B6(shown.domain)) }]
+  const live = B5(shown.domain, shown.until)
+  return [{ text: `${live.text}  ` }, { text: live.detail, dim: true }]
+}
+
+/** The rows a new domain's line takes `columns` wide (`HttpsLine`): B4 one, B5 and B6 as their words wrap after the mark. */
+export const httpsRows = (shown: HttpsShown, columns: number): number =>
+  shown.state === "waiting"
+    ? 1
+    : wrapPieces(httpsPieces(shown), Math.max(1, columns - 2)).length
+
+/**
+ * A new domain's line during and after the wait for HTTPS (specs/015-domains-https,
+ * CL3): B4, live; B5 after ✔, its detail dim; B6 after !, a warning. The words
+ * go on under themselves when the window is narrower than the line.
+ */
+export function HttpsLine({
+  shown,
+  columns,
+}: {
+  shown: HttpsShown
+  columns?: number
+}) {
   const theme = useTheme()
   if (shown.state === "waiting")
     return <Waiting text={B4(shown.domain)} since={shown.since} />
-  if (shown.state === "not_ready")
-    return (
-      <Lead mark="!" color={theme.warning}>
-        {withoutBackticks(B6(shown.domain))}
-      </Lead>
-    )
-  const live = B5(shown.domain, shown.until)
   return (
-    <Lead mark="✔" color={theme.success}>
-      {live.text}
-      <Text dimColor>
-        {"  "}
-        {live.detail}
-      </Text>
-    </Lead>
+    <MarkedLine
+      mark={shown.state === "live" ? MARK.success : MARK.warn}
+      color={shown.state === "live" ? theme.success : theme.warning}
+      pieces={httpsPieces(shown)}
+      columns={columns}
+    />
   )
 }
+
+/**
+ * C2, while the runner waits for a service's health with a path, under the
+ * stage row in the live line's place: dim, with the seconds since the wait
+ * began at a terminal (board `DomainsHealth`) and without them in the app,
+ * whose header counts the time (board `DomainsApp`). Nothing for a health
+ * check without a path, which has no line of its own: Docker's line stays.
+ */
+export function HealthWait({
+  deploy,
+  seconds,
+}: {
+  deploy: DeployProgress
+  seconds: boolean
+}) {
+  const waiting = deploy.waitingFor
+  if (waiting?.path === undefined) return null
+  return (
+    <Text dimColor wrap="truncate-end">
+      {C2(waiting.service, waiting.path)}
+      {seconds ? <SecondsSince since={waiting.since} /> : null}
+    </Text>
+  )
+}
+
+/** Whether a running deploy draws C2 in the live line's place (`HealthWait`). */
+export const healthWaitShown = (deploy: DeployProgress): boolean =>
+  deploy.running && deploy.waitingFor?.path !== undefined
 
 /** A sentence that leads a result: its mark, and the sentence in bold. */
 function Lead({
@@ -150,11 +197,15 @@ export function DeployBlock({
       <Stages stages={stagesOf(deploy)} gap={2} />
       {deploy.running && !waiting ? (
         // Docker's words, not zekno's: dim, and set in by two columns, so nothing a server says
-        // starts at the left edge, where zekno's own lines start.
+        // starts at the left edge, where zekno's own lines start. C2 while a service's health is waited for.
         <Box paddingLeft={LIVE_LINE_INDENT}>
-          <Text dimColor wrap="truncate-end">
-            {deploy.lines.at(-1)?.trimStart() || " "}
-          </Text>
+          {healthWaitShown(deploy) ? (
+            <HealthWait deploy={deploy} seconds />
+          ) : (
+            <Text dimColor wrap="truncate-end">
+              {deploy.lines.at(-1)?.trimStart() || " "}
+            </Text>
+          )}
         </Box>
       ) : null}
       {live ? (
@@ -168,7 +219,7 @@ export function DeployBlock({
             )}
           </Lead>
           {(deploy.https ?? []).map((each) => (
-            <HttpsLine key={each.domain} shown={each} />
+            <HttpsLine key={each.domain} shown={each} columns={columns} />
           ))}
           {waiting ? null : <After>{startedNext(start.flags)}</After>}
         </Box>

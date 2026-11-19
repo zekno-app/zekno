@@ -33,6 +33,7 @@ import {
   deployEnded,
   deployHealth,
   deployHttps,
+  deployPointed,
   deployProgress,
   deployStage,
   deployStarted,
@@ -278,6 +279,11 @@ export function update(state: State, event: AppEvent): Step {
           secrets: event.secrets,
         },
       })
+    case "app-domains":
+      return stay({
+        ...state,
+        appDomains: { server: event.server, app: event.app, rows: event.rows },
+      })
     case "notice":
       return stay({ ...state, notice: event.notice })
     case "failed": {
@@ -324,6 +330,8 @@ export function update(state: State, event: AppEvent): Step {
       return deployHealth(state, event)
     case "deploy-https":
       return deployHttps(state, event)
+    case "deploy-pointed":
+      return deployPointed(state, event)
     case "deploy-ended":
       // A settings screen of that app marks what changed since this deploy: its last deploy is read again.
       return afterDeploy(state, deployEnded(state, event))

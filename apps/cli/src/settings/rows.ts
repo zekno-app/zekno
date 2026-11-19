@@ -279,9 +279,17 @@ export function domainRows(
       removed: { was: sanitize(domain) },
     }))
   )
+  // Marked, as every row of a service the last deploy did not have is; else it was `none` then too.
   if (rows.length === 0 && none)
     rows.push(
-      row("Networking", DOMAINS_LABEL, path, undefined, NOT_SET.domains, {})
+      row(
+        "Networking",
+        DOMAINS_LABEL,
+        path,
+        undefined,
+        NOT_SET.domains,
+        markOf(deployed, name, 0, () => ({ value: 0 }))
+      )
     )
   return rows
 }
@@ -419,7 +427,8 @@ export function reportOf(
  */
 export function screenRows(
   service: readonly [string, ServiceSettings],
-  deployed?: Settings
+  deployed?: Settings,
+  seconds?: number
 ): SettingRow[] {
   const [name] = service
   // A `none` row is marked when the deployed service had a variable, or a volume, and has none now; it names no old value.
@@ -452,14 +461,17 @@ export function screenRows(
     ...volumeRows(service, deployed),
     ...removedRows(service, deployed, "volume", false),
   ]
+  // specs/015-domains-https, E6 (board `DomainsApp`): `health` after `cpus`, the domains after `published`, one a row.
   return [
     partRow(service, deployed, "Source", "image", "image"),
     partRow(service, deployed, "Deploy", "start", "start"),
     partRow(service, deployed, "Deploy", "restart", "restart"),
     partRow(service, deployed, "Deploy", "memory", "memory"),
     partRow(service, deployed, "Deploy", "cpus", "cpus"),
+    healthRow(service, deployed, seconds),
     partRow(service, deployed, "Networking", "port", "port"),
     partRow(service, deployed, "Networking", "published", "publish"),
+    ...domainRows(service, deployed, true),
     partRow(service, deployed, "Variables", "secrets", "secrets"),
     ...(plain.length > 0
       ? plain

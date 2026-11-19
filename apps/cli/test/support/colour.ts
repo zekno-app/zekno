@@ -13,7 +13,8 @@ export type Run = { text: string; bold: boolean; dim: boolean; color?: string }
 /**
  * The text a terminal that shows every colour receives for
  * `<name {...props} />` of the module at `file`, drawn `columns` wide.
- * `props` must survive JSON.
+ * `props` must survive JSON; a date is given as `asDate(…)`, which comes
+ * back a `Date` (a certificate's last day, specs/015-domains-https).
  */
 export function drawnInColour(
   file: string,
@@ -25,7 +26,7 @@ export function drawnInColour(
     'import { createElement } from "react"',
     'import { renderToString } from "ink"',
     `import { ${name} as Drawn } from ${JSON.stringify(file)}`,
-    "const props = JSON.parse(process.argv.at(-1))",
+    'const props = JSON.parse(process.argv.at(-1), (_, v) => (v && typeof v === "object" && typeof v.$date === "string" ? new Date(v.$date) : v))',
     `process.stdout.write(renderToString(createElement(Drawn, props), { columns: ${columns} }))`,
   ].join("\n")
   const run = Bun.spawnSync(
@@ -100,3 +101,6 @@ export const wordRuns = (line: string): Run[] =>
 /** The text of a coloured line, its escape sequences left out. */
 export const plainOf = (text: string): string =>
   text.replace(/\x1b\[[0-9;]*m/g, "")
+
+/** A date that `drawnInColour` gives the component as a `Date`. */
+export const asDate = (iso: string): Date => ({ $date: iso }) as unknown as Date

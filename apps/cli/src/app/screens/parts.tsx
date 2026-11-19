@@ -26,6 +26,8 @@ export function Pane({
   width,
   gap = 1,
   dimTitle = !focused,
+  flexGrow,
+  flexShrink,
   children,
 }: {
   title: ReactNode
@@ -33,6 +35,13 @@ export function Pane({
   focused?: boolean
   /** A fixed width, or undefined to take the room that is left. */
   width?: number
+  /**
+   * How it grows and shrinks along its parent, when not as its width says:
+   * the app screen's `Secrets` and `Domains` boxes, one above the other
+   * (specs/015-domains-https, E7).
+   */
+  flexGrow?: number
+  flexShrink?: number
   /** Empty lines between the title and each part below it. */
   gap?: number
   /** Whether the title is faint: by default, when the pane does not have the keys. */
@@ -44,8 +53,8 @@ export function Pane({
     <Box
       flexDirection="column"
       width={width}
-      flexGrow={width === undefined ? 1 : 0}
-      flexShrink={width === undefined ? 1 : 0}
+      flexGrow={flexGrow ?? (width === undefined ? 1 : 0)}
+      flexShrink={flexShrink ?? (width === undefined ? 1 : 0)}
       borderStyle="round"
       borderColor={focused ? theme.brand : undefined}
       borderDimColor={!focused}

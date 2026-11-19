@@ -95,6 +95,19 @@ export function deployHttps(
   return stay({ ...state, deploy: { ...state.deploy, https } })
 }
 
+/** B1 (specs/015-domains-https, CL3): a new domain points to the server; drawn above the panel, in the order said. */
+export function deployPointed(
+  state: State,
+  event: EventOf<"deploy-pointed">
+): Step {
+  if (!state.deploy) return stay(state)
+  const pointed = [
+    ...(state.deploy.pointed ?? []),
+    { domain: event.domain, address: event.address },
+  ]
+  return stay({ ...state, deploy: { ...state.deploy, pointed } })
+}
+
 export function deployProgress(
   state: State,
   event: EventOf<"deploy-progress">
