@@ -1,9 +1,10 @@
 /**
  * A session: several requests over one connection. It is a way of carrying
  * requests, not a second way in: every request runs the same code, takes the
- * same lock and passes the same checks as its one-shot command. `deploy` and
- * `records` have no one-shot command: they exist only here (contracts/
- * protocol.md, P2).
+ * same lock and passes the same checks as its one-shot command. `deploy`,
+ * `records` and `proxy` have no one-shot command: they exist only here
+ * (contracts/protocol.md, P2; specs/015-domains-https, contracts/runner.md,
+ * RN13). Nor does `status` with routes: the one-shot `status` reads no input.
  */
 import {
   LIMITS,
@@ -18,6 +19,7 @@ import {
 import { version as runnerVersion } from "../../package.json"
 import { apply, refused, setup, status, sync } from "../commands/commands"
 import { deploy } from "../commands/deploy"
+import { proxy, statusWithRoutes } from "../commands/proxy"
 import { records } from "../commands/records"
 import { appStates, followLogs } from "../docker/inspect"
 
@@ -168,7 +170,8 @@ async function handle(
       case "version":
         return version()
       case "status":
-        return status(dir)
+        // With an input, only `{ "routes": true }`, and the answer has the routes in force.
+        return text === "" ? status(dir) : await statusWithRoutes(dir, text)
       case "setup":
         return setup(dir, text)
       case "sync":
@@ -179,12 +182,18 @@ async function handle(
           sink.write({ event: "progress", line })
         )
       case "deploy":
-        // A deploy of version 2: Docker's lines as `apply` sends them.
-        return await deploy(dir, text, (line) =>
-          sink.write({ event: "progress", line })
+        // A deploy of version 2: Docker's lines as `apply` sends them, and
+        // each service whose health the deploy waits for as the wait begins.
+        return await deploy(
+          dir,
+          text,
+          (line) => sink.write({ event: "progress", line }),
+          (service) => sink.write({ event: "health", service })
         )
       case "records":
         return records(dir, text)
+      case "proxy":
+        return await proxy(dir, text)
       case "state":
         return await appStates(dir, closed)
       case "logs": {

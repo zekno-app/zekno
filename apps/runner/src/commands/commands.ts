@@ -174,10 +174,10 @@ export function status(dir: string): RunnerStatus | RunnerReport {
  * interleave. The folder is checked before the lock is made in it: a folder
  * others could write is refused, and left as it is (security review S3).
  */
-export async function locked(
+export async function locked<Answer = RunnerReport>(
   dir: string,
-  work: () => Promise<RunnerReport>
-): Promise<RunnerReport> {
+  work: () => Promise<Answer | RunnerReport>
+): Promise<Answer | RunnerReport> {
   if (!isSetUp(dir)) return refused("not_set_up")
   if (!isPrivate(dir)) return refused("invalid_state")
   const release = acquireLock(dir)
@@ -208,6 +208,32 @@ export function sync(dir: string, input: string): Promise<RunnerReport> {
 }
 
 /**
+ * Saves the Compose text of an accepted deploy and runs `docker compose up`
+ * in the runner's own folder. True when Docker's exit status was 0. Never
+ * throws: a Compose file that could not be written is a start that failed.
+ */
+export async function composeStart(
+  dir: string,
+  deploy: { app: string; compose: string },
+  secrets: Record<string, string>,
+  onProgress?: (line: string) => void
+): Promise<boolean> {
+  try {
+    const file = writeCompose(dir, deploy.app, deploy.compose)
+    const exit = await composeUp({
+      dir,
+      app: deploy.app,
+      file,
+      secrets,
+      onLine: onProgress,
+    })
+    return exit === 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * Saves the Compose text of an accepted deploy and starts it in the runner's
  * own folder. Called only once the deploy's number is used: whatever happens
  * here, the outcome is `started` or `start_failed`.
@@ -219,19 +245,8 @@ export async function startApp(
   onProgress?: (line: string) => void
 ): Promise<RunnerReport> {
   const { app, sequence } = deploy
-  try {
-    const file = writeCompose(dir, app, deploy.compose)
-    const exit = await composeUp({
-      dir,
-      app,
-      file,
-      secrets,
-      onLine: onProgress,
-    })
-    return { outcome: exit === 0 ? "started" : "start_failed", app, sequence }
-  } catch {
-    return { outcome: "start_failed", app, sequence }
-  }
+  const started = await composeStart(dir, deploy, secrets, onProgress)
+  return { outcome: started ? "started" : "start_failed", app, sequence }
 }
 
 /**

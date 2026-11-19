@@ -21,28 +21,28 @@ Tests are part of each task: a test that fails first wherever a contract fixes t
 
 ## Phase 2: Runner
 
-- [ ] T013 `apps/runner/src/docker/run.ts`: one helper for Docker calls (RN1), with tests
-- [ ] T014 Extend the stand-in for Docker in `apps/runner/test/support` to script and record `network`, `run`, `exec`, `logs`, `inspect`, `rm`, `start`, `compose ps` (runner.md, "Tests"); existing scenarios pass unchanged
-- [ ] T015 The runner reads and writes the state marked 3; `setup`; the scenarios of feature 014 pass with protocol 4 (`apps/runner/src/commands/commands.ts`, `home/home.ts`, `test/support/older-programs.ts` gains the 014 tip as an older program)
-- [ ] T016 [P] `apps/runner/src/proxy/image.ts`: the pinned digest, and a test that it is named nowhere else
-- [ ] T017 [P] [US1] `apps/runner/src/proxy/config.ts`: the configuration from the state (RN7), patterns checked again, with `test/proxy/config.test.ts` (the exact JSON for one, two and no routes; a value that does not match throws; same state, same text)
-- [ ] T018 [US1] `apps/runner/src/routes/containers.ts`: the containers of a service (RN4), `no_container`, `host_network`
-- [ ] T019 [US1] `apps/runner/src/routes/network.ts`: the route network and the names (RN5)
-- [ ] T020 [US1] `apps/runner/src/proxy/container.ts`: start, start again, make again, remove, `port_taken`, the test switch (RN6)
-- [ ] T021 [US1] `apps/runner/src/proxy/load.ts`: join, write, validate, signal by `exec`, read the log, confirm the nonce (RN8)
-- [ ] T022 [US4] `apps/runner/src/proxy/certificates.ts`: deleting a released domain's folders (RN10)
-- [ ] T023 [US1] `apps/runner/src/routes/apply.ts`: RN3 to RN10 in order, saving or going back (RN9)
-- [ ] T024 [US1] `apps/runner/src/commands/deploy.ts`: `too_large` for domains (RN2), the steps after `up`, the outcome (RN12); `startApp` split so `apply` keeps today's behaviour
-- [ ] T025 [US1] Scenarios with the stand-in: a first route (calls and their order, file, state), a second app's route, an unchanged redeploy loads nothing, a container made again gets a new name and one kept keeps its own (`apps/runner/test/scenarios/routes.test.ts`)
-- [ ] T026 [US4] Scenarios: `domain_taken` uses no number; a release (load, then disconnect, then delete, then remove the network); the last release removes the proxy (`test/scenarios/routes-release.test.ts`)
-- [ ] T027 [US1] Scenarios: every `routes_failed` (`port_taken` with the leftover removed, `no_container`, `host_network`, `not_loaded` with the state unchanged and the earlier configuration loaded again); `up` failed and routes still released (`test/scenarios/routes-failures.test.ts`)
-- [ ] T028 [US1] Scenario: an app with no route and no health check makes exactly today's calls (SC-005)
-- [ ] T029 [P] [US5] `apps/runner/src/health/check.ts` and `wait.ts`: one check with curl, Docker's own status, the rounds, the limit, the event (RN11)
-- [ ] T030 [US5] Scenarios: healthy, not healthy in time with a path and without, the app left as it is, a health check with no route gets a route network (`test/scenarios/health.test.ts`)
-- [ ] T031 [US3] `status` with routes and the proxy's state; `apps/runner/src/commands/proxy.ts` and its registration; scenarios (RN13)
-- [ ] T032 [US7] Scenarios: a version-1 deploy for an app with a route is refused; a state marked 2 is read and written as 3 (`test/scenarios/versions-routes.test.ts`)
-- [ ] T033 [US1] [US4] [US5] The gated set with real Docker, the pinned image and the internal issuer on high ports: every point of runner.md's last list (`apps/runner/test/scenarios/real-proxy.test.ts`), cleaning up what it made
-- [ ] T034 Runner: type check, lint, format, all tests, the compiled runner answers protocol 4
+- [x] T013 `apps/runner/src/docker/run.ts`: one helper for Docker calls (RN1), with tests
+- [x] T014 Extend the stand-in for Docker in `apps/runner/test/support` to script and record `network`, `run`, `exec`, `logs`, `inspect`, `rm`, `start`, `compose ps` (runner.md, "Tests"); existing scenarios pass unchanged
+- [x] T015 The runner reads and writes the state marked 3; `setup`; the scenarios of feature 014 pass with protocol 4 (`apps/runner/src/commands/commands.ts`, `home/home.ts`, `test/support/older-programs.ts` gains the 014 tip as an older program)
+- [x] T016 [P] `apps/runner/src/proxy/image.ts`: the pinned digest, and a test that it is named nowhere else
+- [x] T017 [P] [US1] `apps/runner/src/proxy/config.ts`: the configuration from the state (RN7), patterns checked again, with `test/proxy/config.test.ts` (the exact JSON for one, two and no routes; a value that does not match throws; same state, same text)
+- [x] T018 [US1] `apps/runner/src/routes/containers.ts`: the containers of a service (RN4), `no_container`, `host_network`
+- [x] T019 [US1] `apps/runner/src/routes/network.ts`: the route network and the names (RN5)
+- [x] T020 [US1] `apps/runner/src/proxy/container.ts`: start, start again, make again, remove, `port_taken`, the test switch (RN6)
+- [x] T021 [US1] `apps/runner/src/proxy/load.ts`: join, write, validate, signal by `exec`, read the log, confirm the nonce (RN8)
+- [x] T022 [US4] `apps/runner/src/proxy/certificates.ts`: deleting a released domain's folders (RN10)
+- [x] T023 [US1] `apps/runner/src/routes/apply.ts`: RN3 to RN10 in order, saving or going back (RN9)
+- [x] T024 [US1] `apps/runner/src/commands/deploy.ts`: `too_large` for domains (RN2), the steps after `up`, the outcome (RN12); `startApp` split so `apply` keeps today's behaviour
+- [x] T025 [US1] Scenarios with the stand-in: a first route (calls and their order, file, state), a second app's route, an unchanged redeploy loads nothing, a container made again gets a new name and one kept keeps its own (`apps/runner/test/scenarios/routes.test.ts`)
+- [x] T026 [US4] Scenarios: `domain_taken` uses no number; a release (load, then delete, then disconnect, then remove the network, as runner.md RN10 orders it); the last release removes the proxy (`test/scenarios/routes-release.test.ts`)
+- [x] T027 [US1] Scenarios: every `routes_failed` (`port_taken` with the leftover removed, `no_container`, `host_network`, `not_loaded` with the state unchanged and the earlier configuration loaded again); `up` failed and routes still released (`test/scenarios/routes-failures.test.ts`)
+- [x] T028 [US1] Scenario: an app with no route and no health check makes exactly today's calls (SC-005)
+- [x] T029 [P] [US5] `apps/runner/src/health/check.ts` and `wait.ts`: one check with curl, Docker's own status, the rounds, the limit, the event (RN11)
+- [x] T030 [US5] Scenarios: healthy, not healthy in time with a path and without, the app left as it is, a health check with no route gets a route network (`test/scenarios/health.test.ts`)
+- [x] T031 [US3] `status` with routes and the proxy's state; `apps/runner/src/commands/proxy.ts` and its registration; scenarios (RN13)
+- [x] T032 [US7] Scenarios: a version-1 deploy for an app with a route is refused; a state marked 2 is read and written as 3 (`test/scenarios/versions-routes.test.ts`)
+- [x] T033 [US1] [US4] [US5] The gated set with real Docker, the pinned image and the internal issuer on high ports: every point of runner.md's last list (`apps/runner/test/scenarios/real-proxy.test.ts`), cleaning up what it made
+- [x] T034 Runner: type check, lint, format, all tests, the compiled runner answers protocol 4
 
 ## Phase 3: CLI, settings and commands
 

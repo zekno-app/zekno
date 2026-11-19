@@ -6,8 +6,17 @@
  * number is used, and a refusal changes nothing but the team lists the
  * request carried. Nothing is decrypted before every check has passed, and
  * nothing decrypted is ever written.
+ *
+ * Since feature 015 (specs/015-domains-https, contracts/runner.md), the
+ * deploy's routes and health check are carried out once `docker compose up`
+ * has returned, under the same lock: the routes are put in force (RN4 to
+ * RN10), then the wait for health (RN11), and the outcome is the first of
+ * `start_failed`, `routes_failed`, `unhealthy` and `started` that holds
+ * (RN12). A deploy of an app with no route and no health check, that held
+ * none, makes exactly the calls it made before (RN3).
  */
 import {
+  domainsAfter,
   LIMITS,
   openSecrets,
   parseMessage,
@@ -18,6 +27,7 @@ import {
   type VerifiedDeployV2,
 } from "@workspace/core"
 
+import { waitHealthy } from "../health/wait"
 import { writeState } from "../home/home"
 import {
   readRecord,
@@ -26,13 +36,14 @@ import {
   removeUnnamed,
   writeRecord,
 } from "../home/records"
+import { putRoutesInForce } from "../routes/apply"
 import {
+  composeStart,
   follow,
   isReport,
   load,
   locked,
   refused,
-  startApp,
   withinLimits,
 } from "./commands"
 
@@ -77,10 +88,57 @@ function recordsFit(dir: string, verified: VerifiedDeployV2): boolean {
   )
 }
 
+/**
+ * What follows `up` (RN3, RN11, RN12): nothing for an app with no route and
+ * no health check that held none; else the routes put in force, carried out
+ * as far as they go even when `up` failed, so that a domain this deploy
+ * releases is released; then, only when both went well, the wait for health.
+ */
+async function afterUp(
+  dir: string,
+  verified: VerifiedDeployV2,
+  started: boolean,
+  upReturned: number,
+  onHealth: (service: string) => void
+): Promise<RunnerReport> {
+  const { app, sequence, routes, health } = verified.deploy
+  const done = { app, sequence }
+  if (
+    routes.length === 0 &&
+    health === null &&
+    !Object.hasOwn(verified.nextState.routes, app)
+  )
+    return { outcome: started ? "started" : "start_failed", ...done }
+
+  const inForce = await putRoutesInForce({ dir, app, routes, health })
+  // Their own failure is not reported over start_failed.
+  if (!started) return { outcome: "start_failed", ...done }
+  if (!inForce.ok)
+    return { outcome: "routes_failed", ...done, routes: inForce.failure }
+  if (health !== null) {
+    const waited = await waitHealthy({
+      dir,
+      app,
+      health,
+      names: inForce.names,
+      deadline: upReturned + health.timeout * 1000,
+      onHealth,
+    })
+    if (!waited.ok)
+      return {
+        outcome: "unhealthy",
+        ...done,
+        health: { service: waited.service, http: waited.http },
+      }
+  }
+  return { outcome: "started", ...done }
+}
+
 export function deploy(
   dir: string,
   input: string,
-  onProgress?: (line: string) => void
+  onProgress?: (line: string) => void,
+  onHealth: (service: string) => void = () => {}
 ): Promise<RunnerReport> {
   // K1. The request: at most a message's size, and exactly its schema.
   const request = parseMessage(RunnerDeployRequestSchema, input)
@@ -107,10 +165,14 @@ export function deploy(
     })
     if (!verified.ok) return refused(verified.error.code)
 
-    // K15. What the runner would hold after it fits what it may hold and report.
+    // K15. What the runner would hold after it fits what it may hold and report,
+    // the domains of every app with this deploy's in place of the app's among them (RN2).
+    const { app, routes } = verified.value.deploy
     if (
       !withinLimits(verified.value.nextState) ||
-      !recordsFit(dir, verified.value)
+      !recordsFit(dir, verified.value) ||
+      domainsAfter(verified.value.nextState, app, routes) >
+        LIMITS.domainsPerServer
     )
       return refused("too_large")
 
@@ -120,11 +182,16 @@ export function deploy(
 
     // K17. The records first, then the state that names them: the number is used
     // here, before anything starts. Then the files no live secret names go.
-    const { app } = verified.value.deploy
     for (const record of verified.value.write)
       writeRecord(dir, app, listedHash(verified.value, record), record)
     writeState(dir, verified.value.nextState)
     removeUnnamed(dir, app, verified.value.keep)
-    return startApp(dir, verified.value.deploy, secrets.value, onProgress)
+    const started = await composeStart(
+      dir,
+      verified.value.deploy,
+      secrets.value,
+      onProgress
+    )
+    return afterUp(dir, verified.value, started, Date.now(), onHealth)
   })
 }

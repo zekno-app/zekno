@@ -34,8 +34,19 @@ import {
 
 type World = Awaited<ReturnType<typeof world>>
 
-/** Every part of a marked state (contracts/state.md, "The shape"). */
-const PARTS = ["formats", "lastSequence", "secrets", "serverId", "team", "v"]
+/**
+ * Every part of a marked state (contracts/state.md, "The shape"), with the
+ * routes in force since feature 015 (specs/015-domains-https, core.md).
+ */
+const PARTS = [
+  "formats",
+  "lastSequence",
+  "routes",
+  "secrets",
+  "serverId",
+  "team",
+  "v",
+]
 
 const fileOf = (home: string) => readFileSync(join(home, "state.json"), "utf8")
 const stateOf = (home: string) =>
@@ -96,24 +107,27 @@ describe("the stored state carries its mark, and every write keeps it whole (ST3
     })
     expect(setup.code).toBe(0)
     expect(stateOf(home)).toEqual({
-      v: 2,
+      v: 3,
       serverId: setup.json!.serverId,
       team: team.trust,
       lastSequence: {},
       secrets: {},
       formats: {},
+      routes: {},
     })
     // world() sets up, then syncs a team list: still marked, every part there.
     const w = await world()
     expect(Object.keys(stateOf(w.home)).sort()).toEqual(PARTS)
-    expect(stateOf(w.home)).toMatchObject({ v: 2, formats: {} })
+    expect(stateOf(w.home)).toMatchObject({ v: 3, formats: {}, routes: {} })
   })
 
   test("after sync, apply and deploy, the file has the mark and every part", async () => {
     const w = await world()
     olderState(w.home, { web: 1 })
     expect(Object.keys(stateOf(w.home)).sort()).toEqual(
-      PARTS.filter((part) => part !== "v" && part !== "formats")
+      PARTS.filter(
+        (part) => part !== "v" && part !== "formats" && part !== "routes"
+      )
     )
 
     const newer = await proposeRoster({ trust: w.trust, signer: w.signer })
@@ -121,14 +135,14 @@ describe("the stored state carries its mark, and every write keeps it whole (ST3
     expect(
       (await runner(w.home, w.docker.path, "sync", { rosters })).json
     ).toEqual({ outcome: "ok" })
-    expect(stateOf(w.home)).toMatchObject({ v: 2, formats: { web: 1 } })
+    expect(stateOf(w.home)).toMatchObject({ v: 3, formats: { web: 1 } })
     expect(Object.keys(stateOf(w.home)).sort()).toEqual(PARTS)
 
     const synced = { ...w, rosters, trust: newer.trust }
     expect((await apply(synced, 2)).json?.outcome).toBe("started")
     expect(Object.keys(stateOf(w.home)).sort()).toEqual(PARTS)
     expect(stateOf(w.home)).toMatchObject({
-      v: 2,
+      v: 3,
       formats: { web: 1 },
       lastSequence: { web: 2 },
     })
@@ -136,7 +150,7 @@ describe("the stored state carries its mark, and every write keeps it whole (ST3
     expect((await deploy(synced, 2)).outcome).toBe("started")
     expect(Object.keys(stateOf(w.home)).sort()).toEqual(PARTS)
     expect(stateOf(w.home)).toMatchObject({
-      v: 2,
+      v: 3,
       formats: { web: 2 },
       lastSequence: { web: 3 },
     })
@@ -161,7 +175,7 @@ describe("the version-1 path on this runner", () => {
       sequence: 2,
     })
     const after = stateOf(w.home)
-    expect(after.v).toBe(2)
+    expect(after.v).toBe(3)
     expect(after.formats).toEqual({ web: 1, api: 2 })
     expect(after.lastSequence).toEqual({ web: 2, api: 4 })
     expect(after.serverId).toBe(before.serverId)

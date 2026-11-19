@@ -11,18 +11,17 @@ import {
   type TeamTrust,
 } from "@workspace/core"
 import {
-  chmodSync,
   existsSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   statSync,
-  writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { buildDeployV2, deployV2 } from "./deploy-v2"
+import { fakeDocker } from "./docker/fake"
 
 export const RUNNER_MAIN = join(import.meta.dir, "../../src/main.ts")
 export const COMPOSE =
@@ -30,31 +29,6 @@ export const COMPOSE =
 
 export function tempDir(label: string): string {
   return mkdtempSync(join(tmpdir(), `zekno-${label}-`))
-}
-
-/** One call of the stand-in Docker: its arguments, its environment and the folder it was started in. */
-type DockerCall = { args: string; env: Record<string, string>; cwd: string }
-
-function readCalls(log: string): DockerCall[] {
-  if (!existsSync(log)) return []
-  return readFileSync(log, "utf8")
-    .split("END\n")
-    .filter((block) => block.trim())
-    .map((block) => {
-      const lines = block.trim().split("\n")
-      const env: Record<string, string> = {}
-      for (const line of lines.filter((entry) => entry.startsWith("ENV "))) {
-        const [name, ...rest] = line.slice(4).split("=")
-        env[name!] = rest.join("=")
-      }
-      const cwd =
-        lines.find((entry) => entry.startsWith("CWD "))?.slice(4) ?? ""
-      return {
-        args: lines.find((entry) => entry.startsWith("ARGS "))!.slice(5),
-        env,
-        cwd,
-      }
-    })
 }
 
 /** The resident memory of a running process, in MiB, or undefined once it has gone. */
@@ -79,12 +53,6 @@ export async function waitFor(
   }
 }
 
-function pidIn(file: string): number | undefined {
-  if (!existsSync(file)) return undefined
-  const pid = Number(readFileSync(file, "utf8").trim())
-  return Number.isInteger(pid) && pid > 0 ? pid : undefined
-}
-
 /** True while a process with this id exists. */
 export function isAlive(pid: number): boolean {
   try {
@@ -95,117 +63,8 @@ export function isAlive(pid: number): boolean {
   }
 }
 
-/**
- * A stand-in for the `docker` command. It records how it was called and with
- * what environment, and exits with the status written in its `exit` file.
- *
- * `compose ... up` prints prepared lines and can be held in the middle until
- * the test lets it go. `compose -p <project> ps` prints a prepared file, or
- * hangs when asked to. `compose -p <project> logs` prints a prepared file
- * and, when the test asks and the call has `--follow`, stays alive afterwards
- * the way Docker does.
- */
-export function fakeDocker() {
-  const dir = tempDir("docker")
-  const path = join(dir, "docker")
-  const log = join(dir, "calls.log")
-  const inspectLog = join(dir, "inspect.log")
-  const at = (name: string) => join(dir, name)
-  writeFileSync(
-    path,
-    `#!/bin/sh
-d="${dir}"
-if [ "$4" = "ps" ] || [ "$4" = "logs" ]; then
-  { echo "ARGS $*"; echo "CWD $(pwd -P)"; env | sed 's/^/ENV /'; echo END; } >> "${inspectLog}"
-else
-  { echo "ARGS $*"; echo "CWD $(pwd -P)"; env | sed 's/^/ENV /'; echo END; } >> "${log}"
-fi
-if [ "$4" = "ps" ]; then
-  if [ -f "$d/ps-hang" ]; then echo $$ > "$d/ps.pid"; exec sleep 60; fi
-  if [ -f "$d/ps-$3" ]; then cat "$d/ps-$3"; fi
-  if [ -f "$d/ps-$3.exit" ]; then exit "$(cat "$d/ps-$3.exit")"; fi
-  exit 0
-fi
-if [ "$4" = "logs" ]; then
-  if [ -f "$d/logs-$3" ]; then cat "$d/logs-$3"; fi
-  # Like Docker, it stays alive afterwards only when asked to follow.
-  case " $* " in *" --follow "*) ;; *) exit 0 ;; esac
-  if [ -f "$d/logs-leave-child" ]; then
-    # A process left behind that keeps the output open after this one is stopped.
-    sleep 60 &
-    echo $! > "$d/logs-child.pid"
-    echo $$ > "$d/logs.pid"
-    wait
-  fi
-  if [ -f "$d/logs-follow" ]; then echo $$ > "$d/logs.pid"; exec sleep 60; fi
-  exit 0
-fi
-if [ -f "$d/up-stdout" ]; then cat "$d/up-stdout"; fi
-if [ -f "$d/up-stderr" ]; then cat "$d/up-stderr" >&2; fi
-if [ -f "$d/up-hold" ]; then
-  touch "$d/up-started"
-  while [ ! -f "$d/up-go" ]; do sleep 0.05; done
-  if [ -f "$d/up-after" ]; then cat "$d/up-after" >&2; fi
-fi
-touch "$d/up-done"
-if [ -f "$d/exit" ]; then exit "$(cat "$d/exit")"; fi
-exit 0
-`
-  )
-  chmodSync(path, 0o755)
-  return {
-    path,
-    failWith: (status: number) => writeFileSync(at("exit"), String(status)),
-    /** The `up` calls, in order. */
-    calls: (): DockerCall[] => readCalls(log),
-    /** The `ps` and `logs` calls, in order. */
-    inspections: (): DockerCall[] => readCalls(inspectLog),
-    /** What `up` prints on standard output and standard error. */
-    upPrints(output: { stdout?: string; stderr?: string }) {
-      if (output.stdout !== undefined)
-        writeFileSync(at("up-stdout"), output.stdout)
-      if (output.stderr !== undefined)
-        writeFileSync(at("up-stderr"), output.stderr)
-    },
-    /** Makes `up` stop after its first lines until `releaseUp`, then print `after` on standard error. */
-    holdUp: (after = "") => {
-      writeFileSync(at("up-after"), after)
-      writeFileSync(at("up-hold"), "")
-    },
-    upStarted: () => existsSync(at("up-started")),
-    releaseUp: () => writeFileSync(at("up-go"), ""),
-    /** True once an `up` ran to its end. */
-    upFinished: () => existsSync(at("up-done")),
-    /** What `ps` prints for an app, and the status it exits with. */
-    ps: (app: string, output: string, status = 0) => {
-      writeFileSync(at(`ps-zekno-${app}`), output)
-      writeFileSync(at(`ps-zekno-${app}.exit`), String(status))
-    },
-    /** Makes every `ps` hang, printing nothing, until it is stopped. */
-    psHangs: () => writeFileSync(at("ps-hang"), ""),
-    /** The process id of the last `ps` that hung, once it has started. */
-    psPid: (): number | undefined => pidIn(at("ps.pid")),
-    /**
-     * What `logs` prints for an app. With `follow`, a call with `--follow`
-     * then stays alive until stopped; one without ends, as Docker's does.
-     * With `leaveChild`, a following call starts a process that keeps the
-     * output open even after `logs` itself is stopped.
-     */
-    logs: (
-      app: string,
-      output: string,
-      options: { follow?: boolean; leaveChild?: boolean } = {}
-    ) => {
-      writeFileSync(at(`logs-zekno-${app}`), output)
-      if (options.follow) writeFileSync(at("logs-follow"), "")
-      if (options.leaveChild) writeFileSync(at("logs-leave-child"), "")
-    },
-    /** The process id of the last `logs` that stayed alive, once it has started. */
-    logsPid: (): number | undefined => pidIn(at("logs.pid")),
-    /** The process id of what `logs` left behind with `leaveChild`. */
-    leftChildPid: (): number | undefined => pidIn(at("logs-child.pid")),
-  }
-}
+/** The stand-in for Docker: `docker/fake.ts`. */
+export { fakeDocker, type DockerCall, type FakeDocker } from "./docker/fake"
 
 /** Runs the runner as its own process, the way SSH would. */
 export async function runner(

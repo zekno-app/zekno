@@ -85,7 +85,7 @@ export function parsePs(output: string): Service[] {
 }
 
 /** Stops a Docker command: asked first, then killed when it does not stop in time. */
-async function stopChild(child: Bun.Subprocess): Promise<void> {
+export async function stopChild(child: Bun.Subprocess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return
   child.kill()
   const stopped = await Promise.race([

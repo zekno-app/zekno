@@ -126,6 +126,9 @@ export async function buildDeployV2(input: {
   statements?: readonly Envelope[]
   removals?: readonly { name: string; version: number }[]
   expiresAt?: Date | null
+  /** Feature 015: the routes and health check the deploy signs. */
+  routes?: Parameters<typeof createDeployV2>[0]["routes"]
+  health?: Parameters<typeof createDeployV2>[0]["health"]
   later?: Parameters<typeof createDeployV2>[0]["later"]
 }): Promise<{ envelope: Envelope; records: SecretRecord[] }> {
   const { trust, serverId, signer } = input
@@ -161,6 +164,8 @@ export async function buildDeployV2(input: {
     ],
     removals,
     expiresAt: input.expiresAt ?? null,
+    routes: input.routes,
+    health: input.health,
     later: input.later,
     signer,
   })

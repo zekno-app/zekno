@@ -126,7 +126,7 @@ describe("the order", () => {
       sequence: 4,
     })
     const state = stateOf(w.home)
-    expect(state.v).toBe(2)
+    expect(state.v).toBe(3)
     expect(state.lastSequence).toEqual({ web: 4 })
     expect(state.formats).toEqual({ web: 2 })
   })
@@ -188,6 +188,12 @@ describe("Docker Compose's working folder", () => {
   })
 })
 
+/*
+ * Routes and the health check are carried out since feature 015 (specs/
+ * 015-domains-https, contracts/core.md, "Carried out"; their scenarios are in
+ * routes*.test.ts and health.test.ts). Builds and the pre-deploy command are
+ * still refused.
+ */
 describe("what this runner does not carry out yet (FR-036, SC-003)", () => {
   const route = { domain: "demo.example.com", service: "web", port: 3000 }
   const recipe: Omit<Build, "key"> = {
@@ -200,20 +206,11 @@ describe("what this runner does not carry out yet (FR-036, SC-003)", () => {
     timeout: 1800,
   }
   const build: Build = { key: buildKey(recipe, []), ...recipe }
-  const health = {
-    timeout: 60,
-    services: [{ service: "web", http: { port: 3000, path: "/health" } }],
-  }
   const predeploy = { service: "web", command: ["bin/migrate"], timeout: 600 }
 
-  test("a deploy with one route, one build, a health check or a pre-deploy command, each alone, is unsupported_version: no number used, Docker not called", async () => {
+  test("a deploy with one build or a pre-deploy command, each alone, is unsupported_version: no number used, Docker not called", async () => {
     const w = await ready()
-    for (const later of [
-      { routes: [route] },
-      { builds: [build] },
-      { health },
-      { predeploy },
-    ])
+    for (const later of [{ builds: [build] }, { predeploy }])
       await refused(
         w,
         await against(w, 1, "web", { later }),

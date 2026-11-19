@@ -15,6 +15,12 @@ import { tempDir } from "./helpers"
 export const OLDER_RUNNER = "runner-v0.1.0"
 /** The commit of `dev` this feature started from: the zekno from before version 2. */
 export const BEFORE = "e7b0146d33a4683aace174f2e0c3d1e4ee1e3b19"
+/**
+ * The tip of feature 014 on `dev` (specs/015-domains-https, T015): the runner
+ * and the zekno of deploy version 2, protocol 3, from before routes were
+ * carried out. Its runner writes the state marked 2 and refuses mark 3.
+ */
+export const DEPLOY_V2 = "92788251a92a8b89c9b631dfb39f11ce3d3d0b81"
 
 const ROOT = join(import.meta.dir, "../../../..")
 /** What is taken from git: the core library and the two programs. */

@@ -152,13 +152,16 @@ describe("each refusal, in order", () => {
     const good = readFileSync(path, "utf8")
     const marked = JSON.parse(good) as Record<string, unknown>
     const { formats: _formats, ...withoutFormats } = marked
+    // Marked 3 since feature 015 (specs/015-domains-https, core.md): the routes are a part too.
+    const { routes: _routes, ...withoutRoutes } = marked
     const { envelope, records } = await next(w)
     for (const damaged of [
       "",
       "{",
       "null",
       JSON.stringify(withoutFormats),
-      JSON.stringify({ ...marked, v: 3 }),
+      JSON.stringify(withoutRoutes),
+      JSON.stringify({ ...marked, v: 4 }),
       JSON.stringify({ ...marked, formats: { web: 2, api: 2 } }),
       JSON.stringify({ ...marked, extra: 1 }),
     ]) {

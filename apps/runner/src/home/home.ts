@@ -1,7 +1,8 @@
 /**
  * The runner's folder on the server: the server's key, the state the core
- * library asks it to remember, the service definition of each app, and the
- * secret records it keeps, sealed (`records/`, in records.ts). Nothing
+ * library asks it to remember, the service definition of each app, the
+ * secret records it keeps, sealed (`records/`, in records.ts), and the
+ * proxy's configuration (`proxy/etc/caddy.json`, since feature 015). Nothing
  * decrypted is ever written here.
  */
 import { randomBytes } from "node:crypto"
@@ -9,6 +10,7 @@ import {
   chmodSync,
   closeSync,
   existsSync,
+  fchmodSync,
   fsyncSync,
   linkSync,
   mkdirSync,
@@ -20,7 +22,7 @@ import {
   writeFileSync,
 } from "node:fs"
 import { homedir } from "node:os"
-import { dirname, join } from "node:path"
+import { dirname, join, resolve } from "node:path"
 
 const SYSTEM_HOME = "/var/lib/zekno"
 
@@ -76,6 +78,9 @@ const paths = (dir: string) => ({
   state: join(dir, "state.json"),
   lock: join(dir, "lock"),
   compose: (app: string) => join(dir, "apps", app, "compose.yaml"),
+  proxy: join(dir, "proxy"),
+  proxyEtc: join(dir, "proxy", "etc"),
+  proxyConfig: join(dir, "proxy", "etc", "caddy.json"),
 })
 
 const token = () => randomBytes(12).toString("hex")
@@ -135,13 +140,16 @@ function syncDir(dir: string): void {
 
 /**
  * Writes a file so that a reader sees the old content or the new, never half
- * of either, and so that the new content survives a power loss.
+ * of either, and so that the new content survives a power loss. Only its
+ * owner can read it, unless `mode` says otherwise.
  */
-export function writeAtomic(path: string, content: string): void {
+export function writeAtomic(path: string, content: string, mode = 0o600): void {
   const temporary = `${path}.${token()}.tmp`
   // Exclusive create: never follows a link someone left at this name.
-  const handle = openSync(temporary, "wx", 0o600)
+  const handle = openSync(temporary, "wx", mode)
   try {
+    // The process's umask could have taken bits off a mode wider than 0600.
+    fchmodSync(handle, mode)
     writeFileSync(handle, content)
     fsyncSync(handle)
     closeSync(handle)
@@ -215,6 +223,41 @@ export function writeCompose(
   ensureDir(join(dir, "apps", app))
   writeAtomic(path, compose)
   return path
+}
+
+/**
+ * The folder the proxy's container mounts read-only at `/etc/zekno-proxy`
+ * (specs/015-domains-https, contracts/runner.md, "Names the runner uses"),
+ * as an absolute path for Docker. The folder is mounted, never the file
+ * alone: a file mounted by itself is lost to the container after an atomic
+ * rename (research R5).
+ */
+export function proxyFolder(dir: string): string {
+  return resolve(paths(dir).proxyEtc)
+}
+
+/**
+ * Writes the proxy's configuration with the runner's atomic write (RN8).
+ * The proxy's root has no capability to read another user's private files,
+ * so the folder and the file can be read by anyone who reaches them; only
+ * the runner's own folder leads there, and nobody else can enter it. The
+ * file holds domains and the runner's names, never a key.
+ */
+export function writeProxyConfig(dir: string, text: string): void {
+  const at = paths(dir)
+  ensureDir(at.proxy)
+  mkdirSync(at.proxyEtc, { recursive: true, mode: 0o755 })
+  chmodSync(at.proxyEtc, 0o755)
+  writeAtomic(at.proxyConfig, text, 0o644)
+}
+
+/** The proxy's configuration as it is on disk, or undefined when there is none. */
+export function readProxyConfig(dir: string): string | undefined {
+  try {
+    return readFileSync(paths(dir).proxyConfig, "utf8")
+  } catch {
+    return undefined
+  }
 }
 
 function isAlive(pid: number): boolean {
