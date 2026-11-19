@@ -51,11 +51,21 @@ export type Script = {
   failing?: string[]
   /** Containers in a restart loop: each `inspect` finds one restart more. */
   restarting?: string[]
+  /** The next signal's lines come after this many bytes of request errors, as visitors make them while an app is down. */
+  flood?: number
+  /** How long each health check's curl takes before it answers, in milliseconds; kept, not used up. */
+  checkMs?: number
+  /** The pinned image is not on this machine until a `pull` brings it. */
+  imageMissing?: boolean
+  /** Each `pull` fails. */
+  pullFails?: boolean
 }
 
 export type Model = {
   containers: FakeContainer[]
   networks: FakeNetwork[]
+  /** The named volumes Docker has, made by the first `run` that mounts one. */
+  volumes: string[]
   /** The log of each container, by name: one JSON line each, as Caddy writes them. */
   logs: Record<string, string[]>
   /** The proxy's `/config/caddy/autosave.json`: what it last loaded. */
@@ -68,7 +78,14 @@ const fileIn = (dir: string) => join(dir, "model.json")
 export function readModel(dir: string): Model {
   const path = fileIn(dir)
   if (!existsSync(path))
-    return { containers: [], networks: [], logs: {}, autosave: "", script: {} }
+    return {
+      containers: [],
+      networks: [],
+      volumes: [],
+      logs: {},
+      autosave: "",
+      script: {},
+    }
   return JSON.parse(readFileSync(path, "utf8")) as Model
 }
 

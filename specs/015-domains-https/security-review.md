@@ -199,4 +199,75 @@ Caddy's own source, and anything only Docker on Linux shows.
 
 ## 7. Answers
 
-Filled in as each finding is fixed (T088).
+Each fix has a test that failed against the code before it. The fixes in the runner were also run
+against the real Caddy, in the gated set with real Docker on the development machine.
+
+### S1. Fixed
+
+Three changes in the runner. The generated configuration leaves the request loggers out of the
+default log (`http.log.error`, `http.log.access`): with real Caddy, 20 requests answered 502 wrote no
+line, where one line a request was written before. The proxy's container has a bounded log
+(`--log-driver local`, 10 MB, three files). And the nonce decides a load: after the signal the
+runner looks for it in `autosave.json` for up to 15 seconds, and reads the log only to stop early on
+a failed reload. Checked by hand with real Caddy first: a load that worked writes the new nonce
+there, a load that failed leaves the old one. The test that failed: 1.1 MiB of request errors before
+the reload line ended `routes_failed`; it now ends `started`. A proxy made before this change keeps
+its unbounded log until it is replaced; no released runner has made one.
+
+### S2. Fixed
+
+When the runner's proxy is stopped or gone and its volume is there, a released domain's folder is
+deleted through a short-lived container of the pinned image with no network and no capability
+(`proxy/certificates.ts`). With real Docker: the proxy stopped, the last domain released, the
+folder gone.
+
+### S3. Fixed
+
+The limit is looked at before each container, a check is given the time left and at most 30
+seconds, and the image is looked for once before the wait and pulled only when missing, with a
+bound of its own (`health/wait.ts`, `check.ts`, `image.ts`). Three 5-second checks under a 1-second
+limit took 15.8 seconds and ended `started`; they now end `unhealthy` in under 6.
+
+### S4. Fixed
+
+A runner that does not answer routes, for an app this machine signed a route for, stops a rollback
+with B10 before anything is signed (`apps/cli/src/ops/deploy-domains.ts`). The scenario that failed:
+the real runner made to answer protocol 3 after a deploy with a domain; the rollback was signed with
+no routes and exited 0. It now exits 1, nothing is sent, and the domain stays in force. A runner of
+protocol 4 that names other routes than it holds still decides what a rollback signs; it gains
+nothing on its own proxy, and K10b keeps it from another app's domain. Accepted.
+
+### S5. Fixed
+
+The deletion names the certificate's folder only.
+
+### S6. Accepted, and said
+
+The README, the security page and the domains page say that apps on one server are not kept apart:
+a deploy the team signed could read the TLS key of every domain there. No check of names in a
+Compose text was added: it would not be a boundary.
+
+### S7. Fixed
+
+The text is written to `caddy.next.json`, validated, and only then renamed over `caddy.json`
+(`proxy/file.ts`). Before a first start, and before a stopped proxy is started, the validate runs in
+a short-lived container. A refused file leaves `caddy.json` byte for byte, and is not followed by a
+load back.
+
+### S8. Fixed
+
+The CLI no longer counts 0.0.0.0/8, 192.0.0.0/24, 198.18.0.0/15, multicast and the reserved block,
+`::`, ff00::/8, 64:ff9b::/96, 2002::/16 or an address with a zone as a server's public address, and
+never shows the text after `%`. The generated route deletes `X-Real-Ip` and `Forwarded` from a
+request: with real Caddy, a request sent with both reached the app without them, and with the
+proxy's own `X-Forwarded-For`.
+
+### Part 4, point 1. Search domains: closed on this machine, open for Linux
+
+The proxy and the health check's container are started with `--dns-search .`. With real Docker the
+proxy's `/etc/resolv.conf` has no `search` line and its names still resolve. The development
+machine's Docker has no search domains of its own, so the case of a Linux host that has some is
+part of the proof on a server (quickstart, maintainer steps).
+
+Points 2 to 5 of part 4 stay as they are; point 2 no longer matters to S1, since no request is
+logged.

@@ -140,15 +140,38 @@ export function steps(w: World, ids: Record<string, string> = {}): string[] {
 export const up = (app = "web") =>
   `compose -p zekno-${app} -f <home>/apps/${app}/compose.yaml up -d --remove-orphans`
 
-/** The proxy's `docker run`, as `steps` writes it, with the ports it publishes. */
+/**
+ * The proxy's `docker run`, as `steps` writes it, with the ports it
+ * publishes: its log capped by Docker (security review S1) and no search
+ * domain of the host's (review, could not decide 1).
+ */
 export const proxyRun = (publish = "-p 80:80 -p 443:443") =>
-  `run -d --name zekno-proxy --label app.zekno.server=<server> --label app.zekno.role=proxy --restart unless-stopped --network zekno-proxy ${publish} -v zekno-proxy-data:/data -v zekno-proxy-config:/config --mount type=bind,source=<home>/proxy/etc,target=/etc/zekno-proxy,readonly --cap-drop ALL --cap-add NET_BIND_SERVICE --security-opt no-new-privileges caddy@sha256:<digest> caddy run --config /etc/zekno-proxy/caddy.json`
+  `run -d --name zekno-proxy --label app.zekno.server=<server> --label app.zekno.role=proxy --restart unless-stopped --log-driver local --log-opt max-size=10m --log-opt max-file=3 --network zekno-proxy --dns-search . ${publish} -v zekno-proxy-data:/data -v zekno-proxy-config:/config --mount type=bind,source=<home>/proxy/etc,target=/etc/zekno-proxy,readonly --cap-drop ALL --cap-add NET_BIND_SERVICE --security-opt no-new-privileges caddy@sha256:<digest> caddy run --config /etc/zekno-proxy/caddy.json`
 
-/** The steps that load a configuration into a running proxy (RN8), after it was joined to its networks. */
+/** Caddy's validate of the next file in a short-lived container, before the proxy starts on it (security review S7). */
+export const VALIDATE_ALONE =
+  "run --rm --network none --cap-drop ALL --security-opt no-new-privileges --mount type=bind,source=<home>/proxy/etc,target=/etc/zekno-proxy,readonly caddy@sha256:<digest> caddy validate --config /etc/zekno-proxy/caddy.next.json"
+
+/** The nonce looked for in what Caddy saved: the one sign that a load worked (security review S1). */
+export const NONCE_SAVED =
+  "exec zekno-proxy grep -q -F -- <nonce> /config/caddy/autosave.json"
+
+/**
+ * The steps that load a configuration into a running proxy (RN8), after it
+ * was joined to its networks: the next file validated, the failures already
+ * in the log counted, the signal, then the nonce, found at the first look.
+ */
 export const LOAD = [
-  "exec zekno-proxy caddy validate --config /etc/zekno-proxy/caddy.json",
+  "exec zekno-proxy caddy validate --config /etc/zekno-proxy/caddy.next.json",
   "logs --since <time> zekno-proxy",
   "exec zekno-proxy kill -USR1 1",
-  "logs --since <time> zekno-proxy",
-  "exec zekno-proxy grep -q -F -- <nonce> /config/caddy/autosave.json",
+  NONCE_SAVED,
 ]
+
+/** The deletion of a released domain's certificate inside the running proxy (RN10). */
+export const certificates = (domain: string) =>
+  `exec zekno-proxy sh -c rm -rf "/data/caddy/certificates/"*"/${domain}"`
+
+/** The same deletion through a short-lived container, when the proxy does not run (security review S2). */
+export const certificatesAlone = (domain: string) =>
+  `run --rm --network none --cap-drop ALL --security-opt no-new-privileges -v zekno-proxy-data:/data caddy@sha256:<digest> sh -c rm -rf "/data/caddy/certificates/"*"/${domain}"`

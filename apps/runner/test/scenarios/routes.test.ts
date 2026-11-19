@@ -14,11 +14,13 @@ import {
   configText,
   deployRoutes,
   LOAD,
+  NONCE_SAVED,
   proxyRun,
   route,
   stateOf,
   steps,
   up,
+  VALIDATE_ALONE,
 } from "../support/routes"
 
 const APP = route("app.example.com")
@@ -44,17 +46,17 @@ describe("a first route (RN4 to RN9)", () => {
       "network create --label app.zekno.server=<server> --label app.zekno.app=web zekno-route-web",
       "network connect --alias <name> zekno-route-web <web>",
       "inspect --type container <web>",
-      // RN6: no proxy yet; its own network; the file written, then the run on it.
+      // RN6: no proxy yet; its own network; the file validated with no proxy, put in place, then the run on it.
       "inspect --type container zekno-proxy",
       "network inspect zekno-proxy",
       "network create --label app.zekno.server=<server> --label app.zekno.role=proxy zekno-proxy",
+      VALIDATE_ALONE,
       proxyRun(),
       "logs --since <time> zekno-proxy",
-      // RN8 for a proxy just started on this file: joining, then validate and the nonce only.
+      // RN8 for a proxy just started on this file: joining, then the nonce only.
       "inspect --type container zekno-proxy",
       "network connect zekno-route-web zekno-proxy",
-      "exec zekno-proxy caddy validate --config /etc/zekno-proxy/caddy.json",
-      "exec zekno-proxy grep -q -F -- <nonce> /config/caddy/autosave.json",
+      NONCE_SAVED,
       // RN10: nothing released.
       "inspect --type container zekno-proxy",
     ])

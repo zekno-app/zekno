@@ -13,8 +13,10 @@
  * socket; a route a domain, and a last route answering 404; certificates from
  * Let's Encrypt only (Caddy's internal authority under the test switch); a
  * grace period of 10 seconds, so one stuck request never keeps a stopping
- * proxy alive; JSON logs on standard error; and a new nonce, which Caddy
- * keeps in what it saves only once a load worked (RN8).
+ * proxy alive; JSON logs on standard error, without the request loggers a
+ * visitor writes to; the request headers a visitor could forge deleted on
+ * the way to an app; and a new nonce, which Caddy keeps in what it saves
+ * only once a load worked (RN8).
  */
 import { randomBytes } from "node:crypto"
 import { isRoutableDomain, type AppRoutes } from "@workspace/core"
@@ -27,6 +29,21 @@ const NAME = /^z[0-9a-f]{32}$/
 const NONCE = /^gen-[0-9a-f]{16}$/
 /** The nonce as it stands in the text this module writes. */
 const NONCE_IN_TEXT = /"@id": "gen-[0-9a-f]{16}"/g
+
+/**
+ * Caddy's loggers of requests: one line for each request that failed (a 502
+ * while an app is being replaced) and, were it switched on, for each request.
+ * A visitor writes them at will, so the default log leaves them out; Caddy's
+ * own lines, those of its core logger that say a load worked or failed, stay
+ * (security review S1; checked with Caddy 2.11.9).
+ */
+const REQUEST_LOGGERS = ["http.log.error", "http.log.access"] as const
+/**
+ * Request headers a visitor could forge that Caddy passes on as they came:
+ * it replaces `X-Forwarded-For`, `-Proto` and `-Host` itself, but not these
+ * (research Q9; security review S8). Deleted before a request reaches an app.
+ */
+const FORGEABLE = ["X-Real-Ip", "Forwarded"] as const
 
 const LETS_ENCRYPT = "https://acme-v02.api.letsencrypt.org/directory"
 const LETS_ENCRYPT_STAGING =
@@ -92,6 +109,8 @@ export function buildConfig(
           level: "INFO",
           writer: { output: "stderr" },
           encoder: { format: "json" },
+          // Visitors write these, one line a failed request: never to the log the runner reads (security review S1).
+          exclude: [...REQUEST_LOGGERS],
         },
       },
     },
@@ -112,6 +131,7 @@ export function buildConfig(
                 handle: [
                   {
                     handler: "reverse_proxy",
+                    headers: { request: { delete: [...FORGEABLE] } },
                     upstreams: dials.map((dial) => ({ dial })),
                   },
                 ],

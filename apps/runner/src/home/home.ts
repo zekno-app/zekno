@@ -81,6 +81,7 @@ const paths = (dir: string) => ({
   proxy: join(dir, "proxy"),
   proxyEtc: join(dir, "proxy", "etc"),
   proxyConfig: join(dir, "proxy", "etc", "caddy.json"),
+  proxyNext: join(dir, "proxy", "etc", "caddy.next.json"),
 })
 
 const token = () => randomBytes(12).toString("hex")
@@ -237,18 +238,37 @@ export function proxyFolder(dir: string): string {
 }
 
 /**
- * Writes the proxy's configuration with the runner's atomic write (RN8).
- * The proxy's root has no capability to read another user's private files,
- * so the folder and the file can be read by anyone who reaches them; only
- * the runner's own folder leads there, and nobody else can enter it. The
- * file holds domains and the runner's names, never a key.
+ * Writes the proxy's next configuration, `caddy.next.json`, beside the one in
+ * place, with the runner's atomic write (RN8). It is put in place only once
+ * Caddy has validated it (`placeProxyNext`), so a file Caddy would refuse
+ * never takes the place of one that works (security review S7). The proxy's
+ * root has no capability to read another user's private files, so the
+ * folder and the files can be read by anyone who reaches them; only the
+ * runner's own folder leads there, and nobody else can enter it. The files
+ * hold domains and the runner's names, never a key.
  */
-export function writeProxyConfig(dir: string, text: string): void {
+export function writeProxyNext(dir: string, text: string): void {
   const at = paths(dir)
   ensureDir(at.proxy)
   mkdirSync(at.proxyEtc, { recursive: true, mode: 0o755 })
   chmodSync(at.proxyEtc, 0o755)
-  writeAtomic(at.proxyConfig, text, 0o644)
+  writeAtomic(at.proxyNext, text, 0o644)
+}
+
+/** Puts the validated next configuration in place of the proxy's file, in one rename. */
+export function placeProxyNext(dir: string): void {
+  const at = paths(dir)
+  renameSync(at.proxyNext, at.proxyConfig)
+  syncDir(at.proxyEtc)
+}
+
+/** Removes a next configuration Caddy refused; the file in place is left as it is. */
+export function dropProxyNext(dir: string): void {
+  try {
+    unlinkSync(paths(dir).proxyNext)
+  } catch {
+    // Not there.
+  }
 }
 
 /** The proxy's configuration as it is on disk, or undefined when there is none. */

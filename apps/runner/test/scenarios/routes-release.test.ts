@@ -11,6 +11,7 @@ import { describe, expect, test } from "bun:test"
 import { leftAsItWas } from "../support/deploy-v2"
 import { world } from "../support/helpers"
 import {
+  certificates as CERTIFICATES,
   configRoutes,
   deployRoutes,
   LOAD,
@@ -22,8 +23,6 @@ import {
 
 const APP = route("app.example.com")
 const API = route("api.example.com", "api", 8080)
-const CERTIFICATES = (domain: string) =>
-  `exec zekno-proxy sh -c rm -rf "/data/caddy/certificates/"*"/${domain}" "/data/caddy/ocsp/${domain}-"*`
 
 /** A world where web holds app.example.com and api holds api.example.com. */
 async function twoApps() {
@@ -131,6 +130,8 @@ describe("a release (RN10)", () => {
     expect(after.filter((step) => step.includes("rm -rf"))).toEqual([
       CERTIFICATES("a.example.com"),
     ])
+    // Let's Encrypt has no OCSP any more, and a glob there could reach another domain's (security review S5).
+    expect(after.join("\n")).not.toContain("/data/caddy/ocsp")
     expect(after.some((step) => step.startsWith("network rm"))).toBe(false)
     expect(after.some((step) => step.startsWith("network disconnect"))).toBe(
       false

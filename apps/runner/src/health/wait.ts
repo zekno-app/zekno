@@ -7,11 +7,18 @@
  * returned. Not in time: the outcome is `unhealthy`, with the service and
  * whether its check had a path. Nothing is stopped, rolled back or released:
  * going back is a signed rollback (deploy-v2.md part 4.3).
+ *
+ * The limit is looked at before each container, and each check is given only
+ * the time left, so the wait ends within one check of its limit however many
+ * containers a service has (security review S3). The image a check with a
+ * path runs is made sure of once, before the first event, and the time that
+ * takes is not counted against the limit.
  */
 import type { Health } from "@workspace/core"
 
 import type { Named } from "../routes/network"
 import { answersHealthy, seen } from "./check"
+import { pinnedImageHere } from "./image"
 
 /** How often a round starts. */
 const ROUND_MS = 2000
@@ -60,9 +67,20 @@ export async function waitHealthy(input: {
   deadline: number
   onHealth: (service: string) => void
 }): Promise<Waited> {
-  const { dir, app, deadline } = input
+  const { dir, app } = input
+  let deadline = input.deadline
+  // The image, once, for the checks with a path: on a time of its own.
+  let imageHere = true
+  if (input.health.services.some(({ http }) => http !== null)) {
+    const started = Date.now()
+    imageHere = await pinnedImageHere(dir)
+    deadline += Date.now() - started
+  }
   for (const { service, http } of input.health.services) {
     input.onHealth(service)
+    const unhealthy: Waited = { ok: false, service, http: http !== null }
+    // A check that cannot run, as its image is not here, is not waited for.
+    if (http && !imageHere) return unhealthy
     const containers = input.names[service] ?? []
     const first = new Map<string, { at: number; restarts: number }>()
     for (;;) {
@@ -70,14 +88,16 @@ export async function waitHealthy(input: {
       let healthy = containers.length > 0
       // Every container is looked at in each round, so each one's steady time starts at once.
       for (const { container, name } of containers) {
+        const left = deadline - Date.now()
+        if (left <= 0) return unhealthy
         const ok = http
-          ? await answersHealthy(dir, app, name, http)
+          ? await answersHealthy(dir, app, name, http, left)
           : await steady(dir, container, first)
         if (!ok) healthy = false
       }
       if (healthy) break
       const now = Date.now()
-      if (now >= deadline) return { ok: false, service, http: http !== null }
+      if (now >= deadline) return unhealthy
       await Bun.sleep(Math.max(0, Math.min(round + ROUND_MS, deadline) - now))
     }
   }

@@ -170,11 +170,16 @@ async function release(
   const found = await findProxy(dir, server)
   const proxy = found?.kind === "ours" ? found : undefined
 
-  // 1. The certificate and key of each domain the app held and no longer has.
+  // 1. The certificate and key of each domain the app held and no longer has,
+  // also when the proxy is stopped or gone (security review S2).
   const kept = new Set(wanted?.routes.map((route) => route.domain) ?? [])
-  if (proxy?.running)
-    for (const route of held?.routes ?? [])
-      if (!kept.has(route.domain)) await deleteCertificates(dir, route.domain)
+  await deleteCertificates(
+    dir,
+    found,
+    (held?.routes ?? [])
+      .map((route) => route.domain)
+      .filter((domain) => !kept.has(domain))
+  )
 
   // 2. The proxy leaves each route network no route uses any more: leaving comes after loading (research R8).
   const routed = new Set(routedApps(saved.routes).map(routeNetwork))

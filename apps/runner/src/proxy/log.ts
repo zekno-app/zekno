@@ -16,8 +16,8 @@ export const PROXY = "zekno-proxy"
 
 /** How far before now a read starts, for a Docker whose clock differs a little from the runner's. */
 const CLOCK_MS = 1000
-/** How often the log is read again while waiting. */
-const POLL_MS = 200
+/** How often the log, or what Caddy saved, is read again while waiting. */
+export const POLL_MS = 200
 
 /** One line of Caddy's log, as its fields. */
 export type LogLine = Record<string, unknown>
@@ -95,12 +95,14 @@ export async function waitForLine<T>(
 export const serving = (line: LogLine): true | undefined =>
   line.msg === "serving initial configuration" ? true : undefined
 
-/** The line that answers a SIGUSR1: the file loaded, or not (RN8, step 5). */
-export const reloaded = (line: LogLine): "ok" | "failed" | undefined =>
-  line.signal !== "SIGUSR1"
-    ? undefined
-    : line.msg === "successfully reloaded config from file"
-      ? "ok"
-      : line.msg === "failed to reload config from file"
-        ? "failed"
-        : undefined
+/**
+ * The line that says a SIGUSR1 did not load the file (RN8, step 5). Only
+ * this line is read from the log after a signal, to stop the wait for the
+ * nonce early: whether the file loaded is told by the nonce in what Caddy
+ * saved, since a log visitors can fill may hide the line that says it did
+ * (security review S1).
+ */
+export const reloadFailed = (line: LogLine): true | undefined =>
+  line.signal === "SIGUSR1" && line.msg === "failed to reload config from file"
+    ? true
+    : undefined

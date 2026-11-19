@@ -203,10 +203,11 @@ describe("not_loaded (RN5 to RN9)", () => {
     )
     const after = steps(w).slice(before)
     // The new file tried until the log said no, then the state's loaded again by the same steps.
-    expect(after.slice(-(LOAD.length * 2 + 3))).toEqual([
+    expect(after.slice(-(LOAD.length * 2 + 5))).toEqual([
       "inspect --type container zekno-proxy",
       "inspect --type container zekno-proxy",
-      ...LOAD.slice(0, -1),
+      ...LOAD,
+      "logs --since <time> zekno-proxy",
       "inspect --type container zekno-proxy",
       "inspect --type container zekno-proxy",
       ...LOAD,
@@ -222,6 +223,7 @@ describe("not_loaded (RN5 to RN9)", () => {
     )
   })
 
+  // The log's word that a load worked is not taken: with no nonce saved, the wait runs its 15 seconds (security review S1).
   test("validate fails, or the log says loaded with no nonce saved: each not_loaded, the state unchanged", async () => {
     for (const script of [
       { validateFails: 1 },
@@ -238,7 +240,7 @@ describe("not_loaded (RN5 to RN9)", () => {
         "app.example.com": [`${state.routes.web!.names.web![0]!.name}:3000`],
       })
     }
-  })
+  }, 40_000)
 
   test("a load the log does not answer within 15 seconds is not_loaded", async () => {
     const { w } = await routed()
@@ -316,7 +318,11 @@ describe("up failed (RN3)", () => {
     expect(state.routes.web!.routes).toEqual([])
     expect(configRoutes(w.home)).toEqual({})
     expect(steps(w).at(-2)).toBe("rm -f zekno-proxy")
-    expect(steps(w).some((step) => step.startsWith("run --rm"))).toBe(false)
+    expect(
+      steps(w).some(
+        (step) => step.startsWith("run --rm") && step.includes(" curl ")
+      )
+    ).toBe(false)
   })
 
   test("start_failed is reported over routes_failed", async () => {

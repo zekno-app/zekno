@@ -262,14 +262,18 @@ same lock:
    not made again keeps its name. Nothing a deploy carries names a network or a name.
 3. When a route needs it, it starts the proxy, `zekno-proxy`, from the image it pins by digest
    (`src/proxy/image.ts`), with ports 80 and 443 published, `--restart unless-stopped`, no
-   capability but binding low ports, no Docker socket, and the volumes `zekno-proxy-data` and
-   `zekno-proxy-config`. A port another program holds is `port_taken`.
-4. It joins the proxy to the route networks it needs, writes `proxy/etc/caddy.json` whole from the
-   routes in force of every app and the names it made, has the proxy check it with
-   `caddy validate`, loads it with `docker exec zekno-proxy kill -USR1 1`, reads the proxy's log
-   for the result, and confirms the file's new nonce in what the proxy saved. Only then are the
-   new routes saved in `state.json`. Not taken: the configuration built from the state as it was is
-   loaded again, the state is left alone, and the outcome is `not_loaded`.
+   capability but binding low ports, no Docker socket, a bounded log, no search domains, and the
+   volumes `zekno-proxy-data` and `zekno-proxy-config`. A port another program holds is
+   `port_taken`.
+4. It joins the proxy to the route networks it needs and builds the configuration whole from the
+   routes in force of every app and the names it made. The text goes to a second file,
+   `proxy/etc/caddy.next.json`; Caddy checks it with `caddy validate`, and only then does it
+   replace `proxy/etc/caddy.json`. The runner loads it with `docker exec zekno-proxy kill -USR1 1`
+   and counts it as loaded when the file's new nonce is in what the proxy saved; the proxy's log
+   is read only to stop early on a failed load. Requests are not written to that log, and the
+   headers `X-Real-Ip` and `Forwarded` of a request are removed before it reaches the app. Only
+   then are the new routes saved in `state.json`. Not taken: the configuration built from the
+   state as it was is loaded again, the state is left alone, and the outcome is `not_loaded`.
 5. It deletes the certificate and key of each released domain, takes the proxy off the network of
    an app with no route, removes the route network of an app with no route and no health check,
    and removes the proxy when no app has a route. The volumes stay.

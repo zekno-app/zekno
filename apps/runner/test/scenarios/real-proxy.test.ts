@@ -13,20 +13,27 @@
  * everything it made, also when a test fails, and checks that at the end.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { existsSync } from "node:fs"
+import { join } from "node:path"
 
 import { loadConfig } from "../../src/proxy/load"
 import { PROXY_IMAGE } from "../../src/proxy/image"
 import { world } from "../support/helpers"
 import {
+  body,
+  CHECKED,
   docker,
   everything,
   gate,
   httpGet,
   httpsGet,
   RUNNER_NAMES,
+  saved,
+  status,
   SWITCH,
   until,
-  type Answer,
+  WEB_A,
+  WEB_B,
 } from "../support/real-docker"
 import {
   ask,
@@ -44,26 +51,6 @@ const ID = `rp${process.pid}`
 const [A, B, C] = [`${ID}a`, `${ID}b`, `${ID}c`]
 const DA = `a-${ID}.example.com`
 const DB = `b-${ID}.example.com`
-
-/** A service of the pinned image answering with `caddy respond`. */
-const service = (name: string, ...answer: string[]) =>
-  `  ${name}:\n    image: ${PROXY_IMAGE}\n    pull_policy: never\n    command: ${JSON.stringify(["caddy", "respond", "--listen", ":8080", ...answer])}\n`
-const compose = (...services: string[]) => `services:\n${services.join("")}`
-const WEB_A = compose(service("web", "--body", "hello from A"))
-const WEB_B = compose(service("web", "--body", "hello from B"))
-const CHECKED = compose(
-  service("ok", "--body", "ok"),
-  service("bad", "--status", "500", "--body", "bad"),
-  service(
-    "moved",
-    "--status",
-    "302",
-    "--header",
-    "Location: http://nowhere.invalid/",
-    "--body",
-    "moved"
-  )
-)
 
 let w: World
 let ca = ""
@@ -88,7 +75,6 @@ async function deploy(
   return answer
 }
 
-const status = (answer: Answer) => ("status" in answer ? answer.status : 0)
 const answered = (domain: string) =>
   until(
     () => httpsGet(domain, ca),
@@ -162,6 +148,36 @@ describe.skipIf(skip !== undefined)("a real proxy (T033)", () => {
       "zekno-proxy"
     )
     expect(restart.stdout.trim()).toBe("unless-stopped")
+
+    // S1: its log kept by the local driver, capped; `docker logs` read it to see the proxy start.
+    const kept = docker(
+      "inspect",
+      "--format",
+      "{{json .HostConfig.LogConfig}}|{{json .HostConfig.DnsSearch}}",
+      "zekno-proxy"
+    )
+      .stdout.trim()
+      .split("|")
+      .map((part) => JSON.parse(part) as unknown)
+    expect(kept).toEqual([
+      { Type: "local", Config: { "max-file": "3", "max-size": "10m" } },
+      ["."],
+    ])
+    // No search domain to complete a name with; Docker's DNS still gave the route's name (the 200 above).
+    expect(
+      docker("exec", "zekno-proxy", "cat", "/etc/resolv.conf").stdout
+    ).not.toMatch(/^search/m)
+
+    // S8: what a visitor forged does not reach the app; X-Forwarded-For is the proxy's own.
+    const forged = await httpsGet(DA, ca, {
+      "X-Real-Ip": "1.2.3.4",
+      Forwarded: "for=1.2.3.4;proto=https",
+      "X-Forwarded-For": "6.6.6.6",
+    })
+    expect(forged).toMatchObject({ status: 200 })
+    expect(body(forged)).toContain("xri=[] fwd=[] xff=[")
+    expect(body(forged)).not.toContain("1.2.3.4")
+    expect(body(forged)).not.toContain("6.6.6.6")
   }, 120_000)
 
   test("a second app cannot take the domain; with its own, both answer", async () => {
@@ -204,6 +220,27 @@ describe.skipIf(skip !== undefined)("a real proxy (T033)", () => {
     expect(configText(w.home)).toBe(file)
   }, 60_000)
 
+  test("S1: requests the proxy cannot pass on write nothing to its log", async () => {
+    const [named] = stateOf(w.home).routes[A]!.names.web!
+    expect(docker("stop", "--timeout", "1", named!.container).code).toBe(0)
+    for (let i = 0; i < 20; i++)
+      expect(await httpsGet(DA, ca)).toMatchObject({ status: 502 })
+    const log = docker("logs", "zekno-proxy")
+    expect(log.code).toBe(0)
+    expect(log.stderr).toContain("serving initial configuration")
+    // Caddy's own lines of its http app stay: `http.log` says a server runs.
+    for (const logger of ["http.log.error", "http.log.access"])
+      expect(`${log.stdout}${log.stderr}`).not.toContain(`"logger":"${logger}"`)
+    expect(docker("start", named!.container).code).toBe(0)
+    expect(
+      await until(
+        () => httpsGet(DA, ca),
+        (each) => body(each).includes("hello from A"),
+        30_000
+      )
+    ).toMatchObject({ status: 200 })
+  }, 90_000)
+
   test("a broken configuration leaves the earlier one serving; the proxy request puts the state's back", async () => {
     const networks = [`zekno-route-${A}`, `zekno-route-${B}`]
     // Caddy's validate refuses it: nothing is signalled.
@@ -221,13 +258,20 @@ describe.skipIf(skip !== undefined)("a real proxy (T033)", () => {
         },
       },
     })
+    const inPlace = configText(w.home)!
+    const earlier = /"@id": "(gen-[0-9a-f]{16})"/.exec(inPlace)![1]!
     expect(
       await loadConfig(
         w.home,
         { text: refused, nonce: "gen-0000000000000001" },
         networks
       )
-    ).toBe(false)
+    ).toBe("kept")
+    // S7: refused before it was in place; the file in place is untouched.
+    expect(configText(w.home)).toBe(inPlace)
+    expect(existsSync(join(w.home, "proxy", "etc", "caddy.next.json"))).toBe(
+      false
+    )
     expect(await answered(DA)).toMatchObject({ status: 200 })
     // Validate takes it, the reload refuses it: an address the container does not have.
     const unbindable = JSON.stringify({
@@ -246,15 +290,20 @@ describe.skipIf(skip !== undefined)("a real proxy (T033)", () => {
         },
       },
     })
+    const tried = Date.now()
     expect(
       await loadConfig(
         w.home,
         { text: unbindable, nonce: "gen-0000000000000002" },
         networks
       )
-    ).toBe(false)
+    ).toBe("replaced")
+    // S1: the log's failure ended the wait early; the nonce is not in what Caddy saved, the earlier one still is.
+    expect(Date.now() - tried).toBeLessThan(10_000)
     const log = docker("logs", "zekno-proxy").stderr
     expect(log).toContain("failed to reload config from file")
+    expect(saved("gen-0000000000000002")).toBe(false)
+    expect(saved(earlier)).toBe(true)
     expect(await answered(DA)).toMatchObject({ status: 200 })
     expect(await answered(DB)).toMatchObject({ status: 200 })
 
@@ -263,17 +312,7 @@ describe.skipIf(skip !== undefined)("a real proxy (T033)", () => {
       proxy: "running",
     })
     const nonce = /"@id": "(gen-[0-9a-f]{16})"/.exec(configText(w.home)!)![1]!
-    expect(
-      docker(
-        "exec",
-        "zekno-proxy",
-        "grep",
-        "-q",
-        "-F",
-        nonce,
-        "/config/caddy/autosave.json"
-      ).code
-    ).toBe(0)
+    expect(saved(nonce)).toBe(true)
     expect(await answered(DA)).toMatchObject({ status: 200 })
     // The signal went by exec: the restart policy is still in force.
     expect(
@@ -349,10 +388,29 @@ describe.skipIf(skip !== undefined)("a real proxy (T033)", () => {
     ).toHaveLength(3)
   }, 180_000)
 
-  test("the last release removes the proxy; its volumes stay until the set removes them", async () => {
+  test("the last release, with the proxy stopped, deletes the certificate and removes the proxy; its volumes stay until the set removes them", async () => {
+    // S2: a short-lived container deletes what the stopped proxy cannot.
+    const look = () =>
+      docker(
+        "run",
+        "--rm",
+        "--name",
+        `zekno-${ID}-look`,
+        "--network",
+        "none",
+        "-v",
+        `${RUNNER_NAMES.volumes[0]}:/data:ro`,
+        PROXY_IMAGE,
+        "test",
+        "-e",
+        `/data/caddy/certificates/local/${DB}`
+      ).code
+    expect(look()).toBe(0)
+    expect(docker("stop", "--timeout", "1", "zekno-proxy").code).toBe(0)
     expect((await deploy(B, WEB_B, { routes: [] })).result.outcome).toBe(
       "started"
     )
+    expect(look()).toBe(1)
     expect(docker("container", "inspect", "zekno-proxy").code).not.toBe(0)
     expect(await ask(w, "status", { routes: true }, SWITCH)).toMatchObject({
       routes: {},

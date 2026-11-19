@@ -47,7 +47,7 @@ For each container of RN4: if the held names have this container id and `docker 
 
 Needed when any app would have a route after this deploy.
 
-- Not there: `docker run -d` with the name, labels, `--restart unless-stopped`, `--network zekno-proxy` (created if missing), `-p 80:80 -p 443:443`, the two volumes, the folder mount read-only, `--cap-drop ALL --cap-add NET_BIND_SERVICE --security-opt no-new-privileges`, the pinned image, `caddy run --config /etc/zekno-proxy/caddy.json`. Before the first run the configuration of RN7 is written, so the proxy never starts on an old file.
+- Not there: `docker run -d` with the name, labels, `--restart unless-stopped`, `--network zekno-proxy` (created if missing), `-p 80:80 -p 443:443`, the two volumes, the folder mount read-only, `--cap-drop ALL --cap-add NET_BIND_SERVICE --security-opt no-new-privileges`, a bounded log (`--log-driver local --log-opt max-size=10m --log-opt max-file=3`), no search domains (`--dns-search .`), the pinned image, `caddy run --config /etc/zekno-proxy/caddy.json`. Before the first run, and before a stopped proxy is started, the configuration of RN7 is validated in a short-lived container of the pinned image (no network, no capability, the folder read-only) and put in place, so the proxy never starts on an old file or on one Caddy has not validated.
 - Exit 125 with `port is already allocated` or `address already in use` in standard error: remove the container left behind, outcome `routes_failed` with `port_taken` and the port named in the text (80 when neither can be told).
 - There, not running: `docker start`.
 - There with another image, or with labels of another server id: with another image it is removed and run again; with another server's label nothing is done and the outcome is `routes_failed` with `not_loaded` (one runner a Docker daemon).
@@ -57,7 +57,7 @@ With `ZEKNO_PROXY_TEST=<http>:<https>` in the runner's environment (two port num
 
 ## RN7. The configuration
 
-Built by `proxy/config.ts` from the state with this app's wanted routes and new names in place of what it held, and from nothing else: every app's routes, each domain to the names of its service's containers and the route's port. The shape is the one in research R2, exactly: admin disabled; one server on `:443`, `h1` and `h2`; a route a domain with `terminal: true`; a last route answering 404; the `acme` issuer with Let's Encrypt's directory and its staging directory as `test_ca` (the internal issuer under the test switch); `grace_period` of 10 seconds; JSON logs to standard error; a new nonce `@id`.
+Built by `proxy/config.ts` from the state with this app's wanted routes and new names in place of what it held, and from nothing else: every app's routes, each domain to the names of its service's containers and the route's port. The shape is the one in research R2, exactly: admin disabled; one server on `:443`, `h1` and `h2`; a route a domain with `terminal: true`; a last route answering 404; the `acme` issuer with Let's Encrypt's directory and its staging directory as `test_ca` (the internal issuer under the test switch); `grace_period` of 10 seconds; JSON logs to standard error, without the request loggers `http.log.error` and `http.log.access` (a visitor must not be able to write to the log: security review S1); the request headers `X-Real-Ip` and `Forwarded` deleted before a request reaches the app (S8); a new nonce `@id`.
 
 Every domain, name and port written into it is checked against its pattern in that module again, whatever checked it before: a value that does not match makes the build throw, and the outcome is `not_loaded`. The text is `JSON.stringify` of an object; no string is put together by hand.
 
@@ -66,24 +66,23 @@ Routes are written in the order of their domains, so the same state gives the sa
 ## RN8. Loading it
 
 1. Connect the proxy to each route network it needs and is not on (`docker network connect`). Joining comes before loading.
-2. Write the file with the runner's atomic write.
-3. `docker exec zekno-proxy caddy validate --config /etc/zekno-proxy/caddy.json` must exit 0.
+2. Write the text to a second file, `caddy.next.json`, with the runner's atomic write.
+3. `docker exec zekno-proxy caddy validate --config /etc/zekno-proxy/caddy.next.json` must exit 0. Only then is the file renamed over `caddy.json`; a refused file is removed, and `caddy.json` is as it was (security review S7).
 4. Note the time; `docker exec zekno-proxy kill -USR1 1`. Never `docker kill`.
-5. Read `docker logs --since <time> zekno-proxy` until a line with `"signal":"SIGUSR1"` says `successfully reloaded config from file` or `failed to reload config from file`, for at most 15 seconds.
-6. `docker exec zekno-proxy grep -q` for the nonce in `/config/caddy/autosave.json` must succeed.
+5. `docker exec zekno-proxy grep -q -F` for the nonce in `/config/caddy/autosave.json`, every 200 ms for at most 15 seconds, until it succeeds. The nonce decides: Caddy writes that file only when a load worked. Between tries `docker logs --since <time> zekno-proxy` is read only to stop early, on a line with `"signal":"SIGUSR1"` that says `failed to reload config from file` (S1).
 
-Any step failing is "not loaded". A proxy that was just started on this file (RN6) needs steps 3 and 6 only.
+Any step failing is "not loaded". A proxy that was just started on this file (RN6) needs step 5 only: the file was validated before the start.
 
 ## RN9. Saving, or going back
 
 - **Loaded**: write the state with `withAppRoutes(state, app, { routes: wanted, names })`, or with the app's entry removed when it has no wanted route and no wanted health. The state is read again under the state lock first, as every write does.
-- **Not loaded**: build the configuration from the state as it is, and load it by RN8 (if that fails too, nothing more is tried). The state is not written. The outcome is `routes_failed` with `not_loaded`.
+- **Not loaded**: build the configuration from the state as it is, and load it by RN8 (if that fails too, nothing more is tried). When the new file was refused by the validate, nothing was replaced, and nothing is loaded back. The state is not written. The outcome is `routes_failed` with `not_loaded`.
 
 ## RN10. What was released
 
 After a load that worked, in this order:
 
-1. For each domain the app held and no longer has: `docker exec zekno-proxy sh -c 'rm -rf "/data/caddy/certificates/"*"/<domain>" "/data/caddy/ocsp/<domain>-"*'`, the domain having matched the domain rule in this module.
+1. For each domain the app held and no longer has: `docker exec zekno-proxy sh -c 'rm -rf "/data/caddy/certificates/"*"/<domain>"'`, the domain having matched the domain rule in this module. When the runner's proxy is stopped or gone and the volume `zekno-proxy-data` is there, the same deletion runs in a short-lived container of the pinned image that mounts the volume, with no network and no capability (security review S2). No OCSP staple is deleted: the glob reached another domain's, and Let's Encrypt has none any more (S5).
 2. Disconnect the proxy from the route network of an app that has no route any more. Leaving comes after loading.
 3. Remove the route network of an app with no route and no health check, once its containers are disconnected from it.
 4. When no app has a route: `docker rm -f zekno-proxy`. The volumes and the proxy's own network stay.
@@ -92,12 +91,12 @@ A failure here is not reported in the outcome; the next deploy with routes or th
 
 ## RN11. The health wait
 
-For each service of the signed `health`, in order, send the event `health` with the service, then:
+Before the first check with a path, the pinned image is looked for once (`docker image inspect`) and pulled only when it is missing, for at most 5 minutes, which do not count against the limit; a pull that fails makes the first service with a path `unhealthy`. For each service of the signed `health`, in order, send the event `health` with the service, then:
 
-- **With `http`**: for each container's name, `docker run --rm --network zekno-route-<app> --read-only --cap-drop ALL --security-opt no-new-privileges --user 65534:65534 --memory 32m --pids-limit 16 <image> curl -sS -o /dev/null --max-time 5 --max-filesize 1024 --proto =http -w '%{http_code}|%{exitcode}' http://<name>:<port><path>`. Healthy: curl's exit is 0 or 63 and the status is 200 to 399. The path has matched the path rule; the URL is one argument.
+- **With `http`**: for each container's name, `docker run --rm --network zekno-route-<app> --read-only --cap-drop ALL --security-opt no-new-privileges --user 65534:65534 --memory 32m --pids-limit 16 --dns-search . <image> curl -sS -o /dev/null --max-time 5 --max-filesize 1024 --proto =http -w '%{http_code}|%{exitcode}' http://<name>:<port><path>`. Healthy: curl's exit is 0 or 63 and the status is 200 to 399. The path has matched the path rule; the URL is one argument.
 - **Without**: `docker inspect` of each container: running and, if it has a health check, `healthy`; if it has none, running with the same restart count 10 seconds later.
 
-One round every 2 seconds until every container of every listed service is healthy, or `timeout` seconds have passed since `up` returned. Not in time: the outcome is `unhealthy` with the service that was not healthy and whether its check had a path. Nothing is stopped, rolled back or released.
+One round every 2 seconds until every container of every listed service is healthy, or `timeout` seconds have passed since `up` returned. The limit is looked at before each container, and a check is given the time left, at most 30 seconds (security review S3). Not in time: the outcome is `unhealthy` with the service that was not healthy and whether its check had a path. Nothing is stopped, rolled back or released.
 
 ## RN12. The outcome
 

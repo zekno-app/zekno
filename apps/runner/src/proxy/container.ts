@@ -15,13 +15,30 @@ import type { RunnerReport } from "@workspace/core"
 
 import { inspectContainer, inspectNetwork, LABEL } from "../docker/objects"
 import { runDocker } from "../docker/run"
-import { proxyFolder } from "../home/home"
+import { etcMount } from "./file"
 import { PROXY_IMAGE } from "./image"
 import { countLines, noteTime, PROXY, serving, waitForLine } from "./log"
 import { portNamed, publishArgs, testSwitch } from "./switch"
 
 /** The proxy's own network: it shares no network with other containers but the route networks. */
 const PROXY_NETWORK = "zekno-proxy"
+/** The proxy's volumes: certificates and keys on `/data`, what Caddy saved on `/config`. */
+export const DATA_VOLUME = "zekno-proxy-data"
+const CONFIG_VOLUME = "zekno-proxy-config"
+/**
+ * The proxy's log, kept by Docker's `local` driver in at most three files of
+ * 10 MB, so nothing a visitor makes Caddy write can fill the disk; `docker
+ * logs` reads it as it reads the default driver's (security review S1). A
+ * proxy made before these options keeps its own until it is made again.
+ */
+const LOG_OPTIONS = [
+  "--log-driver",
+  "local",
+  "--log-opt",
+  "max-size=10m",
+  "--log-opt",
+  "max-file=3",
+]
 /** How long `docker run` may take: the first one pulls the pinned image. */
 const RUN_MS = 10 * 60_000
 /** How long a started proxy has to say it serves its file (RN6). */
@@ -109,15 +126,16 @@ export type Ensured =
   { ok: true; started: boolean } | { ok: false; failure: RoutesFailure }
 
 /**
- * Makes sure this runner's proxy runs from the pinned image (RN6). `write`
- * writes the configuration of RN7 and is called before any start, so the
- * proxy never starts on an old file. `started` says the proxy was started on
- * that file now, and so needs no signal to load it (RN8).
+ * Makes sure this runner's proxy runs from the pinned image (RN6). `prepare`
+ * puts the configuration of RN7 in place once Caddy has validated it, and is
+ * called before any start, so the proxy never starts on an old file nor on
+ * one that was not validated (security review S7). `started` says the proxy
+ * was started on that file now, and so needs no signal to load it (RN8).
  */
 export async function ensureProxy(
   dir: string,
   server: string,
-  write: () => boolean
+  prepare: () => Promise<boolean>
 ): Promise<Ensured> {
   const ports = testSwitch()
   if (ports === "invalid") return { ok: false, failure: NOT_LOADED }
@@ -133,7 +151,7 @@ export async function ensureProxy(
 
   if (found.kind === "ours") {
     if (found.running) return { ok: true, started: false }
-    if (!write()) return { ok: false, failure: NOT_LOADED }
+    if (!(await prepare())) return { ok: false, failure: NOT_LOADED }
     const since = noteTime()
     const before = await countLines(dir, since, serving)
     const start = await runDocker(dir, ["start", PROXY])
@@ -144,11 +162,10 @@ export async function ensureProxy(
       : { ok: false, failure: NOT_LOADED }
   }
 
-  const folder = proxyFolder(dir)
-  // `--mount` reads its value as CSV: a folder whose path would change its meaning is not mounted.
-  if (/[,"\n]/.test(folder) || !(await ensureProxyNetwork(dir, server)))
+  const mount = etcMount(dir)
+  if (mount === undefined || !(await ensureProxyNetwork(dir, server)))
     return { ok: false, failure: NOT_LOADED }
-  if (!write()) return { ok: false, failure: NOT_LOADED }
+  if (!(await prepare())) return { ok: false, failure: NOT_LOADED }
   const since = noteTime()
   const run = await runDocker(
     dir,
@@ -163,15 +180,19 @@ export async function ensureProxy(
       `${LABEL.role}=proxy`,
       "--restart",
       "unless-stopped",
+      ...LOG_OPTIONS,
       "--network",
       PROXY_NETWORK,
+      // No search domain of the host's: a name of a container that is down is never completed into one outside.
+      "--dns-search",
+      ".",
       ...publishArgs(ports),
       "-v",
-      "zekno-proxy-data:/data",
+      `${DATA_VOLUME}:/data`,
       "-v",
-      "zekno-proxy-config:/config",
+      `${CONFIG_VOLUME}:/config`,
       "--mount",
-      `type=bind,source=${folder},target=/etc/zekno-proxy,readonly`,
+      mount,
       "--cap-drop",
       "ALL",
       "--cap-add",

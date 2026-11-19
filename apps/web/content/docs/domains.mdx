@@ -372,6 +372,10 @@ What deploy 41 ran has no service named web, which shop.example.com reaches. Rem
 - **The proxy reaches a container by its name**, on the app's route network,
   looked up at each connection. A container that restarts is followed. While
   it is down, requests for its domain get an error.
+- **The app is told the visitor's address by the proxy.** The proxy sets
+  `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host` itself, in
+  place of what a visitor sent, and removes a visitor's `X-Real-Ip` and
+  `Forwarded` headers. The proxy does not log requests.
 - **A new configuration is loaded only when it differs** from the one in
   force. Each load can drop a few new connections; requests already running
   are not cut. If the proxy does not take it, the configuration it had stays

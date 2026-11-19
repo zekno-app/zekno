@@ -9,8 +9,9 @@
  * the way Docker does.
  *
  * Since feature 015 (contracts/runner.md, "Tests"), `network`, `run`,
- * `exec`, `logs`, `inspect`, `rm`, `start` and `compose -p <project> ps -q
- * <service>` are answered by a model of Docker (`stand-in.ts`, `model.ts`)
+ * `exec`, `logs`, `inspect`, `rm`, `start`, `volume`, `image`, `pull` and
+ * `compose -p <project> ps -q <service>` are answered by a model of Docker
+ * (`stand-in.ts`, `stand-in-proxy.ts`, `model.ts`)
  * that a test can script, and are recorded with the other calls, in order.
  * Every other call still behaves as `up` does, as it always has.
  */
@@ -85,7 +86,7 @@ export function fakeDocker() {
     `#!/bin/sh
 d="${dir}"
 case "$1" in
-  network|run|exec|logs|inspect|rm|start) ${record}; ${standIn} ;;
+  network|run|exec|logs|inspect|rm|start|volume|image|pull) ${record}; ${standIn} ;;
 esac
 if [ "$1" = "compose" ] && [ "$4" = "ps" ] && [ "$5" = "-q" ]; then ${record}; ${standIn}; fi
 if [ "$4" = "ps" ] || [ "$4" = "logs" ]; then
@@ -257,6 +258,12 @@ exit 0
     /** Adds a network, such as one of the runner's names that it did not make. */
     network(name: string, labels: Record<string, string> = {}) {
       changeModel(dir, (model) => model.networks.push({ name, labels }))
+    },
+    /** Removes a named volume, as `docker volume rm` would. */
+    removeVolume(name: string) {
+      changeModel(dir, (model) => {
+        model.volumes = model.volumes.filter((each) => each !== name)
+      })
     },
     /** What the next calls do (`model.ts`, `Script`), added to what was said before. */
     script(change: Script) {

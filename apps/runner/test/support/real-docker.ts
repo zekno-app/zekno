@@ -120,15 +120,22 @@ function readAnswer(text: string): Answer {
   return { status, headers, body: end === -1 ? "" : text.slice(end + 4) }
 }
 
-const request = (domain: string) =>
-  `GET / HTTP/1.1\r\nHost: ${domain}\r\nConnection: close\r\n\r\n`
+const request = (domain: string, headers: Record<string, string> = {}) =>
+  `GET / HTTP/1.1\r\nHost: ${domain}\r\n${Object.entries(headers)
+    .map(([name, value]) => `${name}: ${value}\r\n`)
+    .join("")}Connection: close\r\n\r\n`
 
 /**
  * GET / of `domain` over HTTPS at the proxy's port, with the domain as the
  * server name and `ca` as the only authority trusted: an answer only when the
- * certificate is valid for that domain.
+ * certificate is valid for that domain. `headers` are sent as a visitor
+ * would, forged ones among them.
  */
-export function httpsGet(domain: string, ca: string): Promise<Answer> {
+export function httpsGet(
+  domain: string,
+  ca: string,
+  headers: Record<string, string> = {}
+): Promise<Answer> {
   return new Promise((resolve) => {
     let text = ""
     let san: string | undefined
@@ -147,7 +154,7 @@ export function httpsGet(domain: string, ca: string): Promise<Answer> {
     const timer = setTimeout(() => done({ error: "timed out" }), 5000)
     socket.on("secureConnect", () => {
       san = socket.getPeerCertificate().subjectaltname
-      socket.write(request(domain))
+      socket.write(request(domain, headers))
     })
     socket.on("data", (chunk: Buffer) => (text += chunk.toString("utf8")))
     socket.on("end", () => {
@@ -189,3 +196,45 @@ export async function until<T>(
     await Bun.sleep(500)
   }
 }
+
+// The apps the set deploys: the pinned image answering with `caddy respond`.
+
+/** A service of the pinned image answering with `caddy respond`. */
+const service = (name: string, ...answer: string[]) =>
+  `  ${name}:\n    image: ${PROXY_IMAGE}\n    pull_policy: never\n    command: ${JSON.stringify(["caddy", "respond", "--listen", ":8080", ...answer])}\n`
+const compose = (...services: string[]) => `services:\n${services.join("")}`
+// Caddy fills the placeholders for each request: app A shows what it was sent.
+const ECHO =
+  "xri=[{http.request.header.X-Real-Ip}] fwd=[{http.request.header.Forwarded}] xff=[{http.request.header.X-Forwarded-For}]"
+export const WEB_A = compose(service("web", "--body", `hello from A ${ECHO}`))
+export const WEB_B = compose(service("web", "--body", "hello from B"))
+export const CHECKED = compose(
+  service("ok", "--body", "ok"),
+  service("bad", "--status", "500", "--body", "bad"),
+  service(
+    "moved",
+    "--status",
+    "302",
+    "--header",
+    "Location: http://nowhere.invalid/",
+    "--body",
+    "moved"
+  )
+)
+
+/** The status of an answer, 0 when there was none. */
+export const status = (answer: Answer) =>
+  "status" in answer ? answer.status : 0
+/** The body of an answer, empty when there was none. */
+export const body = (answer: Answer) => ("body" in answer ? answer.body : "")
+/** Whether what the proxy's Caddy saved holds `nonce`. */
+export const saved = (nonce: string) =>
+  docker(
+    "exec",
+    "zekno-proxy",
+    "grep",
+    "-q",
+    "-F",
+    nonce,
+    "/config/caddy/autosave.json"
+  ).code === 0

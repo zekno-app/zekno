@@ -13,6 +13,12 @@
  *
  * Without a path, Docker's own word: running, and `healthy` when the
  * container has a health check of its own.
+ *
+ * A check is given at most the time the wait has left, and never more than
+ * 30 seconds, so one slow check cannot carry the wait past its limit; the
+ * image is on the machine by then (security review S3). Its container has no
+ * search domain of the host's, so a name that is not there is never
+ * completed into one outside.
  */
 import { isHealthPath } from "@workspace/core"
 
@@ -23,18 +29,23 @@ import { routeNetwork } from "../routes/network"
 
 /** A container's name on a route network, as the runner makes them. */
 const NAME = /^z[0-9a-f]{32}$/
-/** How long one check's container may take: the first one pulls the pinned image when the proxy has not. */
-const CHECK_MS = 10 * 60_000
+/** The most one check's container may take: curl gives up after 5 seconds, and a container starts in well under one. */
+const CHECK_MS = 30_000
 
-/** Whether `path` on `port` of the container named `name` answers as healthy. */
+/**
+ * Whether `path` on `port` of the container named `name` answers as healthy
+ * within `timeoutMs`, which is cut to 30 seconds.
+ */
 export async function answersHealthy(
   dir: string,
   app: string,
   name: string,
-  http: { port: number; path: string }
+  http: { port: number; path: string },
+  timeoutMs: number
 ): Promise<boolean> {
   const { port, path } = http
   if (
+    timeoutMs <= 0 ||
     !NAME.test(name) ||
     !isHealthPath(path) ||
     !Number.isInteger(port) ||
@@ -49,6 +60,8 @@ export async function answersHealthy(
       "--rm",
       "--network",
       routeNetwork(app),
+      "--dns-search",
+      ".",
       "--read-only",
       "--cap-drop",
       "ALL",
@@ -76,7 +89,7 @@ export async function answersHealthy(
       // One argument: the path has matched the path rule.
       `http://${name}:${port}${path}`,
     ],
-    { timeoutMs: CHECK_MS }
+    { timeoutMs: Math.min(timeoutMs, CHECK_MS) }
   )
   const said = /^(\d{3})\|(\d{1,3})$/.exec(result.stdout.trim())
   if (!said) return false

@@ -8,16 +8,18 @@
  */
 import type { AppRoutes } from "@workspace/core"
 
-import { readProxyConfig, writeProxyConfig } from "../home/home"
+import { readProxyConfig } from "../home/home"
 import { routeNetwork } from "../routes/network"
 import { buildConfig, sameApartFromNonce } from "./config"
 import { ensureProxy, findProxy, type RoutesFailure } from "./container"
-import { joinNetworks, loadConfig } from "./load"
+import { placeConfig } from "./file"
+import { joinNetworks, loadConfig, type Loaded } from "./load"
 import { testSwitch } from "./switch"
 
 /**
  * Whether the proxy serves the routes; when not, why, and whether a load was
- * tried (RN8), after which the file in place may not be the state's.
+ * tried (RN8) that replaced the file in place, which may then not be the
+ * state's. A file Caddy refused never replaces it (security review S7).
  */
 export type Served =
   { ok: true } | { ok: false; failure: RoutesFailure; tried: boolean }
@@ -27,7 +29,8 @@ const notLoaded = (tried: boolean): Served => ({
   failure: { failure: "not_loaded" },
   tried,
 })
-const loaded = (ok: boolean): Served => (ok ? { ok: true } : notLoaded(true))
+const served = (loaded: Loaded): Served =>
+  loaded === "loaded" ? { ok: true } : notLoaded(loaded === "replaced")
 
 /** The apps with a route, sorted: the route networks the proxy needs to be on. */
 export const routedApps = (routes: Readonly<Record<string, AppRoutes>>) =>
@@ -62,19 +65,15 @@ export async function serveRoutes(
   const networks = routedApps(routes).map(routeNetwork)
 
   if (networks.length > 0) {
-    const ensured = await ensureProxy(dir, server, () => {
-      try {
-        writeProxyConfig(dir, config.text)
-        return true
-      } catch {
-        return false
-      }
-    })
+    // Before any start, the file is validated with no proxy to run it in.
+    const ensured = await ensureProxy(dir, server, () =>
+      placeConfig(dir, config.text, "alone")
+    )
     // Nothing was loaded: a proxy that did not start serves nothing, and one of another server's is not touched.
     if (!ensured.ok)
       return { ok: false, failure: ensured.failure, tried: false }
     if (ensured.started)
-      return loaded(await loadConfig(dir, config, networks, { started: true }))
+      return served(await loadConfig(dir, config, networks, { started: true }))
   } else {
     const found = await findProxy(dir, server)
     if (found?.kind !== "ours" || !found.running) return { ok: true }
@@ -82,7 +81,7 @@ export async function serveRoutes(
   // Each load drops a few new connections: the same file is not loaded again (research R6).
   if (sameApartFromNonce(config.text, readProxyConfig(dir)))
     return (await joinNetworks(dir, networks)) ? { ok: true } : notLoaded(false)
-  return loaded(await loadConfig(dir, config, networks))
+  return served(await loadConfig(dir, config, networks))
 }
 
 /**

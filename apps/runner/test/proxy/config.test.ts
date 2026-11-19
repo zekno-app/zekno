@@ -26,6 +26,7 @@ function whole(routes: unknown[], issuer: "acme" | "internal" = "acme") {
           level: "INFO",
           writer: { output: "stderr" },
           encoder: { format: "json" },
+          exclude: ["http.log.error", "http.log.access"],
         },
       },
     },
@@ -81,6 +82,7 @@ const route = (domain: string, dials: string[]) => ({
   handle: [
     {
       handler: "reverse_proxy",
+      headers: { request: { delete: ["X-Real-Ip", "Forwarded"] } },
       upstreams: dials.map((dial) => ({ dial })),
     },
   ],
@@ -160,6 +162,44 @@ describe("the configuration (RN7)", () => {
     )
     expect(sameApartFromNonce(first.text, other.text)).toBe(false)
     expect(sameApartFromNonce(first.text, undefined)).toBe(false)
+  })
+
+  test("security review S1: the default log leaves out the request loggers, so no visitor can write to the proxy's log; Caddy's own lines stay", () => {
+    const config = JSON.parse(build({ web }).text) as {
+      logging: {
+        logs: Record<string, { exclude?: string[]; include?: string[] }>
+      }
+    }
+    expect(Object.keys(config.logging.logs)).toEqual(["default"])
+    expect(config.logging.logs.default!.exclude).toEqual([
+      "http.log.error",
+      "http.log.access",
+    ])
+    // Caddy's core logger, which says a load worked or failed, is not left out.
+    expect(config.logging.logs.default!.include).toBeUndefined()
+  })
+
+  test("security review S8: each route deletes the request headers a visitor could forge and Caddy does not set itself", () => {
+    const config = JSON.parse(build({ web }).text) as {
+      apps: {
+        http: {
+          servers: {
+            zekno: { routes: { handle: Record<string, unknown>[] }[] }
+          }
+        }
+      }
+    }
+    const [proxied, last] = config.apps.http.servers.zekno.routes
+    expect(proxied!.handle[0]).toMatchObject({
+      handler: "reverse_proxy",
+      headers: { request: { delete: ["X-Real-Ip", "Forwarded"] } },
+    })
+    // X-Forwarded-For, -Proto and -Host are Caddy's own: it replaces what a visitor sent.
+    expect(JSON.stringify(proxied)).not.toContain("X-Forwarded")
+    expect(last!.handle[0]).toEqual({
+      handler: "static_response",
+      status_code: 404,
+    })
   })
 
   test("every domain, name and port is checked again here: one that does not match makes the build throw", () => {
