@@ -112,7 +112,7 @@ Waits for the maintainer's answer on the first group's name (M8) before `meta.js
 
 ## Phase 7: Review and proof on this machine
 
-- [ ] T087 An independent security review by an agent that wrote none of the code: the proxy's configuration and how it is built, the route networks and names, the health check's container, the test switch, the `proxy` and `status` requests, the DNS and HTTPS checks, `ssh -G`, the new commands; findings in `security-review.md`
+- [x] T087 An independent security review by an agent that wrote none of the code: the proxy's configuration and how it is built, the route networks and names, the health check's container, the test switch, the `proxy` and `status` requests, the DNS and HTTPS checks, `ssh -G`, the new commands; findings in `security-review.md`
 - [ ] T088 Fix what the review finds, each with a test that fails first
 - [ ] T089 A walkthrough: every board's scene drawn by the real program and compared (`design/walkthrough.md`)
 - [ ] T090 The as-built boards on the canvas, from real captures

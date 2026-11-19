@@ -1,0 +1,202 @@
+# Security Review: Domains and HTTPS
+
+Everything in [`specs/014-deploy-v2/security-review.md`](../014-deploy-v2/security-review.md) and the
+reviews of features 003 to 012 still applies, except where part 5 below says otherwise.
+
+This is not an external audit. One independent reviewer, who wrote none of this feature's code, read
+the committed source and ran its own probes on 2026-11-19. Nothing was fixed as part of the review
+(T087: record; T088 fixes, part 7). An external audit is still required before production use.
+
+## 1. Scope and method
+
+**Commits.** `c4f5e67` (core), `7e2ea25` (runner), `80c4514` and `7457ff5` (CLI) on
+`015-domains-https`; base `9278825`. The working tree held uncommitted work on the CLI's screens and
+on the docs; neither was reviewed.
+
+**Method.** Source first: for each candidate, the party with less trust, the input it controls, the
+control that should stop it, and the result, traced with file and line. Three probes, in a scratch
+folder outside the repository: local TLS servers on 127.0.0.1 against the CLI's probe; the runner's
+`loadConfig` against a stand-in for Docker; the certificate-deletion glob on a temporary tree. No
+real Docker, SSH, keychain or network.
+
+**Parties considered.** Those of feature 014's review, and one more: a visitor from the internet, who
+can send any request to ports 80 and 443 of a server that routes a domain.
+
+**Summary.** Nothing critical or high. No way was found for a party without the team's keys to change
+a route, and none for a deploy of app B to take or keep a domain app A holds: not by ordering, a
+failed load, `start_failed`, a rollback, the way back (RN9), a crash between steps, or a version-1
+deploy. The worst finding is S1, of medium severity: a visitor can make a route change fail.
+
+## 2. Findings
+
+| # | Severity | Finding |
+|---|---|---|
+| S1 | Medium | Visitors write to the proxy's log, which has no bound, and the runner reads only its first 1 MiB to confirm a reload |
+| S2 | Low | A released domain's certificate and key stay on disk when the proxy is not running |
+| S3 | Low | The health wait can run a full round past its limit, each check allowed ten minutes, under the deploy lock |
+| S4 | Note | A rollback signs routes taken from an answer nobody signed |
+| S5 | Note | The glob that deletes OCSP staples matches another domain's |
+| S6 | Note, open by design | A signed Compose text of any app can pose as the runner's own objects |
+| S7 | Note | The configuration is written before it is validated |
+| S8 | Note | Ranges counted as public; a zone in an address; headers a visitor can forge |
+
+### S1. A visitor can make a route change fail (Medium)
+
+**Who.** Any visitor from the internet, with no credentials, against the proxy and the runner.
+
+**Path.** The generated configuration logs at INFO, Caddy's `http.log.error` included
+(`apps/runner/src/proxy/config.ts`), and the proxy's container is started with no bound on its log
+(`proxy/container.ts`). Each request that fails at the proxy becomes one log line carrying the
+request and its headers; the feature's own research counted 394 such lines while a name was dead.
+A reload is confirmed by reading `docker logs --since` (`proxy/log.ts`) through the Docker helper,
+which keeps the first 1 MiB of an output (`docker/run.ts`). With more than 1 MiB of error lines
+before Caddy's `successfully reloaded` line, the line is never seen, the load counts as failed after
+15 seconds, and the nonce is never looked for.
+
+**Result.** While a deploy replaces a routed container its old name is dead, so each request to the
+domain is a logged 502. The failed load makes the outcome `routes_failed`, and the way back loads the
+configuration of the state, whose names belong to the containers `up` just removed. The domain then
+answers 502 until a deploy gets through, and the flood blocks each later route change on the server.
+Not run: Docker's default log driver does not rotate, so the same lines can fill the disk.
+
+**Probe.** The real `loadConfig` against a stand-in: 0.8 MB of error lines then the reload line gave
+`loaded: true` in 617 ms; 1.2 MB gave `loaded: false` after 15 seconds and 60 reads of the log.
+
+**Fix proposed.** Leave the request loggers out of the default log; bound the container's log;
+make the nonce decisive and use the log only to stop early on a failed reload.
+
+### S2. A released domain's key can stay on disk (Low)
+
+`routes/apply.ts` deletes a released domain's certificate folder only when the proxy runs, and the
+result is not looked at. When the last domain goes, a stopped proxy stays stopped and is then
+removed; the volume keeps the key. Decided point 7 ("deleted with the release") then does not hold,
+and neither `proxy` nor the next deploy knows what is still to delete. **Fix proposed:** when the
+proxy does not run, delete through a short-lived container of the pinned image that mounts the
+volume.
+
+### S3. The health wait can overrun its limit (Low)
+
+`health/wait.ts` checks the deadline only after each container of a service was tried, and
+`health/check.ts` allows each `docker run` ten minutes so that a missing image can be pulled. A
+stalled pull costs up to 16 times ten minutes for one round, with the deploy lock held. With Docker
+behaving normally the overrun is about 16 times 5 seconds. **Fix proposed:** check the deadline
+before each container; cap each check at the time left; pull once, with its own bound.
+
+### S4. A rollback signs routes the server reports (Note)
+
+`ops/deploy-domains.ts` takes a rollback's routes from `status` with routes, which no one signed. A
+runner that claims protocol 3 gets a rollback with no routes; a runner of protocol 4 gets a rollback
+with any routes it names, when the old Compose text has those services and ports. A lying server
+gains nothing on its own proxy. A party that answers for a server it is not, and can hand the deploy
+to the real runner, gets a deploy signed by a member that releases the app's domains or claims free
+ones; K10b still keeps it from another app's domain. **Fix proposed:** stop a rollback before
+signing when this machine's verified history holds routes for the app and the runner does not answer
+routes.
+
+### S5. The OCSP glob (Note)
+
+`"/data/caddy/ocsp/<domain>-"*` also matches staples of a domain that begins with `<domain>-`:
+releasing `a.example.co` deleted the staple of `a.example.co-op.example.com` in the probe. Its
+certificate folder was untouched. No effect today: Let's Encrypt has no OCSP any more. **Fix
+proposed:** drop that part.
+
+### S6. A signed Compose text can pose as the runner's objects (Note, open by design)
+
+The runner does not read the Compose text. A text a member signed for any app can therefore: name a
+container `zekno-proxy` (without the runner's labels, each route change fails `not_loaded`; with
+them and the pinned image, the runner would adopt it); declare or join `zekno-route-<app>`; mount
+`zekno-proxy-data` and read each domain's TLS key. `com.docker.compose.*` labels are closed, as far
+as the research shows: Compose overwrites them, so a text cannot make its container count as another
+app's service. The random names are not secret from other users of the server: they are arguments of
+`docker network connect` and of the health check's `docker run`.
+
+All of it needs a member's signature, which the design of deploy version 2 (part 2.6) already makes
+equal to root on the server. **Proposed:** say in the README and the security page that an app's
+Compose text can read each domain's key.
+
+### S7. Written before validated (Note)
+
+`proxy/load.ts` writes `caddy.json` and then validates it. If validation fails and the way back
+fails before it writes, the invalid file stays and Caddy cannot start at its next restart. **Fix
+proposed:** validate a second file, then rename it.
+
+### S8. Smaller notes
+
+- `domains/ip.ts` counts as public: 0.0.0.0/8, `::`, 255.255.255.255, multicast, 198.18.0.0/15,
+  and the NAT64 and 6to4 forms.
+- `domains/server-address.ts` keeps the text after `%` of an IPv6 address and shows it. Only the
+  person's own SSH configuration can supply it.
+- Caddy passes a visitor's `X-Real-Ip` and `Forwarded` headers through; an app that trusts them is
+  told a forged address.
+
+## 3. Checked and found sound
+
+- **The configuration.** Built by `JSON.stringify` of an object; each domain, name and port checked
+  again in that module; admin off; one listener on `:443`; a fixed issuer; each domain's route
+  terminal and a last 404. App and service names are never written into it. Nothing of a deploy, the
+  state, Docker's output or the environment reaches it, but the test switch's yes or no.
+- **The domain rule.** Refuses `xn--`, upper case, wildcards, braces, addresses, special-use names;
+  the reader enforces routes sorted and once each.
+- **Who holds a domain.** K10b runs before the secrets and before the number is used. The strict
+  state refuses a domain held twice or an app not at format 2, and is applied again before any
+  configuration is built. The way back uses the state as read under the lock. A crash between load
+  and save leaves only the deploying app's own unsaved routes in the proxy.
+- **Version 1 and the state's marks.** An app with routes is at format 2; a version-1 deploy keeps
+  routes as they are; an older runner refuses mark 3.
+- **Containers and names.** Only containers Compose labelled for the project and service count; host
+  networking is refused; names come from 16 random bytes and are kept only when Docker shows them.
+- **The proxy's container.** Pinned digest; label check; no Docker socket; all capabilities dropped
+  but binding low ports; no new privileges; the folder mounted read-only.
+- **The one shell.** The domain is matched again before it is put in double quotes; no quote, `$` or
+  backtick can enter.
+- **The reload.** Sent by `docker exec … kill`. A faked or stale "reloaded" line cannot make a load
+  count: Caddy escapes request text in its JSON, only PID 1 writes the log, and the nonce is new each
+  time.
+- **The health check.** The host is the runner's name; the path rule fixes the authority and has no
+  character curl expands; no redirects, HTTP only, 5 seconds, 1 KiB, read-only, no capabilities,
+  bounded memory and processes; the output parsed strictly.
+- **The test switch.** Read from the runner's own environment only; fails closed on a bad value. Set
+  on a real server it costs availability (certificates browsers refuse), not confidentiality.
+- **The session.** `status`'s input is strict, `proxy` takes none, frames are bounded. Without keys a
+  session learns each app's domains and the proxy's state, and can make the runner start, reload or
+  remove the proxy as the state says; it cannot make the proxy do what no signed deploy put in force.
+- **The CLI's effects.** `ssh -G -T --` leaves no room for an option; three keys are read. DNS
+  answers are kept only when they are addresses, at most 32. "Valid" needs both `authorized` and
+  `checkServerIdentity`: self-signed, an untrusted CA and a wrong name were each `invalid` in the
+  probe.
+- **A hostile project folder.** `zekno domain` looks up only domains the server holds for the app
+  and the file still has; `add` and `rm` look up only the linked server's host. Values of the file
+  are checked against their rules before they are shown.
+- **Text from the runner.** Domains, app and service names follow their rules; of a certificate only
+  its last day is shown.
+
+## 4. Could not be decided from source
+
+1. **Search domains.** Neither the proxy nor the check's container is started with
+   `--dns-search .`. If a routed container is down, Docker's resolver may pass its name upstream,
+   and the host's search domains would then be tried. A search zone that answers each name would be
+   sent visitors' requests. Decided on a Linux server: `docker exec zekno-proxy cat /etc/resolv.conf`.
+2. What exactly Caddy 2.11.9 writes for a failed request, and how far HTTP/2 header compression
+   multiplies it (behind S1).
+3. What `docker logs --since` costs on a large log.
+4. That Compose on the versions servers run overwrites `com.docker.compose.*` labels a text sets.
+5. Whether `ssh -G` can print a host with a zone.
+
+## 5. Carried over
+
+Feature 014's S7 (which names with `xn--` labels may be routed) was left "open, for feature 015". It
+is closed: a label that starts `xn--` is refused by the domain rule, in the core library and so by
+the runner and the CLI (decided point 8), with the review's two probes as tests.
+
+Feature 014's S1 left the runner's bound on a claimed version deferred; this feature does not touch
+it, and it stays deferred.
+
+## 6. Not reviewed
+
+The CLI's screens and the full-screen app (being built), `apps/web`, the settings-to-Compose
+generator beyond routes and health, the gated tests with real Docker, the installer and the release,
+Caddy's own source, and anything only Docker on Linux shows.
+
+## 7. Answers
+
+Filled in as each finding is fixed (T088).
