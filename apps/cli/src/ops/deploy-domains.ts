@@ -2,21 +2,21 @@
  * What a deploy checks of its domains before anything is signed
  * (specs/015-domains-https, contracts/cli.md, CL3, "Before signing", steps 2
  * to 6; FR-010 to FR-014, FR-017, FR-019), once `status` was read on the
- * deploy's own connection, with the routes in force when the runner answers
- * them (step 2; ops/status.ts `askStatus`). Step 1, B10, is the format's
- * (deploy-format.ts). Every stop is a `CliError` thrown before the "checked"
- * stage, so nothing is signed or sent, a terminal says the sentence alone,
- * and the app shows `✖ Checked`.
+ * deploy's own connection, with the routes and health checks in force when
+ * the runner answers them (step 2; ops/status.ts `askStatus`). Step 1, B10,
+ * is the format's (deploy-format.ts). Every stop is a `CliError` thrown
+ * before the "checked" stage, so nothing is signed or sent, a terminal says
+ * the sentence alone, and the app shows `✖ Checked`.
  *
  * 2. B9: a domain of the deploy is another app's on the server.
  * 3. FR-017: each route's service is in the Compose text to be signed, with
  *    the route's port; B11 when not (a settings file's rules refuse it first:
  *    a guard).
- * 4. A rollback signs the routes the server holds for the app (R29), and the
- *    health check of the deploy in force when this machine signed it; B12
- *    when what the old deploy ran cannot be reached by one; B10 when the
- *    runner does not tell its routes and this machine signed one for the app
- *    before. No DNS check.
+ * 4. A rollback signs the routes and the health check the server holds for
+ *    the app (R29), whichever machine signed the deploy in force; B12 when
+ *    what the old deploy ran cannot be reached by one of those routes; B10
+ *    when the runner does not tell them and this machine signed a route or a
+ *    health check for the app before. No DNS check.
  * 5. Each domain the server does not hold for the app yet, in domain order,
  *    looked up from this machine: B13 (the server's address is not known),
  *    B7 (no record), B8 (elsewhere), else B1, the line before the panel.
@@ -41,7 +41,7 @@ import {
   sharedAddress,
   type Looked,
 } from "../domains/dns"
-import { routeFault } from "../domains/routes"
+import { isRouted, routeFault } from "../domains/routes"
 import {
   B10,
   B11,
@@ -58,7 +58,7 @@ import type { Server } from "../profile/profile"
 import { atMost } from "../shared/at-most"
 import { verifiedDeploys } from "../shared/views"
 import type { DeployCallbacks, DeployPlan } from "./deploy"
-import { routesOfApp, type HeldRoutes } from "./status"
+import { healthOfApp, routesOfApp, type HeldRoutes } from "./status"
 
 /** How many domains are looked up at the same time (contracts/cli.md, CL4). */
 export const LOOKUPS_AT_ONCE = 8
@@ -81,29 +81,13 @@ type Said =
   | { kind: "pointed"; domain: string; address: string }
 
 /**
- * The health check of the deploy in force, numbered `accepted` on the
- * server, as this machine signed and recorded it: none when this machine
- * did not sign that deploy, or recorded no answer to it (research R29).
- */
-function healthInForce(
-  team: Pick<Team, "store" | "trust">,
-  server: Server,
-  app: string,
-  accepted: number
-): Health | null {
-  const entry = verifiedDeploys(team, server, app).find(
-    (each) => each.deploy.sequence === accepted && each.outcome !== "sent"
-  )
-  return entry?.deploy.health ?? null
-}
-
-/**
- * Whether a rollback asks the runner for the routes in force (step 4): yes,
- * unless the deploy in force, numbered `accepted`, is one this machine
- * signed, the runner answered `started` or `unhealthy` (so its routes were
- * put in force), and it signed no route. Then the app holds none, and
- * `status` is asked as before (CL7). Its health check comes from this
- * machine's history either way (`healthInForce`).
+ * Whether a rollback asks the runner for the routes and the health check in
+ * force (step 4): yes, unless the deploy in force, numbered `accepted`, is
+ * one this machine signed, the runner answered `started` or `unhealthy` (so
+ * what it signed was put in force), and it signed neither a route nor a
+ * health check. Then the app holds neither, and `status` is asked as before
+ * (CL7). Whatever this machine signed with a route or a health check, the
+ * server is asked: its word, not this machine's history, decides both.
  */
 export function rollbackAsksRoutes(
   team: Pick<Team, "store" | "trust">,
@@ -116,22 +100,23 @@ export function rollbackAsksRoutes(
   )
   if (entry?.outcome !== "started" && entry?.outcome !== "unhealthy")
     return true
-  return (entry.deploy.routes?.length ?? 0) > 0
+  return isRouted(entry.deploy.routes, entry.deploy.health)
 }
 
 /**
- * Whether this machine ever signed a route for the app on this server. Such
- * a deploy is signed only for a runner that carries routes out, so a runner
- * that later says it does not is not believed: a rollback on its word would
- * sign the app's domains away (security-review.md, S4).
+ * Whether this machine ever signed a route or a health check for the app on
+ * this server. Such a deploy is signed only for a runner that carries them
+ * out, so a runner that later says it does not is not believed: a rollback
+ * on its word would sign the app's domains or its health check away
+ * (security-review.md, S4).
  */
-function signedRoutesBefore(
+function signedEitherBefore(
   team: Pick<Team, "store" | "trust">,
   server: Server,
   app: string
 ): boolean {
-  return verifiedDeploys(team, server, app).some(
-    (each) => (each.deploy.routes?.length ?? 0) > 0
+  return verifiedDeploys(team, server, app).some((each) =>
+    isRouted(each.deploy.routes, each.deploy.health)
   )
 }
 
@@ -197,35 +182,35 @@ function heldDomainSaid(
 
 /**
  * CL3's steps 2 to 6 for a deploy whose `status` was read (`held`: the
- * routes in force, when they were asked; `accepted`: its number for the
- * app; `answersRoutes`: the runner carries routes out, protocol 4). Throws
- * the first stop; says the warnings and B1 through `callbacks`. Gives what
- * the deploy signs of its domains.
+ * routes and the health checks in force, when they were asked;
+ * `answersRoutes`: the runner carries routes and health checks out,
+ * protocol 4). Throws the first stop; says the warnings and B1 through
+ * `callbacks`. Gives what the deploy signs of its domains and its health
+ * check.
  */
 export async function checkDomains(input: {
   deps: Pick<OpDeps, "resolveDomain" | "sshHost">
   plan: DeployPlan
   held: HeldRoutes | undefined
-  accepted: number
   answersRoutes: boolean
   /** The runner's version, as B10 names it; undefined for a runner run one request at a time. */
   runnerVersion?: string
   callbacks: Pick<DeployCallbacks, "warning" | "pointed">
 }): Promise<Domained> {
-  const { deps, plan, held, accepted, callbacks } = input
+  const { deps, plan, held, callbacks } = input
   const { team, server, app } = plan
   const inForce = routesOfApp(held, app)
   const rollback = plan.rollback === true
-  // A rollback's routes are the server's. A runner that does not tell them, for an app this machine signed a route for: B10.
-  if (rollback && !input.answersRoutes && signedRoutesBefore(team, server, app))
+  // A rollback's routes and health check are the server's. A runner that does not tell them, for an app this machine
+  // signed a route or a health check for: B10.
+  if (rollback && !input.answersRoutes && signedEitherBefore(team, server, app))
     throw new CliError(B10(server.name, input.runnerVersion))
-  // Step 4: a rollback keeps the routes and the health check in force now, never the old deploy's (FR-019, User Story 6).
+  // Step 4: a rollback keeps the routes and the health check in force now, never the old deploy's (FR-019, User Story
+  // 6): both as the server holds them for the app, which one signed deploy wrote together, whichever machine signed it.
+  // The check was read by the rules of a signed deploy's, and is read again as it is signed. One that names a service
+  // the old text lacks is signed as it is, as this machine's own record of it always was: the runner then says which.
   const routes = rollback ? inForce : (plan.routes ?? [])
-  const health = rollback
-    ? input.answersRoutes
-      ? healthInForce(team, server, app, accepted)
-      : null
-    : (plan.health ?? null)
+  const health = rollback ? healthOfApp(held, app) : (plan.health ?? null)
   const others = Object.entries(held?.routes ?? {}).filter(
     ([holder]) => holder !== app
   )

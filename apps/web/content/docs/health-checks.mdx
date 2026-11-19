@@ -131,8 +131,9 @@ At a terminal the commands are shown without the backquotes. With no
 terminal, the sentence is a line on standard error, in place of the line of
 a deploy that started.
 
-A rollback keeps the health check in force now, as this machine signed it,
-not the one of the earlier deploy (see
+A rollback keeps the health check in force now, as the server reports it,
+not the one of the earlier deploy, whichever machine signed the deploy in
+force (see
 [A rollback keeps the domains](/docs/domains#a-rollback-keeps-the-domains)).
 
 ## How the check is made

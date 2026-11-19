@@ -85,7 +85,13 @@ export {
   type RunnerState,
   type StoredRunnerState,
 } from "./deploy/state"
-export { domainHolders, domainsAfter, withAppRoutes } from "./deploy/routes"
+export {
+  domainHolders,
+  domainsAfter,
+  healthBytesAfter,
+  healthInForce,
+  withAppRoutes,
+} from "./deploy/routes"
 export { openSecrets } from "./deploy/open"
 export {
   createDeployV2,
@@ -104,6 +110,8 @@ export {
 export { buildKey } from "./deploy/later-fields"
 export {
   domainFault,
+  healthBytes,
+  HealthInForceSchema,
   HealthSchema,
   isHealthPath,
   isRoutableDomain,

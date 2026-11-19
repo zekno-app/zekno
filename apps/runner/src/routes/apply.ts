@@ -10,11 +10,13 @@
  * app's route network that only the runner hands out (RN5), the proxy is
  * brought up and onto that network (RN6), the configuration is built from the
  * state with this app's wanted routes and names in place of what it held
- * (RN7), and loaded (RN8). Then the state is saved, or the configuration of
- * the state as it is is loaded again (RN9). Last, what this deploy released
- * goes: certificates, the proxy's place on a network no route uses, the
- * route network of an app with neither a route nor a health check, and the
- * proxy itself when no app has a route (RN10).
+ * (RN7), and loaded (RN8). Then the state is saved, with the deploy's health
+ * check beside its routes, or the configuration of the state as it is is
+ * loaded again and the app keeps the routes and the health check it held
+ * (RN9). Last, what this deploy released goes: certificates, the proxy's
+ * place on a network no route uses, the route network of an app with neither
+ * a route nor a health check, and the proxy itself when no app has a route
+ * (RN10).
  */
 import {
   withAppRoutes,
@@ -118,11 +120,12 @@ async function steps({
       names[service] = named
     }
   }
-  // An app with neither a route nor a health check holds nothing.
+  // An app with neither a route nor a health check holds nothing. The routes and the health check are kept together,
+  // from this one signed deploy, so the entry never holds one deploy's routes with another's health check.
   const wanted: AppRoutes | null =
     routes.length === 0 && health === null
       ? null
-      : { routes: [...routes], names }
+      : { routes: [...routes], health, names }
 
   // RN6 to RN8, from the state with this app's wanted routes and names in place of what it held.
   let next: StoredRunnerState

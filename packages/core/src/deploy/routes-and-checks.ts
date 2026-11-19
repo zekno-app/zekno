@@ -8,7 +8,8 @@
  *
  * This module imports nothing of the deploy or of the messages: the stored
  * state (`state.ts`) and the answer to `status` (`protocol/session.ts`) read
- * routes by `RouteSchema` too.
+ * routes by `RouteSchema` and the health check in force by
+ * `HealthInForceSchema` too.
  */
 import { z } from "zod"
 
@@ -53,6 +54,28 @@ export const HealthSchema = z.strictObject({
     .max(LIMITS.healthServices),
 })
 export type Health = z.infer<typeof HealthSchema>
+
+/**
+ * A health check in force (specs/015-domains-https, contracts/core.md, "The
+ * state" and "`status` with routes"): by `HealthSchema`, with its services
+ * sorted and each once, as a signed deploy's are once read (F6). The runner
+ * keeps each app's by it, and the CLI reads the runner's answer by it before
+ * a rollback signs that check again.
+ */
+export const HealthInForceSchema = HealthSchema.refine((health) =>
+  health.services.every(
+    (entry, index) =>
+      index === 0 || health.services[index - 1]!.service < entry.service
+  )
+)
+
+/**
+ * Bytes the health checks in force take, by app, as the answer to `status`
+ * with routes writes them: at most `LIMITS.healthBytesPerServer` on one
+ * server, so that answer always fits its frame.
+ */
+export const healthBytes = (health: Readonly<Record<string, Health>>): number =>
+  new TextEncoder().encode(JSON.stringify(health)).length
 
 /** Names that never reach the public internet, or that this program keeps for itself (`zekno.invalid`). */
 const SPECIAL_USE = new Set([

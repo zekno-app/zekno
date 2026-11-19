@@ -17,6 +17,7 @@
  */
 import {
   domainsAfter,
+  healthBytesAfter,
   LIMITS,
   openSecrets,
   parseMessage,
@@ -165,14 +166,16 @@ export function deploy(
     })
     if (!verified.ok) return refused(verified.error.code)
 
-    // K15. What the runner would hold after it fits what it may hold and report,
-    // the domains of every app with this deploy's in place of the app's among them (RN2).
-    const { app, routes } = verified.value.deploy
+    // K15. What the runner would hold after it fits what it may hold and report, the domains and the health
+    // checks of every app with this deploy's in place of the app's among them (RN2).
+    const { app, routes, health } = verified.value.deploy
     if (
       !withinLimits(verified.value.nextState) ||
       !recordsFit(dir, verified.value) ||
       domainsAfter(verified.value.nextState, app, routes) >
-        LIMITS.domainsPerServer
+        LIMITS.domainsPerServer ||
+      healthBytesAfter(verified.value.nextState, app, health) >
+        LIMITS.healthBytesPerServer
     )
       return refused("too_large")
 

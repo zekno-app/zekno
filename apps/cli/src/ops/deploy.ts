@@ -331,7 +331,8 @@ export async function sendDeploy(
     checkIdentity(team, server, status)
     const numberOf = () =>
       Object.hasOwn(status.lastSequence, app) ? status.lastSequence[app]! : 0
-    // A rollback keeps the routes in force (CL3 step 4): asked again with them, unless this machine knows there are none.
+    // A rollback keeps the routes and the health check in force (CL3 step 4): asked again with them, unless this machine
+    // knows there are neither.
     if (
       plan.rollback === true &&
       answersRoutes(session) &&
@@ -352,7 +353,6 @@ export async function sendDeploy(
       deps,
       plan,
       held,
-      accepted,
       answersRoutes: answersRoutes(session),
       runnerVersion: session.runner?.version,
       callbacks,

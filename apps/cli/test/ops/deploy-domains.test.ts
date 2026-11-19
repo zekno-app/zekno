@@ -7,7 +7,7 @@
  * runs are in test/scenarios/domains-*.test.ts.
  */
 import { describe, expect, test } from "bun:test"
-import type { Route } from "@workspace/core"
+import type { Health, Route } from "@workspace/core"
 import { rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -80,7 +80,6 @@ async function check(
     held?: HeldRoutes
     dns?: Record<string, DnsAnswer>
     server?: { v4: string[]; v6: string[] } | undefined
-    accepted?: number
   } = {}
 ) {
   const asked = standIns(m.deps, {
@@ -91,8 +90,7 @@ async function check(
   const result = await checkDomains({
     deps: m.deps,
     plan,
-    held: given.held ?? { routes: {}, proxy: "none" },
-    accepted: given.accepted ?? 0,
+    held: given.held ?? { routes: {}, health: {}, proxy: "none" },
     answersRoutes: true,
     callbacks: {
       warning: (text) => said.push(`warning: ${text}`),
@@ -156,8 +154,7 @@ describe("the DNS check of new domains (CL3, step 5)", () => {
       checkDomains({
         deps: m.deps,
         plan,
-        held: { routes: {}, proxy: "none" },
-        accepted: 0,
+        held: { routes: {}, health: {}, proxy: "none" },
         answersRoutes: true,
         callbacks: {
           warning: (text) => said.push(text),
@@ -217,6 +214,7 @@ describe("domains the server holds for the app (CL3, step 6)", () => {
           ROUTE("c.example.com"),
         ],
       },
+      health: {},
       proxy: "running",
     }
     const { said, result } = await check(plan, m, {
@@ -238,7 +236,11 @@ describe("domains the server holds for the app (CL3, step 6)", () => {
   test("new domains are said first, then those held", async () => {
     const { m, plan } = await planOf(["a.example.com", "z.example.com"])
     const { said } = await check(plan, m, {
-      held: { routes: { shop: [ROUTE("a.example.com")] }, proxy: "running" },
+      held: {
+        routes: { shop: [ROUTE("a.example.com")] },
+        health: {},
+        proxy: "running",
+      },
       dns: { "a.example.com": pointsTo(ELSEWHERE) },
     })
     expect(said).toEqual([
@@ -258,9 +260,9 @@ describe("B9 and FR-017 (CL3, steps 2 and 3)", () => {
         plan,
         held: {
           routes: { blog: [ROUTE("shop.example.com")] },
+          health: {},
           proxy: "running",
         },
-        accepted: 0,
         answersRoutes: true,
         callbacks: {},
       })
@@ -287,7 +289,11 @@ describe("B9 and FR-017 (CL3, steps 2 and 3)", () => {
       ),
     ])
     const { result } = await check(plan, m, {
-      held: { routes: Object.fromEntries(others), proxy: "running" },
+      held: {
+        routes: Object.fromEntries(others),
+        health: {},
+        proxy: "running",
+      },
     })
     expect(result.overDomains).toBe(true)
     expect((await check(plan, m)).result.overDomains).toBe(false)
@@ -318,6 +324,7 @@ describe("a rollback (CL3, step 4; FR-019; User Story 6)", () => {
     }
     const held: HeldRoutes = {
       routes: { shop: [ROUTE("shop.example.com")] },
+      health: {},
       proxy: "running",
     }
     const { result, said, asked } = await check(rollback, m, {
@@ -340,5 +347,91 @@ describe("a rollback (CL3, step 4; FR-019; User Story 6)", () => {
         { held }
       )
     ).rejects.toThrow(B12(41, "web", "shop.example.com"))
+  })
+
+  /** A rollback of shop to what deploy 41 ran: web on 3000, and no worker. */
+  async function rollbackPlan() {
+    const { m, plan } = await planOf([])
+    const rollback: DeployPlan = {
+      ...plan,
+      rollback: true,
+      rollbackOf: 41,
+      compose:
+        'services:\n  web:\n    image: "ghcr.io/acme/shop-web:0.9.0"\n    expose: ["3000"]\n',
+    }
+    return { m, rollback }
+  }
+
+  test("signs the health check the server holds for the app, with its routes or with none; not another app's", async () => {
+    const { m, rollback } = await rollbackPlan()
+    const checked: Health = {
+      timeout: 120,
+      services: [{ service: "web", http: { port: 3000, path: "/health" } }],
+    }
+    const other: Health = {
+      timeout: 60,
+      services: [{ service: "api", http: null }],
+    }
+    const withRoute = await check(rollback, m, {
+      held: {
+        routes: { shop: [ROUTE("shop.example.com")] },
+        health: { blog: other, shop: checked },
+        proxy: "running",
+      },
+    })
+    expect(withRoute.result.routes).toEqual([ROUTE("shop.example.com")])
+    expect(withRoute.result.health).toEqual(checked)
+    // A health check and no domain: nothing looked up, nothing said.
+    const alone = await check(rollback, m, {
+      held: { routes: {}, health: { shop: checked }, proxy: "none" },
+    })
+    expect(alone).toEqual({
+      result: {
+        routes: [],
+        health: checked,
+        newDomains: [],
+        overDomains: false,
+      },
+      said: [],
+      asked: { ssh: [], dns: [], https: [] },
+    })
+    // The server holds none for shop: none is signed, whatever another app has.
+    const none = await check(rollback, m, {
+      held: { routes: {}, health: { blog: other }, proxy: "none" },
+    })
+    expect(none.result.health).toBeNull()
+  })
+
+  test("a check that names a service the old text lacks is signed as it is: no stop before signing", async () => {
+    const { m, rollback } = await rollbackPlan()
+    const worker: Health = {
+      timeout: 60,
+      services: [
+        { service: "web", http: null },
+        { service: "worker", http: null },
+      ],
+    }
+    const { result, said } = await check(rollback, m, {
+      held: { routes: {}, health: { shop: worker }, proxy: "none" },
+    })
+    expect(result.health).toEqual(worker)
+    expect(said).toEqual([])
+  })
+
+  test("a runner that does not tell what is in force: nothing of it is signed, and nothing stops an app this machine never signed either for", async () => {
+    const { m, rollback } = await rollbackPlan()
+    const result = await checkDomains({
+      deps: m.deps,
+      plan: rollback,
+      held: undefined,
+      answersRoutes: false,
+      callbacks: {},
+    })
+    expect(result).toEqual({
+      routes: [],
+      health: null,
+      newDomains: [],
+      overDomains: false,
+    })
   })
 })

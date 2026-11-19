@@ -7,14 +7,17 @@ import { describe, expect, test } from "bun:test"
 import {
   domainHolders,
   domainsAfter,
+  healthBytesAfter,
+  healthInForce,
   withAppRoutes,
 } from "../../src/deploy/routes"
+import { healthBytes } from "../../src/deploy/routes-and-checks"
 import { readRunnerState } from "../../src/deploy/state"
 import { CoreError } from "../../src/protocol/result"
 import { deepFreeze, world } from "../support/deploy-v2"
-import { appRoutes, holding, named, route } from "../support/routes"
+import { appRoutes, check, holding, named, route } from "../support/routes"
 
-/** `shop` with two domains, `blog` with one, `api` with a health check only, `old` at format 1. */
+/** `shop` with two domains and a health check, `blog` with one domain, `api` with a health check only, `old` at format 1. */
 async function held() {
   const w = await world()
   const state = holding(
@@ -24,9 +27,13 @@ async function held() {
       formats: { old: 1 },
     },
     {
-      shop: appRoutes(["shop.example.com", "www.shop.example.com"], 1),
+      shop: appRoutes(
+        ["shop.example.com", "www.shop.example.com"],
+        1,
+        check("web", "/health")
+      ),
       blog: appRoutes(["blog.example.com"], 2),
-      api: { routes: [], names: { api: [named(3)] } },
+      api: { routes: [], health: check("api"), names: { api: [named(3)] } },
     }
   )
   return deepFreeze(state)
@@ -69,6 +76,37 @@ describe("domainsAfter", () => {
     expect(domainsAfter(state, "api", [route("api.example.com")])).toBe(4)
     // A domain another app holds counts once: K10b refuses that deploy first.
     expect(domainsAfter(state, "new", [route("blog.example.com")])).toBe(3)
+  })
+})
+
+describe("healthInForce and healthBytesAfter", () => {
+  test("the health check in force of each app that has one, in order of the apps' names; none on a bare server", async () => {
+    const state = await held()
+    const health = healthInForce(state)
+    expect(health).toEqual({
+      api: check("api"),
+      shop: check("web", "/health"),
+    })
+    expect(Object.keys(health)).toEqual(["api", "shop"])
+    expect(healthInForce((await world()).state)).toEqual({})
+  })
+
+  test("the bytes they take as written, with one app's check replaced, added or removed", async () => {
+    const state = await held()
+    const now = healthBytes(healthInForce(state))
+    expect(now).toBe(JSON.stringify(healthInForce(state)).length)
+    expect(healthBytesAfter(state, "shop", check("web", "/health"))).toBe(now)
+    expect(healthBytesAfter(state, "shop", null)).toBe(
+      healthBytes({ api: check("api") })
+    )
+    expect(healthBytesAfter(state, "blog", check("web"))).toBe(
+      healthBytes({
+        api: check("api"),
+        blog: check("web"),
+        shop: check("web", "/health"),
+      })
+    )
+    expect(healthBytesAfter(state, "new", null)).toBe(now)
   })
 })
 
@@ -119,8 +157,9 @@ describe("withAppRoutes", () => {
       ["new", appRoutes(["new.example.com"], 8)],
       // A name another app has.
       ["blog", appRoutes(["blog.example.com"], 1)],
-      // Neither a route nor a name.
-      ["blog", { routes: [], names: {} }],
+      // Neither a route nor a health check, with names or without.
+      ["blog", { routes: [], health: null, names: {} }],
+      ["blog", { routes: [], health: null, names: { web: [named(2)] } }],
       ["Blog", appRoutes(["blog2.example.com"], 9)],
     ] as const)
       expect(() => withAppRoutes(state, app, entry)).toThrow(CoreError)

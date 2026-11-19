@@ -340,9 +340,10 @@ service a domain reaches, it stops before signing:
 What deploy 41 ran has no service named web, which shop.example.com reaches. Remove the domain first, or roll back to a deploy that has web. Nothing was signed.
 ```
 
-A runner older than protocol 4 does not tell its routes. On such a runner, a
-rollback of an app this machine has signed a domain for stops before
-anything is signed, with the sentence of a runner too old for domains (see
+A runner older than protocol 4 does not tell its routes or its health checks.
+On such a runner, a rollback of an app this machine has signed a domain or a
+health check for stops before anything is signed, with the sentence of a
+runner too old for domains (see
 [The check before a deploy](#the-check-before-a-deploy)).
 
 ## What the server holds

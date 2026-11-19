@@ -67,13 +67,13 @@ after its number is used:
   is rolled back.
 
 In a session, `deploy` sends a `health` event when it begins to wait for a service. `status` with
-the input `{"routes":true}` also answers the routes in force of each app that has any, and the
-proxy's state: `none`, `running`, `stopped`, `missing` or `other_image`. Without that input it
-answers as before, so every older zekno reads it. `proxy`, a new request, makes the proxy what the
-routes in force need, from the state alone: it starts the proxy, makes it again from the pinned
-image, loads its configuration when it differs, or removes it when no app has a route. It needs no
-signature, since it puts in force no route a signed deploy did not. `zekno server update` sends it
-after an update.
+the input `{"routes":true}` also answers the routes and the health check in force of each app that
+has either, which a rollback signs again, and the proxy's state: `none`, `running`, `stopped`,
+`missing` or `other_image`. Without that input it answers as before, so every older zekno reads
+it. `proxy`, a new request, makes the proxy what the routes in force need, from the state alone:
+it starts the proxy, makes it again from the pinned image, loads its configuration when it
+differs, or removes it when no app has a route. It needs no signature, since it puts in force no
+route a signed deploy did not. `zekno server update` sends it after an update.
 
 The runner itself still makes no connection of its own. The proxy connects to Let's Encrypt for
 certificates, and Docker fetches the proxy's pinned image the first time it is needed. The rules
@@ -99,7 +99,7 @@ CLI    closes its side
 | Request | Events | Result |
 |---------|--------|--------|
 | `version` | none | its version and protocol |
-| `status` | none | as the `status` command, or a refusal; with `{"routes":true}`, also the routes in force and the proxy's state |
+| `status` | none | as the `status` command, or a refusal; with `{"routes":true}`, also the routes and health checks in force and the proxy's state |
 | `setup` | none | as the `setup` command, or a refusal |
 | `sync` | none | as the `sync` command |
 | `apply` | `progress`: Docker's output, one line each | as the `apply` command |
@@ -175,7 +175,7 @@ that folder exists and belongs to them (a server set up by an earlier version); 
 |------|------|
 | `server.key` | This server's secret key. Mode `0600`. It never leaves the server. |
 | `server.pub` | This server's public key. |
-| `state.json` | The team list it trusts, the last deploy number per app, the latest version of each secret, and a version mark: `"v": 3`, each app's deploy format under `formats`, and under `routes` the routes in force of each app that has a domain or a health check, with the names it gave their containers. |
+| `state.json` | The team list it trusts, the last deploy number per app, the latest version of each secret, and a version mark: `"v": 3`, each app's deploy format under `formats`, and under `routes` the routes and the health check in force of each app that has a domain or a health check, both from the deploy that put them in force, with the names it gave their containers. |
 | `records/<app>/<hash>.json` | The latest record of each secret of an app deployed in format 2, named by the hash of its sealed value. Mode `0600`. |
 | `apps/<app>/compose.yaml` | The Compose file of the last accepted deploy. |
 | `proxy/etc/caddy.json` | The proxy's configuration, written whole by the runner. The proxy reads the folder read-only. |
@@ -241,9 +241,9 @@ or other detail of the server.
   app the runner held when it first read a state without the mark, and that has had no deploy in
   format 2 since. Any other is refused with `unsupported_version`, a word every older zekno can
   read. An app that holds a domain has had one, so a deploy in format 1 never releases it.
-- **Too much**: a deploy that would make it hold more than 1,024 apps, 8,192 secret versions or
-  1,024 domains, or keep more than 8,192 records or 64 MiB of them, is refused with `too_large`,
-  before anything is opened. So is a deploy that sends a record whose statement is longer than 4,096 characters.
+- **Too much**: a deploy that would make it hold more than 1,024 apps, 8,192 secret versions,
+  1,024 domains or 256 KiB of health checks, or keep more than 8,192 records or 64 MiB of them, is
+  refused with `too_large`, before anything is opened. So is a deploy that sends a record whose statement is longer than 4,096 characters.
 - **A request it cannot read**: one that does not match its message, is larger than 32 MiB, or
   asks for the logs of an app it never accepted a deploy of, is refused with `invalid_request`.
   The app name is checked against the app-name pattern before Docker sees it.

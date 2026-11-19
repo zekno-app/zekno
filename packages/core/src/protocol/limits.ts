@@ -81,6 +81,13 @@ export const LIMITS = {
   domainLength: 253,
   /** Domains in force on one server, across its apps (specs/015-domains-https, contracts/core.md). A runner refuses a deploy that would make it more. */
   domainsPerServer: 1024,
+  /**
+   * The health checks in force on one server, by app, as the answer to
+   * `status` with routes writes them (specs/015-domains-https,
+   * contracts/core.md), so that answer always fits its frame. A runner
+   * refuses a deploy that would make it more.
+   */
+  healthBytesPerServer: 256 * 1024,
   /** Sealed secret records one runner keeps, across its apps, as stored. A runner refuses a deploy that would make it more. */
   recordBytesPerServer: 64 * 1024 * 1024,
   /**

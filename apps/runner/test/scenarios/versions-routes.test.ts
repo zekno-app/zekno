@@ -98,6 +98,7 @@ describe('a state marked 2 (core.md, "The state")', () => {
 
     expect(await ask(w, "status", { routes: true })).toMatchObject({
       routes: {},
+      health: {},
       proxy: "none",
     })
     expect((await runner(w.home, w.docker.path, "status")).json).toMatchObject({

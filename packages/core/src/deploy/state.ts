@@ -6,7 +6,13 @@ import { SERVICE_NAME } from "../protocol/service-name"
 import { secretVersion } from "../secrets/secret-record"
 import { APP_NAME, SERVER_ID } from "../secrets/secrets"
 import { TeamTrustSchema, type TeamTrust } from "../team/roster"
-import { RouteSchema, type Route } from "./routes-and-checks"
+import {
+  healthBytes,
+  HealthInForceSchema,
+  RouteSchema,
+  type Health,
+  type Route,
+} from "./routes-and-checks"
 
 /**
  * What a runner remembers between deploys. The runner stores it; this library
@@ -86,18 +92,27 @@ export function readVersionOneState(state: RunnerState): RunnerState {
  * The state a runner of the signed deploy's version 2 keeps (contracts/
  * state.md, as specs/015-domains-https/contracts/core.md changes it). It is
  * today's state with a mark, each app's message format and, since feature
- * 015, the routes in force: mark 3. Any field runner 0.1.0 does not know
- * makes its strict read fail, so an older runner put back after this one has
- * written refuses everything; a runner of feature 014 refuses mark 3 too.
+ * 015, the routes and the health check in force: mark 3. Any field runner
+ * 0.1.0 does not know makes its strict read fail, so an older runner put back
+ * after this one has written refuses everything; a runner of feature 014
+ * refuses mark 3 too. No released runner wrote mark 3 before an app's entry
+ * held its health check, so a mark-3 entry without one is refused like any
+ * other field missing.
  */
 
 /** At most this many containers of one service are routed or checked (core.md, "The state"; runner.md, RN4). */
 export const CONTAINERS_PER_SERVICE = 16
 
-/** One app's routes in force, and the names the runner gave its containers. */
+/**
+ * One app's routes in force, its health check in force, and the names the
+ * runner gave its containers. The routes and the health check are written at
+ * the same moment, from the same signed deploy (runner.md, RN9).
+ */
 export type AppRoutes = {
   /** The routes in force, sorted by domain. */
   readonly routes: readonly Route[]
+  /** The health check of the deploy whose routes these are, or null when it had none. */
+  readonly health: Health | null
   /** For each routed or checked service: the containers found and the name given to each, sorted by container. */
   readonly names: Readonly<
     Record<
@@ -107,12 +122,12 @@ export type AppRoutes = {
   >
 }
 
-/** Today's state, with the mark, each app's format and the routes in force. */
+/** Today's state, with the mark, each app's format and the routes and health checks in force. */
 export type StoredRunnerState = RunnerState & {
   readonly v: 3
   /** Each app's message format: 1 while it may still take version 1, 2 after its first version-2 deploy. */
   readonly formats: Readonly<Record<string, 1 | 2>>
-  /** The routes in force of each app that has a route or a health check. */
+  /** The routes and the health check in force of each app that has a route or a health check. */
   readonly routes: Readonly<Record<string, AppRoutes>>
 }
 
@@ -132,7 +147,7 @@ const formats = z.record(
   z.union([z.literal(1), z.literal(2)])
 )
 
-/** The state of feature 014, marked 2: read as it was, then given no routes. */
+/** The state of feature 014, marked 2: read as it was, then given no routes and so no health check. */
 const MarkTwoSchema = z
   .strictObject({ v: z.literal(2), ...RunnerStateSchema.shape, formats })
   .refine((state) => sameKeys(state.formats, state.lastSequence))
@@ -140,6 +155,7 @@ const MarkTwoSchema = z
 const AppRoutesSchema = z
   .strictObject({
     routes: z.array(RouteSchema).max(LIMITS.routesPerDeploy),
+    health: HealthInForceSchema.nullable(),
     names: z.record(
       z.string().regex(SERVICE_NAME),
       z
@@ -160,18 +176,22 @@ const AppRoutesSchema = z
       sortedAndUnique(found.map((each) => each.container))
     )
   )
-  // An app with neither a route nor a name is not in `routes`.
+  // An app with neither a route nor a health check is not in `routes`; one
+  // with a health check and no route has the names of its checked containers.
   .refine(
     (entry) =>
       entry.routes.length > 0 ||
-      Object.values(entry.names).some((found) => found.length > 0)
+      (entry.health !== null &&
+        Object.values(entry.names).some((found) => found.length > 0))
   )
 
 /**
  * The rules of the routes across apps (core.md, "The state"): every app in
  * `routes` at format 2, so a version-1 deploy can never be taken for an app
  * that holds a domain (FR-036); no domain held by two apps, and at most
- * `LIMITS.domainsPerServer` in all; each name once in the whole state.
+ * `LIMITS.domainsPerServer` in all; each name once in the whole state; the
+ * health checks in force at most `LIMITS.healthBytesPerServer`, as the
+ * answer to `status` with routes writes them.
  */
 function routesHold(state: {
   readonly formats: Readonly<Record<string, 1 | 2>>
@@ -179,19 +199,25 @@ function routesHold(state: {
 }): boolean {
   const domains = new Set<string>()
   const names = new Set<string>()
+  const health: Record<string, Health> = {}
   let held = 0
   for (const [app, entry] of Object.entries(state.routes)) {
     if (!Object.hasOwn(state.formats, app) || state.formats[app] !== 2)
       return false
     for (const route of entry.routes) domains.add(route.domain)
     held += entry.routes.length
+    if (entry.health !== null) health[app] = entry.health
     for (const found of Object.values(entry.names))
       for (const each of found) {
         if (names.has(each.name)) return false
         names.add(each.name)
       }
   }
-  return domains.size === held && held <= LIMITS.domainsPerServer
+  return (
+    domains.size === held &&
+    held <= LIMITS.domainsPerServer &&
+    healthBytes(health) <= LIMITS.healthBytesPerServer
+  )
 }
 
 const StoredRunnerStateSchema = z
@@ -215,7 +241,8 @@ export function readMarked(value: unknown): StoredRunnerState {
 /**
  * Reads the state a runner read back from disk (ST1, as core.md changes it).
  * Marked 3, it is read strictly. Marked 2, as a runner of feature 014 wrote
- * it, it is read by that feature's strict rules and given no routes. Without
+ * it, it is read by that feature's strict rules and given no routes, so no
+ * health check in force either. Without
  * a mark, it is a state from before version 2: read by today's strict schema,
  * then marked in memory (ST2), each app with a number of 1 or more at format
  * 1 and each at 0 at format 2, and given no routes. Nothing is written by

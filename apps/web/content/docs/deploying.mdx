@@ -256,9 +256,10 @@ A rollback keeps the domains and the health check in force now, not those of
 the deploy it returns to, and makes no DNS check (see
 [A rollback keeps the domains](/docs/domains#a-rollback-keeps-the-domains)).
 It has one more stop: on a runner that does not carry out domains, a
-rollback of an app this machine has signed a domain for stops before
-anything is signed, with the sentence of a runner too old for domains and
-health checks (see [An older or a newer runner](#an-older-or-a-newer-runner)).
+rollback of an app this machine has signed a domain or a health check for
+stops before anything is signed, with the sentence of a runner too old for
+domains and health checks (see
+[An older or a newer runner](#an-older-or-a-newer-runner)).
 
 ```bash
 zekno rollback --app api --server prod --to 3

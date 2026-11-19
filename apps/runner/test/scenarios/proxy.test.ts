@@ -41,7 +41,7 @@ describe("status with routes (RN13)", () => {
     const w = await world()
     const today = await ask(w, "status")
     const answer = await ask(w, "status", { routes: true })
-    expect(answer).toEqual({ ...today, routes: {}, proxy: "none" })
+    expect(answer).toEqual({ ...today, routes: {}, health: {}, proxy: "none" })
     expect(parseMessage(RunnerStatusWithRoutesSchema, answer).ok).toBe(true)
   })
 

@@ -72,6 +72,7 @@ export const stateOf = (home: string) =>
       string,
       {
         routes: Route[]
+        health: Health | null
         names: Record<string, { container: string; name: string }[]>
       }
     >

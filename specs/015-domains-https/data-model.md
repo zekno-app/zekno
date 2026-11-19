@@ -19,20 +19,22 @@ Holds no address, no certificate and no key.
 | `routes[]` `{ domain, service, port }`, sorted by domain | each domain of each service, with that service's port |
 | `health` `{ timeout, services[] }` or `null` | the services with a health check, sorted; `timeout` the largest of theirs; `http: { port, path }` with a path, `null` without |
 
-A rollback signs the routes the server holds for the app, and the health check of the deploy this machine signed with the server's current number, if it has it.
+A rollback signs the routes and the health check the server holds for the app (its entry in the runner's state, as `status` with routes answers them), whichever machine signed the deploy in force.
 
 ## On the server: the runner's state (mark 3)
 
-`routes[app] = { routes: Route[], names: { [service]: { container, name }[] } }`. The routes **in force**: written only after the proxy loaded a configuration that has them. Who holds a domain is computed from it. Names are `z` and 32 hex characters, made by the runner, never by a deploy.
+`routes[app] = { routes: Route[], health: Health | null, names: { [service]: { container, name }[] } }`. The routes and the health check **in force**: written together, from one signed deploy, only after the proxy loaded a configuration that has those routes. Who holds a domain is computed from it. Names are `z` and 32 hex characters, made by the runner, never by a deploy. The health checks of all apps take at most 256 KiB as `status` with routes writes them.
 
 Transitions of an app's entry, each under the deploy lock:
 
 | From | Event | To |
 |---|---|---|
-| none | a deploy with routes or a health check reaches its start, and the configuration loads | the wanted routes and the names given |
-| any | the configuration does not load | unchanged (outcome `routes_failed`) |
-| routes | a deploy that leaves a domain out, loaded | the entry without it; its certificate deleted |
-| routes | a deploy with no route and no health check, loaded | none; its route network removed |
+| none | a deploy with routes or a health check reaches its start, and the configuration loads | the wanted routes, the deploy's health check and the names given |
+| any | the configuration does not load, or a container is not found (`routes_failed`) | unchanged: the routes and health check of the deploy that wrote it |
+| any | a deploy with a route or a health check, loaded, then not healthy in time (`unhealthy`) | that deploy's routes and health check: saved before the wait |
+| routes | a deploy that leaves a domain out, loaded | the entry without it, with that deploy's health check; its certificate deleted |
+| any | a deploy with routes and no health check, loaded | its routes, health check `null` |
+| any | a deploy with no route and no health check, loaded | none; its route network removed |
 | any | a deploy that stops before its start (refused, a failed check) | unchanged |
 
 ## On the server: the proxy

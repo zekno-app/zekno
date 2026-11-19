@@ -4,9 +4,9 @@
  * routes" and "`proxy`"), in a session only.
  *
  * `status` with the input `{ "routes": true }`: today's answer, the routes in
- * force of each app that has any, and the proxy's state. It changes nothing.
- * Without the input, `status` answers as it always did, so every older zekno
- * reads it.
+ * force of each app that has any, the health check in force of each app that
+ * has one, and the proxy's state. It changes nothing. Without the input,
+ * `status` answers as it always did, so every older zekno reads it.
  *
  * `proxy`: under the deploy lock, makes the proxy what the state needs, from
  * the state alone: started, made again from the pinned image, its
@@ -16,6 +16,7 @@
  * (research R21). `zekno server update` sends it after an update.
  */
 import {
+  healthInForce,
   parseMessage,
   RunnerStatusRequestSchema,
   type RunnerReport,
@@ -26,7 +27,12 @@ import { proxyState, removeProxy } from "../proxy/container"
 import { routedApps, serveRoutes } from "../proxy/serve"
 import { isReport, load, locked, refused, status } from "./commands"
 
-/** `status` with routes: today's fields, the routes in force, and the proxy's state. */
+/**
+ * `status` with routes: today's fields, the routes in force, the health
+ * checks in force, and the proxy's state. Each app's routes and health check
+ * are those of its entry in the state, which one signed deploy wrote together
+ * (runner.md, RN9): what a rollback signs again.
+ */
 export async function statusWithRoutes(
   dir: string,
   input: string
@@ -47,6 +53,7 @@ export async function statusWithRoutes(
   return {
     ...today,
     routes,
+    health: healthInForce(state),
     proxy: await proxyState(
       dir,
       state.serverId,

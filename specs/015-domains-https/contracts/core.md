@@ -36,6 +36,8 @@ The state `verifyDeployV2` gives back carries `routes` over **unchanged**. The r
 type AppRoutes = {
   /** The routes in force, sorted by domain. */
   routes: Route[]
+  /** The health check of the deploy whose routes these are, or null when it had none. */
+  health: Health | null
   /** For each routed or checked service: the containers found and the name given to each, sorted by container. */
   names: Record<string /* SERVICE_NAME */, { container: string /* 64 hex */; name: string /* z + 32 hex */ }[]>
 }
@@ -52,17 +54,23 @@ Read strictly. A state marked `3` must also satisfy:
 - within an app, routes are sorted by domain and each domain appears once; across apps, no domain appears twice;
 - the domains of all apps together are at most `LIMITS.domainsPerServer` (new, 1,024);
 - every name is `^z[0-9a-f]{32}$` and appears once in the whole state; every container id is 64 hex;
-- at most `LIMITS.routesPerDeploy` routes an app, at most 16 containers a service.
+- at most `LIMITS.routesPerDeploy` routes an app, at most 16 containers a service;
+- each `health` is `null` or a health check by the rules of a signed deploy's (`HealthInForceSchema`: `HealthSchema`, its services sorted and each once, F6);
+- the health checks of all apps together, as `status` with routes writes them (`{ [app]: Health }`), are at most `LIMITS.healthBytesPerServer` bytes (new, 256 KiB).
 
-An app may be in `routes` with `routes: []` and names (a health check with no domain). An app with neither is not in `routes`.
+An entry's `routes` and `health` are written together, from one signed deploy ([runner.md](./runner.md), RN9), so they never come from two deploys. An app may be in `routes` with `routes: []`, a health check and names (a health check with no domain). An app with neither a route nor a health check is not in `routes`. An entry without `health` is refused: no released runner wrote mark 3, so no state is read forward from one that lacked it.
 
-Reading: a state marked `2` is read as it was and given `routes: {}` in memory; a state with no mark is read as feature 014 reads it and then the same. A state marked anything else is refused. `newRunnerState` writes mark 3 with `routes: {}`. The runner writes mark 3 from its first write on.
+Reading: a state marked `2` is read as it was and given `routes: {}` in memory, so no health check in force either; a state with no mark is read as feature 014 reads it and then the same. A state marked anything else is refused. `newRunnerState` writes mark 3 with `routes: {}`. The runner writes mark 3 from its first write on.
 
 New module `deploy/routes.ts`:
 
 - `domainHolders(state): Map<domain, app>`
 - `domainsAfter(state, app, routes): number`: how many domains the server would hold with this app's routes replaced.
+- `healthInForce(state): Record<app, Health>`: the health check of each app that has one, in order of the apps' names; what `status` with routes answers as `health`.
+- `healthBytesAfter(state, app, health): number`: how many bytes the health checks in force would take, as written, with this app's replaced.
 - `withAppRoutes(state, app, appRoutes | null): StoredRunnerState`: the state with this app's entry replaced or removed, read back through the strict schema.
+
+`deploy/routes-and-checks.ts` also exports `HealthInForceSchema` and `healthBytes(record)`, the bytes of a record of health checks by app written out as JSON.
 
 ## The protocol (changes P1)
 
@@ -82,15 +90,16 @@ Still no free text in a report.
 **`status` with routes.** The request may carry the input `{ "routes": true }` (strict; any other input is refused `invalid_request` by a runner of protocol 4, and ignored by older runners, which never read it). The answer is then `RunnerStatusWithRoutesSchema`: today's fields and
 
 - `routes`: `Record<APP_NAME, Route[]>`, the routes in force of each app that has any, within the limits above;
+- `health`: `Record<APP_NAME, Health>`, the health check in force of each app that has one (the `health` of its entry in the state), each by `HealthInForceSchema`, at most `LIMITS.appsPerServer` apps and `LIMITS.healthBytesPerServer` bytes as written. Required: protocol 4 was never released without it;
 - `proxy`: `"none"` (no app has a route and none runs), `"running"`, `"stopped"`, `"missing"` (an app has a route and the container is not there), or `"other_image"` (it runs from an image that is not the pinned one).
 
-Without the input the answer is today's `RunnerStatusSchema`, unchanged, so every older zekno reads it.
+A rollback signs the routes and the health check this answer gives for its app ([cli.md](./cli.md), CL3 step 4). Without the input the answer is today's `RunnerStatusSchema`, unchanged, so every older zekno reads it.
 
 **`proxy`.** A new session command with no input. The answer: `{ "proxy": "none" | "running" }` on success, or a report with outcome `routes_failed` and `routes.failure` of `port_taken` or `not_loaded`. Frame bound: 4 KiB.
 
 ## Limits
 
-`LIMITS.domainsPerServer = 1024`. The others are feature 014's.
+`LIMITS.domainsPerServer = 1024`. `LIMITS.healthBytesPerServer = 256 * 1024`: without it, 1,024 apps each with the largest health check a deploy may carry (16 services, paths of 1,024 characters) would make the answer to `status` with routes about 20 MiB, past its frame of 4 MiB; with it, the largest answer is about 2.6 MiB and fits with room to spare, as the frame's test checks. The others are feature 014's.
 
 ## What stays
 

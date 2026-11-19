@@ -271,3 +271,37 @@ part of the proof on a server (quickstart, maintainer steps).
 
 Points 2 to 5 of part 4 stay as they are; point 2 no longer matters to S1, since no request is
 logged.
+
+## 8. A rollback's health check from the server's word (2026-11-19)
+
+Since this change a rollback signs the health check that `status` with routes answers for its app,
+no longer the one this machine's history kept (research R29, the note of 2026-11-19). Reasoned
+from the code, not probed.
+
+**What is checked.** The answer is read by `RunnerStatusWithRoutesSchema`: each check by
+`HealthSchema` (strict, the path rule, at most 16 services and 1,800 seconds), its services sorted
+and once each, at most 256 KiB of them, so the frame bound (4 MiB) still holds for an honest runner.
+`createDeployV2` reads the deploy back by the format's own reader before it signs it, as for any
+deploy.
+
+**What a lying server gains.** The signed deploy names that server's id, the app and `previous`
+(`createDeployV2`); any other runner refuses it `wrong_server`, and that runner takes it only for
+that app and only while the app's number is still `previous` (`replayed` after). The check decides
+only what that runner does with that app (RN11, `health/`): which of the app's own containers it
+asks, on which port and path, from a container of the pinned image on the app's own route network;
+how long it waits under its deploy lock, at most 30 minutes; and whether it answers `started` or
+`unhealthy`. A runner can do all of that without any signature, and can answer any outcome it
+likes. A check left out makes the deploy count as started without a wait; a check naming a service
+the old text lacks ends `routes_failed` on that server. The check reaches no configuration of the
+proxy (`proxy/config.ts` builds from routes and names only), no domain, no secret and no other app.
+On this machine it is kept in the history like any signed deploy's, so the "changed, not deployed"
+mark of that app on that server compares with it: a display only.
+
+A party that answers for a server it is not and hands the deploy to the real runner (S4's case)
+already gets routes of its choosing signed, a public door to the app's ports; a GET to the same
+containers on the app's private network adds nothing to that. A runner that says it cannot tell
+(below protocol 4, or one request at a time) stops a rollback of an app this machine signed a route
+or a health check for with B10, as S4's fix does for routes.
+
+**Conclusion.** A server that lies about the health check gains nothing beyond what its own runner
+already decides for that app on that server. Accepted, as R29 accepts its word for its own routes.

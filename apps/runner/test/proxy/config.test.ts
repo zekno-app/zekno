@@ -91,6 +91,7 @@ const route = (domain: string, dials: string[]) => ({
 
 const web: AppRoutes = {
   routes: [{ domain: "app.example.com", service: "web", port: 3000 }],
+  health: null,
   names: { web: [{ container: C1, name: N1 }] },
 }
 
@@ -116,6 +117,7 @@ describe("the configuration (RN7)", () => {
         { domain: "api.example.com", service: "api", port: 8080 },
         { domain: "zz.example.org", service: "api", port: 8081 },
       ],
+      health: null,
       names: {
         api: [
           { container: C2, name: N2 },
@@ -123,9 +125,13 @@ describe("the configuration (RN7)", () => {
         ],
       },
     }
-    // A health check with no domain: its names are not routes.
+    // A health check with no domain: its names, and the check itself, are not routes.
     const checked: AppRoutes = {
       routes: [],
+      health: {
+        timeout: 60,
+        services: [{ service: "worker", http: { port: 8080, path: "/" } }],
+      },
       names: {
         worker: [{ container: "d".repeat(64), name: `z${"4".repeat(32)}` }],
       },

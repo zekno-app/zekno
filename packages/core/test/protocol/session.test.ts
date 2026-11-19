@@ -15,7 +15,7 @@ import type {
   RunnerStatusWithRoutes,
 } from "../../src/index"
 import { setup } from "../support/helpers"
-import { route } from "../support/routes"
+import { check, route } from "../support/routes"
 
 const {
   LIMITS,
@@ -99,13 +99,14 @@ describe("status with routes", () => {
       ])
   })
 
-  test("the answer is today's fields with routes and the proxy's state", async () => {
+  test("the answer is today's fields with routes, the health checks in force and the proxy's state", async () => {
     const today = await status()
     const answer = {
       ...today,
       routes: {
         shop: [route("shop.example.com"), route("www.shop.example.com")],
       },
+      health: { shop: check("web", "/health"), worker: check("worker") },
       proxy: "running",
     }
     expect(reads(RunnerStatusWithRoutesSchema, answer)).toBe(true)
@@ -113,6 +114,7 @@ describe("status with routes", () => {
       reads(RunnerStatusWithRoutesSchema, {
         ...answer,
         routes: {},
+        health: {},
         proxy: "none",
       })
     ).toBe(true)
@@ -132,9 +134,11 @@ describe("status with routes", () => {
     expect(reads(RunnerStatusSchema, answer)).toBe(false)
     const { proxy: _proxy, ...noProxy } = answer
     const { routes: _routes, ...noRoutes } = answer
+    const { health: _health, ...noHealth } = answer
     for (const wrong of [
       noProxy,
       noRoutes,
+      noHealth,
       { ...answer, proxy: "starting" },
       { ...answer, routes: { shop: [] } },
       { ...answer, routes: { Shop: [route("shop.example.com")] } },
@@ -156,6 +160,7 @@ describe("status with routes", () => {
     const answer = (routes: Record<string, unknown>) => ({
       ...today,
       routes,
+      health: {},
       proxy: "running",
     })
     expect(
@@ -181,6 +186,108 @@ describe("status with routes", () => {
       reads(
         RunnerStatusWithRoutesSchema,
         answer(apps(LIMITS.domainsPerServer + 1))
+      )
+    ).toBe(false)
+  })
+})
+
+/**
+ * The largest health check a signed deploy can carry, its services named
+ * from `first`: 16 services, each named in 63 characters and checked on a
+ * path of 1,024.
+ */
+const largestCheck = (first = "s") => ({
+  timeout: LIMITS.healthSeconds,
+  services: Array.from({ length: LIMITS.healthServices }, (_, n) => ({
+    service: `${first}${String(n).padStart(2, "0")}`.padEnd(63, "x"),
+    http: { port: 65535, path: `/${"p".repeat(LIMITS.healthPathLength - 1)}` },
+  })),
+})
+
+/** As many apps with the largest health check as fit `LIMITS.healthBytesPerServer`, named by `app`. */
+function mostHealth(
+  app: (n: number) => string
+): Record<string, ReturnType<typeof largestCheck>> {
+  const health: Record<string, ReturnType<typeof largestCheck>> = {}
+  for (let n = 0; ; n++) {
+    const more = { ...health, [app(n)]: largestCheck() }
+    if (core.healthBytes(more) > LIMITS.healthBytesPerServer) return health
+    health[app(n)] = largestCheck()
+  }
+}
+
+describe("the health checks in force, in status with routes", () => {
+  test("each by the rules of a signed deploy's: strict, within its limits, its services sorted and each once", async () => {
+    const today = await status()
+    const answer = (health: unknown) => ({
+      ...today,
+      routes: {},
+      health,
+      proxy: "none",
+    })
+    const web = { service: "web", http: null }
+    expect(
+      reads(RunnerStatusWithRoutesSchema, answer({ shop: largestCheck() }))
+    ).toBe(true)
+    for (const health of [
+      { Shop: check() },
+      { shop: null },
+      { shop: { timeout: 0, services: [web] } },
+      { shop: { timeout: LIMITS.healthSeconds + 1, services: [web] } },
+      { shop: { timeout: 60, services: [] } },
+      {
+        shop: {
+          ...largestCheck(),
+          services: [...largestCheck().services, { ...web, service: "z" }],
+        },
+      },
+      { shop: { timeout: 60, services: [{ service: "web" }] } },
+      {
+        shop: {
+          timeout: 60,
+          services: [{ ...web, http: { port: 3000, path: "health" } }],
+        },
+      },
+      { shop: { ...check(), extra: 1 } },
+      { shop: { timeout: 60, services: [{ ...web, service: "worker" }, web] } },
+      { shop: { timeout: 60, services: [web, web] } },
+      [check()],
+      null,
+    ])
+      expect([
+        health,
+        reads(RunnerStatusWithRoutesSchema, answer(health)),
+      ]).toEqual([health, false])
+  })
+
+  test(`at most ${LIMITS.healthBytesPerServer} bytes as written, and at most ${LIMITS.appsPerServer} apps`, async () => {
+    const today = await status()
+    const answer = (health: Record<string, unknown>) => ({
+      ...today,
+      routes: {},
+      health,
+      proxy: "none",
+    })
+    const most = mostHealth((n) => `a-${n}`)
+    expect(Object.keys(most).length).toBeGreaterThan(10)
+    expect(reads(RunnerStatusWithRoutesSchema, answer(most))).toBe(true)
+    expect(
+      reads(
+        RunnerStatusWithRoutesSchema,
+        answer({ ...most, more: largestCheck() })
+      )
+    ).toBe(false)
+    const small = (count: number) =>
+      Object.fromEntries(
+        Array.from({ length: count }, (_, n) => [`a-${n}`, check()])
+      )
+    expect(
+      reads(RunnerStatusWithRoutesSchema, answer(small(LIMITS.appsPerServer)))
+    ).toBe(true)
+    expect(
+      reads(
+        RunnerStatusWithRoutesSchema,
+        answer(small(LIMITS.appsPerServer + 1))
       )
     ).toBe(false)
   })
@@ -249,14 +356,20 @@ describe("the bound of each frame", () => {
         [{ domain: domain(n), service: "s".repeat(63), port: 65535 }],
       ])
     )
+    // The health checks in force: as many of the largest as the server may hold, under the longest app names.
+    const health = mostHealth(app)
     const largest = {
       ...today,
       team: { ...today.team, version: Number.MAX_SAFE_INTEGER },
       lastSequence,
       secrets,
       routes,
+      health,
       proxy: "other_image",
     }
+    expect(core.healthBytes(health)).toBeGreaterThan(
+      LIMITS.healthBytesPerServer - written(largestCheck()) - 70
+    )
     expect(reads(RunnerStatusWithRoutesSchema, largest)).toBe(true)
     expect(written({ result: largest }) * 1.5).toBeLessThan(
       SESSION_FRAME_BYTES.status
@@ -317,6 +430,10 @@ describe("the public names of feature 015", () => {
       "HealthSchema",
       "domainHolders",
       "domainsAfter",
+      "healthInForce",
+      "healthBytesAfter",
+      "healthBytes",
+      "HealthInForceSchema",
       "withAppRoutes",
       "CONTAINERS_PER_SERVICE",
       "ROUTE_FAILURES",

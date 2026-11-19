@@ -22,7 +22,7 @@ Every new call goes through `docker/run.ts`: it runs `ZEKNO_DOCKER || "docker"` 
 
 ## RN2. Before the number is used
 
-In `deploy`, with the other limits (K15): `domainsAfter(state, app, routes) > LIMITS.domainsPerServer` is refused `too_large`. `domain_taken` is the core library's (K10b). Neither uses a number or touches Docker.
+In `deploy`, with the other limits (K15): `domainsAfter(state, app, routes) > LIMITS.domainsPerServer` is refused `too_large`, and so is `healthBytesAfter(state, app, health) > LIMITS.healthBytesPerServer` (the health checks in force, as `status` with routes writes them, with this deploy's in place of the app's). `domain_taken` is the core library's (K10b). Neither uses a number or touches Docker.
 
 ## RN3. When the steps run
 
@@ -75,8 +75,10 @@ Any step failing is "not loaded". A proxy that was just started on this file (RN
 
 ## RN9. Saving, or going back
 
-- **Loaded**: write the state with `withAppRoutes(state, app, { routes: wanted, names })`, or with the app's entry removed when it has no wanted route and no wanted health. The state is read again under the state lock first, as every write does.
-- **Not loaded**: build the configuration from the state as it is, and load it by RN8 (if that fails too, nothing more is tried). When the new file was refused by the validate, nothing was replaced, and nothing is loaded back. The state is not written. The outcome is `routes_failed` with `not_loaded`.
+- **Loaded**: write the state with `withAppRoutes(state, app, { routes: wanted, health: wanted health, names })`, or with the app's entry removed when it has no wanted route and no wanted health. The routes and the health check are written at this one moment, from this one signed deploy, so an entry never holds one deploy's routes with another's health check. The state is read again under the state lock first, as every write does.
+- **Not loaded**: build the configuration from the state as it is, and load it by RN8 (if that fails too, nothing more is tried). When the new file was refused by the validate, nothing was replaced, and nothing is loaded back. The state is not written: the app keeps the routes and the health check of the deploy that put its entry in force, or no entry. The outcome is `routes_failed` with `not_loaded`.
+
+Any other `routes_failed` (RN4 to RN6) stops before the state is written too, with the same result. An `unhealthy` deploy was saved here before its wait (RN11): its entry holds its own routes and health check. A `start_failed` deploy holds whatever RN4 to RN9 reached, by the same two rules.
 
 ## RN10. What was released
 
@@ -104,7 +106,7 @@ In this order: `start_failed` (as today); `routes_failed` (RN4 to RN9); `unhealt
 
 ## RN13. `status` with routes, and `proxy`
 
-`status` with the input `{ "routes": true }`: today's answer and `routes` from the state, and `proxy` from `docker inspect zekno-proxy`: `none`, `running`, `stopped`, `missing`, `other_image` ([core.md](./core.md)). It changes nothing.
+`status` with the input `{ "routes": true }`: today's answer, `routes` and `health` from the state (`healthInForce`: the `health` of each entry that has one), and `proxy` from `docker inspect zekno-proxy`: `none`, `running`, `stopped`, `missing`, `other_image` ([core.md](./core.md)). It changes nothing. An app's routes and health check in the answer are those of its one entry, written together by RN9: what a rollback signs again, from whichever machine.
 
 `proxy`: under the deploy lock, makes the proxy what the state needs by RN6 to RN8 and RN10's last step, from the state alone. It carries out no route a signed deploy did not put in force.
 
@@ -113,4 +115,5 @@ In this order: `start_failed` (as today); `routes_failed` (RN4 to RN9); `unhealt
 - The stand-in for Docker (`test/support`) is extended first, so that each of `network`, `run`, `exec`, `logs`, `inspect`, `rm`, `start` and `compose ps` can be scripted and is recorded; a call it is not told about still behaves as today.
 - Every rule above has a scenario against the real runner program with the stand-in: the calls made and their order (joining before loading, loading before leaving, `exec kill` and never `kill -s`), the file written, the state before and after, the outcome.
 - A deploy without a route or a health check makes exactly today's calls.
+- The health check in force (`test/scenarios/health-in-force.test.ts`): what the entry holds and `status` with routes answers after a deploy with a health check and no route, with both, with a route and none, after a later deploy without one, after `routes_failed` and after `unhealthy`; `status` without the input unchanged; K15's refusal past `LIMITS.healthBytesPerServer`; an entry without `health` answered `invalid_state`.
 - A gated set with real Docker and the pinned image (it never pulls; skipped with a line that says why): a deploy with a domain answers over HTTPS through the proxy with a certificate for that domain; HTTP is redirected; a second app cannot take the domain; a release stops the answer and deletes the certificate's folder; a container restarted behind its name is followed; a broken configuration leaves the earlier one serving; the health check passes, fails on 500 and on no answer, and follows no redirect; everything named `zekno-*` that the test made is removed.

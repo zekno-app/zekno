@@ -19,8 +19,10 @@ import { E3, E4, OTHER_IMAGE, PROXY_LABEL } from "../domains/words"
 import type { CheckLine } from "./doctor"
 import type { HeldRoutes } from "./status"
 
-/** The Proxy line for a server whose runner answered `held`, or undefined when there is none to show. */
-export function proxyLine(held: HeldRoutes | undefined): CheckLine | undefined {
+/** The Proxy line for a server whose runner answered `held`, or undefined when there is none to show. The health checks in force play no part. */
+export function proxyLine(
+  held: Pick<HeldRoutes, "routes" | "proxy"> | undefined
+): CheckLine | undefined {
   if (held === undefined) return undefined
   const domains = Object.values(held.routes).reduce(
     (total, routes) => total + routes.length,

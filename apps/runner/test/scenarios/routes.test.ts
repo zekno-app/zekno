@@ -71,7 +71,7 @@ describe("a first route (RN4 to RN9)", () => {
       aliases: [named!.name],
     })
     expect(state.routes).toEqual({
-      web: { routes: [APP], names: { web: [named!] } },
+      web: { routes: [APP], health: null, names: { web: [named!] } },
     })
     expect(state.lastSequence).toEqual({ web: 1 })
     expect(configRoutes(w.home)).toEqual({

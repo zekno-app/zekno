@@ -2,6 +2,7 @@ import {
   RunnerAppStatesSchema,
   RunnerStatusSchema,
   RunnerStatusWithRoutesSchema,
+  type Health,
   type Route,
   type RunnerAppStates,
   type RunnerStatus,
@@ -58,12 +59,14 @@ export function checkIdentity(
 }
 
 /**
- * The routes in force on a server, by app, and its proxy's state, as `status`
- * with routes answers them (specs/015-domains-https, contracts/core.md,
- * "`status` with routes"). Only apps with a route are in `routes`.
+ * The routes and the health checks in force on a server, by app, and its
+ * proxy's state, as `status` with routes answers them (specs/015-domains-
+ * https, contracts/core.md, "`status` with routes"). Only apps with a route
+ * are in `routes`, and only apps with a health check in `health`.
  */
 export type HeldRoutes = {
   routes: Record<string, Route[]>
+  health: Record<string, Health>
   proxy: RunnerStatusWithRoutes["proxy"]
 }
 
@@ -92,8 +95,8 @@ export async function askStatus(
   const answer = await session.request("status", RunnerStatusWithRoutesSchema, {
     input: { routes: true },
   })
-  const { routes: inForce, proxy, ...status } = answer
-  return { status, held: { routes: inForce, proxy } }
+  const { routes: inForce, health, proxy, ...status } = answer
+  return { status, held: { routes: inForce, health, proxy } }
 }
 
 /** The routes in force for `app`, from a `status` with routes: none when the app has none, or the runner was not asked. */
@@ -102,6 +105,15 @@ export const routesOfApp = (
   app: string
 ): Route[] =>
   held !== undefined && Object.hasOwn(held.routes, app) ? held.routes[app]! : []
+
+/** The health check in force for `app`, from a `status` with routes: null when the app has none, or the runner was not asked. */
+export const healthOfApp = (
+  held: HeldRoutes | undefined,
+  app: string
+): Health | null =>
+  held !== undefined && Object.hasOwn(held.health, app)
+    ? held.health[app]!
+    : null
 
 /** One service of an app, as the runner reports it: its name, state, exit code and health, nothing else. */
 export type ServiceState = RunnerAppStates["apps"][string]["services"][number]

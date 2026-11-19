@@ -7,7 +7,11 @@
 import { z } from "zod"
 
 import { EnvelopeSchema } from "../crypto/envelope"
-import { RouteSchema } from "../deploy/routes-and-checks"
+import {
+  healthBytes,
+  HealthInForceSchema,
+  RouteSchema,
+} from "../deploy/routes-and-checks"
 import { APP_NAME } from "../secrets/secrets"
 import { LIMITS } from "./limits"
 import {
@@ -128,7 +132,8 @@ export const SESSION_FRAME_BYTES: Readonly<Record<SessionCommand, number>> = {
   logs: 192 * KiB,
   // At most 1024 apps and 4096 services: about 0.6 MiB.
   state: 1 * MiB,
-  // At most 1024 apps and 8192 secrets: about 2.1 MiB.
+  // At most 1024 apps and 8192 secrets: about 2.1 MiB; with routes, 1,024
+  // domains and 256 KiB of health checks more: about 2.6 MiB.
   status: 4 * MiB,
   // As apply: a progress event, at most about 24 KiB written out, a health
   // event, or a report.
@@ -241,11 +246,14 @@ export const PROXY_STATES = [
 
 /**
  * Runner to CLI: the answer to `status` with the input `{ "routes": true }`.
- * Today's fields, the routes in force of each app that has any, and the
- * proxy's state. Within the stored state's limits: at most
- * `LIMITS.routesPerDeploy` routes an app and `LIMITS.domainsPerServer` in
- * all. Without the input the answer is `RunnerStatusSchema`, unchanged, so
- * every older zekno reads it.
+ * Today's fields, the routes in force of each app that has any, the health
+ * check in force of each app that has one, and the proxy's state. Within the
+ * stored state's limits: at most `LIMITS.routesPerDeploy` routes an app and
+ * `LIMITS.domainsPerServer` in all; each health check by the rules of a
+ * signed deploy's, and at most `LIMITS.healthBytesPerServer` of them as
+ * written. A rollback signs the routes and the health check given here for
+ * its app. Without the input the answer is `RunnerStatusSchema`, unchanged,
+ * so every older zekno reads it.
  */
 export const RunnerStatusWithRoutesSchema = z
   .strictObject({
@@ -260,6 +268,10 @@ export const RunnerStatusWithRoutesSchema = z
           Object.values(routes).reduce((total, app) => total + app.length, 0) <=
           LIMITS.domainsPerServer
       ),
+    health: z
+      .record(z.string().regex(APP_NAME), HealthInForceSchema)
+      .refine(atMost(LIMITS.appsPerServer))
+      .refine((health) => healthBytes(health) <= LIMITS.healthBytesPerServer),
     proxy: z.enum(PROXY_STATES),
   })
   .refine(ownServerId)
