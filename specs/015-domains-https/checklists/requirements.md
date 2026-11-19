@@ -27,9 +27,9 @@
 - [x] All functional requirements have clear acceptance criteria
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
-- [ ] The ten open points are decided by the maintainer
-- [ ] The six boards and the words in `design/lines.md` are approved by the maintainer
+- [x] The ten open points are decided by the maintainer (2026-11-19, each as recommended)
+- [x] The six boards and the words in `design/lines.md` are approved by the maintainer (2026-11-19)
 
 ## Notes
 
-- Planning does not start until the two unchecked items are done: design and tool choices are the maintainer's.
+- Any further tool choice inside the feature is still shown to the maintainer before it is used.

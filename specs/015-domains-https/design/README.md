@@ -1,8 +1,8 @@
 # Design of feature 015, domains and HTTPS
 
-**Status**: proposed on 2026-11-19, not approved. Nothing is built until the maintainer approves the boards and the words.
+**Status**: approved on 2026-11-19, with the ten open points decided as recommended. Screens are built last, so a board can still change before its screen exists.
 
-The words of every new line are in [`lines.md`](./lines.md). The boards are on the design canvas, in the row "Domains and HTTPS (spec 015): proposed", and kept here as files:
+The words of every new line are in [`lines.md`](./lines.md). The boards are on the design canvas, in the row "Domains and HTTPS (spec 015)", and kept here as files:
 
 | Board | Shows |
 |---|---|

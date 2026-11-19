@@ -1,6 +1,6 @@
 # The words of feature 015, domains and HTTPS
 
-**Status**: proposed on 2026-11-19, not approved. The boards draw these lines; where a board and this file differ, the board is used. Nothing is built until the maintainer approves them.
+**Status**: approved on 2026-11-19 with the ten points decided as recommended. The boards draw these lines; where a board and this file differ, the board is used.
 
 Example values: the app `shop`, its service `web` on port 3000, the server `prod-1` at 203.0.113.7, the domain `shop.example.com`, another app `blog`.
 
@@ -27,10 +27,10 @@ Refused, with nothing written (exit status 2, as `zekno settings set` gives):
 | # | When | First sentence | Second |
 |---|---|---|---|
 | A10 | Not a name zekno routes: a wildcard, an address, `localhost`, a port, a path, a special-use name | `*.example.com is not a domain zekno can route.` | `Use a full name such as shop.example.com: no wildcard, no address, no port.` |
-| A11 | Letters outside ASCII, in either spelling (Open, point 8) | `bücher.example is not a domain zekno can route yet.` | `Names with letters other than a to z, digits and the hyphen are not in this version of zekno.` |
+| A11 | Letters outside ASCII, in either spelling (decided, point 8) | `bücher.example is not a domain zekno can route yet.` | `Names with letters other than a to z, digits and the hyphen are not in this version of zekno.` |
 | A12 | The service has no port | `web has no port, so a domain cannot reach it.` | `Set the port it listens on first: zekno settings set web.port <port>.` |
 | A13 | The domain is in the file already | `shop.example.com is already a domain of api.` | `A domain reaches one service. Remove it there first: zekno domain rm shop.example.com.` |
-| A14 | A Compose file written by hand (Open, point 1) | `This folder deploys a Compose file written by hand.` | `Domains need a settings file. Run zekno settings init to start one.` |
+| A14 | A Compose file written by hand (decided, point 1) | `This folder deploys a Compose file written by hand.` | `Domains need a settings file. Run zekno settings init to start one.` |
 | A15 | `rm` of a domain the file does not have | `shop.example.com is not a domain of this app.` | `Run zekno domain to see its domains.` |
 | A16 | No terminal, several services, no `--service` | `There is no terminal to ask on.` | `Say which service with --service <name>.` |
 

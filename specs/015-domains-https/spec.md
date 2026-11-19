@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-19
 
-**Status**: Draft. The direction was settled with the maintainer on 2026-11-18 (see Clarifications). The points under "Open, for the maintainer" and every new screen and line are not decided: the boards in [`design/`](./design/) show them with a recommendation, and nothing is built until they are approved.
+**Status**: Approved. The direction was settled with the maintainer on 2026-11-18. On 2026-11-19 the maintainer answered the ten open points, each as recommended ("Push and follow all recommends, start next spec"), which is read here as approval of the six boards in [`design/`](./design/) and the words in [`design/lines.md`](./design/lines.md) too. Screens are built last, so a board can still be changed before its screen exists.
 
 **Input**: The second of the two features the maintainer split "domains and HTTPS" into on 2026-11-18. Feature 014 built the signed deploy, version 2, whose format already carries `routes` and `health`; its runner refuses a deploy that uses them (`unsupported_version`). This feature carries them out: an app gets a domain, the server answers for it over HTTPS with a certificate it obtains by itself, and a deploy can wait for the app to be healthy. It follows the design written and reviewed during feature 010 ([`deploy-v2.md`](../010-app-settings/deploy-v2.md), parts 4.2 and 4.3, "the design" below), closes its finding V23 and the note S7 of feature 014's security review, uses the reverse proxy chosen in [`research-proxy.md`](./research-proxy.md), and ends with runner release 0.1.1 and a proof on a real server.
 
@@ -17,6 +17,19 @@
 - Q: Does Zekno change DNS? → A: Never. It says which record to create and checks it before asking for a certificate.
 - Q: Which release? → A: Runner 0.1.1, with development releases `0.1.1-dev.N` before it. Releases stay in the 0.1 line.
 - Q: Where is the proof? → A: On a real server at the end, each use with the maintainer's go-ahead.
+
+### Session 2026-11-19
+
+- Q: Where are domains written? → A: In the settings file only, in this version. A folder with a Compose file written by hand is told to start a settings file.
+- Q: A domain that does not point to the server? → A: The deploy stops before signing, and `--skip-dns-check` goes on with a warning.
+- Q: Does a deploy wait for HTTPS? → A: Up to 60 seconds, then it says how to look again. The deploy has succeeded either way.
+- Q: Are health checks in this feature? → A: Yes, after domains work, in the same release.
+- Q: HTTP/3? → A: Off in this version. HTTP is always redirected to HTTPS.
+- Q: A contact address for the certificate authority? → A: None. Let's Encrypt only.
+- Q: A released domain's certificate and key? → A: Deleted with the release.
+- Q: Names with letters outside ASCII? → A: Refused in this version, in both their spellings, which closes the note S7 of feature 014's review.
+- Q: The commands' names? → A: `zekno domain`, `zekno domain add <domain>`, `zekno domain rm <domain>`.
+- Q: The proof? → A: Needs a domain of the maintainer's and a server whose ports 80 and 443 are free; settled before the release.
 
 ## Why
 
@@ -147,7 +160,7 @@ Domains need a runner that carries out routes. A zekno that meets an older runne
 - **A routed service with no container**, or one that uses the host's network: the route cannot be applied; the outcome is "not started" and the sentence names the service.
 - **A service with a domain and no port**: refused before signing; the sentence says to set the port.
 - **A name that is not a domain Zekno routes**: an address, `localhost`, a wildcard, a special-use name (`.test`, `.local`, `.internal` and the like), a trailing dot, upper case (lowered, said once), a name over 253 characters. Each is refused when it is added, with a sentence.
-- **Names with letters outside ASCII** (and their `xn--` forms): see Open, point 8.
+- **Names with letters outside ASCII** (and their `xn--` forms): refused, in both their spellings (decided, point 8).
 - **A domain that points to the server by IPv6 only**, or to several addresses of which one is the server's.
 - **The certificate authority refuses** (too many requests, a CAA record that forbids it): the proxy keeps trying with growing waits; `zekno domain` shows that no valid certificate is served, and since when.
 - **The proxy's container dies or the server restarts**: Docker brings the proxy back; routes and certificates are kept on the server.
@@ -172,7 +185,7 @@ Domains need a runner that carries out routes. A zekno that meets an older runne
 - **FR-006**: `zekno domain` MUST list the app's domains with, for each: the service, whether the server holds it for this app, where DNS points, and what HTTPS answers (FR-030 to FR-033).
 - **FR-007**: `zekno settings`, `zekno settings set` and `unset`, and the settings screen MUST show and change domains as they do other settings, under Networking.
 - **FR-008**: A health check MUST be settable on a service: a path (optional), and a time limit in seconds (a default when left out). The sentence "Health checks are not in this version of zekno yet." MUST go.
-- **FR-009**: A folder with a hand-written Compose file and no settings file: see Open, point 1.
+- **FR-009**: A folder with a hand-written Compose file and no settings file: refused with a sentence that says to start a settings file (decided, point 1).
 
 **The DNS check**
 
@@ -189,7 +202,7 @@ Domains need a runner that carries out routes. A zekno that meets an older runne
 - **FR-017**: The CLI MUST check before signing that each route's service exists in the Compose text it signs and has that port.
 - **FR-018**: The deploy summary MUST show the domains, before anything is sent.
 - **FR-019**: A rollback MUST carry the routes and the health check in force now (User Story 6).
-- **FR-020**: The domain rule MUST be the design's (lowercase ASCII, at most 253 characters, at least two labels, no wildcard, no address, no special-use name, no trailing dot), tightened as Open, point 8 decides, in the core library, so the CLI and the runner apply one rule.
+- **FR-020**: The domain rule MUST be the design's (lowercase ASCII, at most 253 characters, at least two labels, no wildcard, no address, no special-use name, no trailing dot), tightened to refuse names with letters outside ASCII in both their spellings (point 8), in the core library, so the CLI and the runner apply one rule.
 
 **The runner**
 
@@ -198,7 +211,7 @@ Domains need a runner that carries out routes. A zekno that meets an older runne
 - **FR-023**: The proxy MUST run from an image the runner release pins by digest, never one a deploy names. The runner MUST start it at the first deploy with routes, and stop and remove it when no app has a route.
 - **FR-024**: The proxy's configuration MUST be generated whole from the routes in force of every app and from names the runner made, checked as valid before it is loaded, written atomically, and never contain text from a deploy that did not pass the patterns. If the proxy will not take it, the earlier configuration MUST stay in force and the earlier routes in the runner's state.
 - **FR-025**: The proxy MUST reach an app's containers only by a random name the runner gave them on a network the runner made for that app, resolved when it connects (closing the design's V23). It MUST NOT be given the Docker socket. Its admin interface MUST be off or out of reach of every app's network.
-- **FR-026**: The proxy MUST ask for certificates only for domains in routes in force, redirect HTTP to HTTPS, and keep certificates and keys on the server. A released domain's certificate and key MUST be deleted (Open, point 7).
+- **FR-026**: The proxy MUST ask for certificates only for domains in routes in force, redirect HTTP to HTTPS, and keep certificates and keys on the server. A released domain's certificate and key MUST be deleted (point 7).
 - **FR-027**: The runner MUST carry out the health check as the design says: by a short-lived container from a pinned image on the app's route network, to the runner's own names, following no redirect, reading at most 1 KiB, giving up on a try after 5 seconds; or, without a path, by Docker's health status. A failed check MUST give the outcome `unhealthy`, leave the app and its routes as they are, and roll nothing back.
 - **FR-028**: Routes MUST change only when a deploy reaches its start, under the lock that serves one deploy at a time. A deploy that stops earlier MUST leave the app's routes and domains as they were.
 - **FR-029**: The runner's answer to `status` MUST say which domains each app holds, so the CLI can show them and check a claim before signing.
@@ -206,7 +219,7 @@ Domains need a runner that carries out routes. A zekno that meets an older runne
 **What a person is told about a domain**
 
 - **FR-030**: Whether the server holds the domain for this app comes from the runner. Where DNS points and what HTTPS answers MUST be found out from the developer's machine, not taken from the server's word: it is what a visitor would get.
-- **FR-031**: After a deploy that started with a domain the app did not have, the CLI MUST wait a bounded time for HTTPS to answer with a valid certificate, and say either that the address is live or that the certificate is not ready and how to look again (Open, point 3).
+- **FR-031**: After a deploy that started with a domain the app did not have, the CLI MUST wait a bounded time for HTTPS to answer with a valid certificate, and say either that the address is live or that the certificate is not ready and how to look again (point 3).
 - **FR-032**: The HTTPS check MUST verify the certificate as a browser would, show until when it is valid, and warn when that is within 14 days.
 - **FR-033**: With no terminal, `zekno domain` MUST print one tab-separated line per domain, and `--json` the same facts.
 
@@ -248,9 +261,9 @@ Domains need a runner that carries out routes. A zekno that meets an older runne
 - **SC-007**: On a real server: a browser opens the proof's address with a valid certificate; after a rollback it still does; after the domain is released the server no longer answers for it.
 - **SC-008**: Every earlier test passes; the frozen plain transcripts are unchanged.
 
-## Open, for the maintainer
+## Decided with the maintainer on 2026-11-19
 
-Each has a recommendation. The boards show what each looks like.
+The ten points that were open. Each was decided as recommended; the recommendation is the first sentence of each.
 
 1. **Where domains are written.** Recommended: in the settings file only, in this version. A folder with a hand-written Compose file is told to start a settings file. The other way (domains for hand-written Compose too) needs a second place to write them, the folder's `zekno.json`, and a second set of screens.
 2. **A domain that does not point to the server.** Recommended: stop before signing, with `--skip-dns-check` to go on. The other way: warn and deploy; the certificate then fails on the server and comes later, at a time nobody can predict.
