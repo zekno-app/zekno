@@ -40,6 +40,20 @@ Where `zekno` keeps your key, and everything else, is on
 Step 3 is the planned design. Today there is no relay: `zekno` sends the
 sealed, signed packet to the runner over SSH.
 
+## Domains and HTTPS
+
+Which domain reaches which app is part of the signed deploy. The runner sends
+a domain's requests only to the app whose signed deploy names it, and one app
+holds a domain on a server at a time. So the control plane, when it exists,
+could carry a deploy but never add, change or move a domain.
+
+The server holds the TLS certificate and private key of each domain it
+serves, in the storage of its proxy. They are made on the server and never
+pass through your machine or Zekno. A released domain's certificate and key
+are deleted. The proxy ends TLS for every app with a domain on that server,
+so it handles their requests unencrypted, as any reverse proxy does. See
+[What the server holds](/docs/domains#what-the-server-holds).
+
 ## What it protects against
 
 | Scenario | Outcome | Why |
@@ -53,7 +67,7 @@ sealed, signed packet to the runner over SSH.
 | Scenario | Why |
 | --- | --- |
 | A team member's machine is compromised | That machine holds a signing key |
-| One of your servers is compromised | Secrets are plaintext in memory where the app runs |
+| One of your servers is compromised | Secrets are plaintext in memory where the app runs, and the server holds the TLS keys of its domains |
 | A Zekno release (the CLI or the runner) is tampered with | The client is the trust anchor. A server installs a runner only when it matches the checksum the command-line tool holds, recorded after a second build of the same source gave the same file. Runner releases are not signed |
 
 How a runner release is checked, and the limits of that route, are on

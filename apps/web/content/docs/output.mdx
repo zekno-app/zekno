@@ -14,8 +14,8 @@ description: Exit status, and what zekno prints with and without a terminal.
 | Status | Means |
 | --- | --- |
 | `0` | Success. Also the app when you quit, and `zekno logs` stopped with Ctrl-C or a closed pipe |
-| `1` | Refused or failed, including a deploy whose app did not start, and a question left with Esc or Ctrl-C |
-| `2` | Wrong usage, including a `zekno.json` not signed by your team, one not used here yet when there is no terminal to ask on, `zekno` with no arguments and no terminal, a folder with both `zekno.app.json` and `compose.yaml` and nothing to say which when there is no terminal to ask on, and a setting value not allowed |
+| `1` | Refused or failed, including a deploy whose app did not start, a deploy whose domains the server could not put in force or that was not healthy in time, a deploy stopped by its DNS check, and a question left with Esc or Ctrl-C |
+| `2` | Wrong usage, including a `zekno.json` not signed by your team, one not used here yet when there is no terminal to ask on, `zekno` with no arguments and no terminal, a folder with both `zekno.app.json` and `compose.yaml` and nothing to say which when there is no terminal to ask on, a setting value not allowed, and a domain `zekno domain add` or `rm` refuses |
 
 ## Output
 
@@ -35,9 +35,13 @@ from the first version:
 | Command | Plain output | Changed from the first version? |
 | --- | --- | --- |
 | `deploy`, `rollback` | `Deploy <n> of <app> is running on <server> with <k> secrets.` | Yes: "`<k> secret(s)`" became "`<k> secrets`", "`1 secret`" or "`no secrets`" |
-| `deploy --json` | `{"outcome","app","sequence","server"}` | No |
-| `status` | `<server>: team list version <v>`, then `<app>\tdeploy <n>\t<state>`, then `<app>/<NAME>\tversion <v>` | Yes: a third cell, `running`, `stopped`, `partly running` or `unknown`; the apps in Home's order, the latest deploy from your machine first |
-| `status --json` | As before, plus `"apps": { "<app>": { "state", "services": [...] } }` | Yes: one added field |
+| `deploy` with a domain | Before it: `dns\t<domain>\t<address>` for each new domain that points to the server. After it: `https\t<domain>\tlive\t<last day>` or `https\t<domain>\twaiting` | New. A deploy with no domain prints what it printed before |
+| `deploy --json` | `{"outcome","app","sequence","server"}` | No. A deploy with a domain or a health check can also have the outcome `routes_failed`, with a field `routes`, or `unhealthy`, with a field `health` |
+| `status` | `<server>: team list version <v>`, then `<app>\tdeploy <n>\t<state>`, then `<app>/<NAME>\tversion <v>` | Yes: a third cell, `running`, `stopped`, `partly running` or `unknown`; the apps in Home's order, the latest deploy from your machine first. After an app's line, `domain\t<app>\t<domain>` for each domain the server holds for it |
+| `status --json` | As before, plus `"apps": { "<app>": { "state", "services": [...] } }` | Yes: one added field, and `routes` for a server that holds a domain |
+| `domain` | `<domain>\t<service>\t<port>\t<state>\t<last day>`, one line per domain | New |
+| `domain --json` | A list: `{"domain","service","port","state","until"}` for each domain | New |
+| `domain add`, `domain rm` | As `settings set`, then `record\tA\t<domain>\t<address>` (or `AAAA`) after an `add` when the server's address is known | New |
 | `secret ls`, `server ls` | Unchanged | No |
 | `logs` | `<time>\t<service>\t<text>`, one line per log line | New |
 | `settings` | `<service>\t<place>\t<value>`, one line per setting that is set | New |

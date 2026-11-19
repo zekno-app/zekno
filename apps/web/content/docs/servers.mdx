@@ -71,7 +71,7 @@ zekno server update prod --yes
 
 ### Updating is one way
 
-Replacing runner 0.1.0 with a runner that speaks protocol 3 (see
+Replacing runner 0.1.0 with a runner that speaks protocol 3 or 4 (see
 [An older or a newer runner](/docs/deploying#an-older-or-a-newer-runner))
 cannot be undone. The new runner reads the state runner 0.1.0 left, and
 changes nothing in it until it first writes: a team list update, or a deploy
@@ -87,10 +87,10 @@ from any `zekno`, older ones included. From then on:
   `zekno` says `The runner refused the request (unsupported_version).` Its
   `zekno status` still reads the server.
 
-No runner release speaks protocol 3 yet, so `zekno server update` does not
-take this step today. When `zekno` runs from a checkout of the repository,
+No runner release speaks protocol 3 or 4 yet, so `zekno server update` does
+not take this step today. When `zekno` runs from a checkout of the repository,
 not as a compiled file, a runner on your machine (`--local`) is the
-checkout's own runner, which speaks protocol 3. Going back by restoring a
+checkout's own runner, which speaks protocol 4. Going back by restoring a
 runner's folder from a backup is not supported (see the
 [runner page](/docs/runner#what-to-know-before-you-rely-on-it)).
 

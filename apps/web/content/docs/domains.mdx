@@ -1,0 +1,414 @@
+---
+title: Domains and HTTPS
+description: Giving an app a domain, the DNS record to create, the check before a deploy, the wait for HTTPS, zekno domain, moving and removing a domain, and what the server holds.
+---
+
+<Callout type="warn" title="Pre-alpha and unaudited">
+  The command-line tool, the runner and the core library have had internal
+  reviews only. Do not use them for anything you could not afford to lose, and
+  do not rely on them in production before an external audit.
+</Callout>
+
+An app deployed from a settings file can have a domain. The server answers
+for it over HTTPS, with a certificate it obtains by itself from Let's Encrypt,
+and sends each request to one service of the app. A reverse proxy does that
+on the server: Caddy, in a container the runner starts, configures and
+removes. `zekno` never changes DNS. It says which record to create, and checks
+it from your machine before it signs a deploy.
+
+Which domain reaches which app is part of the signed deploy, like the Compose
+text. So only your team can add, change or move a domain.
+
+## What a domain needs
+
+- **A settings file.** Domains are written in `zekno.app.json`, under the
+  service that answers for them (see [App settings](/docs/settings)). A folder
+  that deploys a Compose file written by hand cannot have one in this version.
+- **A service with a port.** The port the service listens on,
+  `networking.port`. The proxy reaches it there, over a network of its own;
+  the port is not published on the server because of the domain.
+- **A runner that speaks protocol 4.** Runner 0.1.1 is the first release that
+  will. It is not published yet: until it is, a `zekno` built from the
+  repository installs runner 0.1.0, and on a server with that runner a deploy
+  with a domain stops before anything is signed. A runner built from the
+  repository speaks protocol 4 (see
+  [An older or a newer runner](/docs/deploying#an-older-or-a-newer-runner)).
+- **Ports 80 and 443 of the server**, free and reachable from the internet.
+  The proxy takes both, and Let's Encrypt checks the domain through them. A
+  server that runs no app with a domain has no proxy and opens neither port.
+- **A DNS record** for the domain that points to the server (below).
+
+## Giving an app a domain
+
+`zekno domain add` writes the domain to the settings file. It follows
+`zekno settings set` step for step: the change, the question, the write. It
+deploys nothing and connects to none of your servers.
+
+```text
+$ zekno domain add shop.example.com
+  web · domains  none → shop.example.com
+? Write this to zekno.app.json? Nothing is deployed until you deploy. (y/N) yes
+✔ Written  Run zekno deploy to use it.
+
+  Before you deploy, create this DNS record at your DNS provider:
+  A  shop.example.com  203.0.113.7
+```
+
+- The file is the one `zekno deploy` here would sign, found as
+  `zekno settings` finds it (see [App settings](/docs/settings#zekno-settings)).
+  `--yes` writes without asking; with no terminal, it needs `--yes`.
+- The domain goes to the only service that has a port. With several, it asks
+  `? Which service answers for shop.example.com?` among them, and with no
+  terminal it needs `--service <name>`:
+  `zekno domain add shop.example.com --service web`.
+- A domain is written in lowercase. A service may have several, and a domain
+  reaches one service only. A settings file names at most 64 domains, and a
+  server holds at most 1,024.
+- `zekno settings set web.domains "shop.example.com, www.example.com"` sets
+  the whole list at once, and `zekno settings unset web.domains` removes it
+  (see [Changing settings](/docs/changing-settings#changing-one-zekno-settings-set-and-unset)).
+- With no terminal it prints the change line, `Written  Run zekno deploy to use it.`,
+  and the record as `record\tA\tshop.example.com\t203.0.113.7`, tab-separated.
+  `--json` prints one object: the service, its domains before and after, and
+  the record when it is known.
+
+Refused with nothing written, exit status 2, as `zekno settings set` refuses
+a value:
+
+```text
+$ zekno domain add "*.example.com"
+✖ *.example.com is not a domain zekno can route.
+  Use a full name such as shop.example.com: no wildcard, no address, no port.
+
+$ zekno domain add bücher.example
+✖ bücher.example is not a domain zekno can route yet.
+  Names with letters other than a to z, digits and the hyphen are not in this version of zekno.
+
+$ zekno domain add shop.example.com
+✖ web has no port, so a domain cannot reach it.
+  Set the port it listens on first: zekno settings set web.port <port>.
+
+$ zekno domain add shop.example.com --service web
+✖ shop.example.com is already a domain of api.
+  A domain reaches one service. Remove it there first: zekno domain rm shop.example.com.
+```
+
+**The domain rule.** A full name of lowercase letters, digits, hyphens and
+dots: at least two labels, each at most 63 characters and not starting or
+ending with a hyphen, at most 253 characters in all, and no dot at the end.
+Not a wildcard, an address, a port or a path. Not `localhost`, and not a name
+under a special-use name that never reaches the public internet, such as
+`.test`, `.local`, `.internal`, `.example` or `.invalid`. A name with letters
+outside a to z is refused in this version, and so is its other spelling, a
+label that starts `xn--`. The runner holds every signed domain to the same
+rule.
+
+In a folder that deploys a Compose file written by hand:
+`This folder deploys a Compose file written by hand. Domains need a settings file. Run zekno settings init to start one.`
+
+## The DNS record
+
+At your DNS provider, create an `A` record for the domain with the server's
+public IPv4 address, or an `AAAA` record with its IPv6 address.
+`zekno domain add` names the record when it knows the address. It reads the
+address the way SSH would reach the server: `ssh -G` prints the host SSH
+would connect to, without connecting, and only its `hostname`, `proxyjump`
+and `proxycommand` lines are read.
+
+The address is not known when the server is this machine, when SSH reaches
+it through a jump host or a proxy command, or when its host name gives only
+private addresses. The line after the write then says what to do instead:
+
+```text
+  Before you deploy, point shop.example.com at the public address of prod-1 at your DNS provider.
+```
+
+In a folder that is not linked to a server, it names "your server".
+
+## The check before a deploy
+
+Before it signs a deploy, `zekno deploy` looks up each domain the server does
+not hold for the app yet, from your machine, with the system's resolver. The
+domain is never sent to Zekno, or to anyone `zekno` chose. Each lookup waits
+3 seconds, and is tried twice. A domain that points to the server gets a line
+before the deploy's panel:
+
+```text
+✔ shop.example.com points to prod-1  203.0.113.7
+```
+
+A domain that does not lead to the server stops the deploy. Nothing is
+signed or sent, and no deploy number is used. Exit status 1. The sentence
+names the record to create:
+
+| When | `zekno` says |
+| --- | --- |
+| The domain has no record | shop.example.com has no DNS record yet. Create an A record for shop.example.com with the value 203.0.113.7, then run `zekno deploy` again. Nothing was signed. |
+| It points to another address | shop.example.com points to 198.51.100.9, not to prod-1. Change its A record to 203.0.113.7, then run `zekno deploy` again. If something of yours stands in front of prod-1, deploy with `--skip-dns-check`. Nothing was signed. |
+
+When something of yours answers DNS with its own addresses, such as a CDN in
+front of the server, or when a VPN or a company proxy makes your machine see
+other addresses than visitors do, deploy with `zekno deploy --skip-dns-check`.
+Nothing is looked up, and each new domain gets a warning:
+
+```text
+! DNS was not checked for shop.example.com.
+```
+
+The other cases are warnings, and the deploy goes on:
+
+| When | `zekno` says |
+| --- | --- |
+| The server's public address is not known | zekno cannot tell whether shop.example.com points to prod-1, because this machine reaches prod-1 at an address that is not public. It points to 203.0.113.7. |
+| The lookup itself failed: no network, or no answer from the resolver | zekno could not look up shop.example.com from this machine. The deploy goes on. |
+| A domain the app holds already has moved away | shop.example.com points to 198.51.100.9, no longer to prod-1. Visitors are not reaching shop there, and its certificate cannot be renewed. |
+
+A domain the server holds for the app already is a warning, not a stop: its
+route exists. A domain that points to the server by several addresses passes
+when one of them is the server's.
+
+These stop a deploy before the DNS check, with nothing signed:
+
+- **Another app holds the domain on that server.**
+  ``shop.example.com belongs to blog on prod-1. Release it there first: run `zekno domain rm shop.example.com` in blog's folder and deploy blog. Nothing was signed.``
+- **The runner does not carry out domains.** A runner of protocol 3 or older,
+  as every released runner is today:
+  ``The runner on prod-1 is version 0.1.0, too old for domains and health checks. Run `zekno server update prod-1`, then run `zekno deploy` again. Nothing was signed.``
+  A deploy with no domain and no health check is not affected.
+- **A service with a domain has no port.**
+  ``web has a domain and no port. Set the port it listens on with `zekno settings set web.port <port>`. Nothing was signed.``
+
+With no terminal, each stop and warning is a line on standard error, and the
+line of a domain that points to the server is
+`dns\tshop.example.com\t203.0.113.7` on standard output.
+
+## After the start: the wait for HTTPS
+
+The summary panel of the deploy has a `domains` row, one domain a row; after
+the first three, `and 5 more`. On the server, the runner puts the routes in
+force once Docker Compose has started the app: it starts the proxy if it is
+not running, gives the proxy its new configuration, and confirms that the
+proxy took it. The proxy then asks Let's Encrypt for a certificate for each
+new domain.
+
+When the deploy started with a domain the app did not have, `zekno` asks the
+address over HTTPS from your machine, as a visitor would, every 2 seconds,
+for up to 60 seconds:
+
+```text
+⠹ Waiting for the certificate of shop.example.com 12s
+✔ https://shop.example.com is live  certificate until 17 Feb 2027
+```
+
+The certificate counts only when it is valid for the domain as a browser
+would judge it. When it is not there within the 60 seconds, the deploy still
+succeeded, with exit status 0, and a warning says how to look later:
+
+```text
+! The certificate for shop.example.com is not ready yet. Run `zekno domain` to see when it is.
+```
+
+The proxy keeps asking for the certificate by itself, with growing waits.
+With no terminal, the wait ends with `https\tshop.example.com\tlive\t2027-02-17`
+or `https\tshop.example.com\twaiting` on standard output. With `--json`,
+nothing is waited for.
+
+### When the routes cannot be put in force
+
+The app was started, its deploy number is used, and it is the app's current
+deploy. Its domains are not served as the deploy asked. Exit status 1:
+
+| When | `zekno` says |
+| --- | --- |
+| Port 80 or 443 is taken by another program | shop is running, but prod-1 cannot answer for its domains: port 80 is in use by another program. Free ports 80 and 443 on prod-1, then run `zekno deploy` again. |
+| A routed service has no running container | shop.example.com cannot reach web: no container of web is running. Run `zekno logs` to see why. |
+| A routed service uses the host's network | shop.example.com cannot reach web: web uses the host's network, which zekno cannot route to. Give web a network of its own, then run `zekno deploy` again. |
+| The proxy did not take the new configuration | shop is running, but prod-1 did not take its new domains, so it answers for the ones it had. Run `zekno doctor` to see why. |
+
+In each case the proxy keeps the configuration it had, and the app's earlier
+routes stay in force. No other app's domain is affected. An app whose own
+Compose text publishes port 80 or 443 holds that port, and the proxy cannot
+start beside it.
+
+The runner refuses two deploys before anything runs, with no number used:
+
+| The runner's reason | `zekno` says |
+| --- | --- |
+| `domain_taken` | A domain of this deploy belongs to another app on that server. Nothing of it ran. Run zekno domain to see which. |
+| `too_large`, for domains | That server would hold more domains than a runner keeps. Nothing of this deploy ran. Remove a domain from an app there first. |
+
+## zekno domain
+
+Lists the domains of the folder's app, and whether each one works now. It
+needs a folder linked to the app with `zekno link`, and takes its app and
+server from there.
+
+```text
+$ zekno domain
+  shop on prod-1
+blog.example.com  web:3000  ✖ belongs to blog       release it there first
+new.example.com   web:3000  ○ not deployed          run zekno deploy
+old.example.com   web:3000  ○ to be released        removed from the file, run zekno deploy
+shop.example.com  web:3000  ● live                  certificate until 17 Feb 2027
+www.example.com   web:3000  ● DNS points elsewhere  198.51.100.9, not prod-1
+```
+
+One row a domain of the settings file or of the server's routes for the app,
+in domain order: the domain, the service and port it reaches, its state after
+a mark, and what to do. Whether the server holds a domain, and for which app,
+is the runner's word. Where DNS points and what HTTPS answers are asked from
+your machine: it is what a visitor would get, not the server's word. They are
+asked only for the domains the server holds for the app and the file still
+names, at most 8 at a time. The state is the first of these that holds:
+
+| State | Mark | Detail | When |
+| --- | --- | --- | --- |
+| `belongs to blog` | `✖` red | release it there first | The server holds the domain for another app |
+| `not deployed` | `○` dim | run zekno deploy | In the file, not yet in the server's routes for this app |
+| `to be released` | `○` dim | removed from the file, run zekno deploy | In the server's routes for this app, no longer in the file |
+| `no DNS record` | `●` red | create an A record with the value 203.0.113.7 | The domain has no A or AAAA record |
+| `DNS points elsewhere` | `●` red | 198.51.100.9, not prod-1 | None of its addresses is the server's |
+| `not answering` | `●` red | nothing answers on port 443 of prod-1 | Nothing answers HTTPS within 5 seconds |
+| `no certificate yet` | `●` yellow | prod-1 is asking for one | Something answers, without a valid certificate for the domain |
+| `live` | `●` yellow | certificate ends 21 Nov, renewal is failing | Valid, and its last day is within 14 days |
+| `live` | `●` green | certificate until 17 Feb 2027 | Valid |
+
+The proxy renews a certificate well before its last day, so a last day
+within 14 days means renewal is failing. When the server's public address is
+not known, `no DNS record` says to point the domain at the server's public
+address, and a domain with records is not judged by them.
+
+- With no domain:
+  `shop has no domain. Add one with zekno domain add <domain>.`
+- When the server cannot be reached, or its runner is older than protocol 4,
+  the file's domains are shown as `not deployed`, with `prod-1 was not asked`.
+  The warning `zekno status` would give about that server, when there is one,
+  comes first.
+- With no terminal, one line a domain, tab-separated: the domain, the service,
+  the port, the state in one word, and the certificate's last day or nothing:
+  `shop.example.com\tweb\t3000\tlive\t2027-02-17`. The words are `live`,
+  `renewing`, `waiting`, `no-dns`, `dns-elsewhere`, `down`, `not-deployed`,
+  `releasing` and `taken`. Nothing for an app with no domain.
+- `zekno domain --json` prints a list of the same facts, each with `domain`,
+  `service`, `port`, `state` and `until`, or `[]`.
+- Exit status 0, whatever the states.
+
+The domains show in other places too. `zekno settings` shows them under
+Networking, one a row (see [Showing the settings](/docs/changing-settings#showing-the-settings)).
+`zekno status` shows the domains the server holds after each app's line, as
+`shop  https://shop.example.com`, without asking DNS or HTTPS (see
+[zekno status](/docs/deploying#zekno-status)). `zekno doctor` checks the proxy
+of each server that holds a domain (see [zekno doctor](/docs/doctor#zekno-doctor)).
+
+## Removing a domain, or moving it
+
+`zekno domain rm` takes the domain out of the settings file, shown before it
+is written, as `zekno domain add` writes it:
+
+```text
+$ zekno domain rm shop.example.com
+  web · domains  shop.example.com → none
+? Write this to zekno.app.json? Nothing is deployed until you deploy. (y/N) yes
+✔ Written  Run zekno deploy to release it.
+```
+
+A domain the file does not name is refused, exit status 2:
+`shop.example.com is not a domain of this app. Run zekno domain to see its domains.`
+
+The next deploy leaves the domain out, and the server releases it: the proxy
+stops answering for it, then its certificate and private key are deleted.
+Other apps' domains are untouched. When the last domain on a server is
+released, the proxy is stopped and removed, and ports 80 and 443 close again.
+Its storage stays on the server, for the next domain.
+
+A domain belongs to one app on a server at a time. A deploy of another app
+that names it stops before signing, and says which app holds it. Moving a
+domain is two deploys: remove it from the app that holds it and deploy that
+app, then add it to the other and deploy that one. One deploy runs at a time
+on a server, so when two apps claim one free domain at once, the first deploy
+holds it and the second is refused.
+
+## A rollback keeps the domains
+
+`zekno rollback` signs a new deploy with the Compose text of an earlier one.
+It keeps the domains in force now, as the server reports them, not those of
+the earlier deploy, so going back never takes the site off its domain or frees
+a domain for another app. It makes no DNS check. When the earlier text has no
+service a domain reaches, it stops before signing:
+
+```text
+What deploy 41 ran has no service named web, which shop.example.com reaches. Remove the domain first, or roll back to a deploy that has web. Nothing was signed.
+```
+
+## What the server holds
+
+| What | Where |
+| --- | --- |
+| The proxy | A container named `zekno-proxy`, started from Caddy 2.11.9, pinned in the runner by its digest. Docker restarts it unless it is stopped by hand. |
+| Certificates and their private keys | The Docker volume `zekno-proxy-data`, in the proxy at `/data`. Kept when the proxy is made again or removed. |
+| What the proxy saves of its configuration | The Docker volume `zekno-proxy-config`. |
+| The proxy's configuration | `proxy/etc/caddy.json` in the [runner's folder](/docs/runner#its-folder), generated whole by the runner and read by the proxy, read-only. |
+| An app's route network | A Docker network, `zekno-route-<app>`, for each app with a domain or a health check. The runner gives each container of a routed or checked service a random name on it. |
+| Which app holds which domain | The routes in force, in the runner's `state.json`. |
+
+- **The TLS keys of the domains are on the server.** Each certificate's
+  private key is made and kept by the proxy, on the server. None passes
+  through your machine or through Zekno. A released domain's certificate and
+  key are deleted with the release.
+- **Let's Encrypt only.** Certificates are asked for only for the domains in
+  routes in force, from Let's Encrypt, with no email address. No other
+  certificate authority is used.
+- **HTTPS only.** A request over HTTP on port 80 is redirected to HTTPS.
+  HTTP/1.1 and HTTP/2 are served; HTTP/3 is off, so no UDP port is opened. A
+  request whose `Host` names no route gets 404.
+- **The proxy's configuration holds nothing a deploy wrote.** It is built from
+  the routes in force and the names the runner made, and every domain, name
+  and port in it is checked again as it is written. The proxy has no admin
+  interface and never gets the Docker socket. It runs with no capability
+  but binding ports below 1024.
+- **The proxy reaches a container by its name**, on the app's route network,
+  looked up at each connection. A container that restarts is followed. While
+  it is down, requests for its domain get an error.
+- **A new configuration is loaded only when it differs** from the one in
+  force. Each load can drop a few new connections; requests already running
+  are not cut. If the proxy does not take it, the configuration it had stays
+  in force.
+- **A deploy replaces the app's containers as it does today.** Requests that
+  arrive while it does can fail.
+- **The image comes through Docker.** The first time the proxy is started,
+  Docker fetches the pinned image, about 24 MiB. The runner uses no image a
+  deploy names for the proxy.
+- **Updating the runner.** A runner release with another image makes the
+  proxy again at the next deploy with a domain. After `zekno server update`,
+  when the server holds a domain, the runner is asked to make the proxy match
+  the routes in force at once. Nothing is put in force that a signed deploy
+  did not put there.
+
+## What zekno cannot know
+
+- **The server's public address**, when your machine reaches it through a
+  jump host, a proxy command or a private network, or when it is this machine.
+  `zekno` then says it cannot tell, and does not guess.
+- **Whether a certificate will come.** Let's Encrypt has limits on how many
+  certificates it gives. A CAA record of the domain can forbid it, and a
+  firewall in front of ports 80 or 443 can block its check. The deploy says
+  the certificate is not ready, and `zekno domain` shows what HTTPS answers.
+- **What visitors elsewhere get.** DNS and HTTPS are asked from your machine.
+  A VPN, a company proxy or a DNS cache can make them answer differently
+  there.
+
+## Not in this version
+
+- Domains for an app deployed from a Compose file written by hand.
+- Names with letters outside a to z, in either spelling.
+- Wildcard domains, certificates by a DNS challenge, certificates you bring,
+  another certificate authority, and an email address given to Let's Encrypt.
+- Routes by path, and routes for TCP or UDP. HTTP/3.
+- Deploys with no dropped requests.
+- Changing DNS: `zekno` never creates, changes or deletes a DNS record.
+- A check by `zekno doctor` that ports 80 and 443 are free: the deploy that
+  starts the proxy says so.
+- Docker without root: binding ports below 1024 then needs a setting on the
+  server, which `zekno` does not check.
+- Removing an app altogether. A deploy that leaves its domains out releases
+  them.

@@ -61,6 +61,13 @@ press does at the hidden prompt is a pure function, `src/ui/parts/secret-input.t
 interface and an in-memory key store, so they need no terminal and never touch the real keychain. `test/docs/docs.test.ts` checks that the pages of the docs name every command, flag
 and key, and that they, this file and the root README name nothing that does not exist.
 
+What a domain needs from outside this machine's files comes through three effects, given in
+`src/main.ts` only: `resolveDomain` (the system's resolver), `probeHttps` (a TLS connection to port
+443 of a domain) and `sshHost` (`ssh -G`, which connects nowhere). Left out, as in every test that
+sets no stand-in (`test/support/domain-stand-ins.ts`), each means "cannot tell" or "not looked up",
+and nothing is called. `test/domains/effects.test.ts` checks which files may use them. So the tests
+make no DNS lookup and no connection to a domain.
+
 ### Where the code lives
 
 `src` holds `main.ts`, the entry point, and one folder per subject. Nothing else sits loose.
@@ -76,6 +83,7 @@ and key, and that they, this file and the root README name nothing that does not
 | `server/` | Reaching a server: transport, session, cleaning what a server says, the check script, and `install/`, the installer |
 | `project/` | `zekno.json`, the record of first use, reading the Compose file |
 | `settings/` | An app's `zekno.app.json`: its reader, its writer, the Compose text it turns into, and which file a deploy uses |
+| `domains/` | Domains and HTTPS: the domain rule as typed, the routes and health check a deploy signs, the server's public address, the DNS lookup, the HTTPS probe, the state `zekno domain` shows, and their words |
 | `templates/` | The templates `zekno add` adds: one file each in `files/` and the index that names them, their reader, the passwords made, what adding one changes, and the lines for a Compose file written by hand |
 | `profile/` | The profile folder and the keychain |
 | `shared/` | What both the app and single commands show: times, app views, deploy stages |

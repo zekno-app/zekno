@@ -57,6 +57,23 @@ $ zekno doctor
   free disk space where the runner keeps its state. It finds these with a short
   fixed script that only reads, and by asking the runner its version and
   status.
+- **The proxy.** For a server whose runner speaks protocol 4 and holds a
+  domain, one more line after the runner's: whether the proxy that answers
+  for the domains runs (see [Domains and HTTPS](/docs/domains#what-the-server-holds)).
+  A proxy that is not running is a problem; one from another image than the
+  runner's is a warning, which `zekno server update` puts right. A server
+  with no domain has no Proxy line.
+
+  ```text
+  ✔ Proxy          answers for 2 domains
+  ✖ Proxy          not running
+                   Deploy an app with a domain to start it again
+  ! Proxy          an older version
+                   Run zekno server update prod-1 to replace it
+  ```
+
+  It does not check whether ports 80 and 443 are free: a deploy that starts
+  the proxy says so when one is taken.
 - **Results.** `✔` good, `!` a warning, `✖` a problem, `–` not checked: a check
   that depends on one that failed is not checked, not wrong. Every warning and
   problem has a line under it that says what to do. A warning does not fail
@@ -71,9 +88,9 @@ $ zekno doctor
 - `--server <name>` checks your machine and that one server. `--json` prints
   one object: `zekno`, `runner`, `machine` (the checks of your machine),
   `servers` (each with `name`, `where` and `checks`), `serversSkipped`,
-  `latest`, `problems` and `warnings`. Each check has `check`, `result`
-  (`good`, `warning`, `problem` or `not_checked`), and `detail` and `next`
-  where there are any.
+  `latest`, `problems` and `warnings`. Each check has `check` (the proxy's is
+  `proxy`), `result` (`good`, `warning`, `problem` or `not_checked`), and
+  `detail` and `next` where there are any.
 - It also asks GitHub once whether a newer release exists, as `zekno version`
   does. A newer one makes the `zekno` line a warning, with "A newer release
   exists" under it; no answer is not a warning.

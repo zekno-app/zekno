@@ -71,9 +71,19 @@ from     zekno.app.json  2 services: web, worker
 A deploy from a Compose file draws the panel as before. Plain output and
 `--json` are the same for both.
 
-Exit status 1 when the runner accepted the deploy but the app did not start.
-The deploy number is used either way. A deploy in the new deploy format that
-the runner refuses uses no number (see
+An app whose settings give it a domain or a health check is deployed with
+them. Before anything is signed, each domain new to the app is looked up from
+your machine, and a domain that does not point to the server stops the
+deploy; `zekno deploy --skip-dns-check` goes on without looking. The panel has
+a `domains` row, and after the start the deploy waits up to 60 seconds for
+each new domain to answer over HTTPS with a valid certificate. With a health
+check, it waits for the app to be healthy. See [Domains and HTTPS](/docs/domains) and
+[Health checks](/docs/health-checks).
+
+Exit status 1 when the runner accepted the deploy but the app did not start,
+when the server could not put its domains in force, or when it was not
+healthy in time. The deploy number is used in each case. A deploy in the new
+deploy format that the runner refuses uses no number (see
 [The deploy it is made after](#the-deploy-it-is-made-after)).
 
 ```bash
@@ -113,7 +123,7 @@ and stops as before.
 
 ### The deploy it is made after
 
-With a runner that speaks protocol 3 (see
+With a runner that speaks protocol 3 or 4 (see
 [An older or a newer runner](#an-older-or-a-newer-runner)), `zekno deploy`
 signs in the new deploy format, deploy format 2. On the deploy's own
 connection it reads the app's last deploy number from the runner, and signs a
@@ -163,6 +173,8 @@ one sentence:
 | `secret_missing` | The runner does not hold a secret this deploy lists, and it was not sent with it. Nothing of it ran. Run zekno deploy again. |
 | `untrusted_secret` | A secret of this app was set by someone who is no longer in the team. Nothing of this deploy ran. Set it again with zekno secret set, or remove it with zekno secret rm. |
 | `expired` | The time this deploy had to run had passed by the server's clock. Nothing of it ran. Deploy again, and check the server's clock if it says so again. |
+| `domain_taken` | A domain of this deploy belongs to another app on that server. Nothing of it ran. Run zekno domain to see which. |
+| `too_large`, for domains | That server would hold more domains than a runner keeps. Nothing of this deploy ran. Remove a domain from an app there first. |
 | `unsupported_version` | The runner on that server does not carry out everything this deploy asks for. Nothing of it ran. Run zekno status to compare its version with this zekno's. |
 | `malformed`, `wrong_payload_type` | The runner could not read this deploy. Nothing of it ran. Run zekno status to compare its version with this zekno's. |
 
@@ -181,16 +193,28 @@ and signs in the format the runner speaks:
 
 | The runner | The deploy |
 | --- | --- |
-| Speaks protocol 3 | Signed in the new format |
-| Speaks an older protocol, as every released runner does, 0.1.0 included | Signed in the older format, as before |
-| From before sessions, so it reports no version | Signed in the older format, as before |
+| Speaks protocol 4 | Signed in the new format, with its domains and health check |
+| Speaks protocol 3 | Signed in the new format. One with a domain or a health check is not signed |
+| Speaks an older protocol, as every released runner does, 0.1.0 included | Signed in the older format, as before. One with a domain or a health check is not signed |
+| From before sessions, so it reports no version | Signed in the older format, as before. One with a domain or a health check is not signed |
 | Speaks a newer protocol than this `zekno` | Not signed |
 
-No runner release speaks protocol 3 yet. A `zekno` built from the repository
-still installs runner 0.1.0, so on a server with a released runner every
-deploy is signed in the older format, as before: numbered one above the
-runner's number and the highest this machine signed, with every secret sent
-each time. A runner built from the repository speaks protocol 3.
+No runner release speaks protocol 3 or 4 yet: runner 0.1.1, the first that
+will, is not published. A `zekno` built from the repository still installs
+runner 0.1.0, so on a server with a released runner every deploy is signed in
+the older format, as before: numbered one above the runner's number and the
+highest this machine signed, with every secret sent each time. A runner built
+from the repository speaks protocol 4.
+
+A deploy with a domain or a health check, to a runner that does not carry
+them out, stops before anything is signed:
+
+```text
+The runner on <server> is version <version>, too old for domains and health checks. Run `zekno server update <server>`, then run `zekno deploy` again. Nothing was signed.
+```
+
+A runner from before sessions reports no version, and the sentence leaves
+`version <version>, ` out.
 
 When a runner of an older protocol reports a version older than the one this
 `zekno` carries, the deploy says so once it is signed, and goes on. At a
@@ -228,6 +252,10 @@ deploy reached the server first, its sentence ends
 `Run zekno rollback again to deploy on top of it.` Against an older or a newer
 runner it does what `zekno deploy` does.
 
+A rollback keeps the domains and the health check in force now, not those of
+the deploy it returns to, and makes no DNS check (see
+[A rollback keeps the domains](/docs/domains#a-rollback-keeps-the-domains)).
+
 ```bash
 zekno rollback --app api --server prod --to 3
 ```
@@ -246,6 +274,12 @@ to update `zekno` first, and `zekno deploy` stops before signing (see
 ```bash
 zekno status --server prod
 ```
+
+A runner that speaks protocol 4 also says which domains each app holds. Each
+one is a line after its app's line, as `shop  https://shop.example.com`;
+piped, `domain\tshop\tshop.example.com`; and with `--json`, the field
+`routes`, for a server that holds any. They are what the server holds, not
+whether they work: [zekno domain](/docs/domains#zekno-domain) checks that.
 
 <Screen
   name="status"

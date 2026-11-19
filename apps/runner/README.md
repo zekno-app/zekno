@@ -9,6 +9,10 @@ The [CLI](../cli) starts it over SSH. The runner checks, with
 this server and is newer than the last one. Only then does it decrypt the secrets and start
 Docker Compose. Having SSH access is not enough to make it run something: the signature is.
 
+When an app has a domain, the runner starts a proxy on the server, a container that listens on
+ports 80 and 443 (see [Domains and the proxy](#domains-and-the-proxy)). The runner itself still
+opens no port.
+
 > **Pre-alpha and unaudited.** The runner, the CLI and the core library have had internal reviews
 > only. Do not use it for anything you could not afford to lose, and do not rely on it in
 > production before an external audit.
@@ -27,13 +31,15 @@ Docker Compose. Having SSH access is not enough to make it run something: the si
 Each command but `session` prints one JSON line on standard output. `setup`, `sync` and `apply`
 read one JSON message from standard input, of at most 32 MiB. During a one-shot `apply`, Docker's
 own output goes to standard error. Any other word, or more than one, prints the usage on standard
-error. `deploy` and `records`, like `state` and `logs`, are requests of a session only:
-`zekno-runner deploy` and `zekno-runner records` print the usage, with exit status 2.
+error. `deploy`, `records` and `proxy`, like `state` and `logs`, are requests of a session only:
+`zekno-runner deploy`, `zekno-runner records` and `zekno-runner proxy` print the usage, with exit
+status 2.
 
 ### Protocol 3
 
-Runner 0.1.0 speaks protocol 2. A runner built from this repository speaks protocol 3, and answers
-`version` with `{"version":"0.1.0","protocol":3}`. No runner release speaks protocol 3 yet.
+Runner 0.1.0 speaks protocol 2. A runner built from this repository speaks protocol 4, and answers
+`version` with `{"version":"0.1.0","protocol":4}`. No runner release speaks protocol 3 or 4 yet:
+runner 0.1.1, the first that will, is not published.
 
 Protocol 3 means the runner carries out deploy format 2, `zekno.deploy.v2`: each deploy names the
 deploy of the app it was made after (`previous`), may carry an expiry (`expiresAt`), and lists each
@@ -41,12 +47,38 @@ secret by its version. The runner keeps each secret's latest record, so a deploy
 records it lacks. It answers two more requests in a session, `deploy` and `records`. It still opens
 no network port and makes no connection of its own.
 
-Deploy format 2 already has fields for builds from source, a command to run before a deploy, a
-health check and routes. This runner carries out none of them, and refuses a deploy that uses one.
-It takes a deploy in deploy format 1, through `apply`, only for the apps it held before it was
-updated that have had no deploy in format 2 since (see [What it refuses](#what-it-refuses)). The
-checks of format 2, in their order, are
-[`specs/014-deploy-v2/contracts/runner-checks.md`](../../specs/014-deploy-v2/contracts/runner-checks.md).
+Deploy format 2 also has fields for builds from source and a command to run before a deploy. The
+runner carries out neither, and refuses a deploy that uses one. It takes a deploy in deploy format
+1, through `apply`, only for the apps it held before it was updated that have had no deploy in
+format 2 since (see [What it refuses](#what-it-refuses)). The checks of format 2, in their order,
+are [`specs/014-deploy-v2/contracts/runner-checks.md`](../../specs/014-deploy-v2/contracts/runner-checks.md).
+
+### Protocol 4
+
+Protocol 4 means the runner also carries out the two other fields of deploy format 2: its routes,
+each a domain, a service and a port, and its health check (see
+[Domains and the proxy](#domains-and-the-proxy)). A deploy can end with two more outcomes, both
+after its number is used:
+
+- `routes_failed`: the app started, and its routes could not be put in force, with the reason,
+  `port_taken`, `no_container`, `host_network` or `not_loaded`, and the port or the service it
+  concerns.
+- `unhealthy`: the app started, and a service was not healthy in time, with that service. Nothing
+  is rolled back.
+
+In a session, `deploy` sends a `health` event when it begins to wait for a service. `status` with
+the input `{"routes":true}` also answers the routes in force of each app that has any, and the
+proxy's state: `none`, `running`, `stopped`, `missing` or `other_image`. Without that input it
+answers as before, so every older zekno reads it. `proxy`, a new request, makes the proxy what the
+routes in force need, from the state alone: it starts the proxy, makes it again from the pinned
+image, loads its configuration when it differs, or removes it when no app has a route. It needs no
+signature, since it puts in force no route a signed deploy did not. `zekno server update` sends it
+after an update.
+
+The runner itself still makes no connection of its own. The proxy connects to Let's Encrypt for
+certificates, and Docker fetches the proxy's pinned image the first time it is needed. The rules
+are [`specs/015-domains-https/contracts/runner.md`](../../specs/015-domains-https/contracts/runner.md)
+and [`contracts/core.md`](../../specs/015-domains-https/contracts/core.md).
 
 ### `session`
 
@@ -67,17 +99,19 @@ CLI    closes its side
 | Request | Events | Result |
 |---------|--------|--------|
 | `version` | none | its version and protocol |
-| `status` | none | as the `status` command, or a refusal |
+| `status` | none | as the `status` command, or a refusal; with `{"routes":true}`, also the routes in force and the proxy's state |
 | `setup` | none | as the `setup` command, or a refusal |
 | `sync` | none | as the `sync` command |
 | `apply` | `progress`: Docker's output, one line each | as the `apply` command |
 | `state` | none | what is running for each app, or a refusal |
 | `logs` | `log`: one line of an app's logs | `{"outcome":"ok"}` once Docker's log command ends |
-| `deploy` | `progress`: Docker's output, one line each | `started`, `start_failed` or a refusal, as `apply` |
+| `deploy` | `progress`: Docker's output, one line each; `health`: the service it waits for | `started`, `start_failed`, `routes_failed`, `unhealthy` or a refusal |
 | `records` | none | the statements of the secret records it keeps for an app, or a refusal |
+| `proxy` | none | the proxy's state, `none` or `running`; `routes_failed` with `port_taken` or `not_loaded`; or a refusal |
 
-`state`, `logs`, `deploy` and `records` exist only inside a session. `deploy` and `records` need
-protocol 3: a runner from before it answers either with `invalid_request` before it runs anything.
+`state`, `logs`, `deploy`, `records` and `proxy` exist only inside a session. `deploy` and
+`records` need protocol 3, and `proxy` protocol 4: a runner from before it answers with
+`invalid_request` before it runs anything.
 
 - Requests are handled one at a time, in order. Each is answered by zero or more events, then
   exactly one result.
@@ -141,10 +175,11 @@ that folder exists and belongs to them (a server set up by an earlier version); 
 |------|------|
 | `server.key` | This server's secret key. Mode `0600`. It never leaves the server. |
 | `server.pub` | This server's public key. |
-| `state.json` | The team list it trusts, the last deploy number per app, the latest version of each secret, and a version mark: `"v": 2`, and each app's deploy format under `formats`. |
+| `state.json` | The team list it trusts, the last deploy number per app, the latest version of each secret, and a version mark: `"v": 3`, each app's deploy format under `formats`, and under `routes` the routes in force of each app that has a domain or a health check, with the names it gave their containers. |
 | `records/<app>/<hash>.json` | The latest record of each secret of an app deployed in format 2, named by the hash of its sealed value. Mode `0600`. |
 | `apps/<app>/compose.yaml` | The Compose file of the last accepted deploy. |
-| `lock` | Present while a `setup`, `sync`, `apply` or `deploy` is at work, so two runs never overlap. |
+| `proxy/etc/caddy.json` | The proxy's configuration, written whole by the runner. The proxy reads the folder read-only. |
+| `lock` | Present while a `setup`, `sync`, `apply`, `deploy` or `proxy` is at work, so two runs never overlap. |
 
 Decrypted secrets are never written here. They are handed to Docker Compose through its
 environment. Docker itself keeps a container's environment in its own configuration. App state
@@ -157,9 +192,10 @@ opens a record only after every check of a deploy that lists it, and checks the 
 again at each deploy. A server keeps at most 8,192 records, and at most 64 MiB of them. Deploys in
 format 1 leave no record.
 
-Runner 0.1.0 writes `state.json` without the mark. A runner that speaks protocol 3 reads such a
+Runner 0.1.0 writes `state.json` without the mark. A runner that speaks protocol 4 reads such a
 state and writes nothing until its first change (`sync`, `apply` or `deploy`), which writes it
-whole with the mark; `setup` writes the mark from the start. Each app it held when it first read
+whole with the mark; `setup` writes the mark from the start. A state marked `"v": 2`, which a
+runner of protocol 3 writes, is read as holding no routes. Each app it held when it first read
 the state is at format 1 until its first deploy in format 2, and stays at format 2 from then on. An
 app it never held is at format 2 from its first deploy. Once the state has the mark, runner 0.1.0
 cannot read it (see [What to know before you rely on it](#what-to-know-before-you-rely-on-it)).
@@ -195,23 +231,66 @@ or other detail of the server.
 - **An expired deploy**: `expired`, when the deploy's expiry has passed by the server's clock, or
   is more than 7 days after it. zekno signs no expiry over SSH. The order of deploys never depends
   on the clock.
-- **What it does not carry out yet**: a deploy in format 2 that asks for a build, a command before
-  the deploy, a health check or a route is refused with `unsupported_version`, once its format has
-  been checked. One whose field breaks its own rule, with a field the format does not have, with a
+- **A domain another app holds**: a deploy in format 2 with a route for a domain that another app
+  on the server holds is refused with `domain_taken`, before anything runs.
+- **What it does not carry out yet**: a deploy in format 2 that asks for a build or a command
+  before the deploy is refused with `unsupported_version`, once its format has been checked. One whose field breaks its own rule, with a field the format does not have, with a
   `v` other than 2, or written in any other spelling than the one zekno signs, is `malformed`.
 - **Format 1, for an app that has moved on**: a deploy in format 1 (`apply`) is taken only for an
   app the runner held when it first read a state without the mark, and that has had no deploy in
   format 2 since. Any other is refused with `unsupported_version`, a word every older zekno can
-  read.
-- **Too much**: a deploy that would make it hold more than 1,024 apps or 8,192 secret versions, or
-  keep more than 8,192 records or 64 MiB of them, is refused with `too_large`, before anything is
-  opened. So is a deploy that sends a record whose statement is longer than 4,096 characters.
+  read. An app that holds a domain has had one, so a deploy in format 1 never releases it.
+- **Too much**: a deploy that would make it hold more than 1,024 apps, 8,192 secret versions or
+  1,024 domains, or keep more than 8,192 records or 64 MiB of them, is refused with `too_large`,
+  before anything is opened. So is a deploy that sends a record whose statement is longer than 4,096 characters.
 - **A request it cannot read**: one that does not match its message, is larger than 32 MiB, or
   asks for the logs of an app it never accepted a deploy of, is refused with `invalid_request`.
   The app name is checked against the app-name pattern before Docker sees it.
 
 Every refusal of a deploy in format 2 comes before its number is used, and changes nothing but the
 team lists sent with it: `state.json`, `records/`, the Compose file and Docker are as they were.
+
+## Domains and the proxy
+
+A deploy with routes or a health check does more once `docker compose up` has returned, under the
+same lock:
+
+1. It finds each routed or checked service's containers, by `docker compose ps` and their Compose
+   labels. A service with none is `no_container`; one on the host's network is `host_network`.
+2. It makes the app's route network, `zekno-route-<app>`, labelled with this server and the app,
+   and gives each container a random name on it: `z` and 32 hex characters. A container that was
+   not made again keeps its name. Nothing a deploy carries names a network or a name.
+3. When a route needs it, it starts the proxy, `zekno-proxy`, from the image it pins by digest
+   (`src/proxy/image.ts`), with ports 80 and 443 published, `--restart unless-stopped`, no
+   capability but binding low ports, no Docker socket, and the volumes `zekno-proxy-data` and
+   `zekno-proxy-config`. A port another program holds is `port_taken`.
+4. It joins the proxy to the route networks it needs, writes `proxy/etc/caddy.json` whole from the
+   routes in force of every app and the names it made, has the proxy check it with
+   `caddy validate`, loads it with `docker exec zekno-proxy kill -USR1 1`, reads the proxy's log
+   for the result, and confirms the file's new nonce in what the proxy saved. Only then are the
+   new routes saved in `state.json`. Not taken: the configuration built from the state as it was is
+   loaded again, the state is left alone, and the outcome is `not_loaded`.
+5. It deletes the certificate and key of each released domain, takes the proxy off the network of
+   an app with no route, removes the route network of an app with no route and no health check,
+   and removes the proxy when no app has a route. The volumes stay.
+6. With a health check, it waits for it: one round every 2 seconds until every container of every
+   checked service is healthy, or the limit has passed. With a path, `curl` asks each container by
+   its name from a short-lived container of the same pinned image on the route network: read-only,
+   as a user without rights, no capability, 32 MB, no redirect followed, at most 1 KiB read, 5
+   seconds a try.
+
+The configuration has no admin interface, one server on 443 for HTTP/1.1 and HTTP/2 (so port 80
+answers with a redirect to HTTPS and no UDP port is opened), a route a domain and a last route that
+answers 404, Let's Encrypt as the only certificate authority with no email, and a grace period of
+10 seconds. Every domain, name and port in it is checked again as it is written, and the text is
+the JSON of an object, never put together by hand. It is loaded only when it differs, nonce apart,
+from the one in force, since each load can drop a few new connections.
+
+A deploy whose app has no route and no health check, and held none, makes no Docker call it did not
+make before. A deploy that stops before its start leaves the app's routes as they were. When
+`docker compose up` fails, the outcome is `start_failed`, as before, and the routes are still
+carried out as far as they go, so a domain the deploy leaves out is released. What it means for an
+app is in the [docs](https://zekno.app/docs/domains#what-the-server-holds).
 
 ## Install on a server
 
@@ -335,8 +414,8 @@ How to cut a release, from start to end, and how to withdraw one: [RELEASING.md]
   for the maintainer's decision. `records` needs no signature either: it gives the statements of
   each app's secrets, their names, versions and who set them, never a value. The design accepts
   that (T17 in [`specs/010-app-settings/deploy-v2.md`](../../specs/010-app-settings/deploy-v2.md)).
-- **Updating it is one way.** Once a runner that speaks protocol 3 has written its state, runner
-  0.1.0 cannot read it. Put back by hand, it refuses `status`, `sync`, `apply`, `state` and `logs`
+- **Updating it is one way.** Once a runner that speaks protocol 3 or 4 has written its state,
+  runner 0.1.0 cannot read it. Put back by hand, it refuses `status`, `sync`, `apply`, `state` and `logs`
   with `invalid_state`, and `setup` with `already_set_up`, and never reads the state as empty. A
   zekno from before deploy format 2 can then deploy only the apps that have had no deploy in
   format 2 ([docs](https://zekno.app/docs/servers#updating-is-one-way)).
@@ -354,7 +433,14 @@ How to cut a release, from start to end, and how to withdraw one: [RELEASING.md]
   variables: `BUN_OPTIONS` (for example `--preload <file>`, which runs that file first),
   `BUN_BE_BUN=1` (it then acts as Bun itself) and `BUN_INSPECT` (it opens a debugger). Whoever can
   set them already controls that account. The server's SSH must not accept `BUN_*` from clients:
-  no `AcceptEnv BUN_*`.
+  no `AcceptEnv BUN_*`. `ZEKNO_PROXY_TEST=<http port>:<https port>`, a switch for the tests, makes
+  the proxy take certificates from Caddy's internal authority and publish those ports on 127.0.0.1
+  only; it is read from the environment alone, and a deploy cannot set it.
+- **A domain opens ports 80 and 443 to everyone.** The proxy holds the TLS keys of every domain on
+  the server, and ends TLS for every app with a domain. Its configuration is reloaded only when it
+  changes, and each reload can drop a few new connections.
+- **A health check holds the lock.** While a deploy waits for one, up to 30 minutes, every other
+  request that takes the lock is refused with `busy`.
 - **Signing a deploy is equal to root on the server.** A Compose file can mount anything Docker
   can reach. The signature decides who may do that; the runner does not limit what they deploy.
 - **Docker's messages are passed back as they are.** An error from Docker can repeat a value
@@ -378,7 +464,7 @@ The reviews these come from are
 ## Develop
 
 ```bash
-bun test            # runs the runner as a real process against a stand-in docker
+bun test            # runs the runner as a real process against a stand-in docker, and a real proxy when Docker and the pinned image are present
 bun run typecheck
 bun run lint        # ESLint with typescript-eslint; any finding fails
 bun run format      # Prettier, the repository's settings
@@ -390,5 +476,14 @@ bun run compile     # dist/zekno-runner, for the machine you are on
 
 `src` holds `main.ts`, the entry point, and one folder per subject: `commands/` (what each
 command does), `session/` (several requests over one connection), `docker/` (starting apps with
-Docker Compose and reading what runs) and `home/` (the runner's folder on the server). Tests sit
-in folders of the same names under `test/`.
+Docker Compose and reading what runs), `home/` (the runner's folder on the server), `routes/` (an
+app's containers, its route network and their names), `proxy/` (the pinned image, the
+configuration, the container, loading it, and released certificates) and `health/` (the health
+check and the wait). Tests sit in folders of the same names under `test/`, and the scenarios in
+`test/scenarios/`.
+
+`test/scenarios/real-proxy.test.ts` runs the real runner with real Docker, the pinned image,
+Caddy's internal authority and the test switch's ports 18080 and 18443 on 127.0.0.1. It never
+pulls: without Docker, without the image, with something named as the runner names its proxy
+already there, or with either port taken, it skips and prints one line that says why. It removes
+everything it made.

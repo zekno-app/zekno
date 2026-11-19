@@ -23,7 +23,9 @@ $ zekno settings
                 restart   on failure
                 memory    1g  ! changed, not deployed (was 512m)
                 cpus      1
+                health    GET /health, within 60s
   Networking    port      3000, not published
+                domains   shop.example.com
   Variables     secrets   DATABASE_URL, SESSION_KEY
                 plain     NODE_ENV=production
   Volumes       uploads   /data/uploads
@@ -52,6 +54,9 @@ $ zekno settings
   volume from the settings keeps its data (see [Volumes](/docs/settings#volumes)). A service
   is a line after the others:
   `auth  ! removed, not deployed (was ghcr.io/acme/auth:1)`.
+- `health` is under Deploy, and `domains` under Networking, one domain a row.
+  A domain that deploy routed and the file no longer names is a row of its
+  own, as a plain variable is: `none  ! removed, not deployed (was www.example.com)`.
 
 Piped, one line per setting that is set: the service, the setting's place in
 the file, and the value as the file holds it, separated by tabs. No marks, no
@@ -63,7 +68,9 @@ web	deploy.start	bun run start
 web	deploy.restart	on-failure
 web	deploy.memory	1g
 web	deploy.cpus	1
+web	deploy.healthcheck.path	/health
 web	networking.port	3000
+web	networking.domains	shop.example.com
 web	variables.secrets	DATABASE_URL,SESSION_KEY
 web	variables.plain.NODE_ENV	production
 web	volumes.uploads	/data/uploads
@@ -94,8 +101,11 @@ one, named as `<service>.<setting>`:
 | `restart` | `deploy.restart` | `no`, `on-failure` or `always` |
 | `memory` | `deploy.memory` | A size such as `512m` or `1g` |
 | `cpus` | `deploy.cpus` | A number such as `0.5` or `2` |
+| `health` | `deploy.healthcheck` | A path such as `/health`, or `up` to wait until the service stays up. See [Health checks](/docs/health-checks) |
+| `health-timeout` | `deploy.healthcheck.timeout` | Seconds a deploy waits, `1` to `1800`. Not set: `60` |
 | `port` | `networking.port` | `1` to `65535` |
 | `publish` | `networking.publish` | `1` to `65535` |
+| `domains` | `networking.domains` | Domains separated by `,`, the whole list. See [Domains and HTTPS](/docs/domains) |
 | `secrets` | `variables.secrets` | Names separated by `,` |
 | `plain.<NAME>` | `variables.plain.<NAME>` | Any value, empty included. A new name is added last |
 | `volumes.<name>` | | A mount path. A new volume is added last |
@@ -141,8 +151,18 @@ $ zekno settings set web.memory 1g
 - A value that starts with `-` would be read as an option, as for every
   command. Put it after `--`:
   `zekno settings set --yes web.plain.NODE_OPTIONS -- --max-old-space-size=4096`.
-- A setting this version does not have, such as `web.domains`, is refused with
-  its second sentence: `Domains are not in this version of zekno yet.`
+- A setting this version does not have, such as `web.replicas`, is refused
+  with its second sentence:
+  `Several copies of a service are not in this version of zekno yet.`
+- `domains` is written in lowercase and replaces the whole list:
+  `zekno settings set web.domains "shop.example.com, www.example.com"`. A
+  name the domain rule refuses is said with that rule (see
+  [Giving an app a domain](/docs/domains#giving-an-app-a-domain)), and
+  `zekno domain add` and `rm` change one domain at a time.
+- `health` keeps the limit when the path changes. `unset web.health` removes
+  the health check with its limit, and `unset web.health-timeout` puts the
+  limit back to 60 seconds. A limit for a service with no health check is
+  refused: `web · health is not set. Nothing was written.`
 
 `zekno` writes the whole file in one layout: two spaces of indent, the keys in
 a fixed order, a short object or list on one line. A file written by hand in
@@ -226,7 +246,7 @@ $ zekno settings init
 | --- | --- |
 | `0` | Shown, written or printed; a value the same as now; `unset` of a setting not set |
 | `1` | No settings file, or a deploy here would use a Compose file, or a `zekno.json` not in use here yet names another file; a fault in the file; "no", Esc or Ctrl-C; no terminal without `--yes`; `init` with no terminal or with a file here; the file changed since it was read, is a symbolic link, or could not be written |
-| `2` | A word missing or one too many; an option the command does not take; a setting this `zekno` does not know or does not have yet; a service the file does not have; a value not allowed; a change that breaks a rule of the file; `unset` of the image |
+| `2` | A word missing or one too many; an option the command does not take; a setting this `zekno` does not know or does not have yet; a service the file does not have; a value not allowed; a change that breaks a rule of the file; `unset` of the image; a limit for a service with no health check |
 
 ## The settings screen
 

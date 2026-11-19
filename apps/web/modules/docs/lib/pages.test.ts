@@ -22,7 +22,10 @@ const ROOT = join(WEB, "../..")
 const PAGES = join(WEB, "content/docs")
 const MOVE_LIST = join(ROOT, "specs/013-docs-refresh/move-list.md")
 
-/** The seventeen pages of the contract, with their titles, in the order of the tree. */
+/**
+ * The pages of the contract, with their titles, in the order of the tree:
+ * seventeen, and the two of specs/015-domains-https (tasks T079, T080).
+ */
 const CONTRACT: [file: string, title: string][] = [
   ["index", "Introduction"],
   ["quick-start", "Quick start"],
@@ -34,6 +37,8 @@ const CONTRACT: [file: string, title: string][] = [
   ["secrets", "Secrets"],
   ["settings", "App settings"],
   ["changing-settings", "Changing settings"],
+  ["domains", "Domains and HTTPS"],
+  ["health-checks", "Health checks"],
   ["templates", "Templates"],
   ["project-file", "The project file"],
   ["doctor", "Doctor and version"],
@@ -43,10 +48,14 @@ const CONTRACT: [file: string, title: string][] = [
   ["runner", "Server runner"],
 ]
 
-/** `meta.json` as research.md §6 gives it: three groups, as separators, in this order. */
+/**
+ * `meta.json` as research.md §6 gives it: three groups, as separators, in
+ * this order. The first group is "Get Started", the maintainer's name for it
+ * (specs/015-domains-https, quickstart.md, M8).
+ */
 const META = {
   pages: [
-    "---Start---",
+    "---Get Started---",
     "index",
     "quick-start",
     "install",
@@ -58,6 +67,8 @@ const META = {
     "secrets",
     "settings",
     "changing-settings",
+    "domains",
+    "health-checks",
     "templates",
     "project-file",
     "doctor",

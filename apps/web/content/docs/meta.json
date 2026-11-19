@@ -1,6 +1,6 @@
 {
   "pages": [
-    "---Start---",
+    "---Get Started---",
     "index",
     "quick-start",
     "install",
@@ -12,6 +12,8 @@
     "secrets",
     "settings",
     "changing-settings",
+    "domains",
+    "health-checks",
     "templates",
     "project-file",
     "doctor",

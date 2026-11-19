@@ -1,0 +1,155 @@
+---
+title: Health checks
+description: Making a deploy wait until a service answers or stays up, how the check is made on the server, and what happens when it does not pass in time.
+---
+
+<Callout type="warn" title="Pre-alpha and unaudited">
+  The command-line tool, the runner and the core library have had internal
+  reviews only. Do not use them for anything you could not afford to lose, and
+  do not rely on them in production before an external audit.
+</Callout>
+
+A service of a settings file can have a health check. A deploy then counts
+as done only when the service answers a path with success, or stays up,
+within a time limit. When it does not, the deploy says so, and the new
+version keeps running: `zekno` never goes back by itself.
+
+Like a domain, a health check is part of the signed deploy, and needs a
+settings file and a runner that speaks protocol 4. Runner 0.1.1 is the first
+release that will. It is not published yet: until it is, a deploy with a
+health check stops before anything is signed and says to update the runner
+(see [What a domain needs](/docs/domains#what-a-domain-needs)). A deploy with
+no health check and no domain is not affected.
+
+## Setting a health check
+
+In `zekno.app.json`, under the service's `deploy` section:
+
+```json
+"deploy": {
+  "start": "bun run start",
+  "healthcheck": { "path": "/health", "timeout": 60 }
+}
+```
+
+- `path`: the path the service must answer, such as `/health` or
+  `/health?full=1`. It starts with `/`, has no space and no `#`, and is at
+  most 1,024 characters. It needs the service's `networking.port`: the path is
+  asked on that port. Left out, the service only has to stay up.
+- `timeout`: how long a deploy waits, a whole number of seconds from 1 to
+  1,800. Left out: 60.
+- `"healthcheck": {}` waits for the service to stay up, within 60 seconds.
+- At most 16 services of a file have a health check.
+
+Or with `zekno settings set` (see
+[Changing settings](/docs/changing-settings#changing-one-zekno-settings-set-and-unset)):
+
+```bash
+zekno settings set web.health /health       # answer GET /health
+zekno settings set web.health up            # no path: stay up
+zekno settings set web.health-timeout 120   # wait up to 120 seconds
+zekno settings unset web.health             # remove the check and its limit
+```
+
+A new path keeps the limit, and `unset web.health-timeout` puts it back to
+60 seconds. A limit for a service with no health check is refused:
+`web · health is not set. Nothing was written.`
+
+`zekno settings` shows the check under Deploy, after `cpus`:
+
+```text
+  Deploy        start     bun run start
+                health    GET /health, within 60s
+```
+
+Without a path it reads `stays up, within 60s`. Piped, its lines are
+`web\tdeploy.healthcheck.path\t/health` and
+`web\tdeploy.healthcheck.timeout\t120`, each when the file sets it, or
+`web\tdeploy.healthcheck\t{}`.
+
+A health check is not part of the Compose text: `zekno settings compose`
+prints the same text with or without one. A deploy from a Compose file
+written by hand has no health check of `zekno`'s, and never waits.
+
+## What a deploy does
+
+At a terminal, the stage row of a deploy with a health check has a fifth
+stage, `Healthy`, after `Started`. While the deploy waits for a service with
+a path, a line under the stage row says
+`waiting for web to answer GET /health`, and for how long. A deploy with no
+health check keeps the four stages.
+
+```text
+✔ Checked  ✔ Signed  ✔ Sent  ✔ Started  ✔ Healthy
+```
+
+On the server, the runner waits once Docker Compose has started the app, for
+each service with a health check, in turn. It looks at every container of the
+service every 2 seconds, until all of them are healthy, or the time limit has
+passed since Docker Compose returned. A deploy has one limit: the largest of
+its services' limits.
+
+- **With a path**, a container is healthy when it answers `GET <path>` on its
+  port with a status from 200 to 399.
+- **Without a path**, a container is healthy when Docker reports it running
+  and, if its image has a health check of its own, `healthy`. With no health
+  check of its own, it must stay running for 10 seconds without a restart.
+
+## Not healthy in time
+
+The deploy ends as not healthy, with exit status 1. The new version keeps
+running, its domains stay in force, and nothing is rolled back: going back is
+your decision, and a database may already have changed. The deploy number is
+used, and the deploy is the app's current one: `zekno status`, the app's list
+of deploys and `zekno rollback` treat it as a deploy that started. The stage
+row ends with `✖ Healthy`, and the sentence says what was checked:
+
+```text
+web did not answer GET /health with success within 60 seconds. shop is running as deployed, and nothing was rolled back. Run `zekno logs` to see why, or `zekno rollback` to go back.
+```
+
+Without a path:
+
+```text
+web did not stay up within 60 seconds. shop is running as deployed, and nothing was rolled back. Run `zekno logs` to see why, or `zekno rollback` to go back.
+```
+
+At a terminal the commands are shown without the backquotes. With no
+terminal, the sentence is a line on standard error, in place of the line of
+a deploy that started.
+
+A rollback keeps the health check in force now, as this machine signed it,
+not the one of the earlier deploy (see
+[A rollback keeps the domains](/docs/domains#a-rollback-keeps-the-domains)).
+
+## How the check is made
+
+The request is made on the server, by `curl` in a short-lived container of
+the same pinned image the proxy runs (see
+[What the server holds](/docs/domains#what-the-server-holds)), never by your
+machine:
+
+- It runs on the app's route network, a Docker network the runner makes for
+  each app with a domain or a health check, and asks each container by the
+  random name the runner gave it there: never an address, and never a name a
+  deploy chose. It cannot reach another app's containers.
+- It speaks plain HTTP only, follows no redirect, reads at most 1 KiB of the
+  answer, and gives up on one try after 5 seconds. A redirect is not
+  followed: its status, from 300 to 399, counts as success.
+- The container runs read-only, as a user with no rights, with no
+  capability, 32 MB of memory and at most 16 processes.
+- The first check on a server fetches the pinned image through Docker when
+  the proxy has not fetched it yet.
+
+## What to know
+
+- **A long wait holds the server.** The runner does one deploy at a time on a
+  server. While a deploy waits for its health check, up to 30 minutes with the
+  largest limit, another deploy to that server, or any other request that
+  waits for the same turn, is refused as busy:
+  `The runner is in the middle of another deploy. Try again in a moment.` The
+  default limit is 60 seconds.
+- **A check is not a deploy without dropped requests.** The app's containers
+  are replaced as they are today, and requests that arrive meanwhile can fail.
+- **Healthy is the service's word.** A path that answers 200 says only that
+  the service answered. What it checks is up to the app.

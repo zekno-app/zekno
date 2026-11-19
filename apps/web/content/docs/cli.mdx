@@ -29,6 +29,7 @@ zekno secret import <file> [--app <app>] [--server <name>] [--yes]
 zekno secret rm <NAME> [--app <app>] [--server <name>]
 zekno secret ls [--app <app>] [--server <name>]
 zekno deploy [--app <app>] [--server <name>] [-f <compose file>] [--json]
+zekno deploy --skip-dns-check
 zekno rollback [--app <app>] [--server <name>] [--to <number>] [--json]
 zekno status [--server <name>] [--json]
 zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
@@ -38,6 +39,9 @@ zekno settings set <service>.<setting> <value> [--yes]
 zekno settings unset <service>.<setting> [--yes]
 zekno settings compose
 zekno settings init
+zekno domain [--json]
+zekno domain add <domain> [--service <name>] [--yes]
+zekno domain rm <domain> [--yes]
 zekno add [<template>] [--name <service>] [--for <service>] [--app <app>] [--server <name>] [--yes]
 zekno add --list [--json]
 zekno add <template> --show [--json]
@@ -69,6 +73,7 @@ Each command is described on one page:
 | [`zekno secret rm`](/docs/secrets#zekno-secret-set-import-rm-and-ls) | Signs the removal of a secret |
 | [`zekno secret ls`](/docs/secrets#zekno-secret-set-import-rm-and-ls) | Lists names and versions. No command shows a value |
 | [`zekno deploy`](/docs/deploying#zekno-deploy) | Signs a deploy with the next deploy number, and sends it to the runner over one connection |
+| [`zekno deploy --skip-dns-check`](/docs/domains#the-check-before-a-deploy) | Deploys without looking up the app's new domains first, with a warning for each |
 | [`zekno rollback`](/docs/deploying#zekno-rollback) | Deploys an earlier service definition again, under the next number, with the current secrets |
 | [`zekno status`](/docs/deploying#zekno-status) | Reads what a server holds: its team list version, each app's last deploy and whether it is running, and each secret's version |
 | [`zekno logs`](/docs/deploying#zekno-logs) | Prints an app's logs, read straight from its server |
@@ -78,6 +83,9 @@ Each command is described on one page:
 | [`zekno settings unset`](/docs/changing-settings#changing-one-zekno-settings-set-and-unset) | Removes one setting |
 | [`zekno settings compose`](/docs/changing-settings#what-will-run-zekno-settings-compose) | Prints the Compose text the settings turn into |
 | [`zekno settings init`](/docs/changing-settings#starting-a-file-zekno-settings-init) | Writes `zekno.app.json` in this folder with one service and its image |
+| [`zekno domain`](/docs/domains#zekno-domain) | Lists the domains of the folder's app, and whether each one works now, as a visitor would find |
+| [`zekno domain add`](/docs/domains#giving-an-app-a-domain) | Adds a domain to a service in `zekno.app.json`, and names the DNS record to create. It deploys nothing |
+| [`zekno domain rm`](/docs/domains#removing-a-domain-or-moving-it) | Removes a domain from `zekno.app.json`. The next deploy releases it |
 | [`zekno add`](/docs/templates#zekno-add) | Adds a ready-made service, such as a database, to this folder's `zekno.app.json`, with the secrets it needs made on your machine |
 | [`zekno add --list`, `zekno add <template> --show`](/docs/templates#looking-first-the-picker---list-and---show) | List the templates, or show what one would add. They change nothing |
 | [`zekno doctor`](/docs/doctor#zekno-doctor) | Checks this machine and each connected server, one line per check, and says what to do for each thing that is wrong |

@@ -41,13 +41,17 @@ one developer. With them you can:
 - add a database from a template ([Templates](/docs/templates))
 - see what is running, read its logs and roll back
   ([The terminal app](/docs/app), [Deploying](/docs/deploying))
+- give the app a domain, served over HTTPS with a certificate the server
+  obtains itself, and make a deploy wait until the app is healthy
+  ([Domains and HTTPS](/docs/domains), [Health checks](/docs/health-checks)).
+  Both need runner 0.1.1, which is not published yet.
 
 | Part | Status |
 | --- | --- |
 | Website (`apps/web`) | Landing page and these docs; the signed-in dashboard is planned |
 | Core library (`packages/core`): encryption, signing, team lists, message formats | First version built; internal review only |
 | Command-line tool (`apps/cli`) | Second version built: a full-screen terminal app and single commands for scripts, running state and logs read from your server, and a project file. One developer, deploying directly over SSH. It installs on a server the runner release its build carries, checked against a checksum it holds. The first runner release, 0.1.0, is published. Internal reviews only. See [Commands](/docs/cli) |
-| Server runner (`apps/runner`) | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything. One connection per command. Built for Linux on x86-64 and ARM64 with glibc 2.17 or newer. Internal reviews only. See [Server runner](/docs/runner) |
+| Server runner (`apps/runner`) | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything. One connection per command. Built for Linux on x86-64 and ARM64 with glibc 2.17 or newer. A runner built from the repository also serves an app's domains over HTTPS, through a proxy it starts on the server, and waits for health checks; no release does yet. Internal reviews only. See [Server runner](/docs/runner) |
 | Control plane | Not built yet. When built, hosted by Zekno, closed source |
 
 ## A deploy today
@@ -82,6 +86,9 @@ does today. The steps of that design are on
   Zekno service is involved.
 - **Only `zekno version` and `zekno doctor` reach the network on their own:**
   each asks GitHub once for the newest release, and sends nothing about you.
+  For an app with a domain, `zekno deploy` and `zekno domain` also look the
+  domain up with your system's resolver and ask it over HTTPS, as a visitor
+  would. Nothing of it goes to Zekno.
 - **State and logs come from your server.** Whether an app is running, and its
   logs, are read from the runner over SSH when you look. They never pass
   through Zekno, and your machine keeps none of it.
@@ -98,10 +105,15 @@ does today. The steps of that design are on
 - **Docker's messages are shown as they are.** An error from Docker can repeat
   a value that was filled in from a secret.
 - **App settings cover an image that is already built.** This version cannot
-  build an image from source, serve a domain with HTTPS, wait for a health
-  check, run a command before a deploy, or run several copies of a service. A
-  `zekno.app.json` that sets one of them is refused with a sentence that names
-  it. A Compose file written by hand can do what Compose does.
+  build an image from source, run a command before a deploy, or run several
+  copies of a service. A `zekno.app.json` that sets one of them is refused
+  with a sentence that names it. A Compose file written by hand can do what
+  Compose does.
+- **Domains come from a settings file, with certificates from Let's Encrypt
+  only.** The server's ports 80 and 443 must be free, and the server holds the
+  TLS keys of its domains. `zekno` never changes DNS: it checks it from your
+  machine. A deploy still replaces the app's containers, so requests during it
+  can fail. See [Domains and HTTPS](/docs/domains#not-in-this-version).
 - **A published port is open to whoever can reach the server.** It is
   published on every address of the server, as Compose does, and Docker's
   published ports can pass a host firewall such as `ufw`. Zekno does not
@@ -121,7 +133,8 @@ are in the `specs` folder of the
     From a checkout to an app running on your server.
   </Card>
   <Card title="Using zekno" href="/docs/app">
-    The terminal app, deploys, servers, secrets, settings and templates.
+    The terminal app, deploys, servers, secrets, settings, domains, health
+    checks and templates.
   </Card>
   <Card title="Reference" href="/docs/cli">
     Every command, output and exit status, what is kept where, and the runner.

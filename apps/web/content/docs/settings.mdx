@@ -74,9 +74,10 @@ that app's folder is. A file counts only when its folder lists it exactly as
         "start": "bun run start",
         "restart": "on-failure",
         "memory": "1g",
-        "cpus": 1
+        "cpus": 1,
+        "healthcheck": { "path": "/health" }
       },
-      "networking": { "port": 3000 },
+      "networking": { "port": 3000, "domains": ["shop.example.com"] },
       "variables": {
         "secrets": ["DATABASE_URL", "SESSION_KEY"],
         "plain": { "NODE_ENV": "production" }
@@ -104,8 +105,10 @@ left out.
 | | `restart` | `no`, `on-failure` or `always`. Left out: `no` |
 | | `memory` | A memory limit: a whole number and `m` or `g`, such as `512m` or `1g`, at least `6m`. Left out: no limit |
 | | `cpus` | A processor limit: a number above 0 and at most 1024, with at most two decimals, such as `0.5` or `2`. Left out: no limit |
+| | `healthcheck` | What a deploy waits for: `path`, a path the service must answer with success, such as `/health`, and `timeout`, the seconds it waits, 1 to 1800. Either may be left out: no path waits for the service to stay up, and no limit is 60 seconds. A path needs `port`. Left out: a deploy does not wait. See [Health checks](/docs/health-checks) |
 | `networking` | `port` | The port the service listens on, 1 to 65535. The other services of the app reach it by the service's name |
 | | `publish` | A port of the server that reaches `port`, 1 to 65535. It needs `port`, and two services cannot publish the same one. Left out: not published. See [Published ports](#published-ports) |
+| | `domains` | The domains the server answers for over HTTPS and sends to this service's `port`, such as `["shop.example.com"]`. Each is a full name in lowercase, and names one service of the file only. It needs `port`. Left out: none. See [Domains and HTTPS](/docs/domains) |
 | `variables` | `secrets` | The names of the secrets the service reads, each set with `zekno secret set`. Never a value. Letters, digits and underscore, not starting with a digit, at most 128 characters, and not a name `zekno` keeps for itself, such as `PATH` |
 | | `plain` | Values that are not secret, such as `{ "NODE_ENV": "production" }`. A name as for a secret, though a name `zekno` keeps for itself is allowed here. A value of one line with no control or invisible character (below), at most 4096 characters, which may be empty. A name cannot be both a secret and a plain variable of one service |
 | `volumes` | `<name>` | A named volume, and the absolute path in the container where it is mounted, such as `/data`. See [Volumes](#volumes) |
@@ -118,7 +121,9 @@ left out.
   `zekno.app.json is written for a later version of zekno. Update zekno to use it.`
 - At most 32 services. Each service reads at most 256 secret names, has at
   most 128 plain variables and 16 volumes, and mounts no two volumes at the
-  same path. The services of one app read at most 256 secret names together.
+  same path. The services of one app read at most 256 secret names together,
+  name at most 64 domains together, and at most 16 of them have a health
+  check.
 
 **How it is read.** It is JSON, read strictly: no comment, no comma after the
 last item, no key twice in one object, nested at most 6 deep, no text longer
@@ -160,15 +165,14 @@ container. Another file: JSON has no include, and `env_file`, `extends` and
 `include` are settings this `zekno` does not know. So `zekno.app.json` holds
 no secret and is safe to commit.
 
-**Settings this version does not have.** `source.build`, `deploy.predeploy`,
-`deploy.healthcheck`, `deploy.replicas` and `networking.domains` are names
-kept for settings this version of `zekno` does not have. A file that sets one
-is refused by every command that reads it, with two sentences that name it,
-and exit status 1:
+**Settings this version does not have.** `source.build`, `deploy.predeploy`
+and `deploy.replicas` are names kept for settings this version of `zekno`
+does not have. A file that sets one is refused by every command that reads
+it, with two sentences that name it, and exit status 1:
 
 ```text
-✖ zekno.app.json sets a domain for web.
-  Domains are not in this version of zekno yet.
+✖ zekno.app.json sets replicas for web.
+  Several copies of a service are not in this version of zekno yet.
 ```
 
 ### The start command
@@ -192,6 +196,10 @@ it by the service's name. With `publish`, the port is published on every
 address of the server, as Compose does. It is then open to whoever can reach
 the server: Docker's published ports can pass a host firewall such as `ufw`,
 and Zekno does not manage the server's firewall.
+
+A domain does not publish the service's port. The server's proxy reaches the
+service on a network of its own, and publishes its own ports, 80 and 443 (see
+[Domains and HTTPS](/docs/domains)).
 
 ### Volumes
 
