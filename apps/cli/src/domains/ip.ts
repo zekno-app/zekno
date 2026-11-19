@@ -6,7 +6,10 @@
  *
  * Not public: private (10/8, 172.16/12, 192.168/16), loopback (127/8, ::1),
  * link-local (169.254/16, fe80::/10), carrier-grade NAT (100.64/10) and
- * unique-local (fc00::/7), the contract's list. An IPv4 address written in
+ * unique-local (fc00::/7), the contract's list; and what no server is
+ * reached at either: 0.0.0.0/8, 192.0.0.0/24, 198.18.0.0/15, multicast and
+ * the reserved block above it, `::`, ff00::/8, 64:ff9b::/96, 2002::/16, and
+ * an address with a zone (security-review.md, S8). An IPv4 address written in
  * IPv6 (`::ffff:10.0.0.1`) is judged as the IPv4 address it is. The
  * documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24,
  * 2001:db8::/32) count as public: the examples and the tests use them.
@@ -62,6 +65,10 @@ function v4Public(parts: readonly number[]): boolean {
   if (a === 192 && b === 168) return false
   if (a === 169 && b === 254) return false
   if (a === 100 && b >= 64 && b <= 127) return false
+  // "This network", the protocol assignments (192.0.0.0/24), benchmarking (198.18.0.0/15), multicast and what is reserved above it.
+  if (a === 0 || a >= 224) return false
+  if (a === 192 && b === 0 && parts[2] === 0) return false
+  if (a === 198 && (b === 18 || b === 19)) return false
   return true
 }
 
@@ -69,12 +76,19 @@ function v4Public(parts: readonly number[]): boolean {
 export function isPublicAddress(address: string): boolean {
   const v4 = v4Parts(address)
   if (v4 !== undefined) return v4Public(v4)
+  // An address with a zone is one of this machine's own links.
+  if (address.includes("%")) return false
   const groups = v6Groups(address)
   if (groups === undefined) return false
   const mapped = mappedV4(groups)
   if (mapped !== undefined) return v4Public(v4Parts(mapped)!)
-  if (groups.every((group, index) => group === (index === 7 ? 1 : 0)))
+  // `::` and `::1`.
+  if (groups.slice(0, 7).every((group) => group === 0) && groups[7]! <= 1)
     return false
+  // Multicast, and an IPv4 address carried in IPv6 by a translator (64:ff9b::/96) or by 6to4 (2002::/16).
+  if ((groups[0]! & 0xff00) === 0xff00) return false
+  if (groups[0] === 0x64 && groups[1] === 0xff9b) return false
+  if (groups[0] === 0x2002) return false
   if ((groups[0]! & 0xffc0) === 0xfe80) return false
   if ((groups[0]! & 0xfe00) === 0xfc00) return false
   return true

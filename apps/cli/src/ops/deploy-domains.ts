@@ -14,7 +14,9 @@
  *    a guard).
  * 4. A rollback signs the routes the server holds for the app (R29), and the
  *    health check of the deploy in force when this machine signed it; B12
- *    when what the old deploy ran cannot be reached by one. No DNS check.
+ *    when what the old deploy ran cannot be reached by one; B10 when the
+ *    runner does not tell its routes and this machine signed one for the app
+ *    before. No DNS check.
  * 5. Each domain the server does not hold for the app yet, in domain order,
  *    looked up from this machine: B13 (the server's address is not known),
  *    B7 (no record), B8 (elsewhere), else B1, the line before the panel.
@@ -41,6 +43,7 @@ import {
 } from "../domains/dns"
 import { routeFault } from "../domains/routes"
 import {
+  B10,
   B11,
   B12,
   B13,
@@ -116,6 +119,22 @@ export function rollbackAsksRoutes(
   return (entry.deploy.routes?.length ?? 0) > 0
 }
 
+/**
+ * Whether this machine ever signed a route for the app on this server. Such
+ * a deploy is signed only for a runner that carries routes out, so a runner
+ * that later says it does not is not believed: a rollback on its word would
+ * sign the app's domains away (security-review.md, S4).
+ */
+function signedRoutesBefore(
+  team: Pick<Team, "store" | "trust">,
+  server: Server,
+  app: string
+): boolean {
+  return verifiedDeploys(team, server, app).some(
+    (each) => (each.deploy.routes?.length ?? 0) > 0
+  )
+}
+
 /** Step 5's line for a domain the server does not hold for the app yet. */
 function newDomainSaid(
   domain: string,
@@ -189,12 +208,17 @@ export async function checkDomains(input: {
   held: HeldRoutes | undefined
   accepted: number
   answersRoutes: boolean
+  /** The runner's version, as B10 names it; undefined for a runner run one request at a time. */
+  runnerVersion?: string
   callbacks: Pick<DeployCallbacks, "warning" | "pointed">
 }): Promise<Domained> {
   const { deps, plan, held, accepted, callbacks } = input
   const { team, server, app } = plan
   const inForce = routesOfApp(held, app)
   const rollback = plan.rollback === true
+  // A rollback's routes are the server's. A runner that does not tell them, for an app this machine signed a route for: B10.
+  if (rollback && !input.answersRoutes && signedRoutesBefore(team, server, app))
+    throw new CliError(B10(server.name, input.runnerVersion))
   // Step 4: a rollback keeps the routes and the health check in force now, never the old deploy's (FR-019, User Story 6).
   const routes = rollback ? inForce : (plan.routes ?? [])
   const health = rollback

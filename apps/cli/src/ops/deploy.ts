@@ -354,6 +354,7 @@ export async function sendDeploy(
       held,
       accepted,
       answersRoutes: answersRoutes(session),
+      runnerVersion: session.runner?.version,
       callbacks,
     })
     const signing: DeployPlan = {

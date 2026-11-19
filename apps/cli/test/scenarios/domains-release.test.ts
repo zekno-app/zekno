@@ -10,7 +10,8 @@ import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { B12, B9, R9 } from "../../src/domains/words"
+import runnerPackage from "../../../runner/package.json"
+import { B10, B12, B9, R9 } from "../../src/domains/words"
 import { entriesOf, historyOf } from "../support/deploys"
 import {
   shopFile,
@@ -135,6 +136,24 @@ describe("User Story 6: a rollback keeps the domains (FR-019)", () => {
       undefined,
       { routes: true },
     ])
+    expect(await inForce(s)).toEqual({ shop: [ROUTE] })
+  }, 60_000)
+
+  test("a runner that says it is too old for routes, for an app this machine deployed with a domain: B10, nothing signed (review S4)", async () => {
+    const s = await shopOnProd(shopFile())
+    standIns(s.m.deps)
+    expect(await s.zekno("deploy")).toBe(0)
+    s.file(fileWith(SHOP))
+    expect(await s.zekno("deploy")).toBe(0)
+    s.clear()
+    // The server answers as an older runner would: a rollback must not sign the app's domains away on its word.
+    const w = wire(s.m.deps)
+    w.rewrite("version", (answer) => ({ ...answer, protocol: 3 }))
+    expect(await s.zekno("rollback", "--to", "1")).toBe(1)
+    expect(s.m.err).toEqual([B10("prod-1", runnerPackage.version)])
+    expect(w.requests("deploy")).toEqual([])
+    expect((await entriesOf(s.m, "shop")).length).toBe(2)
+    w.restore()
     expect(await inForce(s)).toEqual({ shop: [ROUTE] })
   }, 60_000)
 

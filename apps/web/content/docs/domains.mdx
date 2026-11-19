@@ -355,6 +355,9 @@ What deploy 41 ran has no service named web, which shop.example.com reaches. Rem
   private key is made and kept by the proxy, on the server. None passes
   through your machine or through Zekno. A released domain's certificate and
   key are deleted with the release.
+- **Apps on one server share it.** A deploy your team signed runs its Compose
+  text with all that Docker allows on that server, so one app's deploy could
+  read the key of every domain there.
 - **Let's Encrypt only.** Certificates are asked for only for the domains in
   routes in force, from Let's Encrypt, with no email address. No other
   certificate authority is used.

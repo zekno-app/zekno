@@ -54,6 +54,11 @@ are deleted. The proxy ends TLS for every app with a domain on that server,
 so it handles their requests unencrypted, as any reverse proxy does. See
 [What the server holds](/docs/domains#what-the-server-holds).
 
+Apps on one server are not kept apart from each other. A deploy your team
+signed runs its Compose text with all that Docker allows on that server, so
+one app's deploy could read the TLS key of every domain there. Put on one
+server only apps whose deployers you trust with all of it.
+
 ## What it protects against
 
 | Scenario | Outcome | Why |

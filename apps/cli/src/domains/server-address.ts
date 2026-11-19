@@ -105,7 +105,9 @@ export function sshHostOf(options: {
     if (output === undefined) return undefined
     const host = sshHostName(output)
     if (host === undefined) return undefined
-    const kind = isIP(host.split("%")[0]!)
+    // An address with a zone is never public, and its text after `%` is never shown (domains/ip.ts).
+    if (host.includes("%")) return undefined
+    const kind = isIP(host)
     if (kind !== 0)
       return publicOf({
         v4: kind === 4 ? [host] : [],
