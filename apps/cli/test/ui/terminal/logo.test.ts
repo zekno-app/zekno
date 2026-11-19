@@ -5,13 +5,13 @@ import { join } from "node:path"
 import { createElement } from "react"
 
 import {
-  APP_COLUMN,
   Logo,
   LOGO_BITMAP,
   LOGO_HEIGHT,
   LOGO_WIDTH,
   logoLines,
   logoParts,
+  SUFFIX_COLUMN,
 } from "../../../src/ui/terminal/logo"
 
 const DESIGN = join(import.meta.dir, "../../../../../specs/004-cli-app/design")
@@ -21,7 +21,7 @@ type Run = { x: number; y: number; width: number; height: number }
 /** The filled runs of the wordmark's SVG on a board, by colour: each `M x y h w v h h-w z` is one rectangle. */
 function svgRuns(board: string): Map<string, Run[]> {
   const svg =
-    /<svg role="img" aria-label="zekno\.app" viewBox="0 0 41 5"[^>]*>([\s\S]*?)<\/svg>/.exec(
+    /<svg role="img" aria-label="zekno\.dev" viewBox="0 0 42 5"[^>]*>([\s\S]*?)<\/svg>/.exec(
       readFileSync(join(DESIGN, board), "utf8")
     )
   if (!svg) throw new Error(`no wordmark in ${board}`)
@@ -48,7 +48,7 @@ function svgRuns(board: string): Map<string, Run[]> {
   return runs
 }
 
-/** A 5 by 41 grid of the cells the runs fill, `#` for filled. */
+/** A 5 by 42 grid of the cells the runs fill, `#` for filled. */
 function grid(runs: Run[]): string[] {
   const cells = Array.from({ length: 5 }, () =>
     Array<string>(LOGO_WIDTH).fill(" ")
@@ -83,11 +83,11 @@ function unfold(lines: string[]): string[] {
 const boardsWithLogo = readdirSync(DESIGN).filter(
   (file) =>
     file.endsWith(".dc.html") &&
-    readFileSync(join(DESIGN, file), "utf8").includes('aria-label="zekno.app"')
+    readFileSync(join(DESIGN, file), "utf8").includes('aria-label="zekno.dev"')
 )
 
 describe("the wordmark", () => {
-  test("is 41 columns by 3 lines of half blocks", () => {
+  test("is 42 columns by 3 lines of half blocks", () => {
     const lines = logoLines()
     expect(lines).toHaveLength(LOGO_HEIGHT)
     for (const line of lines) {
@@ -108,25 +108,25 @@ describe("the wordmark", () => {
     ])
   })
 
-  test("'zekno' is the text-coloured part and '.app' the brand-blue part, split where the canvas splits them", () => {
+  test("'zekno' is the text-coloured part and '.dev' the brand-blue part, split where the canvas splits them", () => {
     const runs = svgRuns("Welcome.dc.html")
     const white = grid(runs.get("#ffffff")!)
     const blue = grid(runs.get("#2383e2")!)
     for (const row of white)
-      expect(row.slice(APP_COLUMN - 1)).toBe(
-        " ".repeat(LOGO_WIDTH - APP_COLUMN + 1)
+      expect(row.slice(SUFFIX_COLUMN - 1)).toBe(
+        " ".repeat(LOGO_WIDTH - SUFFIX_COLUMN + 1)
       )
     for (const row of blue)
-      expect(row.slice(0, APP_COLUMN)).toBe(" ".repeat(APP_COLUMN))
-    // Column 24 is the space between "zekno" and ".app": empty in both.
+      expect(row.slice(0, SUFFIX_COLUMN)).toBe(" ".repeat(SUFFIX_COLUMN))
+    // Column 24 is the space between "zekno" and ".dev": empty in both.
     const parts = logoParts()
     expect(unfold(parts.map((part) => part.name))).toEqual([
-      ...white.map((row) => row.slice(0, APP_COLUMN)),
-      " ".repeat(APP_COLUMN),
+      ...white.map((row) => row.slice(0, SUFFIX_COLUMN)),
+      " ".repeat(SUFFIX_COLUMN),
     ])
-    expect(unfold(parts.map((part) => part.app))).toEqual([
-      ...blue.map((row) => row.slice(APP_COLUMN)),
-      " ".repeat(LOGO_WIDTH - APP_COLUMN),
+    expect(unfold(parts.map((part) => part.suffix))).toEqual([
+      ...blue.map((row) => row.slice(SUFFIX_COLUMN)),
+      " ".repeat(LOGO_WIDTH - SUFFIX_COLUMN),
     ])
   })
 

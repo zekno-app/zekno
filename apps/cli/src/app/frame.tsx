@@ -29,7 +29,9 @@ export function Trail({ parts }: { parts: readonly string[] }) {
 /**
  * The header of every screen: the wordmark, the screen's place in the app
  * and, on the right, `right` (by default "pre-alpha, unaudited"), both on the
- * wordmark's last line.
+ * wordmark's last line. The place follows the wordmark with no column
+ * between them: the wordmark's last line ends with two empty cells, under
+ * the arm of its "v", and those are the space before the place.
  */
 export function Header({
   place,
@@ -47,7 +49,7 @@ export function Header({
       columnGap={2}
       flexShrink={0}
     >
-      <Box alignItems="flex-end" columnGap={1} flexShrink={1}>
+      <Box alignItems="flex-end" flexShrink={1}>
         {logo ? <Logo /> : null}
         {place}
       </Box>

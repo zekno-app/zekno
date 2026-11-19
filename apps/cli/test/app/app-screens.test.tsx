@@ -56,7 +56,8 @@ describe("the header", () => {
     const logo = logoLines().map((line) => ` ${line}`.trimEnd())
     expect(lines[0]).toBe(logo[0])
     expect(lines[1]).toBe(logo[1])
-    expect(lines[2]!.startsWith(` ${logoLines()[2]} › help`)).toBe(true)
+    // The place follows the wordmark with no column between them (frame.tsx).
+    expect(lines[2]!.startsWith(` ${logoLines()[2]}› help`)).toBe(true)
     expect(lines[2]!.trimEnd().endsWith("pre-alpha, unaudited")).toBe(true)
     expect([...lines[2]!.trimEnd()].length).toBe(99)
   })

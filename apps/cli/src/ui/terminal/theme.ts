@@ -4,7 +4,7 @@
  * readable on any background. Secondary text is the dim variant of that
  * colour. State uses the terminal's standard green, red and yellow, always
  * beside a symbol and a word, never by colour alone. The brand blue marks
- * focus, the selected row's arrow and ".app" in the logo.
+ * focus, the selected row's arrow and ".dev" in the logo.
  *
  * Nothing here sets a background colour: a selected row is shown by the arrow
  * marker and bold text only.
@@ -21,7 +21,7 @@ export type Background = "dark" | "light"
 
 export type Theme = {
   background: Background
-  /** Focus, the selection marker, action letters and ".app" in the logo. */
+  /** Focus, the selection marker, action letters and ".dev" in the logo. */
   brand: string
   /** Something that worked or is running. Always beside ✔ or ● and a word. */
   success: "green"

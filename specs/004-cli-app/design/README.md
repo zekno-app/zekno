@@ -30,5 +30,7 @@ Home's details pane use `brand` on a dark terminal and `brand-darker` on a light
 A selected row is marked by the arrow and bold text only, with no shaded bar; the boards were
 updated to show this on 2026-11-14.
 
-The logo on the boards is an SVG of a 5-row bitmap, 41 columns wide. In the terminal it is drawn
-with half-block characters, 3 lines tall.
+The logo on the boards is an SVG of a 5-row bitmap, 42 columns wide; the boards were changed from
+"zekno.app" to "zekno.dev" on 2026-11-19, one column wider, and the screen's place now follows the
+wordmark with no column between them, so every header keeps the room it had. In the terminal it is
+drawn with half-block characters, 3 lines tall.

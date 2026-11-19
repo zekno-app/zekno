@@ -158,7 +158,7 @@ describe("the board AppSettings, 100 by 30", () => {
     const logo = logoLines()
     expect(lines[0]).toBe(` ${logo[0]}`.trimEnd())
     expect(lines[1]).toBe(` ${logo[1]}`.trimEnd())
-    expect(lines[2]!.startsWith(` ${logo[2]} › prod › demo › settings`)).toBe(
+    expect(lines[2]!.startsWith(` ${logo[2]}› prod › demo › settings`)).toBe(
       true
     )
     expect(lines[2]!.trimEnd().endsWith("● running deploy 4")).toBe(true)

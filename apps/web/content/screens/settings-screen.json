@@ -7,9 +7,9 @@
   "alt": "The settings screen of shop on prod-1, which is running. On the left its services, web and worker, web selected. On the right web's settings by section: its image, its start command, restart, memory and cpus, its port, the secrets and plain variables it reads, and its volume. The memory shows 1g, changed and not deployed, where it was 512m. The keys of the screen are on the last line.",
   "fixed": [],
   "lines": [
-    [[""," ▀▀▀█ ▄▀▀▄ █ ▄▀ █▀▀▄ ▄▀▀▄ "],["brand","   ▀▀▄ █▀▀▄ █▀▀▄"]],
-    [[""," ▄▀▀  █▀▀▀ █▀▄  █  █ █  █ "],["brand","  ▄▀▀█ █▀▀  █▀▀"]],
-    [[""," ▀▀▀▀  ▀▀▀ ▀  ▀ ▀  ▀  ▀▀  "],["brand","▀  ▀▀▀ ▀    ▀   "],[""," "],["dim","›"],[""," "],["dim","prod-1"],[""," "],["dim","›"],[""," "],["dim","shop"],[""," "],["dim","›"],[""," "],["bold","settings"],["","            "],["green","● running"],[""," "],["dim","deploy 1"]],
+    [[""," ▀▀▀█ ▄▀▀▄ █ ▄▀ █▀▀▄ ▄▀▀▄ "],["brand","     █ ▄▀▀▄ █   █"]],
+    [[""," ▄▀▀  █▀▀▀ █▀▄  █  █ █  █ "],["brand","  ▄▀▀█ █▀▀▀  █ █"]],
+    [[""," ▀▀▀▀  ▀▀▀ ▀  ▀ ▀  ▀  ▀▀  "],["brand","▀  ▀▀▀  ▀▀▀   ▀  "],["dim","›"],[""," "],["dim","prod-1"],[""," "],["dim","›"],[""," "],["dim","shop"],[""," "],["dim","›"],[""," "],["bold","settings"],["","            "],["green","● running"],[""," "],["dim","deploy 1"]],
     [],
     [[""," "],["dim","╭────────────────────╮"],[""," "],["brand","╭─────────────────────────────────────────────────────────────────────────╮"]],
     [[""," "],["dim","│"],[""," "],["bold,dim","Services"],["","           "],["dim","│"],[""," "],["brand","│"],[""," "],["bold","web"],["","                                                      "],["dim","zekno.app.json"],[""," "],["brand","│"]],

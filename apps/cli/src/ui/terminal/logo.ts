@@ -1,9 +1,9 @@
 /**
- * The pixel wordmark "zekno.app" (research R13). The canvas draws it as an
- * SVG of a 5-row bitmap, 41 columns wide. A terminal cell is about twice as
+ * The pixel wordmark "zekno.dev" (research R13). The canvas draws it as an
+ * SVG of a 5-row bitmap, 42 columns wide. A terminal cell is about twice as
  * tall as it is wide, so two rows share one line, drawn with half blocks:
- * 41 columns by 3 lines. "zekno" is in the terminal's own text colour and
- * ".app" in the brand blue.
+ * 42 columns by 3 lines. "zekno" is in the terminal's own text colour and
+ * ".dev" in the brand blue.
  */
 import { Box, Text } from "ink"
 import { createElement, type ReactElement } from "react"
@@ -12,17 +12,17 @@ import { useTheme } from "./theme"
 
 /** The bitmap of specs/004-cli-app/design/*.dc.html, one string per row, `#` for a filled cell. */
 export const LOGO_BITMAP: readonly string[] = [
-  "####  ##  #  # ###   ##     ##  ###  ### ",
-  "   # #  # # #  #  # #  #      # #  # #  #",
-  " ##  #### ##   #  # #  #    ### ###  ### ",
-  "#    #    # #  #  # #  #   #  # #    #   ",
-  "####  ### #  # #  #  ##  #  ### #    #   ",
+  "####  ##  #  # ###   ##       #  ##  #   #",
+  "   # #  # # #  #  # #  #      # #  # #   #",
+  " ##  #### ##   #  # #  #    ### ####  # # ",
+  "#    #    # #  #  # #  #   #  # #     # # ",
+  "####  ### #  # #  #  ##  #  ###  ###   #  ",
 ]
 
-export const LOGO_WIDTH = 41
+export const LOGO_WIDTH = 42
 export const LOGO_HEIGHT = 3
-/** Where ".app" begins. Columns before it are "zekno" and the space after it. */
-export const APP_COLUMN = 25
+/** Where ".dev" begins, in the brand blue. Columns before it are "zekno" and the space after it. */
+export const SUFFIX_COLUMN = 25
 
 const filled = (row: number, column: number): boolean =>
   LOGO_BITMAP[row]?.[column] === "#"
@@ -35,7 +35,7 @@ function halfBlock(top: boolean, bottom: boolean): string {
   return " "
 }
 
-/** The three lines of the wordmark, each 41 characters. */
+/** The three lines of the wordmark, each 42 characters. */
 export function logoLines(): string[] {
   const lines: string[] = []
   for (let line = 0; line < LOGO_HEIGHT; line++) {
@@ -49,17 +49,17 @@ export function logoLines(): string[] {
 }
 
 /** One line of the wordmark, split where the colour changes. */
-export type LogoLine = { name: string; app: string }
+export type LogoLine = { name: string; suffix: string }
 
-/** The three lines, each split into "zekno" (text colour) and ".app" (brand blue). */
+/** The three lines, each split into "zekno" (text colour) and ".dev" (brand blue). */
 export function logoParts(): LogoLine[] {
   return logoLines().map((line) => ({
-    name: line.slice(0, APP_COLUMN),
-    app: line.slice(APP_COLUMN),
+    name: line.slice(0, SUFFIX_COLUMN),
+    suffix: line.slice(SUFFIX_COLUMN),
   }))
 }
 
-/** The wordmark, three lines tall and 41 columns wide. It never wraps or shrinks. */
+/** The wordmark, three lines tall and 42 columns wide. It never wraps or shrinks. */
 export function Logo(): ReactElement {
   const theme = useTheme()
   return createElement(
@@ -70,7 +70,7 @@ export function Logo(): ReactElement {
         Text,
         { key: line, wrap: "truncate-end" },
         part.name,
-        createElement(Text, { color: theme.brand }, part.app)
+        createElement(Text, { color: theme.brand }, part.suffix)
       )
     )
   )
