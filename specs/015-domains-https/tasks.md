@@ -6,18 +6,18 @@ Tests are part of each task: a test that fails first wherever a contract fixes t
 
 ## Phase 1: Core (blocks everything)
 
-- [ ] T001 Tighten the domain rule, remove the A-label code, add `domainFault`, in `packages/core/src/deploy/later-fields.ts`; move the pinned `xn--` cases and add the review's probes in `packages/core/test/deploy/routes-and-checks.test.ts` (core.md, "The domain rule")
-- [ ] T002 [P] Export `isRoutableDomain`, `domainFault`, `isHealthPath`, `RouteSchema`, `HealthSchema` from `packages/core/src/index.ts`
-- [ ] T003 `carriedOut` refuses only `builds` and `predeploy`, in `packages/core/src/deploy/message.ts`; update the tests that pin the refusal of `routes` and `health` (`packages/core/test/deploy/message.test.ts`, `deploy-v2.test.ts`)
-- [ ] T004 `createDeployV2` takes `routes` and `health`, sorted, refusing a repeat, in `packages/core/src/deploy/deploy-v2.ts` and the test supports that pass `later`
-- [ ] T005 `LIMITS.domainsPerServer = 1024` in `packages/core/src/protocol/limits.ts`
-- [ ] T006 The state marked 3 with `routes`, its strict rules, and reading marks 2 and none, in `packages/core/src/deploy/state.ts`; `packages/core/test/deploy/state.test.ts` (core.md, "The state")
-- [ ] T007 New `packages/core/src/deploy/routes.ts`: `domainHolders`, `domainsAfter`, `withAppRoutes`, with `packages/core/test/deploy/routes.test.ts`
-- [ ] T008 Check K10b `domain_taken` in `verifyDeployV2`, routes carried over unchanged in the state it gives back; `domain_taken` in `packages/core/src/protocol/result.ts`
-- [ ] T009 `RUNNER_PROTOCOL = 4`; outcomes `routes_failed` and `unhealthy` with the report's `routes` and `health` fields and their rules, in `packages/core/src/protocol/protocol.ts`
-- [ ] T010 The session event `health`; the request `status` with `{ routes: true }` and `RunnerStatusWithRoutesSchema`; the command `proxy` with its answer and frame bound
-- [ ] T011 Core tests for T008 to T010 (`packages/core/test/protocol/`, `test/deploy/`), including: a version-1 deploy can never be taken for an app in `routes`
-- [ ] T012 Core: type check, lint, format, all tests; the runner and the CLI still compile against it (their own tests may fail on protocol 4 until their phases)
+- [x] T001 Tighten the domain rule, remove the A-label code, add `domainFault`, in `packages/core/src/deploy/later-fields.ts`; move the pinned `xn--` cases and add the review's probes in `packages/core/test/deploy/routes-and-checks.test.ts` (core.md, "The domain rule")
+- [x] T002 [P] Export `isRoutableDomain`, `domainFault`, `isHealthPath`, `RouteSchema`, `HealthSchema` from `packages/core/src/index.ts`
+- [x] T003 `carriedOut` refuses only `builds` and `predeploy`, in `packages/core/src/deploy/message.ts`; update the tests that pin the refusal of `routes` and `health` (`packages/core/test/deploy/message.test.ts`, `deploy-v2.test.ts`)
+- [x] T004 `createDeployV2` takes `routes` and `health`, sorted, refusing a repeat, in `packages/core/src/deploy/deploy-v2.ts` and the test supports that pass `later`
+- [x] T005 `LIMITS.domainsPerServer = 1024` in `packages/core/src/protocol/limits.ts`
+- [x] T006 The state marked 3 with `routes`, its strict rules, and reading marks 2 and none, in `packages/core/src/deploy/state.ts`; `packages/core/test/deploy/state.test.ts` (core.md, "The state")
+- [x] T007 New `packages/core/src/deploy/routes.ts`: `domainHolders`, `domainsAfter`, `withAppRoutes`, with `packages/core/test/deploy/routes.test.ts`
+- [x] T008 Check K10b `domain_taken` in `verifyDeployV2`, routes carried over unchanged in the state it gives back; `domain_taken` in `packages/core/src/protocol/result.ts`
+- [x] T009 `RUNNER_PROTOCOL = 4`; outcomes `routes_failed` and `unhealthy` with the report's `routes` and `health` fields and their rules, in `packages/core/src/protocol/protocol.ts`
+- [x] T010 The session event `health`; the request `status` with `{ routes: true }` and `RunnerStatusWithRoutesSchema`; the command `proxy` with its answer and frame bound
+- [x] T011 Core tests for T008 to T010 (`packages/core/test/protocol/`, `test/deploy/`), including: a version-1 deploy can never be taken for an app in `routes`
+- [x] T012 Core: type check, lint, format, all tests; the runner and the CLI still compile against it (their own tests may fail on protocol 4 until their phases)
 
 ## Phase 2: Runner
 

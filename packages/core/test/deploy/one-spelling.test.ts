@@ -161,15 +161,23 @@ describe("everything this library signs is in that spelling", () => {
     expect(
       reason(readSignedDeployV2({ envelope: made.envelope, trust: w.trust }))
     ).toBe("accepted")
+    const routed = await deployV2(w, {
+      health: {
+        timeout: 30,
+        services: [{ service: "web", http: { port: 80, path: "/up" } }],
+      },
+      routes: [{ domain: "demo.example.com", service: "web", port: 80 }],
+    })
+    expect(readers(w, routed.envelope)).toEqual(["accepted", "accepted"])
     const later = await deployV2(w, {
+      health: {
+        timeout: 30,
+        services: [{ service: "web", http: { port: 80, path: "/up" } }],
+      },
+      routes: [{ domain: "demo.example.com", service: "web", port: 80 }],
       later: {
         builds: [build()],
         predeploy: { service: "web", command: ["bun", "x"], timeout: 60 },
-        health: {
-          timeout: 30,
-          services: [{ service: "web", http: { port: 80, path: "/up" } }],
-        },
-        routes: [{ domain: "demo.example.com", service: "web", port: 80 }],
       },
     })
     expect(readers(w, later.envelope)).toEqual([

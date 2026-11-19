@@ -266,6 +266,9 @@ describe("F7: what this step does not carry out", () => {
       command: ["bun", "run", "migrate"],
       timeout: 600,
     },
+  }
+  // Carried out since feature 015 (specs/015-domains-https, contracts/core.md, "Carried out").
+  const carried = {
     health: { timeout: 120, services: [{ service: "web", http: null }] },
     routes: [{ domain: "demo.example.com", service: "web", port: 3000 }],
   }
@@ -282,6 +285,15 @@ describe("F7: what this step does not carry out", () => {
         "unsupported_version"
       )
     })
+  }
+
+  for (const field of Object.keys(carried) as (keyof typeof carried)[]) {
+    test(`${field} alone and valid reads`, () => {
+      expect(code(payload({ secrets, [field]: carried[field] }))).toBe("read")
+    })
+  }
+
+  for (const field of Object.keys(broken) as (keyof typeof broken)[]) {
     test(`${field} breaking its own rule is malformed first`, () => {
       expect(code(payload({ secrets, [field]: broken[field] }))).toBe(
         "malformed"
@@ -289,16 +301,25 @@ describe("F7: what this step does not carry out", () => {
     })
   }
 
+  test("routes and a health check together read; with a later field they are unsupported_version", () => {
+    expect(code(payload({ secrets, ...carried }))).toBe("read")
+    expect(
+      code(payload({ secrets, ...carried, predeploy: later.predeploy }))
+    ).toBe("unsupported_version")
+  })
+
   test("a later field is malformed first even when the deploy's own fields are fine and another later field is not empty", () => {
     expect(
-      code(payload({ secrets, routes: later.routes, health: broken.health }))
+      code(
+        payload({ secrets, predeploy: later.predeploy, health: broken.health })
+      )
     ).toBe("malformed")
   })
 
   test("a fault in the deploy's own fields is malformed before a later field is judged", () => {
-    expect(code(payload({ secrets, routes: later.routes, sequence: 50 }))).toBe(
-      "malformed"
-    )
+    expect(
+      code(payload({ secrets, predeploy: later.predeploy, sequence: 50 }))
+    ).toBe("malformed")
   })
 
   test("the design's part 3.2 example reads to unsupported_version", () => {

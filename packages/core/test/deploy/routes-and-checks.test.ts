@@ -1,16 +1,29 @@
 /**
  * The pre-deploy command, the health check and routes (contracts/message.md,
  * F31 to F40), with the path and domain rules, read through
- * `readDeployV2Payload`. As in later-fields.test.ts, "passes" means
- * `unsupported_version`: the field keeps every rule and this step refuses it.
+ * `readDeployV2Payload`. The pre-deploy command is still a later field: as in
+ * later-fields.test.ts, it "passes" when it keeps every rule and this step
+ * refuses it, `unsupported_version`. The health check and routes are carried
+ * out since feature 015 (specs/015-domains-https, contracts/core.md): they
+ * pass when the deploy reads.
  */
 import { describe, expect, test } from "bun:test"
 
 import { readDeployV2Payload } from "../../src/deploy/message"
+import {
+  domainFault,
+  HealthSchema,
+  isHealthPath,
+  isRoutableDomain,
+  RouteSchema,
+} from "../../src/index"
 import { LIMITS } from "../../src/protocol/limits"
 import { KiB, payload } from "../support/payload-v2"
 
-const PASSES = "unsupported_version"
+/** A later field that keeps its rules: refused by F7 only. */
+const LATER = "unsupported_version"
+/** A field this library carries out, keeping its rules: the deploy reads. */
+const PASSES = "read"
 
 const code = (json: unknown) => {
   const read = readDeployV2Payload(json)
@@ -31,11 +44,11 @@ describe("F31 to F34: the pre-deploy command", () => {
     )
 
   test("its service and time limit", () => {
-    expect(predeploy()).toBe(PASSES)
+    expect(predeploy()).toBe(LATER)
     for (const service of ["", "-web", "we b", "a".repeat(64)])
       expect(predeploy({ service })).toBe("malformed")
     for (const timeout of [1, LIMITS.predeploySeconds])
-      expect(predeploy({ timeout })).toBe(PASSES)
+      expect(predeploy({ timeout })).toBe(LATER)
     for (const timeout of [0, LIMITS.predeploySeconds + 1, 2.5])
       expect(predeploy({ timeout })).toBe("malformed")
     expect(predeploy({ shell: true })).toBe("malformed")
@@ -45,18 +58,18 @@ describe("F31 to F34: the pre-deploy command", () => {
     const words = (count: number, length = 1) =>
       Array.from({ length: count }, () => "a".repeat(length))
     expect(predeploy({ command: [] })).toBe("malformed")
-    expect(predeploy({ command: words(LIMITS.predeployWords) })).toBe(PASSES)
+    expect(predeploy({ command: words(LIMITS.predeployWords) })).toBe(LATER)
     expect(predeploy({ command: words(LIMITS.predeployWords + 1) })).toBe(
       "malformed"
     )
     expect(predeploy({ command: words(1, LIMITS.predeployWordLength) })).toBe(
-      PASSES
+      LATER
     )
     expect(
       predeploy({ command: words(1, LIMITS.predeployWordLength + 1) })
     ).toBe("malformed")
     expect(LIMITS.predeployBytes).toBe(16 * KiB)
-    expect(predeploy({ command: words(4, 4096) })).toBe(PASSES)
+    expect(predeploy({ command: words(4, 4096) })).toBe(LATER)
     expect(predeploy({ command: [...words(4, 4096), "a"] })).toBe("malformed")
     for (const word of ["a\u0000b", "\udc00"])
       expect(predeploy({ command: ["sh", word] })).toBe("malformed")
@@ -196,9 +209,9 @@ describe("F39 and F40: routes", () => {
     `${label("a", 63)}.com`,
     "localhost.com",
     "invalid.com",
-    "xn--bcher-kva.example.com",
-    "xn--d1acpjx3f.xn--p1ai",
-    "xn--55qx5d.com",
+    "xn.com",
+    "xn-a.com",
+    "a.xn",
     longest,
   ])("%s reads", (domain) => {
     expect(longest).toHaveLength(LIMITS.domainLength)
@@ -222,7 +235,15 @@ describe("F39 and F40: routes", () => {
     // At least two labels.
     "com",
     "",
-    // An xn-- label only when it is a valid A-label.
+    // No label starting xn--: a name outside ASCII, in either spelling, is not
+    // in this version (core.md, the domain rule 3). These three were valid
+    // A-labels and passed until feature 015.
+    "xn--bcher-kva.example.com",
+    "xn--d1acpjx3f.xn--p1ai",
+    "xn--55qx5d.com",
+    // The review's probes (feature 014's review, S7).
+    "xn--ls8h.la",
+    "xn--fa-hia.de",
     "xn--zz.com",
     "xn--ab.com",
     "xn--a.com",
@@ -258,5 +279,115 @@ describe("F39 and F40: routes", () => {
 
   test("a domain that is not text is malformed", () => {
     expect(routes([route(42 as unknown as string)])).toBe("malformed")
+  })
+})
+
+describe("the rules as the library exports them (core.md, the domain rule)", () => {
+  test("isRoutableDomain is the rule routes are read by, and does not lower its input", () => {
+    for (const domain of ["shop.example.com", "a.b", "xn.com"])
+      expect([domain, isRoutableDomain(domain)]).toEqual([domain, true])
+    for (const domain of [
+      "Shop.example.com",
+      "xn--bcher-kva.example.com",
+      "bücher.example.com",
+      "localhost",
+      "1.2.3.4",
+      "",
+    ])
+      expect([domain, isRoutableDomain(domain)]).toEqual([domain, false])
+    expect(isRoutableDomain(42 as unknown as string)).toBe(false)
+    expect(
+      RouteSchema.safeParse({
+        domain: "Shop.example.com",
+        service: "web",
+        port: 80,
+      }).success
+    ).toBe(false)
+  })
+
+  test("domainFault: nothing for a name the rule takes once lowered", () => {
+    for (const text of [
+      "shop.example.com",
+      "Shop.Example.COM",
+      "WWW.EXAMPLE.ORG",
+      "a-b.c-d.com",
+    ])
+      expect([text, domainFault(text)]).toEqual([text, undefined])
+  })
+
+  test("domainFault: not_ascii for a character outside printable ASCII, or an xn-- label, in either case", () => {
+    for (const text of [
+      "bücher.example.com",
+      "BÜCHER.example.com",
+      "例え.jp",
+      "shop.example.com\u00a0",
+      "shop\u0000.example.com",
+      "shop.example.com\n",
+      "xn--bcher-kva.example.com",
+      "XN--BCHER-KVA.example.com",
+      "shop.xn--p1ai",
+      "xn--ls8h.la",
+      "xn--fa-hia.de",
+      "xn--.com",
+    ])
+      expect([text, domainFault(text)]).toEqual([text, "not_ascii"])
+  })
+
+  test("domainFault: not_routable for anything else the rule refuses", () => {
+    for (const text of [
+      "*.example.com",
+      "1.2.3.4",
+      "localhost",
+      "a.localhost",
+      "demo.invalid",
+      "shop.example.com:8080",
+      "shop.example.com/path",
+      "https://shop.example.com",
+      "a b.com",
+      "a_b.com",
+      "-a.com",
+      "a..com",
+      "a.com.",
+      "com",
+      "",
+      `${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(62)}`,
+    ])
+      expect([text, domainFault(text)]).toEqual([text, "not_routable"])
+    expect(domainFault(42 as unknown as string)).toBe("not_routable")
+  })
+
+  test("isHealthPath is the path rule of F38, as HealthSchema reads it", () => {
+    for (const path of [
+      "/health",
+      "/",
+      "/a?b=%20",
+      `/${"a".repeat(LIMITS.healthPathLength - 1)}`,
+    ])
+      expect([path.slice(0, 20), isHealthPath(path)]).toEqual([
+        path.slice(0, 20),
+        true,
+      ])
+    for (const path of [
+      "health",
+      "",
+      "/a b",
+      "/a#b",
+      "/%zz",
+      "/aé",
+      `/${"a".repeat(LIMITS.healthPathLength)}`,
+      `/${"%2F".repeat(341)}a`,
+    ])
+      expect([path.slice(0, 20), isHealthPath(path)]).toEqual([
+        path.slice(0, 20),
+        false,
+      ])
+    expect(isHealthPath(42 as unknown as string)).toBe(false)
+    const check = (path: string) =>
+      HealthSchema.safeParse({
+        timeout: 60,
+        services: [{ service: "web", http: { port: 80, path } }],
+      }).success
+    expect(check("/health")).toBe(true)
+    expect(check("/a b")).toBe(false)
   })
 })

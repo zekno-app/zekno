@@ -2,7 +2,8 @@
  * The signed deploy's version 2: its payload, and how it is read. The format
  * is the design's part 5 (specs/010-app-settings/deploy-v2.md), and every rule
  * here is a rule of contracts/message.md (F4 to F19, and F7). The later
- * fields' rules (F20 to F40) are in `later-fields.ts`.
+ * fields' rules (F20 to F34) are in `later-fields.ts`; those of the health
+ * check and routes (F35 to F40) in `routes-and-checks.ts`.
  *
  * Reading is pure: no signature, no state. Every field is present in every
  * payload, and a value outside its rule is refused, never clamped, defaulted
@@ -18,13 +19,13 @@ import { secretVersion } from "../secrets/statement"
 import { isoTime, TEAM_ID } from "../team/roster"
 import {
   BuildSchema,
-  HealthSchema,
   laterFieldsAreConsistent,
   PredeploySchema,
-  RouteSchema,
 } from "./later-fields"
+import { HealthSchema, RouteSchema } from "./routes-and-checks"
 
-export type { Build, Health, Predeploy, Route } from "./later-fields"
+export type { Build, Predeploy } from "./later-fields"
+export type { Health, Route } from "./routes-and-checks"
 
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/)
 
@@ -77,7 +78,7 @@ const sortedAndUnique = (names: readonly string[]) =>
   names.every((name, index) => index === 0 || names[index - 1]! < name)
 
 /** Freezes a value read from JSON and everything in it. */
-function freezeDeep<T>(value: T): T {
+export function freezeDeep<T>(value: T): T {
   if (typeof value === "object" && value !== null) {
     for (const child of Object.values(value)) freezeDeep(child)
     Object.freeze(value)
@@ -145,18 +146,18 @@ export function readDeployV2Bytes(
   return read
 }
 
-/** F7: builds, the pre-deploy command, the health check and routes come in later steps. */
+/**
+ * F7: builds and the pre-deploy command come in later steps. The health check
+ * and routes are carried out since feature 015 (specs/015-domains-https,
+ * contracts/core.md, "Carried out"). No option chooses: this library ships
+ * inside the runner, as the protocol number does.
+ */
 function carriedOut(
   read: Result<DeployV2, "malformed">
 ): Result<DeployV2, "malformed" | "unsupported_version"> {
   if (!read.ok) return read
   const deploy = read.value
-  if (
-    deploy.builds.length > 0 ||
-    deploy.predeploy !== null ||
-    deploy.health !== null ||
-    deploy.routes.length > 0
-  ) {
+  if (deploy.builds.length > 0 || deploy.predeploy !== null) {
     return refuse(
       "unsupported_version",
       "This deploy asks for something this runner does not carry out yet."

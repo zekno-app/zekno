@@ -50,6 +50,8 @@ export const DEPLOY_V2_REFUSALS = [
   "untrusted_secret",
   /** The deploy's time to run has passed, or it has none where one is required. */
   "expired",
+  /** The deploy names a domain another app on this server holds (specs/015-domains-https, contracts/core.md, K10b). */
+  "domain_taken",
 ] as const
 export type DeployV2Refusal =
   DeployRefusal | (typeof DEPLOY_V2_REFUSALS)[number]

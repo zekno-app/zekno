@@ -54,7 +54,8 @@ export const signV2 = (payload: unknown, signer: Signer) =>
 
 /**
  * Sets `values` for the app (each at `version`) and signs a deploy made
- * against `previous` that lists them, with `statements` and `removals` too.
+ * against `previous` that lists them, with `statements` and `removals` too,
+ * and the `routes`, `health` and `later` fields given.
  */
 export async function deployV2(
   w: World,
@@ -66,6 +67,8 @@ export async function deployV2(
     statements?: readonly Envelope[]
     removals?: readonly Envelope[]
     expiresAt?: Date | null
+    routes?: Parameters<typeof createDeployV2>[0]["routes"]
+    health?: Parameters<typeof createDeployV2>[0]["health"]
     later?: Parameters<typeof createDeployV2>[0]["later"]
   } = {}
 ): Promise<{ envelope: Envelope; records: SecretRecord[] }> {
@@ -96,6 +99,8 @@ export async function deployV2(
     ],
     removals: input.removals ?? [],
     expiresAt: input.expiresAt ?? null,
+    routes: input.routes,
+    health: input.health,
     later: input.later,
     signer: w.founder.signer,
     now: NOW,

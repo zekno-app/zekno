@@ -16,12 +16,13 @@ import {
 import { isoTime, TEAM_ID } from "../team/roster"
 import { SecretRecordSchema } from "../secrets/secret-record"
 import { APP_NAME, SealedSecretSchema, SERVER_ID } from "../secrets/secrets"
-import { RUNNER_VERSION_PATTERN } from "./version"
+import { SERVICE_NAME } from "./service-name"
 
 /**
  * Every message exchanged with the control plane. This file is the public
  * record of what the hosted service receives. All schemas are strict: an
- * unknown field is an error, not something to ignore.
+ * unknown field is an error, not something to ignore. The messages only a
+ * session carries are in `session.ts`.
  */
 
 const sealedSecrets = z.array(SealedSecretSchema).max(LIMITS.secretsPerDeploy)
@@ -181,11 +182,52 @@ export const RUNNER_OUTCOMES = [
   "started",
   "start_failed",
   "refused",
+  // Protocol 4 (specs/015-domains-https, contracts/core.md, "Outcomes"): the
+  // app started and its routes could not be put in force; or it started and a
+  // service was not healthy in time.
+  "routes_failed",
+  "unhealthy",
 ] as const
 
 /**
+ * Why a deploy's routes could not be put in force (runner.md, RN4 to RN9): a
+ * port the proxy needs is taken; a routed or checked service has no container;
+ * a container uses the host's network; the proxy did not load the
+ * configuration.
+ */
+export const ROUTE_FAILURES = [
+  "port_taken",
+  "no_container",
+  "host_network",
+  "not_loaded",
+] as const
+
+const withService = new Set<string>(["no_container", "host_network"])
+
+/** A report's `routes`: the failure, the service exactly with `no_container` and `host_network`, the port exactly with `port_taken`. */
+const RoutesFailureSchema = z
+  .strictObject({
+    failure: z.enum(ROUTE_FAILURES),
+    service: z.string().regex(SERVICE_NAME).optional(),
+    port: z.union([z.literal(80), z.literal(443)]).optional(),
+  })
+  .refine(
+    (routes) =>
+      withService.has(routes.failure) === (routes.service !== undefined) &&
+      (routes.failure === "port_taken") === (routes.port !== undefined)
+  )
+
+/** A report's `health`: the service that was not healthy in time, and whether its check had a path. */
+const HealthFailureSchema = z.strictObject({
+  service: z.string().regex(SERVICE_NAME),
+  http: z.boolean(),
+})
+
+/**
  * Runner to CLI: what happened. `refused` always carries a reason; nothing
- * else does. There is no free-text field.
+ * else does. `routes_failed` always carries `routes`, and `unhealthy`
+ * `health`; nothing else does (core.md, "Outcomes"). There is no free-text
+ * field.
  */
 export const RunnerReportSchema = z
   .strictObject({
@@ -200,234 +242,63 @@ export const RunnerReportSchema = z
         ...RUNNER_REFUSALS,
       ])
       .optional(),
+    routes: RoutesFailureSchema.optional(),
+    health: HealthFailureSchema.optional(),
   })
   .refine(
-    (report) => (report.outcome === "refused") === (report.reason !== undefined)
+    (report) =>
+      (report.outcome === "refused") === (report.reason !== undefined) &&
+      (report.outcome === "routes_failed") === (report.routes !== undefined) &&
+      (report.outcome === "unhealthy") === (report.health !== undefined)
   )
 export type RunnerReport = z.infer<typeof RunnerReportSchema>
 
 /** At most `limit` entries: a runner holds no more than that, so an answer with more is not a runner's. */
-const atMost = (limit: number) => (record: Record<string, unknown>) =>
+export const atMost = (limit: number) => (record: Record<string, unknown>) =>
   Object.keys(record).length <= limit
+
+/** The server's own id is the one derived from its key. */
+export const ownServerId = (status: {
+  serverId: string
+  serverPublicKey: ServerPublicKey
+}) => serverIdOf(status.serverPublicKey) === status.serverId
+
+/** The fields of the answer to `status`: what the server holds. Shared with the answer with routes (`session.ts`). */
+export const runnerStatusFields = {
+  serverId: z.string().regex(SERVER_ID),
+  serverPublicKey: z.custom<ServerPublicKey>((value) =>
+    isKey("serverPublic", value)
+  ),
+  team: z.strictObject({
+    teamId: z.string().regex(TEAM_ID),
+    version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    hash: z.string().regex(/^[0-9a-f]{64}$/),
+  }),
+  // Keys are shown to a person, so they are held to the same patterns as app and secret names.
+  lastSequence: z
+    .record(
+      z.string().regex(APP_NAME),
+      z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+    )
+    .refine(atMost(LIMITS.appsPerServer)),
+  secrets: z
+    .record(
+      z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]{0,62}\/[A-Za-z_][A-Za-z0-9_]{0,127}$/),
+      z.strictObject({
+        version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+        removed: z.boolean(),
+      })
+    )
+    .refine(atMost(LIMITS.secretsPerServer)),
+}
 
 /** Runner to CLI: what the server holds. Versions and numbers only, never a value. */
 export const RunnerStatusSchema = z
-  .strictObject({
-    serverId: z.string().regex(SERVER_ID),
-    serverPublicKey: z.custom<ServerPublicKey>((value) =>
-      isKey("serverPublic", value)
-    ),
-    team: z.strictObject({
-      teamId: z.string().regex(TEAM_ID),
-      version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
-      hash: z.string().regex(/^[0-9a-f]{64}$/),
-    }),
-    // Keys are shown to a person, so they are held to the same patterns as app and secret names.
-    lastSequence: z
-      .record(
-        z.string().regex(APP_NAME),
-        z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
-      )
-      .refine(atMost(LIMITS.appsPerServer)),
-    secrets: z
-      .record(
-        z
-          .string()
-          .regex(/^[a-z0-9][a-z0-9-]{0,62}\/[A-Za-z_][A-Za-z0-9_]{0,127}$/),
-        z.strictObject({
-          version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
-          removed: z.boolean(),
-        })
-      )
-      .refine(atMost(LIMITS.secretsPerServer)),
-  })
-  .refine((status) => serverIdOf(status.serverPublicKey) === status.serverId)
+  .strictObject(runnerStatusFields)
+  .refine(ownServerId)
 export type RunnerStatus = z.infer<typeof RunnerStatusSchema>
-
-/*
- * A session: several requests over one connection to a runner. The CLI
- * writes one request per line; the runner answers each with zero or more
- * event lines and exactly one result line.
- */
-
-/**
- * The protocol this version of the messages belongs to. A runner reports it
- * with its version. 3 (specs/014-deploy-v2, contracts/protocol.md P1): the
- * runner carries out a version-2 deploy with `previous`, `expiresAt` and
- * secrets by version, and answers `deploy` and `records`; it refuses every
- * later field. Runner 0.1.0 speaks 2.
- */
-export const RUNNER_PROTOCOL = 3
-
-/** Runner to CLI: which runner this is. */
-export const RunnerVersionSchema = z.strictObject({
-  version: z.string().regex(RUNNER_VERSION_PATTERN),
-  protocol: z.number().int().min(1).max(1_000_000),
-})
-export type RunnerVersion = z.infer<typeof RunnerVersionSchema>
-
-export const SESSION_COMMANDS = [
-  "setup",
-  "sync",
-  "apply",
-  "status",
-  "state",
-  "logs",
-  "version",
-  // Feature 014: they exist only inside a session, never as one-shot commands.
-  "deploy",
-  "records",
-] as const
-export type SessionCommand = (typeof SESSION_COMMANDS)[number]
-
-/** CLI to runner: one request. `input` is that command's own request message, checked by the runner. */
-export const SessionRequestSchema = z.strictObject({
-  command: z.enum(SESSION_COMMANDS),
-  input: z.unknown().optional(),
-})
-export type SessionRequest = z.infer<typeof SessionRequestSchema>
-
-/** The name of one service of an app, as Docker Compose reports it. */
-export const SERVICE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/
-
-/** A time as Docker writes it: RFC 3339 with up to nanoseconds. */
-const LOG_TIME =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/
-
-/** Runner to CLI, during `apply`: one line of what Docker printed. Text for a person, never trusted. */
-export const ProgressEventSchema = z.strictObject({
-  event: z.literal("progress"),
-  line: z.string().max(4096),
-})
-export type ProgressEvent = z.infer<typeof ProgressEventSchema>
-
-/** Runner to CLI, during `logs`: one line an app's container wrote. Text for a person, never trusted. */
-export const LogEventSchema = z.strictObject({
-  event: z.literal("log"),
-  service: z.string().regex(SERVICE_NAME),
-  time: z.string().regex(LOG_TIME),
-  line: z.string().max(16384),
-})
-export type LogEvent = z.infer<typeof LogEventSchema>
-
-export const SessionEventSchema = z.discriminatedUnion("event", [
-  ProgressEventSchema,
-  LogEventSchema,
-])
-export type SessionEvent = z.infer<typeof SessionEventSchema>
-
-/** Runner to CLI: the end of one request. `result` is that command's own answer, checked by the CLI. */
-export const SessionResultSchema = z.strictObject({ result: z.unknown() })
-
-/** Runner to CLI: one line of a session. */
-export const SessionFrameSchema = z.union([
-  SessionEventSchema,
-  SessionResultSchema,
-])
-export type SessionFrame = z.infer<typeof SessionFrameSchema>
-
-const KiB = 1024
-const MiB = 1024 * KiB
-
-/**
- * The longest line a runner sends while it answers each request, in bytes:
- * about twice the longest frame the messages above allow, written out as
- * JSON (an escape turns one character into at most six bytes). A session
- * client reads no further, so a runner that lies cannot make it hold or
- * parse more than that. Requests are still bounded by `LIMITS.messageBytes`.
- */
-export const SESSION_FRAME_BYTES: Readonly<Record<SessionCommand, number>> = {
-  version: 64 * KiB,
-  setup: 64 * KiB,
-  sync: 64 * KiB,
-  // A progress event: at most 4096 characters, at most about 24 KiB written out.
-  apply: 64 * KiB,
-  // A log event: at most 16384 characters, at most about 96 KiB written out.
-  logs: 192 * KiB,
-  // At most 1024 apps and 4096 services: about 0.6 MiB.
-  state: 1 * MiB,
-  // At most 1024 apps and 8192 secrets: about 2.1 MiB.
-  status: 4 * MiB,
-  // As apply: a progress event, at most about 24 KiB written out, or a report.
-  deploy: 64 * KiB,
-  // At most 256 secret statements of about 0.8 KiB each: about 0.2 MiB. The
-  // design allows 8 MiB; every bound here stays within an eighth of a message.
-  records: 4 * MiB,
-}
-
-export const SERVICE_STATES = [
-  "running",
-  "exited",
-  "created",
-  "restarting",
-  "paused",
-  "dead",
-  "removing",
-  "unknown",
-] as const
-export const SERVICE_HEALTH = ["healthy", "unhealthy", "starting", ""] as const
-
-/**
- * Runner to CLI: what is running for each app. Names and states only. At
- * most `LIMITS.appsPerServer` apps, and `LIMITS.servicesPerServer` services
- * in all: a runner leaves out the apps past that, which reads as "not known".
- */
-export const RunnerAppStatesSchema = z.strictObject({
-  apps: z
-    .record(
-      z.string().regex(APP_NAME),
-      z.strictObject({
-        services: z
-          .array(
-            z.strictObject({
-              service: z.string().regex(SERVICE_NAME),
-              state: z.enum(SERVICE_STATES),
-              exitCode: z.number().int().min(0).max(255),
-              health: z.enum(SERVICE_HEALTH),
-            })
-          )
-          .max(LIMITS.servicesPerApp),
-      })
-    )
-    .refine(atMost(LIMITS.appsPerServer))
-    .refine(
-      (apps) =>
-        Object.values(apps).reduce(
-          (total, app) => total + app.services.length,
-          0
-        ) <= LIMITS.servicesPerServer
-    ),
-})
-export type RunnerAppStates = z.infer<typeof RunnerAppStatesSchema>
-
-/**
- * CLI to runner: the logs of one app, starting with its last `tail` lines.
- * They are followed unless `follow` is false: then the runner sends the lines
- * Docker has and ends the request. Absent means true.
- */
-export const RunnerLogsRequestSchema = z.strictObject({
-  app: z.string().regex(APP_NAME),
-  tail: z.number().int().min(0).max(1000),
-  follow: z.boolean().optional(),
-})
-export type RunnerLogsRequest = z.infer<typeof RunnerLogsRequestSchema>
-
-/** CLI to runner, in a session: the statements the runner holds for one app. */
-export const RunnerRecordsRequestSchema = z.strictObject({
-  app: z.string().regex(APP_NAME),
-})
-export type RunnerRecordsRequest = z.infer<typeof RunnerRecordsRequestSchema>
-
-/**
- * Runner to CLI: the statement of each record the runner holds for the app,
- * sorted by name. Never a sealed value: a statement says a secret's name,
- * version and hash and who set it. The CLI verifies each one; the runner's
- * word is not enough.
- */
-export const RunnerRecordsSchema = z.strictObject({
-  statements: z.array(EnvelopeSchema).max(LIMITS.secretsPerDeploy),
-})
-export type RunnerRecords = z.infer<typeof RunnerRecordsSchema>
 
 /**
  * Validates a message from outside. Raw text or bytes are checked for size

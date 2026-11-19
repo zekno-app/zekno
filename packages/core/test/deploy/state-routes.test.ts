@@ -1,0 +1,251 @@
+/**
+ * The routes in force in the state marked 3 (specs/015-domains-https,
+ * contracts/core.md, "The state"): each strict rule, with a state that breaks
+ * only it. A state that breaks one is refused, never read as having no routes.
+ */
+import { describe, expect, test } from "bun:test"
+
+import {
+  initialRunnerState,
+  readRunnerState,
+  takesVersionOne,
+  type StoredRunnerState,
+} from "../../src/deploy/state"
+import { CONTAINERS_PER_SERVICE, LIMITS } from "../../src/index"
+import { CoreError } from "../../src/protocol/result"
+import { setup } from "../support/helpers"
+import {
+  appRoutes,
+  containerOf,
+  holding,
+  named,
+  nameOf,
+  route,
+} from "../support/routes"
+
+/**
+ * A good state: `a` at format 1 with no routes; `b` with two domains and two
+ * containers of `web`; `c` with a health check and no domain.
+ */
+async function routedState(): Promise<StoredRunnerState> {
+  const { server } = await setup()
+  const base: StoredRunnerState = {
+    v: 3,
+    ...initialRunnerState({
+      serverId: server.serverId,
+      team: server.state.team,
+    }),
+    lastSequence: { a: 3, b: 2, c: 1 },
+    formats: { a: 1, b: 2, c: 2 },
+    routes: {},
+  }
+  return holding(base, {
+    b: {
+      routes: [route("b.example.com"), route("www.b.example.com")],
+      names: { web: [named(1), named(2)] },
+    },
+    c: { routes: [], names: { api: [named(3)] } },
+  })
+}
+
+/** The state with `b`'s entry changed by `change`. */
+const withB = (
+  state: StoredRunnerState,
+  change: Record<string, unknown>
+): unknown => ({
+  ...state,
+  routes: { ...state.routes, b: { ...state.routes.b, ...change } },
+})
+
+const refused = (value: unknown) =>
+  expect(() => readRunnerState(value)).toThrow(CoreError)
+
+describe("a state with routes", () => {
+  test("reads back equal, through JSON too", async () => {
+    const state = await routedState()
+    expect(readRunnerState(state)).toEqual(state)
+    expect(readRunnerState(JSON.parse(JSON.stringify(state)))).toEqual(state)
+  })
+
+  test("an app may hold a health check and no domain; an app with neither is not in routes", async () => {
+    const state = await routedState()
+    expect(readRunnerState(state).routes.c!.routes).toEqual([])
+    refused({
+      ...state,
+      routes: { ...state.routes, c: { routes: [], names: {} } },
+    })
+    refused({
+      ...state,
+      routes: { ...state.routes, c: { routes: [], names: { api: [] } } },
+    })
+  })
+})
+
+describe("FR-036: only an app at format 2 holds routes", () => {
+  test("an app in routes at format 1 is refused, and so is one with no format", async () => {
+    const state = await routedState()
+    refused({ ...state, formats: { ...state.formats, b: 1 } })
+    refused({
+      ...state,
+      routes: { ...state.routes, d: appRoutes(["d.example.com"], 9) },
+    })
+  })
+
+  test("so no app in routes may take a version-1 deploy", async () => {
+    const state = readRunnerState(await routedState())
+    for (const app of Object.keys(state.routes))
+      expect([app, takesVersionOne(state, app)]).toEqual([app, false])
+    expect(takesVersionOne(state, "a")).toBe(true)
+  })
+})
+
+describe("domains", () => {
+  test("within an app, sorted by domain and each once", async () => {
+    const state = await routedState()
+    refused(
+      withB(state, {
+        routes: [route("www.b.example.com"), route("b.example.com")],
+      })
+    )
+    refused(
+      withB(state, {
+        routes: [route("b.example.com"), route("b.example.com", { port: 4 })],
+      })
+    )
+  })
+
+  test("across apps, no domain held twice", async () => {
+    const state = await routedState()
+    refused({
+      ...state,
+      routes: {
+        ...state.routes,
+        c: { ...state.routes.c, routes: [route("b.example.com")] },
+      },
+    })
+  })
+
+  test("each route by the route's own rules, the domain rule among them", async () => {
+    const state = await routedState()
+    for (const routes of [
+      [route("xn--bcher-kva.example.com")],
+      [route("B.example.com")],
+      [route("b.example.com", { port: 0 })],
+      [route("b.example.com", { service: "we b" })],
+      [{ ...route("b.example.com"), tls: false }],
+    ])
+      refused(withB(state, { routes }))
+  })
+
+  test(`at most ${LIMITS.routesPerDeploy} an app`, async () => {
+    const state = await routedState()
+    const many = (count: number) =>
+      Array.from({ length: count }, (_, n) =>
+        route(`d${String(n).padStart(2, "0")}.example.com`)
+      )
+    expect(
+      readRunnerState(withB(state, { routes: many(LIMITS.routesPerDeploy) }))
+        .routes.b!.routes
+    ).toHaveLength(LIMITS.routesPerDeploy)
+    refused(withB(state, { routes: many(LIMITS.routesPerDeploy + 1) }))
+  })
+
+  test(`at most ${LIMITS.domainsPerServer} across the server`, async () => {
+    expect(LIMITS.domainsPerServer).toBe(1024)
+    const state = await routedState()
+    const apps = (count: number) => {
+      const held: Record<string, ReturnType<typeof appRoutes>> = {}
+      let domains = 0
+      for (let app = 0; domains < count; app++) {
+        const take = Math.min(LIMITS.routesPerDeploy, count - domains)
+        held[`app-${app}`] = appRoutes(
+          Array.from(
+            { length: take },
+            (_, n) => `d${String(n).padStart(2, "0")}.app-${app}.example.com`
+          ),
+          100 + app
+        )
+        domains += take
+      }
+      return held
+    }
+    const bare = { ...state, routes: {} }
+    const full = holding(bare, apps(LIMITS.domainsPerServer))
+    expect(Object.keys(readRunnerState(full).routes)).toHaveLength(16)
+    refused(holding(bare, apps(LIMITS.domainsPerServer + 1)))
+  })
+})
+
+describe("names and containers", () => {
+  test("every name is z and 32 hex characters, every container 64 hex characters", async () => {
+    const state = await routedState()
+    for (const entry of [
+      { container: containerOf(1), name: "z".padEnd(32, "0") },
+      { container: containerOf(1), name: `z${"A".repeat(32)}` },
+      { container: containerOf(1), name: `y${"0".repeat(32)}` },
+      { container: containerOf(1), name: `${nameOf(1)}0` },
+      { container: "a".repeat(63), name: nameOf(1) },
+      { container: "A".repeat(64), name: nameOf(1) },
+      { container: `${containerOf(1)}0`, name: nameOf(1) },
+      { container: containerOf(1), name: nameOf(1), alias: "web" },
+      { container: containerOf(1) },
+    ])
+      refused(withB(state, { names: { web: [entry] } }))
+  })
+
+  test("each name once in the whole state", async () => {
+    const state = await routedState()
+    // Twice in one service, in two services of one app, and in two apps.
+    refused(
+      withB(state, {
+        names: {
+          web: [named(1), { container: containerOf(2), name: nameOf(1) }],
+        },
+      })
+    )
+    refused(
+      withB(state, {
+        names: {
+          api: [{ container: containerOf(5), name: nameOf(1) }],
+          web: [named(1), named(2)],
+        },
+      })
+    )
+    refused(withB(state, { names: { web: [named(1), named(3)] } }))
+  })
+
+  test("within a service, sorted by container and each container once", async () => {
+    const state = await routedState()
+    refused(withB(state, { names: { web: [named(2), named(1)] } }))
+    refused(
+      withB(state, {
+        names: {
+          web: [named(1), { container: containerOf(1), name: nameOf(2) }],
+        },
+      })
+    )
+  })
+
+  test(`at most ${CONTAINERS_PER_SERVICE} containers a service`, async () => {
+    expect(CONTAINERS_PER_SERVICE).toBe(16)
+    const state = await routedState()
+    const containers = (count: number) =>
+      Array.from({ length: count }, (_, n) => named(100 + n))
+    expect(
+      readRunnerState(
+        withB(state, { names: { web: containers(CONTAINERS_PER_SERVICE) } })
+      ).routes.b!.names.web
+    ).toHaveLength(CONTAINERS_PER_SERVICE)
+    refused(
+      withB(state, { names: { web: containers(CONTAINERS_PER_SERVICE + 1) } })
+    )
+  })
+
+  test("service and app names by their patterns, and no other field", async () => {
+    const state = await routedState()
+    refused(withB(state, { names: { "we b": [named(1)] } }))
+    refused(withB(state, { extra: 1 }))
+    refused({ ...state, routes: { ...state.routes, B: state.routes.b } })
+    refused({ ...state, routes: { ...state.routes, b: null } })
+  })
+})

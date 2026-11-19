@@ -31,6 +31,12 @@ import {
 
 const DAY = 24 * 60 * 60 * 1000
 const route = { domain: "demo.example.com", service: "web", port: 3000 }
+const health = {
+  timeout: 60,
+  services: [{ service: "web", http: { port: 3000, path: "/health" } }],
+}
+/** A later field no runner carries out yet (F7). */
+const predeploy = { service: "web", command: ["migrate"], timeout: 60 }
 
 /** The arguments of a good `createDeployV2` call in this world, changed by `change`. */
 const signing = (w: World, change: Record<string, unknown> = {}) => ({
@@ -118,16 +124,19 @@ describe("createDeployV2", () => {
     })
   })
 
-  test("with later fields, makes a deploy that reads and asks for them", async () => {
+  test("with routes and a health check, makes a deploy both readers take; a later field still asks for what no runner does", async () => {
     const w = await world()
     const envelope = await createDeployV2(
-      signing(w, { later: { routes: [route] } })
+      signing(w, { routes: [route], health })
     )
     expect(payloadOf(envelope).routes).toEqual([route])
+    expect(payloadOf(envelope).health).toEqual(health)
     expect(reason(readSignedDeployV2({ envelope, trust: w.trust }))).toBe(
       "accepted"
     )
-    expect(reason(readDeployV2Payload(payloadOf(envelope)))).toBe(
+    expect(reason(readDeployV2Payload(payloadOf(envelope)))).toBe("accepted")
+    const later = await createDeployV2(signing(w, { later: { predeploy } }))
+    expect(reason(readDeployV2Payload(payloadOf(later)))).toBe(
       "unsupported_version"
     )
   })
@@ -192,10 +201,8 @@ describe("createDeployV2", () => {
       [{ expiresAt: new Date(Number.NaN) }, "invalid_argument"],
       [{ expiresAt: "tomorrow" }, "invalid_argument"],
       [{ now: new Date(Number.NaN) }, "invalid_argument"],
-      [
-        { later: { routes: [{ ...route, domain: "demo.invalid" }] } },
-        "invalid_argument",
-      ],
+      [{ routes: [{ ...route, domain: "demo.invalid" }] }, "invalid_argument"],
+      [{ health: { ...health, timeout: 0 } }, "invalid_argument"],
     ] as const)
       expect([
         change,
@@ -228,7 +235,7 @@ describe("readSignedDeployV2", () => {
 
   test("F4 to F6 apply, F7 does not", async () => {
     const w = await world()
-    const { envelope } = await deployV2(w, { later: { routes: [route] } })
+    const { envelope } = await deployV2(w, { later: { predeploy } })
     expect(reason(readSignedDeployV2({ envelope, trust: w.trust }))).toBe(
       "accepted"
     )
@@ -302,9 +309,13 @@ describe("verifyDeployV2: K4 to K10", () => {
         )
       )
     ).toBe("malformed")
-    expect(reason(verify(w, await signed({ ...good, routes: [route] })))).toBe(
+    expect(reason(verify(w, await signed({ ...good, predeploy })))).toBe(
       "unsupported_version"
     )
+    // Routes and a health check are carried out (specs/015-domains-https, contracts/core.md).
+    expect(
+      reason(verify(w, await signed({ ...good, routes: [route], health })))
+    ).toBe("accepted")
   })
 
   test("K8: role, team, team list, server, server listed", async () => {
@@ -424,16 +435,13 @@ describe("verifyDeployV2: K4 to K10", () => {
       ],
       [
         "K6 and K7",
-        await signV2(
-          { ...good, sequence: 9, routes: [route] },
-          w.founder.signer
-        ),
+        await signV2({ ...good, sequence: 9, predeploy }, w.founder.signer),
         "malformed",
       ],
       [
         "K7 and K8",
         await signV2(
-          { ...good, routes: [route], teamHash: "b".repeat(64) },
+          { ...good, predeploy, teamHash: "b".repeat(64) },
           w.founder.signer
         ),
         "unsupported_version",

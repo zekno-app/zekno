@@ -132,7 +132,13 @@ describe("P5, P6: the records request and its answer", () => {
 
 describe("P2: the session's commands and the bound of each answer", () => {
   test("deploy and records come after version, and a session request names them", () => {
-    expect(SESSION_COMMANDS.slice(-3)).toEqual(["version", "deploy", "records"])
+    // Feature 015 adds `proxy` after them (specs/015-domains-https, contracts/core.md).
+    expect(SESSION_COMMANDS.slice(-4)).toEqual([
+      "version",
+      "deploy",
+      "records",
+      "proxy",
+    ])
     for (const command of ["deploy", "records"])
       expect(parseMessage(core.SessionRequestSchema, { command }).ok).toBe(true)
   })
@@ -175,8 +181,8 @@ describe("P2: the session's commands and the bound of each answer", () => {
       expect(limit).toBeLessThanOrEqual(LIMITS.messageBytes / 8)
   })
 
-  test("P1: this library speaks protocol 3", () => {
-    expect(core.RUNNER_PROTOCOL).toBe(3)
+  test("P1: this library speaks protocol 4 since feature 015 (it was 3)", () => {
+    expect(core.RUNNER_PROTOCOL).toBe(4)
   })
 })
 
@@ -201,6 +207,8 @@ describe("P8: the reasons only version 2 has", () => {
       "secret_missing",
       "untrusted_secret",
       "expired",
+      // Feature 015, K10b (specs/015-domains-https, contracts/core.md).
+      "domain_taken",
     ])
     // None of them is a version-1 reason.
     for (const reason of DEPLOY_V2_REFUSALS)

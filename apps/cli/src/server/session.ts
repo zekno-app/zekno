@@ -293,6 +293,8 @@ async function start(
 function clean(event: SessionEvent): SessionEvent {
   if (event.event === "progress")
     return { event: "progress", line: sanitize(event.line) }
+  if (event.event === "health")
+    return { event: "health", service: sanitize(event.service) }
   return {
     event: "log",
     service: sanitize(event.service),

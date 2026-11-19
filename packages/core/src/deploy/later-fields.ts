@@ -1,26 +1,27 @@
 /**
  * The fields of the signed deploy's version 2 that a runner carries out in
- * later steps: builds, the pre-deploy command, the health check and routes.
- * Their whole format is fixed now, as the design's part 5 gives it
- * (specs/010-app-settings/deploy-v2.md) and contracts/message.md states it
- * (F20 to F40), so a later feature adds behaviour and never changes the
- * format. Every rule here is checked in full; `message.ts` then refuses a
- * deploy that uses one of these fields (`unsupported_version`).
+ * later steps: builds and the pre-deploy command. Their whole format is fixed
+ * now, as the design's part 5 gives it (specs/010-app-settings/deploy-v2.md)
+ * and contracts/message.md states it (F20 to F34), so a later feature adds
+ * behaviour and never changes the format. Every rule here is checked in
+ * full; `message.ts` then refuses a deploy that uses one of these fields
+ * (`unsupported_version`). The health check and routes were later fields
+ * too until feature 015 carried them out: their rules are in
+ * `routes-and-checks.ts`.
  */
-import { domainToASCII, domainToUnicode } from "node:url"
 import { z } from "zod"
 
 import { isWellFormed, toHex, utf8 } from "../crypto/encoding"
 import { hash } from "../crypto/hash"
 import { LIMITS } from "../protocol/limits"
-import { SERVICE_NAME } from "../protocol/protocol"
 import { CoreError } from "../protocol/result"
+import { SERVICE_NAME } from "../protocol/service-name"
 import { isReservedSecretName, secretName } from "../secrets/secrets"
 import { staysInside } from "./link"
+import type { Health, Route } from "./routes-and-checks"
 
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/)
 const seconds = (max: number) => z.number().int().min(1).max(max)
-const port = z.number().int().min(1).max(65535)
 const service = z.string().regex(SERVICE_NAME)
 
 const bytesOf = (text: string) => utf8(text).length
@@ -88,85 +89,6 @@ export const PredeploySchema = z.strictObject({
   timeout: seconds(LIMITS.predeploySeconds),
 })
 export type Predeploy = z.infer<typeof PredeploySchema>
-
-/**
- * An HTTP path and query, as RFC 3986 allows them: no space, no `#`, and `%`
- * only before two hex digits.
- */
-const PATH = /^\/(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2}){0,1023}$/
-
-/** When the deploy counts as done: each service up, and answering on `http` if given (part 4.3). */
-export const HealthSchema = z.strictObject({
-  timeout: seconds(LIMITS.healthSeconds),
-  services: z
-    .array(
-      z.strictObject({
-        service,
-        http: z
-          .strictObject({
-            port,
-            path: z.string().max(LIMITS.healthPathLength).regex(PATH),
-          })
-          .nullable(),
-      })
-    )
-    .min(1)
-    .max(LIMITS.healthServices),
-})
-export type Health = z.infer<typeof HealthSchema>
-
-/** Names that never reach the public internet, or that this program keeps for itself (`zekno.invalid`). */
-const SPECIAL_USE = new Set([
-  "localhost",
-  "invalid",
-  "test",
-  "example",
-  "local",
-  "internal",
-  "alt",
-  "onion",
-  "arpa",
-])
-
-const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
-
-/**
- * An `xn--` label counts only as the one spelling of what it shows: it
- * decodes, and encodes back to the same text. Otherwise two texts could name
- * what a browser shows as one domain.
- */
-function isALabel(label: string): boolean {
-  const shown = domainToUnicode(label)
-  return shown !== "" && domainToASCII(shown) === label
-}
-
-/**
- * The domain rule (F40). Lowercase ASCII, at most 253 characters, at least two
- * labels of 1 to 63 letters, digits and hyphens, none starting or ending with
- * a hyphen; an `xn--` label only when it is a valid A-label; a last label that
- * is not all digits (never an address); not a special-use name or under one.
- * So two spellings of one domain cannot both pass, and comparing the text
- * compares the domains.
- */
-export function isRoutableDomain(domain: string): boolean {
-  if (domain.length > LIMITS.domainLength) return false
-  const labels = domain.split(".")
-  if (labels.length < 2) return false
-  for (const label of labels) {
-    if (!LABEL.test(label)) return false
-    if (label.startsWith("xn--") && !isALabel(label)) return false
-  }
-  const last = labels.at(-1)!
-  return !/^[0-9]+$/.test(last) && !SPECIAL_USE.has(last)
-}
-
-/** Where a domain's traffic goes: a service of the app and a port of its containers (part 4.2). */
-export const RouteSchema = z.strictObject({
-  domain: z.string().refine(isRoutableDomain),
-  service,
-  port,
-})
-export type Route = z.infer<typeof RouteSchema>
 
 /** What a build key is made of: a build without its key and time limit. */
 export type BuildRecipe = {

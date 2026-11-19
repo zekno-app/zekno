@@ -1,10 +1,11 @@
 /**
  * The signed deploy's version 2: signing it, reading it back, and the
  * runner-side gate. The message is `message.ts`'s (contracts/message.md); the
- * gate runs the checks of contracts/runner-checks.md K4 to K14 in their order
- * (K11 to K14, the secrets, in `listed-secrets.ts`), and its result is the
- * only thing `openSecrets` opens (K16). K1 to K3, K15 and K17 are the
- * runner's: they read the request, the disk and Docker.
+ * gate runs the checks of contracts/runner-checks.md K4 to K14 in their order,
+ * with K10b of specs/015-domains-https/contracts/core.md (K11 to K14, the
+ * secrets, in `listed-secrets.ts`), and its result is the only thing
+ * `openSecrets` opens (K16). K1 to K3, K15 and K17 are the runner's: they
+ * read the request, the disk and Docker.
  */
 import { utf8 } from "../crypto/encoding"
 import {
@@ -36,15 +37,18 @@ import {
   type TeamTrust,
 } from "../team/roster"
 import { DEPLOY_ROLES } from "./deploy"
-import type { Build, Health, Predeploy, Route } from "./later-fields"
+import type { Build, Predeploy } from "./later-fields"
 import { checkListedSecrets } from "./listed-secrets"
 import {
+  freezeDeep,
   readDeployV2Bytes,
   readDeployV2Format,
   readDeployV2PayloadBytes,
   type DeployV2,
 } from "./message"
 import { registerVerified } from "./open"
+import { domainHolders } from "./routes"
+import type { Health, Route } from "./routes-and-checks"
 import { readMarked, type StoredRunnerState } from "./state"
 
 /** A version-2 deploy that passed every check of `verifyDeployV2`. The only version-2 deploy `openSecrets` opens. */
@@ -52,7 +56,12 @@ export type VerifiedDeployV2 = {
   readonly deploy: DeployV2
   /** The member who signed it. */
   readonly signer: Member
-  /** Save this before anything runs: the number is used, the versions and `formats[app] = 2` are kept. */
+  /**
+   * Save this before anything runs: the number is used, the versions and
+   * `formats[app] = 2` are kept. The routes in force are the state's, as
+   * they were: they change only once the runner has put the deploy's routes
+   * in force (specs/015-domains-https, contracts/runner.md, RN9).
+   */
   readonly nextState: StoredRunnerState
   /** The records supplied with the deploy, each listed and verified: write them before the state that names them. */
   readonly write: readonly SecretRecord[]
@@ -62,6 +71,37 @@ export type VerifiedDeployV2 = {
 
 const byName = (a: { name: string }, b: { name: string }) =>
   a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+
+/**
+ * `list` sorted by the text `key` gives each item, so the signer need not
+ * sort it; throws `CoreError` when it is not a list of objects with that
+ * text, or when two items give the same text (`repeated` says which).
+ */
+function sortedOnce<T>(
+  list: unknown,
+  key: (item: T) => unknown,
+  repeated: string
+): T[] {
+  const keyOf = (item: unknown) =>
+    typeof item === "object" && item !== null ? key(item as T) : undefined
+  if (
+    !Array.isArray(list) ||
+    !list.every((item) => typeof keyOf(item) === "string")
+  ) {
+    throw new CoreError(
+      "invalid_argument",
+      "Routes and a health check's services are each a list of objects."
+    )
+  }
+  const sorted = [...(list as T[])].sort((a, b) => {
+    const left = keyOf(a) as string
+    const right = keyOf(b) as string
+    return left < right ? -1 : left > right ? 1 : 0
+  })
+  if (new Set(sorted.map(keyOf)).size !== sorted.length)
+    throw new CoreError("invalid_argument", repeated)
+  return sorted
+}
 
 const isTime = (value: unknown): value is Date =>
   value instanceof Date && Number.isFinite(value.getTime())
@@ -76,7 +116,13 @@ const isTime = (value: unknown): value is Date =>
  * listing comes only from statements a member signed (FR-021): never a
  * version or a hash from anyone's word. The payload is read back by the
  * runner's own reader before it is signed, so this never signs what a runner
- * would call `malformed` (FR-005). `later` is for tests only.
+ * would call `malformed` (FR-005).
+ *
+ * `routes` and `health` are inputs of their own (specs/015-domains-https,
+ * contracts/core.md, "Carried out"): routes are sorted by domain and the
+ * health check's services by service, and a domain or a service given twice
+ * is refused. `later` holds builds and the pre-deploy command, which no
+ * runner carries out yet: it is for tests only.
  */
 export async function createDeployV2(input: {
   trust: TeamTrust
@@ -87,11 +133,11 @@ export async function createDeployV2(input: {
   statements: readonly Envelope[]
   removals: readonly Envelope[]
   expiresAt: Date | null
+  routes?: readonly Route[]
+  health?: Health | null
   later?: {
     builds?: Build[]
     predeploy?: Predeploy | null
-    health?: Health | null
-    routes?: Route[]
   }
   signer: Signer
   now?: Date
@@ -161,6 +207,23 @@ export async function createDeployV2(input: {
       "Each secret name can appear only once in a deploy."
     )
   }
+  const routes = sortedOnce<Route>(
+    input.routes ?? [],
+    (route) => route.domain,
+    "Each domain can appear only once in a deploy."
+  )
+  const health = input.health ?? null
+  const checks =
+    health === null
+      ? null
+      : {
+          ...health,
+          services: sortedOnce<Health["services"][number]>(
+            (health as { services?: unknown }).services,
+            (entry) => entry.service,
+            "Each service can appear only once in a health check."
+          ),
+        }
   const now = input.now ?? new Date()
   if (!isTime(now) || !(input.expiresAt === null || isTime(input.expiresAt))) {
     throw new CoreError(
@@ -183,8 +246,8 @@ export async function createDeployV2(input: {
     removed,
     builds: input.later?.builds ?? [],
     predeploy: input.later?.predeploy ?? null,
-    health: input.later?.health ?? null,
-    routes: input.later?.routes ?? [],
+    health: checks,
+    routes,
   }
   // What is signed is what the reader gives, and reads again as itself, in the one spelling both readers take (F41).
   const read = readDeployV2Format(deploy)
@@ -329,6 +392,19 @@ export function verifyDeployV2(input: {
       )
   }
 
+  // K10b. Who holds a domain (specs/015-domains-https, contracts/core.md):
+  // a domain another app holds is not taken over. Nothing is written and no
+  // number is used.
+  const holders = domainHolders(state)
+  for (const route of deploy.routes) {
+    const holder = holders.get(route.domain)
+    if (holder !== undefined && holder !== app)
+      return refuse(
+        "domain_taken",
+        "Another app on this server holds a domain this deploy names."
+      )
+  }
+
   // K11 to K14. The secrets: every live one listed, none going back, each record verified.
   const checked = checkListedSecrets({
     deploy,
@@ -339,9 +415,10 @@ export function verifyDeployV2(input: {
   if (!checked.ok) return checked
   const { sealed, write, secrets, keep } = checked.value
 
-  // The next state: the number used, the versions kept, and the app at format 2.
+  // The next state: the number used, the versions kept, the app at format 2,
+  // and the routes in force as they were (core.md, K10b).
   const nextState: StoredRunnerState = Object.freeze({
-    v: 2 as const,
+    v: 3 as const,
     serverId: state.serverId,
     team: state.team,
     lastSequence: Object.freeze({
@@ -350,6 +427,7 @@ export function verifyDeployV2(input: {
     }),
     secrets,
     formats: Object.freeze({ ...state.formats, [app]: 2 as const }),
+    routes: freezeDeep(state.routes),
   })
   const result: VerifiedDeployV2 = Object.freeze({
     deploy,
