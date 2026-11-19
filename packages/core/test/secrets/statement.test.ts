@@ -82,7 +82,8 @@ describe("verifySecretStatement", () => {
       ...record.envelope,
       signature: {
         ...record.envelope.signature,
-        sig: `${record.envelope.signature.sig.slice(0, -2)}AA`,
+        // The first character, never the last ones: an Ed25519 signature often ends in zero bits, and then "AA" changes nothing.
+        sig: `${record.envelope.signature.sig.startsWith("A") ? "B" : "A"}${record.envelope.signature.sig.slice(1)}`,
       },
     }
     const other = await addServer({

@@ -226,7 +226,8 @@ describe("version 2 (CL12 to CL14, CL16, CL17)", () => {
         ...a.envelope,
         signature: {
           ...a.envelope.signature,
-          sig: `${a.envelope.signature.sig.slice(0, -2)}AA`,
+          // The first character, never the last ones: an Ed25519 signature often ends in zero bits, and then "AA" changes nothing.
+          sig: `${a.envelope.signature.sig.startsWith("A") ? "B" : "A"}${a.envelope.signature.sig.slice(1)}`,
         },
       },
     }

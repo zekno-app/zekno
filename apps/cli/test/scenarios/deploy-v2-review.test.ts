@@ -96,7 +96,8 @@ describe("what the CLI takes from a `records` answer", () => {
       ...otherApp.envelope,
       signature: {
         ...otherApp.envelope.signature,
-        sig: `${otherApp.envelope.signature.sig.slice(0, -2)}AA`,
+        // The first character, never the last ones: an Ed25519 signature often ends in zero bits, and then "AA" changes nothing.
+        sig: `${otherApp.envelope.signature.sig.startsWith("A") ? "B" : "A"}${otherApp.envelope.signature.sig.slice(1)}`,
       },
     }
     const w = wire(m.deps)
