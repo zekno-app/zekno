@@ -51,7 +51,7 @@ export const site = {
     "Push-button deploys, roles and deploy history on servers you own. Secrets are encrypted and deploys are signed on your machine, so the Zekno service never holds a key.",
   repoUrl,
   /** The address the site is served from. Used for canonical links, the sitemap and social cards. */
-  url: "https://zekno.dev",
+  url: "https://www.zekno.dev",
   locale: "en_US",
   keywords: [
     "deployment platform",
