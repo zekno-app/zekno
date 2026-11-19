@@ -86,9 +86,9 @@ does today. The steps of that design are on
   Zekno service is involved.
 - **Only `zekno version` and `zekno doctor` reach the network on their own:**
   each asks GitHub once for the newest release, and sends nothing about you.
-  For an app with a domain, `zekno deploy` and `zekno domain` also look the
-  domain up with your system's resolver and ask it over HTTPS, as a visitor
-  would. Nothing of it goes to Zekno.
+  For an app with a domain, `zekno deploy`, `zekno domain` and the
+  full-screen app also look the domain up with your system's resolver and ask
+  it over HTTPS, as a visitor would. Nothing of it goes to Zekno.
 - **State and logs come from your server.** Whether an app is running, and its
   logs, are read from the runner over SSH when you look. They never pass
   through Zekno, and your machine keeps none of it.

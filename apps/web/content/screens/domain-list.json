@@ -1,0 +1,19 @@
+{
+  "name": "domain-list",
+  "title": "An app's domains",
+  "command": "zekno domain",
+  "columns": 100,
+  "rows": null,
+  "alt": "zekno domain in shop's folder: shop on prod-1, then one row a domain, in domain order, with the service and port it reaches, its state after a mark, and what to do. api.example.com on api:8080 has no certificate yet, prod-1 is asking for one. new.example.com on web:3000 is not deployed. shop.example.com on web:3000 is live, with a certificate until 17 Feb 2027. www.example.com on web:3000 has DNS that points elsewhere, to 198.51.100.9, not prod-1.",
+  "fixed": [
+    {"what":"the clock a certificate's last day is measured against, so the certificate stays far from its end","shown":"certificate until 17 Feb 2027"}
+  ],
+  "lines": [
+    [["dim","$ zekno domain"]],
+    [["dim","  shop on prod-1"]],
+    [["","api.example.com   "],["dim","api:8080 "],[""," "],["yellow","● no certificate yet   "],[""," "],["dim","prod-1 is asking for one"]],
+    [["","new.example.com   "],["dim","web:3000 "],[""," "],["dim","○ not deployed         "],[""," "],["dim","run zekno deploy"]],
+    [["","shop.example.com  "],["dim","web:3000 "],[""," "],["green","● live                 "],[""," "],["dim","certificate until 17 Feb 2027"]],
+    [["","www.example.com   "],["dim","web:3000 "],[""," "],["red","● DNS points elsewhere "],[""," "],["dim","198.51.100.9, not prod-1"]]
+  ]
+}

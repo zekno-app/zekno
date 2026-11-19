@@ -1,0 +1,26 @@
+{
+  "name": "deploy-healthy",
+  "title": "A deploy with a health check",
+  "command": "zekno deploy",
+  "columns": 100,
+  "rows": null,
+  "alt": "zekno deploy in shop's folder after web was given the health check GET /health. The summary panel of deploy 2 names the app, the server, the secrets and the domain shop.example.com, which the server holds already. The stage row has a fifth stage: Checked, Signed, Sent, Started and Healthy. Then shop is live on prod-1, and how to watch the logs or roll back.",
+  "fixed": [
+    {"what":"how long the deploy took, read from the clock","shown":"in 4.2s"}
+  ],
+  "lines": [
+    [["dim","$ zekno deploy"]],
+    [["dim","╭─ "],["bold","Deploy 2"],[""," "],["dim","───────────────────────────────────────────────────╮"]],
+    [["dim","│"],[""," "],["dim","app"],["","       shop                                               "],["dim","│"]],
+    [["dim","│"],[""," "],["dim","server"],["","    prod-1                                             "],["dim","│"]],
+    [["dim","│"],[""," "],["dim","from"],["","      zekno.app.json"],["dim","  2 services: web, worker"],["","            "],["dim","│"]],
+    [["dim","│"],[""," "],["dim","secrets"],["","   2                                                  "],["dim","│"]],
+    [["dim","│"],[""," "],["dim","domains"],["","   shop.example.com                                   "],["dim","│"]],
+    [["dim","╰──────────────────────────────────────────────────────────────╯"]],
+    [],
+    [["green","✔"],[""," Checked  "],["green","✔"],[""," Signed  "],["green","✔"],[""," Sent  "],["green","✔"],[""," Started  "],["green","✔"],[""," Healthy"]],
+    [],
+    [["green","✔"],[""," "],["bold","shop is live on prod-1"],["dim"," in 4.2s"]],
+    [["","  "],["dim","zekno logs to watch it, zekno rollback to undo"]]
+  ]
+}

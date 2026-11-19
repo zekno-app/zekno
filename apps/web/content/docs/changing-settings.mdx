@@ -264,8 +264,11 @@ the file.
 - The left pane lists the file's services. The right one shows one service in
   five sections: Source, Deploy, Networking, Variables, Volumes. Every setting
   has a row, set or not. One not set reads dim: `the image's own` for the
-  start command, `no` for restart, `no limit`, `none`, or `not published`.
-  Secrets are shown by name only.
+  start command, `no` for restart, `no limit`, `not set` for the health
+  check, `none`, or `not published`. Secrets are shown by name only.
+- `health` is under Deploy, after `cpus`, and reads as `zekno settings` shows
+  it: `GET /health, within 60s` or `stays up, within 60s`. `domains` is under
+  Networking, after `published`, one domain a row, or `none`.
 - `! changed, not deployed (was 512m)` marks a value that differs from your
   machine's last deploy of that app, when that deploy was made from settings.
   When that is not known, nothing is marked.
@@ -294,6 +297,12 @@ the file.
   Then the box shows `now` and `new` and asks "Write this to zekno.app.json?
   Nothing is deployed until you deploy." Only `y` writes it. It is written as
   `zekno settings set` writes it, and runs after the next deploy.
+- `enter` on any `domains` row opens the whole list, the domains separated
+  by `,`, as `zekno settings set web.domains` takes it. Edit it there; an
+  empty value removes every domain. `enter` on `health` takes a path such as
+  `/health`, or `up` for a service that only has to stay up; an empty value
+  removes the health check and its limit. The limit has no row of its own:
+  change it with `zekno settings set <service>.health-timeout`.
 - A plain variable or a volume is added with `zekno settings set`; `enter` on
   their `none` row says how.
 - While no change is open, the file is read again every 5 seconds, so an edit

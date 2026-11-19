@@ -1,0 +1,18 @@
+{
+  "name": "domain-add",
+  "title": "Giving an app a domain",
+  "command": "zekno domain add shop.example.com",
+  "columns": 100,
+  "rows": null,
+  "alt": "zekno domain add shop.example.com in shop's folder: the change to web's domains, from none to shop.example.com; the question whether to write it to zekno.app.json, answered yes; Written, with what to run next; then the one DNS record to create before deploying, an A record for shop.example.com with the value 203.0.113.7.",
+  "fixed": [],
+  "lines": [
+    [["dim","$ zekno domain add shop.example.com"]],
+    [["","  "],["dim","web · domains"],["","  none "],["dim","→"],[""," "],["bold","shop.example.com"]],
+    [["brand","?"],[""," "],["bold","Write this to zekno.app.json?"],[""," Nothing is deployed until you deploy. "],["dim","(y/N)"],[""," yes"]],
+    [["green","✔"],[""," Written  "],["dim","Run zekno deploy to use it."]],
+    [],
+    [["","  "],["dim","Before you deploy, create this DNS record at your DNS provider:"]],
+    [["","  A  "],["bold","shop.example.com"],["","  "],["bold","203.0.113.7"]]
+  ]
+}

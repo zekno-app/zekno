@@ -104,10 +104,10 @@ Waits for the maintainer's answer on the first group's name (M8) before `meta.js
 - [x] T079 [P] `apps/web/content/docs/domains.mdx`: giving an app a domain, the record, the check, what `zekno domain` shows, moving and removing, what the server holds, what is not in this version
 - [x] T080 [P] `apps/web/content/docs/health-checks.mdx`
 - [x] T081 The pages that change: `settings.mdx`, `changing-settings.mdx`, `cli.mdx`, `deploying.mdx`, `doctor.mdx`, `security.mdx`, `index.mdx`, `output.mdx`, `runner.mdx`; `meta.json` and the pages contract in `apps/web/modules/docs/lib/pages.test.ts`
-- [ ] T082 Stored screens: recapture those that changed, add recipes for `zekno domain`, `zekno domain add` and a deploy with a domain (`apps/cli/test/screens/recipes`), each shown by a page
+- [x] T082 Stored screens: recapture those that changed, add recipes for `zekno domain`, `zekno domain add` and a deploy with a domain (`apps/cli/test/screens/recipes`), each shown by a page
 - [x] T083 `README.md`: "What works today", the security model (the server holds the TLS keys of routed domains; what a hosted service would learn), the roadmap; `apps/cli/README.md`, `apps/runner/README.md`. The desktop app stays unnamed.
 - [x] T084 The docs test of the CLI: every command and flag of the help is named by a page
-- [ ] T085 Every sentence a page quotes is checked against the built program
+- [x] T085 Every sentence a page quotes is checked against the built program
 - [x] T086 Web: tests, type check, lint, format
 
 ## Phase 7: Review and proof on this machine

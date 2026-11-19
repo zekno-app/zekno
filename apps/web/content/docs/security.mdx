@@ -50,7 +50,7 @@ could carry a deploy but never add, change or move a domain.
 The server holds the TLS certificate and private key of each domain it
 serves, in the storage of its proxy. They are made on the server and never
 pass through your machine or Zekno. A released domain's certificate and key
-are deleted. The proxy ends TLS for every app with a domain on that server,
+are deleted, also when the proxy is stopped or gone. The proxy ends TLS for every app with a domain on that server,
 so it handles their requests unencrypted, as any reverse proxy does. See
 [What the server holds](/docs/domains#what-the-server-holds).
 

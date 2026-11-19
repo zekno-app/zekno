@@ -60,9 +60,10 @@ $ zekno doctor
 - **The proxy.** For a server whose runner speaks protocol 4 and holds a
   domain, one more line after the runner's: whether the proxy that answers
   for the domains runs (see [Domains and HTTPS](/docs/domains#what-the-server-holds)).
-  A proxy that is not running is a problem; one from another image than the
-  runner's is a warning, which `zekno server update` puts right. A server
-  with no domain has no Proxy line.
+  A proxy that is missing or stopped is a problem. One from another image
+  than the runner's, running or not, is a warning: the next deploy with a
+  domain makes it again, and so does `zekno server update` when it replaces
+  the runner. A server with no domain has no Proxy line.
 
   ```text
   ✔ Proxy          answers for 2 domains

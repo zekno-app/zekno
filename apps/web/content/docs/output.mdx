@@ -15,7 +15,7 @@ description: Exit status, and what zekno prints with and without a terminal.
 | --- | --- |
 | `0` | Success. Also the app when you quit, and `zekno logs` stopped with Ctrl-C or a closed pipe |
 | `1` | Refused or failed, including a deploy whose app did not start, a deploy whose domains the server could not put in force or that was not healthy in time, a deploy stopped by its DNS check, and a question left with Esc or Ctrl-C |
-| `2` | Wrong usage, including a `zekno.json` not signed by your team, one not used here yet when there is no terminal to ask on, `zekno` with no arguments and no terminal, a folder with both `zekno.app.json` and `compose.yaml` and nothing to say which when there is no terminal to ask on, a setting value not allowed, and a domain `zekno domain add` or `rm` refuses |
+| `2` | Wrong usage, including a `zekno.json` not signed by your team, one not used here yet when there is no terminal to ask on, `zekno` with no arguments and no terminal, a folder with both `zekno.app.json` and `compose.yaml` and nothing to say which when there is no terminal to ask on, a setting value not allowed, a domain `zekno domain add` or `rm` refuses, and `zekno domain` in a folder that deploys a Compose file written by hand |
 
 ## Output
 
@@ -41,7 +41,7 @@ from the first version:
 | `status --json` | As before, plus `"apps": { "<app>": { "state", "services": [...] } }` | Yes: one added field, and `routes` for a server that holds a domain |
 | `domain` | `<domain>\t<service>\t<port>\t<state>\t<last day>`, one line per domain | New |
 | `domain --json` | A list: `{"domain","service","port","state","until"}` for each domain | New |
-| `domain add`, `domain rm` | As `settings set`, then `record\tA\t<domain>\t<address>` (or `AAAA`) after an `add` when the server's address is known | New |
+| `domain add`, `domain rm` | As `settings set`, but after an `rm` the result is `Written  Run zekno deploy to release it.`; then `record\tA\t<domain>\t<address>` (or `AAAA`) after an `add` when the server's address is known | New |
 | `secret ls`, `server ls` | Unchanged | No |
 | `logs` | `<time>\t<service>\t<text>`, one line per log line | New |
 | `settings` | `<service>\t<place>\t<value>`, one line per setting that is set | New |

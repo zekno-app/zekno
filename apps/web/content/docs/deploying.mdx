@@ -75,8 +75,8 @@ An app whose settings give it a domain or a health check is deployed with
 them. Before anything is signed, each domain new to the app is looked up from
 your machine, and a domain that does not point to the server stops the
 deploy; `zekno deploy --skip-dns-check` goes on without looking. The panel has
-a `domains` row, and after the start the deploy waits up to 60 seconds for
-each new domain to answer over HTTPS with a valid certificate. With a health
+a `domains` row, and after the start the deploy waits up to 60 seconds in
+all for its new domains to answer over HTTPS with a valid certificate. With a health
 check, it waits for the app to be healthy. See [Domains and HTTPS](/docs/domains) and
 [Health checks](/docs/health-checks).
 
@@ -255,6 +255,10 @@ runner it does what `zekno deploy` does.
 A rollback keeps the domains and the health check in force now, not those of
 the deploy it returns to, and makes no DNS check (see
 [A rollback keeps the domains](/docs/domains#a-rollback-keeps-the-domains)).
+It has one more stop: on a runner that does not carry out domains, a
+rollback of an app this machine has signed a domain for stops before
+anything is signed, with the sentence of a runner too old for domains and
+health checks (see [An older or a newer runner](#an-older-or-a-newer-runner)).
 
 ```bash
 zekno rollback --app api --server prod --to 3

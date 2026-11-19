@@ -60,6 +60,12 @@ named `zekno-runner`, never replaces a newer runner, and the new runner must
 answer with its version before it replaces the old one. The runner's folder,
 key and state are not touched. A runner on your machine has nothing to update.
 
+When the new runner holds a domain, it is then asked to make the proxy match
+the routes in force, such as making again a proxy of another image (see
+[What the server holds](/docs/domains#what-the-server-holds)). Nothing is
+signed for it, and no route is put in force that a signed deploy did not put
+there. If it fails, a warning says why, and the update stands.
+
 A runner newer than the one this `zekno` carries is left as it is, and you
 are told to update `zekno` instead. A build of `zekno` that holds no checksum
 for its runner stops with "This build of zekno has no published runner to

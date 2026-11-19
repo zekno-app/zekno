@@ -201,6 +201,7 @@ belongs to them (a server set up by an earlier version); else
 | `records/<app>/<hash>.json` | The latest record of each secret of an app deployed in format 2, named by the hash of its sealed value. Mode `0600`. |
 | `apps/<app>/compose.yaml` | The Compose file of the last accepted deploy. |
 | `proxy/etc/caddy.json` | The proxy's configuration, written whole by the runner. The proxy reads the folder read-only. |
+| `proxy/etc/caddy.next.json` | A new configuration while Caddy checks it. It replaces `caddy.json` only when it is valid, and is removed when it is not. |
 | `lock` | Present while a `setup`, `sync`, `apply`, `deploy` or `proxy` is at work, so two runs never overlap. |
 
 Decrypted secrets are never written here. They are handed to Docker Compose
@@ -293,12 +294,16 @@ the Compose file and Docker are as they were.
 A deploy with routes or a health check does more once `docker compose up`
 has returned, under the same lock. The runner finds each routed or checked
 service's containers by their Compose labels, and gives each a random name on
-the app's route network, `zekno-route-<app>`, which it makes. It starts the
-proxy, `zekno-proxy`, from the Caddy image it pins by digest, when a route
-needs it. It writes the proxy's configuration whole, from the routes in force
-of every app and the names it made, has the proxy check it, loads it, and
-confirms the proxy took it. Only then does it save the new routes. Then it
-deletes the certificate and key of each released domain, and removes the
+the app's route network, `zekno-route-<app>`, which it makes. It writes the
+proxy's configuration whole, from the routes in force of every app and the
+names it made, to a second file, `proxy/etc/caddy.next.json`. Caddy checks
+that file, and only a valid one replaces `proxy/etc/caddy.json`. When a route
+needs the proxy and it is not running, the runner then starts it,
+`zekno-proxy`, from the Caddy image it pins by digest; a running proxy is
+told to load the new file. The load counts only when what the proxy saved
+holds the new file's nonce, a random mark the runner puts in each file. Only
+then does it save the new routes. Then it deletes the certificate and key of
+each released domain, also when the proxy is stopped or gone, and removes the
 proxy when no app has a route. Then it waits for the health check. What each
 step means for your apps is on [Domains and HTTPS](/docs/domains#what-the-server-holds)
 and [Health checks](/docs/health-checks#how-the-check-is-made).
@@ -461,7 +466,8 @@ procedure, from start to end, and how to withdraw a release, is
   domain. Its configuration is reloaded only when it changes, and each reload
   can drop a few new connections.
 - **A health check holds the lock.** While a deploy waits for one, up to 30
-  minutes, every other request that takes the lock is refused with `busy`.
+  minutes, and up to 5 minutes more when the runner first fetches the image
+  a check runs, every other request that takes the lock is refused with `busy`.
 - **Signing a deploy is equal to root on the server.** A Compose file can
   mount anything Docker can reach. The signature decides who may do that; the
   runner does not limit what they deploy.

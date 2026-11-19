@@ -24,8 +24,8 @@ is left as it was, also after an error.
 | Screen | Opens from | Shows |
 | --- | --- | --- |
 | Home | Start, when a team exists | Servers; the selected server's apps with deploy number, state and when; the selected app's details and actions; whether this folder is linked |
-| App | `enter` on an app | Deploy history; secrets by name and version; the selected deploy's details; a note when a secret is newer than the running deploy |
-| Deploy | `d`, or `r` | Summary panel, stage row, one live line; Docker's output on `o` and on failure |
+| App | `enter` on an app | Deploy history; secrets by name and version; the selected deploy's details; a note when a secret is newer than the running deploy; for an app with a domain, a Domains box under the secrets |
+| Deploy | `d`, or `r` | Summary panel, with a `domains` row for a deploy with a domain; stage row, with a fifth stage for a health check; one live line; Docker's output on `o` and on failure |
 | Logs | `l` | Time, service, text; following or paused |
 | First run | Start, when no team exists | The logo, the three steps (your key, a server, a first deploy), the name question |
 | Add a server | `a` on Home, or step 2 of first run | The destination and name, each step as it completes, the team code and the server code with what each is for. Once done it stays, every step ticked and the server code shown, until `enter` goes to Home |
@@ -45,6 +45,18 @@ of Home. Only `q` and `ctrl-c` work there.
   name="app-detail"
   caption="The App screen for shop, opened with enter on it: its two deploys, the latest selected with its details, and its secrets by name and version, never a value."
 />
+
+For an app with a domain, the App screen has a Domains box under Secrets:
+each domain, and under it its state after a mark, as
+[zekno domain](/docs/domains#zekno-domain) gives them, without the detail.
+At its foot, dim: `Checked from this machine.` and
+`e settings to change them.`; below 100 columns it has no foot. The box only
+shows, and takes no keys. It is read in the background when the screen opens
+and after a deploy of the app, over SSH in batch mode only, and not while SSH
+needs an answer for that server. It is there when this folder deploys the app
+from a settings file, linked to it or to nothing, and that file or the app's
+last deploy from this machine has a domain. Otherwise there is no box, and
+nothing more is asked of the server.
 
 ## Keys
 
@@ -169,6 +181,19 @@ question is open, letter keys type into it.
 - The deploy screen shows a summary panel, a row of stages (checked, signed,
   sent, starting, then started or failed) and one live line. Docker's full
   output is shown on `o`, and on a failed start.
+- A deploy with a domain is checked as `zekno deploy` checks it (see
+  [The check before a deploy](/docs/domains#the-check-before-a-deploy)). Each
+  new domain that points to the server has its line above the panel, and the
+  panel has a `domains` row, one domain a row. A stop before signing shows
+  the panel with `✖ Checked` and the sentence. While the deploy waits for
+  HTTPS, the live line is the wait for the certificate; once it ended, the
+  address live, or not ready yet, is under the result. The app cannot skip
+  the DNS check: only `zekno deploy --skip-dns-check` does.
+- A deploy with a health check has a fifth stage, healthy, after started
+  (see [Health checks](/docs/health-checks#what-a-deploy-does)). While a
+  service with a path is waited for, the live line says
+  `waiting for web to answer GET /health`, without the seconds: the header
+  counts the time.
 
 ## Logs in the app
 

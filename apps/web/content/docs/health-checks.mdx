@@ -79,15 +79,17 @@ a path, a line under the stage row says
 `waiting for web to answer GET /health`, and for how long. A deploy with no
 health check keeps the four stages.
 
-```text
-✔ Checked  ✔ Signed  ✔ Sent  ✔ Started  ✔ Healthy
-```
+<Screen
+  name="deploy-healthy"
+  caption="A deploy of shop after web was given the health check GET /health: the fifth stage, Healthy, after Started. shop.example.com is held already, so nothing is said of DNS or HTTPS."
+/>
 
 On the server, the runner waits once Docker Compose has started the app, for
 each service with a health check, in turn. It looks at every container of the
 service every 2 seconds, until all of them are healthy, or the time limit has
 passed since Docker Compose returned. A deploy has one limit: the largest of
-its services' limits.
+its services' limits. The limit is looked at before each container, so the
+wait ends at its limit however many containers a service has.
 
 - **With a path**, a container is healthy when it answers `GET <path>` on its
   port with a status from 200 to 399.
@@ -114,6 +116,17 @@ Without a path:
 web did not stay up within 60 seconds. shop is running as deployed, and nothing was rolled back. Run `zekno logs` to see why, or `zekno rollback` to go back.
 ```
 
+A service with a health check that no domain reaches cannot be checked when
+it has no running container, or uses the host's network. The deploy then ends
+before the wait, with exit status 1, as one whose domains could not be put in
+force (see
+[When the routes cannot be put in force](/docs/domains#when-the-routes-cannot-be-put-in-force)):
+
+```text
+web cannot be checked: no container of web is running. Run `zekno logs` to see why.
+web cannot be checked: web uses the host's network, which zekno cannot route to. Give web a network of its own, then run `zekno deploy` again.
+```
+
 At a terminal the commands are shown without the backquotes. With no
 terminal, the sentence is a line on standard error, in place of the line of
 a deploy that started.
@@ -135,17 +148,21 @@ machine:
   deploy chose. It cannot reach another app's containers.
 - It speaks plain HTTP only, follows no redirect, reads at most 1 KiB of the
   answer, and gives up on one try after 5 seconds. A redirect is not
-  followed: its status, from 300 to 399, counts as success.
+  followed: its status, from 300 to 399, counts as success. A check gets at
+  most the time left of the limit, and never more than 30 seconds.
 - The container runs read-only, as a user with no rights, with no
   capability, 32 MB of memory and at most 16 processes.
-- The first check on a server fetches the pinned image through Docker when
-  the proxy has not fetched it yet.
+- Before the wait begins, the runner looks for the pinned image once, and has
+  Docker fetch it when it is not on the server yet. The fetch may take up to
+  5 minutes, which do not count against the limit. When it fails, the first
+  service with a path is not healthy.
 
 ## What to know
 
 - **A long wait holds the server.** The runner does one deploy at a time on a
   server. While a deploy waits for its health check, up to 30 minutes with the
-  largest limit, another deploy to that server, or any other request that
+  largest limit and up to 5 minutes more when the runner first fetches the
+  image a check runs, another deploy to that server, or any other request that
   waits for the same turn, is refused as busy:
   `The runner is in the middle of another deploy. Try again in a moment.` The
   default limit is 60 seconds.

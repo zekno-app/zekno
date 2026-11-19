@@ -179,6 +179,7 @@ that folder exists and belongs to them (a server set up by an earlier version); 
 | `records/<app>/<hash>.json` | The latest record of each secret of an app deployed in format 2, named by the hash of its sealed value. Mode `0600`. |
 | `apps/<app>/compose.yaml` | The Compose file of the last accepted deploy. |
 | `proxy/etc/caddy.json` | The proxy's configuration, written whole by the runner. The proxy reads the folder read-only. |
+| `proxy/etc/caddy.next.json` | A new configuration while Caddy checks it. It replaces `caddy.json` only when it is valid, and is removed when it is not. |
 | `lock` | Present while a `setup`, `sync`, `apply`, `deploy` or `proxy` is at work, so two runs never overlap. |
 
 Decrypted secrets are never written here. They are handed to Docker Compose through its
@@ -256,7 +257,7 @@ A deploy with routes or a health check does more once `docker compose up` has re
 same lock:
 
 1. It finds each routed or checked service's containers, by `docker compose ps` and their Compose
-   labels. A service with none is `no_container`; one on the host's network is `host_network`.
+   labels. None, or more than 16, is `no_container`; one on the host's network is `host_network`.
 2. It makes the app's route network, `zekno-route-<app>`, labelled with this server and the app,
    and gives each container a random name on it: `z` and 32 hex characters. A container that was
    not made again keeps its name. Nothing a deploy carries names a network or a name.
@@ -264,7 +265,8 @@ same lock:
    (`src/proxy/image.ts`), with ports 80 and 443 published, `--restart unless-stopped`, no
    capability but binding low ports, no Docker socket, a bounded log, no search domains, and the
    volumes `zekno-proxy-data` and `zekno-proxy-config`. A port another program holds is
-   `port_taken`.
+   `port_taken`. Before a start, the file of step 4 is checked in a short-lived container of the
+   pinned image with no network, and put in place: the proxy never starts on an unchecked file.
 4. It joins the proxy to the route networks it needs and builds the configuration whole from the
    routes in force of every app and the names it made. The text goes to a second file,
    `proxy/etc/caddy.next.json`; Caddy checks it with `caddy validate`, and only then does it
@@ -272,16 +274,20 @@ same lock:
    and counts it as loaded when the file's new nonce is in what the proxy saved; the proxy's log
    is read only to stop early on a failed load. Requests are not written to that log, and the
    headers `X-Real-Ip` and `Forwarded` of a request are removed before it reaches the app. Only
-   then are the new routes saved in `state.json`. Not taken: the configuration built from the
-   state as it was is loaded again, the state is left alone, and the outcome is `not_loaded`.
-5. It deletes the certificate and key of each released domain, takes the proxy off the network of
-   an app with no route, removes the route network of an app with no route and no health check,
-   and removes the proxy when no app has a route. The volumes stay.
+   then are the new routes saved in `state.json`. Refused by `caddy validate`, `caddy.json` stays
+   as it was and nothing is signalled; put in place and not taken, the configuration built from
+   the state as it was is loaded again. Either way the state stays, and the outcome is `not_loaded`.
+5. It deletes the certificate and key of each released domain, also when the proxy is stopped or
+   gone, takes the proxy off the network of an app with no route, removes the route network of an
+   app with no route and no health check, and removes the proxy when no app has a route. The
+   volumes stay.
 6. With a health check, it waits for it: one round every 2 seconds until every container of every
    checked service is healthy, or the limit has passed. With a path, `curl` asks each container by
    its name from a short-lived container of the same pinned image on the route network: read-only,
-   as a user without rights, no capability, 32 MB, no redirect followed, at most 1 KiB read, 5
-   seconds a try.
+   as a user without rights, no capability, 32 MB, 16 processes, no redirect followed, at most
+   1 KiB read, 5 seconds a try. The image is looked for once before the wait and pulled when
+   missing, in up to 5 minutes not counted against the limit. The limit is looked at before each
+   container, and a check gets at most the time left and 30 seconds.
 
 The configuration has no admin interface, one server on 443 for HTTP/1.1 and HTTP/2 (so port 80
 answers with a redirect to HTTPS and no UDP port is opened), a route a domain and a last route that
@@ -443,8 +449,8 @@ How to cut a release, from start to end, and how to withdraw one: [RELEASING.md]
 - **A domain opens ports 80 and 443 to everyone.** The proxy holds the TLS keys of every domain on
   the server, and ends TLS for every app with a domain. Its configuration is reloaded only when it
   changes, and each reload can drop a few new connections.
-- **A health check holds the lock.** While a deploy waits for one, up to 30 minutes, every other
-  request that takes the lock is refused with `busy`.
+- **A health check holds the lock.** While a deploy waits for one, up to 30 minutes and 5 more for
+  a first fetch of the image, every other request that takes the lock is refused with `busy`.
 - **Signing a deploy is equal to root on the server.** A Compose file can mount anything Docker
   can reach. The signature decides who may do that; the runner does not limit what they deploy.
 - **Docker's messages are passed back as they are.** An error from Docker can repeat a value

@@ -44,15 +44,10 @@ text. So only your team can add, change or move a domain.
 `zekno settings set` step for step: the change, the question, the write. It
 deploys nothing and connects to none of your servers.
 
-```text
-$ zekno domain add shop.example.com
-  web · domains  none → shop.example.com
-? Write this to zekno.app.json? Nothing is deployed until you deploy. (y/N) yes
-✔ Written  Run zekno deploy to use it.
-
-  Before you deploy, create this DNS record at your DNS provider:
-  A  shop.example.com  203.0.113.7
-```
+<Screen
+  name="domain-add"
+  caption="zekno domain add in shop's folder, linked to shop on prod-1: the change to web's domains, the question answered yes, and the one DNS record to create before you deploy. The address is an example value."
+/>
 
 - The file is the one `zekno deploy` here would sign, found as
   `zekno settings` finds it (see [App settings](/docs/settings#zekno-settings)).
@@ -186,26 +181,33 @@ line of a domain that points to the server is
 
 The summary panel of the deploy has a `domains` row, one domain a row; after
 the first three, `and 5 more`. On the server, the runner puts the routes in
-force once Docker Compose has started the app: it starts the proxy if it is
-not running, gives the proxy its new configuration, and confirms that the
-proxy took it. The proxy then asks Let's Encrypt for a certificate for each
-new domain.
+force once `docker compose up` has returned: it writes the proxy's new
+configuration beside the one in place, has Caddy check it, puts it in place,
+starts the proxy if it is not running or has it load the file, and confirms
+that the proxy took it. The proxy then asks Let's Encrypt for a certificate
+for each new domain.
+
+<Screen
+  name="deploy-domain"
+  caption="The first deploy of shop since shop.example.com was added: the domain checked from this machine before anything is signed, the panel's domains row, the four stages, and the address live over HTTPS."
+/>
 
 When the deploy started with a domain the app did not have, `zekno` asks the
 address over HTTPS from your machine, as a visitor would, every 2 seconds,
-for up to 60 seconds:
+for up to 60 seconds. While it waits, the last line counts the seconds:
 
 ```text
-⠹ Waiting for the certificate of shop.example.com 12s
-✔ https://shop.example.com is live  certificate until 17 Feb 2027
+⠹ Waiting for the certificate of shop.example.com  12s
 ```
 
 The certificate counts only when it is valid for the domain as a browser
-would judge it. When it is not there within the 60 seconds, the deploy still
-succeeded, with exit status 0, and a warning says how to look later:
+would judge it. Then the line reads `https://shop.example.com is live`, with
+the certificate's last day, as above. When it is not there within the 60
+seconds, the deploy still succeeded, with exit status 0, and a warning says
+how to look later:
 
 ```text
-! The certificate for shop.example.com is not ready yet. Run `zekno domain` to see when it is.
+! The certificate for shop.example.com is not ready yet. Run zekno domain to see when it is.
 ```
 
 The proxy keeps asking for the certificate by itself, with growing waits.
@@ -226,9 +228,12 @@ deploy. Its domains are not served as the deploy asked. Exit status 1:
 | The proxy did not take the new configuration | shop is running, but prod-1 did not take its new domains, so it answers for the ones it had. Run `zekno doctor` to see why. |
 
 In each case the proxy keeps the configuration it had, and the app's earlier
-routes stay in force. No other app's domain is affected. An app whose own
-Compose text publishes port 80 or 443 holds that port, and the proxy cannot
-start beside it.
+routes stay in force. No other app's domain is affected. One case differs: a
+proxy from another image than the runner's, as after a runner update, is
+removed before the new one starts. If the new one does not start, no domain
+on the server is answered until a later deploy starts it, and `zekno doctor`
+shows the proxy as not running. An app whose own Compose text publishes port
+80 or 443 holds that port, and the proxy cannot start beside it.
 
 The runner refuses two deploys before anything runs, with no number used:
 
@@ -243,15 +248,10 @@ Lists the domains of the folder's app, and whether each one works now. It
 needs a folder linked to the app with `zekno link`, and takes its app and
 server from there.
 
-```text
-$ zekno domain
-  shop on prod-1
-blog.example.com  web:3000  ✖ belongs to blog       release it there first
-new.example.com   web:3000  ○ not deployed          run zekno deploy
-old.example.com   web:3000  ○ to be released        removed from the file, run zekno deploy
-shop.example.com  web:3000  ● live                  certificate until 17 Feb 2027
-www.example.com   web:3000  ● DNS points elsewhere  198.51.100.9, not prod-1
-```
+<Screen
+  name="domain-list"
+  caption="zekno domain in shop's folder: four domains in domain order, each with the service and port it reaches, its state after a mark, and what to do. The DNS and HTTPS answers are example values."
+/>
 
 One row a domain of the settings file or of the server's routes for the app,
 in domain order: the domain, the service and port it reaches, its state after
@@ -316,8 +316,8 @@ A domain the file does not name is refused, exit status 2:
 `shop.example.com is not a domain of this app. Run zekno domain to see its domains.`
 
 The next deploy leaves the domain out, and the server releases it: the proxy
-stops answering for it, then its certificate and private key are deleted.
-Other apps' domains are untouched. When the last domain on a server is
+stops answering for it, then its certificate and private key are deleted,
+also when the proxy is stopped or gone. Other apps' domains are untouched. When the last domain on a server is
 released, the proxy is stopped and removed, and ports 80 and 443 close again.
 Its storage stays on the server, for the next domain.
 
@@ -340,6 +340,11 @@ service a domain reaches, it stops before signing:
 What deploy 41 ran has no service named web, which shop.example.com reaches. Remove the domain first, or roll back to a deploy that has web. Nothing was signed.
 ```
 
+A runner older than protocol 4 does not tell its routes. On such a runner, a
+rollback of an app this machine has signed a domain for stops before
+anything is signed, with the sentence of a runner too old for domains (see
+[The check before a deploy](#the-check-before-a-deploy)).
+
 ## What the server holds
 
 | What | Where |
@@ -347,14 +352,15 @@ What deploy 41 ran has no service named web, which shop.example.com reaches. Rem
 | The proxy | A container named `zekno-proxy`, started from Caddy 2.11.9, pinned in the runner by its digest. Docker restarts it unless it is stopped by hand. |
 | Certificates and their private keys | The Docker volume `zekno-proxy-data`, in the proxy at `/data`. Kept when the proxy is made again or removed. |
 | What the proxy saves of its configuration | The Docker volume `zekno-proxy-config`. |
-| The proxy's configuration | `proxy/etc/caddy.json` in the [runner's folder](/docs/runner#its-folder), generated whole by the runner and read by the proxy, read-only. |
+| The proxy's configuration | `proxy/etc/caddy.json` in the [runner's folder](/docs/runner#its-folder), generated whole by the runner and read by the proxy, read-only. A new one is written first to `proxy/etc/caddy.next.json`, and replaces it only once Caddy found it valid. |
+| The proxy's network | A Docker network, `zekno-proxy`, of the proxy alone. Kept when the proxy is removed. |
 | An app's route network | A Docker network, `zekno-route-<app>`, for each app with a domain or a health check. The runner gives each container of a routed or checked service a random name on it. |
 | Which app holds which domain | The routes in force, in the runner's `state.json`. |
 
 - **The TLS keys of the domains are on the server.** Each certificate's
   private key is made and kept by the proxy, on the server. None passes
   through your machine or through Zekno. A released domain's certificate and
-  key are deleted with the release.
+  key are deleted with the release, also when the proxy is stopped or gone.
 - **Apps on one server share it.** A deploy your team signed runs its Compose
   text with all that Docker allows on that server, so one app's deploy could
   read the key of every domain there.
@@ -375,19 +381,23 @@ What deploy 41 ran has no service named web, which shop.example.com reaches. Rem
 - **The app is told the visitor's address by the proxy.** The proxy sets
   `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host` itself, in
   place of what a visitor sent, and removes a visitor's `X-Real-Ip` and
-  `Forwarded` headers. The proxy does not log requests.
+  `Forwarded` headers. The proxy does not log requests, and Docker keeps its
+  log in at most three files of 10 MB.
 - **A new configuration is loaded only when it differs** from the one in
-  force. Each load can drop a few new connections; requests already running
-  are not cut. If the proxy does not take it, the configuration it had stays
-  in force.
+  force. One Caddy finds invalid never replaces the one in place. Each load
+  can drop a few new connections; requests already running are not cut. A
+  load counts only when what the proxy saved holds the new file's nonce, a
+  random mark the runner puts in each file. If the proxy does not take it,
+  the configuration it had stays in force.
 - **A deploy replaces the app's containers as it does today.** Requests that
   arrive while it does can fail.
-- **The image comes through Docker.** The first time the proxy is started,
-  Docker fetches the pinned image, about 24 MiB. The runner uses no image a
-  deploy names for the proxy.
+- **The image comes through Docker.** The first time the runner needs it,
+  for the proxy or for a health check with a path, Docker fetches the pinned
+  image, about 24 MiB. The runner uses no image a deploy names for the proxy.
 - **Updating the runner.** A runner release with another image makes the
-  proxy again at the next deploy with a domain. After `zekno server update`,
-  when the server holds a domain, the runner is asked to make the proxy match
+  proxy again at the next deploy with a domain or a health check, while the
+  server holds a domain. When `zekno server update` replaced the runner and
+  the server holds a domain, the new runner is asked to make the proxy match
   the routes in force at once. Nothing is put in force that a signed deploy
   did not put there.
 
