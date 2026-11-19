@@ -47,6 +47,9 @@ const NEVER_FETCHES: { [command: string]: string[][] } = {
   "settings unset": [["settings", "unset", "web.memory", "--yes"]],
   "settings compose": [["settings", "compose"]],
   "settings init": [["settings", "init"]],
+  // specs/015-domains-https, CL2: they change the settings file only.
+  "domain add": [["domain", "add", "shop.example.com", "--yes"]],
+  "domain rm": [["domain", "rm", "shop.example.com", "--yes"]],
   add: [
     ["add", "postgres", "--yes", "--app", "demo", "--server", "dev"],
     ["add", "--list"],

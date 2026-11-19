@@ -65,8 +65,11 @@ const R7 =
   "The runner on that server does not carry out everything this deploy asks for. Nothing of it ran. Run zekno status to compare its version with this zekno's."
 const R8 =
   "The runner could not read this deploy. Nothing of it ran. Run zekno status to compare its version with this zekno's."
+/** R9 of specs/015-domains-https/design/lines.md, exactly: protocol 4's refusal `domain_taken`. */
+const R9 =
+  "A domain of this deploy belongs to another app on that server. Nothing of it ran. Run zekno domain to see which."
 
-/** Every reason a `deploy` check can give (research R15): the 15 of version 1, the 3 new and the 5 of every request. */
+/** Every reason a `deploy` check can give (research R15): the 15 of version 1, the 3 new, protocol 4's `domain_taken` and the 5 of every request. */
 const EVERY = [...DEPLOY_REFUSALS, ...DEPLOY_V2_REFUSALS, ...RUNNER_REFUSALS]
 
 /** What a refusal of a version-2 deploy says, reason by reason. */
@@ -81,6 +84,7 @@ const VERSION_TWO: Record<string, string> = {
   unsupported_version: R7,
   malformed: R8,
   wrong_payload_type: R8,
+  domain_taken: R9,
 }
 
 /** What a refusal of a version-1 deploy says: today's, with the reasons today said only by their word. */
@@ -92,12 +96,13 @@ const VERSION_ONE: Record<string, string> = {
   unsupported_version: R7,
   malformed: R8,
   wrong_payload_type: R8,
+  domain_taken: R9,
 }
 
 describe("explainDeploy (SC-011)", () => {
-  test("23 reasons, each named once", () => {
-    expect(EVERY).toHaveLength(23)
-    expect(new Set(EVERY).size).toBe(23)
+  test("24 reasons, each named once", () => {
+    expect(EVERY).toHaveLength(24)
+    expect(new Set(EVERY).size).toBe(24)
   })
 
   test("version 2: every reason has its own sentence, R1 to R8 where they apply, never the general one", () => {
@@ -128,8 +133,8 @@ describe("explainDeploy (SC-011)", () => {
     )
   })
 
-  test("R1 to R8: the first sentence fits one line, no em dash, no agent", () => {
-    for (const line of [R1, R2, R3, R4, R5, R6, R7, R8]) {
+  test("R1 to R9: the first sentence fits one line, no em dash, no agent", () => {
+    for (const line of [R1, R2, R3, R4, R5, R6, R7, R8, R9]) {
       fitsOneLine(line)
       keepsTheHabits(line)
     }

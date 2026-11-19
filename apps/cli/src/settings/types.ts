@@ -5,6 +5,8 @@
  * uses. Types only: the reader, the writer and the Compose text are the other
  * files of this folder.
  */
+import type { Health as SignedHealth, Route } from "@workspace/core"
+
 import type { ComposeSource, ComposeText } from "../project/compose-read"
 
 /** One service's settings, as the file holds them. Absent: not set. */
@@ -15,12 +17,23 @@ export type ServiceSettings = {
   memory?: string
   /** As written in the file, held to research R1's form: "1", "0.5". */
   cpus?: string
+  /**
+   * The health check (specs/015-domains-https, contracts/cli.md, CL1): the
+   * path asked on the service's port, and the limit in seconds as the file
+   * writes it, 60 when left out. Neither: the service stays up, within 60s.
+   */
+  health?: Health
   port?: number
   publish?: number
+  /** The domains that reach this service on its port (CL1), lowercase, in the file's order; never empty. */
+  domains?: readonly string[]
   secrets?: readonly string[]
   plain?: readonly (readonly [name: string, value: string])[]
   volumes?: readonly (readonly [name: string, path: string])[]
 }
+
+/** A service's health check, as the file holds it (CL1). */
+export type Health = { path?: string; timeout?: number }
 
 /** The whole file, read and checked. Services, plain variables and volumes in the file's order. */
 export type Settings = {
@@ -45,9 +58,12 @@ export type SettingsRead = {
   settings: Settings
 }
 
-/** A setting a later version of zekno brings: refused by its presence (SL0 to SL5). `version` is the file's own `zekno`. */
-export type LaterSetting =
-  "version" | "build" | "predeploy" | "healthcheck" | "replicas" | "domains"
+/**
+ * A setting a later version of zekno brings: refused by its presence (SL0 to
+ * SL4). `version` is the file's own `zekno`. Domains and the health check
+ * were later settings until feature 015 (specs/015-domains-https, CL1).
+ */
+export type LaterSetting = "version" | "build" | "predeploy" | "replicas"
 
 /** Why the file could not be used, as the sentences say it. Never a piece of the file's content. */
 export type SettingsFault =
@@ -71,6 +87,10 @@ export type SettingPath =
         | "port"
         | "publish"
         | "secrets"
+        // specs/015-domains-https, CL1: the whole list; the health check, a path or `up`; its limit in seconds.
+        | "domains"
+        | "health"
+        | "health-timeout"
     }
   | { service: string; key: "plain"; name: string }
   | { service: string; key: "volume"; name: string }
@@ -129,10 +149,23 @@ export type SettingsReport = {
   piped?: readonly (readonly [service: string, place: string, value: string])[]
 }
 
-/** What a deploy reads, whichever kind of file it came from. */
+/**
+ * What a deploy reads, whichever kind of file it came from. A Compose file
+ * written by hand has no routes and no health check (specs/015-domains-https,
+ * contracts/cli.md, CL3).
+ */
 export type DeployText = ComposeText & {
-  /** Set for a settings file: its services, for the summary's `from` line, and the SHA-256 of the bytes read. */
-  settings?: { services: readonly string[]; sha256: string }
+  /**
+   * Set for a settings file: its services, for the summary's `from` line, the
+   * SHA-256 of the bytes read, and the routes and the health check the deploy
+   * signs (domains/routes.ts): no route is `[]`, no health check `null`.
+   */
+  settings?: {
+    services: readonly string[]
+    sha256: string
+    routes: readonly Route[]
+    health: SignedHealth | null
+  }
 }
 
 /** Which file a deploy uses (contracts/deploy.md). */

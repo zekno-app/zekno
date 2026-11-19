@@ -112,6 +112,15 @@ function rawValue(service: ServiceSettings | undefined, path: SettingPath) {
       const port = service[path.key]
       return port === undefined ? "" : String(port)
     }
+    // specs/015-domains-https, CL1: as `zekno settings set` takes them. The screen gives them rows in a later phase.
+    case "domains":
+      return service.domains?.join(", ") ?? ""
+    case "health":
+      return service.health === undefined ? "" : (service.health.path ?? "up")
+    case "health-timeout": {
+      const timeout = service.health?.timeout
+      return timeout === undefined ? "" : String(timeout)
+    }
     default:
       return service[path.key] ?? ""
   }

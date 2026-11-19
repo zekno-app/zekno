@@ -41,7 +41,7 @@ import {
 import { shownFile, shownPath } from "../project/shown"
 import { standingOf } from "../project/signed"
 import { applyChange, parseSettingPath } from "../settings/change"
-import { composeText, deployedSettings } from "../settings/compose"
+import { composeText } from "../settings/compose"
 import { readSettingsFile, SETTINGS_FILE } from "../settings/file"
 import { pipedLines } from "../settings/piped"
 import { reportOf } from "../settings/rows"
@@ -77,7 +77,7 @@ import {
   SH4,
 } from "../settings/words"
 import { createSettings, writeSettings } from "../settings/write"
-import { lastDeployedCompose } from "../shared/views"
+import { lastDeployedSettings } from "../shared/views"
 
 /**
  * The zekno.json that applies here, in this folder or the nearest above:
@@ -108,7 +108,8 @@ function realFile(path: string): string {
 }
 
 /** The zekno.json in use here, or undefined: what the deploy would follow with no question. */
-const linkInUse = (deps: Pick<OpDeps, "cwd" | "home">) => linkOf(deps).inUse
+export const linkInUse = (deps: Pick<OpDeps, "cwd" | "home">) =>
+  linkOf(deps).inUse
 
 /** The settings a deploy in this folder would sign, read once: the file, and where it came from. */
 type Placed = {
@@ -210,15 +211,15 @@ function readPlaced(deps: Pick<OpDeps, "cwd" | "home">): Placed {
 
 /**
  * The settings this machine last deployed of `link`'s app, read back from
- * the Compose text of its last deploy, or undefined when that cannot be
- * known: no deploy from this machine, one not made from settings, a server
- * not in the profile, a history that cannot be read (research R4).
+ * the Compose text of its last deploy with the routes and health check it
+ * signed (specs/015-domains-https, research R30), or undefined when that
+ * cannot be known: no deploy from this machine, one not made from settings,
+ * a server not in the profile, a history that cannot be read (research R4).
  */
 function lastDeployed(team: Team, link: ProjectLink): Settings | undefined {
   try {
     const server = findServer(team.profile, link.server)
-    const text = lastDeployedCompose(team.store, team.trust, server, link.app)
-    return text === undefined ? undefined : deployedSettings(text)
+    return lastDeployedSettings(team.store, team.trust, server, link.app)
   } catch {
     return undefined
   }

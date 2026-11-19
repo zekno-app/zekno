@@ -14,7 +14,9 @@ import {
   readSignedDeployV2,
   type Deploy,
   type Envelope,
+  type Health,
   type Member,
+  type Route,
   type TeamTrust,
 } from "@workspace/core"
 
@@ -25,8 +27,17 @@ export const sameEnvelope = (a: Envelope, b: Envelope): boolean =>
   a.signature.keyId === b.signature.keyId &&
   a.signature.sig === b.signature.sig
 
-/** What both kinds of deploy say, read from under the signature. `previous`: the deploy a version-2 deploy was made after. */
-export type HistoryDeploy = Omit<Deploy, "v"> & { previous?: number }
+/**
+ * What both kinds of deploy say, read from under the signature. `previous`:
+ * the deploy a version-2 deploy was made after. `routes` and `health`: what
+ * a version-2 deploy signed of them (specs/015-domains-https, research R30),
+ * for "changed, not deployed"; a version-1 deploy has neither field.
+ */
+export type HistoryDeploy = Omit<Deploy, "v"> & {
+  previous?: number
+  routes?: readonly Route[]
+  health?: Health | null
+}
 
 /** A deploy of the history that verifies against the team list given. */
 export type DeployEntry = {
@@ -63,7 +74,26 @@ export function readDeployEntry(
     const { deploy, signer } = read.value
     return {
       format: 2,
-      deploy: { ...shared(deploy), previous: deploy.previous },
+      deploy: {
+        ...shared(deploy),
+        previous: deploy.previous,
+        routes: deploy.routes.map(({ domain, service, port }) => ({
+          domain,
+          service,
+          port,
+        })),
+        health:
+          deploy.health === null
+            ? null
+            : {
+                timeout: deploy.health.timeout,
+                services: deploy.health.services.map(({ service, http }) => ({
+                  service,
+                  http:
+                    http === null ? null : { port: http.port, path: http.path },
+                })),
+              },
+      },
       signer,
     }
   }

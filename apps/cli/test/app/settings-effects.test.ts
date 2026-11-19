@@ -232,18 +232,16 @@ describe("reading", () => {
   test("a later setting: its two sentences; a file too large, or a pipe, says so at once and never hangs", async () => {
     const m = await empty()
     const file = join(m.project, "zekno.app.json")
+    // Domains are a setting since specs/015-domains-https (CL1); replicas are still a later one.
     writeFileSync(
       file,
-      DESIGN_FILE.replace(
-        '"networking": { "port": 3000 }',
-        '"networking": { "port": 3000, "domains": ["x.example"] }'
-      )
+      DESIGN_FILE.replace('"cpus": 1', '"cpus": 1, "replicas": 2')
     )
     const app = await appIn(m)
     expect(await app.read()).toEqual({
       kind: "fault",
-      first: "zekno.app.json sets a domain for web.",
-      rest: "Domains are not in this version of zekno yet.",
+      first: "zekno.app.json sets replicas for web.",
+      rest: "Several copies of a service are not in this version of zekno yet.",
     })
     writeFileSync(file, "")
     truncateSync(file, 65_537)

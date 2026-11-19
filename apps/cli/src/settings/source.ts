@@ -33,6 +33,7 @@ import {
   listsExactly,
   type ProjectLink,
 } from "../project/file"
+import { healthOf, routesOf } from "../domains/routes"
 import { readCompose, type ComposeSource } from "../project/compose-read"
 import { shownFile } from "../project/shown"
 import { composeText } from "./compose"
@@ -159,8 +160,11 @@ export function namedPath(source: ComposeSource): string {
 /**
  * Reads the chosen file once: a Compose file as today (`readCompose`); a
  * settings file read and checked whole (`readSettingsFile`), then turned
- * into the Compose text a deploy signs, with its services for the summary.
- * Every problem is the `CliError` of the reader.
+ * into the Compose text a deploy signs, with its services for the summary,
+ * and the routes and the health check the deploy signs beside the text
+ * (specs/015-domains-https, contracts/cli.md, CL3; domains/routes.ts), from
+ * the same settings read. A Compose file written by hand has neither. Every
+ * problem is the `CliError` of the reader.
  */
 export function readSource(
   source: DeploySource & { kind: "compose" | "settings" },
@@ -174,6 +178,8 @@ export function readSource(
     settings: {
       services: read.settings.services.map(([name]) => name),
       sha256: read.sha256,
+      routes: routesOf(read.settings),
+      health: healthOf(read.settings),
     },
   }
 }

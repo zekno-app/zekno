@@ -57,26 +57,37 @@ export type WriteOptions = {
   beforeFallback?: () => void
 }
 
-/** The fields of a service, in one order, to compare two settings whatever order their objects were made in. */
+/**
+ * The fields of a service, in one order, to compare two settings whatever
+ * order their objects were made in. Every field is here: one left out would
+ * not be compared, so a write that dropped it would pass the check that
+ * reads the text back (specs/015-domains-https added `health` and `domains`).
+ */
 const FIELDS: readonly (keyof ServiceSettings)[] = [
   "image",
   "start",
   "restart",
   "memory",
   "cpus",
+  "health",
   "port",
   "publish",
+  "domains",
   "secrets",
   "plain",
   "volumes",
 ]
 
-/** Settings as one text, a list left empty the same as one left out. */
+/** Settings as one text, a list left empty the same as one left out, a health check as its path and limit in that order. */
 const canonical = (settings: Settings): string =>
   JSON.stringify(
     settings.services.map(([name, service]) => [
       name,
       FIELDS.map((field) => {
+        if (field === "health")
+          return service.health === undefined
+            ? null
+            : [service.health.path ?? null, service.health.timeout ?? null]
         const value = service[field]
         return Array.isArray(value) && value.length === 0
           ? null

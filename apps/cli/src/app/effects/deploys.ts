@@ -425,15 +425,19 @@ export function createDeploys(context: Context) {
       }
       lines.flush()
       const ended = Date.now()
+      // `routes_failed` and `unhealthy` (specs/015-domains-https, CL3): the app started; their own words and the
+      // fifth stage come with the screens' phase. Until then the screen says what is known, that it started.
+      const outcome =
+        result.outcome === "start_failed" ? "start_failed" : "started"
       const text =
-        result.outcome === "started"
+        outcome === "started"
           ? `${app} is live on ${server.name} in ${seconds(ended - started)}`
           : `${server.name} accepted deploy ${result.sequence}, but the app did not start.`
       dispatch({
         type: "deploy-ended",
-        outcome: result.outcome,
+        outcome,
         notice: {
-          tone: result.outcome === "started" ? "success" : "error",
+          tone: outcome === "started" ? "success" : "error",
           text,
         },
         at: ended,

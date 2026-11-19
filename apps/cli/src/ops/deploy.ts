@@ -1,6 +1,12 @@
-import { RunnerStatusSchema, type RunnerReport } from "@workspace/core"
+import {
+  RunnerStatusSchema,
+  type Health,
+  type Route,
+  type RunnerReport,
+} from "@workspace/core"
 import { reach, teamOf, type OpDeps, type Team } from "../cli/context"
 import { CliError, MISSING_APP, UsageError, WrongInput } from "../cli/errors"
+import { isRouted } from "../domains/routes"
 import { findServer, NAME, type History, type Server } from "../profile/profile"
 import type { ProjectLink } from "../project/file"
 import { sanitize } from "../server/sanitize"
@@ -46,6 +52,15 @@ export type DeployPlan = {
   server: Server
   app: string
   compose: string
+  /**
+   * The routes the deploy signs, sorted by domain, and its health check
+   * (specs/015-domains-https, contracts/cli.md, CL3; domains/routes.ts):
+   * from a settings file, as `readSource` gives them. Left out: none, as for
+   * a Compose file written by hand, a rollback (until it carries the
+   * server's routes), and every deploy before feature 015.
+   */
+  routes?: readonly Route[]
+  health?: Health | null
   fresh?: boolean
   rollback?: true
 }
@@ -63,7 +78,13 @@ export class AppTaken extends CliError {
 }
 
 export type DeployResult = DeployInfo & {
-  outcome: "started" | "start_failed"
+  /**
+   * The runner's outcome. `routes_failed` and `unhealthy` (protocol 4,
+   * specs/015-domains-https, contracts/cli.md, CL3): the deploy was accepted
+   * and its app started; its routes are not in force, or it was not healthy
+   * in time.
+   */
+  outcome: "started" | "start_failed" | "routes_failed" | "unhealthy"
   /** The runner's report, as it answered. */
   report: RunnerReport
   /** How the runner was reached. `one-shot` is a runner that does not speak sessions. */
@@ -161,7 +182,9 @@ export type DeployInput = Where & {
  * from the settings it holds, checked whole, and that text is the text
  * signed, sent and recorded, as a Compose file's is (FR-009). With both files
  * here and nothing to say which, nothing is read: DP2, which names `-f`.
- * `services`: a settings file's services, for the summary's `from` row.
+ * `services`: a settings file's services, for the summary's `from` row. A
+ * settings file's routes and health check are carried as read with its text
+ * (specs/015-domains-https, contracts/cli.md, CL3).
  */
 export async function prepareDeploy(
   deps: OpDeps,
@@ -186,7 +209,11 @@ export async function prepareDeploy(
     from: read.path,
     ...(read.settings === undefined
       ? {}
-      : { services: read.settings.services }),
+      : {
+          services: read.settings.services,
+          routes: read.settings.routes,
+          health: read.settings.health,
+        }),
   }
 }
 
@@ -267,12 +294,14 @@ export async function sendDeploy(
   const carried = (deps.release ?? RUNNER_RELEASE).version
 
   return withSession(reach(deps, server.target), async (session) => {
-    // CL1. Nothing is signed in a format the runner does not carry out, and nothing is downgraded unsaid.
+    // CL1. Nothing is signed in a format the runner does not carry out, and nothing is downgraded unsaid. A route or a
+    // health check needs a runner that carries them out: B10 (specs/015-domains-https, CL3 step 1).
     const chosen = chooseFormat({
       server: server.name,
       mode: session.mode,
       runner: session.runner,
       carried,
+      routed: isRouted(plan.routes, plan.health),
     })
 
     // CL2. Who answers, and the number it holds for the app.

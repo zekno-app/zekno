@@ -10,6 +10,7 @@ import {
 import { z } from "zod"
 
 import { CliError } from "./errors"
+import type { SshHost } from "../domains/address"
 import type { KeyStore } from "../profile/keystore"
 import type { Fetch } from "../version/newest"
 import {
@@ -55,6 +56,14 @@ export type Deps = {
    * can reach the network by mistake.
    */
   fetch?: Fetch
+  /**
+   * The server's public addresses, as `ssh -G` names its host
+   * (specs/015-domains-https, contracts/cli.md, CL5), for the record
+   * `zekno domain add` names (A5). Only main.ts sets it, from a later phase
+   * on. Undefined: the address is not known, and nothing is run
+   * (domains/address.ts); tests give a stand-in.
+   */
+  sshHost?: SshHost
 }
 
 /**

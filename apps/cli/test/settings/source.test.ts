@@ -272,9 +272,64 @@ describe("readSource: the chosen file, read once", () => {
         sha256: new Bun.CryptoHasher("sha256")
           .update(DESIGN_FILE)
           .digest("hex"),
+        // design.md's file has no domain and no health check (specs/015-domains-https, CL3).
+        routes: [],
+        health: null,
       },
     })
     expect(read.text).toBe(composeText(DESIGN_SETTINGS))
+  })
+
+  test("a settings file with domains and health checks: the routes and the health check the deploy signs (specs/015-domains-https, CL3; R14)", () => {
+    const folder = folderWith({
+      "zekno.app.json": JSON.stringify({
+        zekno: 1,
+        services: {
+          web: {
+            source: { image: "ghcr.io/acme/web:1" },
+            deploy: { healthcheck: { path: "/health" } },
+            networking: {
+              port: 3000,
+              domains: ["www.example.com", "shop.example.com"],
+            },
+          },
+          api: {
+            source: { image: "ghcr.io/acme/api:1" },
+            deploy: { healthcheck: { timeout: 120 } },
+            networking: { port: 8080, domains: ["api.example.com"] },
+          },
+        },
+      }),
+    })
+    const read = readSource(
+      { kind: "settings", source: { kind: "default", folder } },
+      folder
+    )
+    expect(read.settings?.routes).toEqual([
+      { domain: "api.example.com", service: "api", port: 8080 },
+      { domain: "shop.example.com", service: "web", port: 3000 },
+      { domain: "www.example.com", service: "web", port: 3000 },
+    ])
+    expect(read.settings?.health).toEqual({
+      timeout: 120,
+      services: [
+        { service: "api", http: null },
+        { service: "web", http: { port: 3000, path: "/health" } },
+      ],
+    })
+    // Neither is in the Compose text: it is the text the settings turn into, as before.
+    expect(read.text).not.toContain("example.com")
+    expect(read.text).not.toContain("/health")
+  })
+
+  test("a Compose file written by hand has neither", () => {
+    const folder = folderWith({
+      "compose.yaml": "services:\n  web:\n    image: x\n",
+    })
+    const source = { kind: "default", folder } as const
+    expect(
+      readSource({ kind: "compose", source }, folder).settings
+    ).toBeUndefined()
   })
 
   test("the file a link names, and one named with -f", () => {

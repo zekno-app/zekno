@@ -24,7 +24,7 @@ import { findProject } from "../../project/file"
 import { standingOf } from "../../project/signed"
 import { sanitize } from "../../server/sanitize"
 import { applyChange } from "../../settings/change"
-import { composeText, deployedSettings } from "../../settings/compose"
+import { composeText } from "../../settings/compose"
 import { readSettingsFile } from "../../settings/file"
 import { removedServices, screenRows } from "../../settings/rows"
 import { namedPath, settingsPlace } from "../../settings/source"
@@ -40,7 +40,7 @@ import {
 } from "../../settings/words"
 import { writeSettings } from "../../settings/write"
 import type { Notice } from "../../shared/notice"
-import { lastDeployedCompose } from "../../shared/views"
+import { lastDeployedSettings } from "../../shared/views"
 import type { Effect } from "../state/events"
 import type { SettingsView } from "../state/types"
 import type { Context } from "./context"
@@ -55,12 +55,10 @@ type Found =
 /** The end of the first sentence every fault of form starts with (`notSettings`). */
 const NOT_SETTINGS = " could not be read as settings. "
 
-/** The second sentences of SL0 to SL5, fixed words: what follows the first of a later setting. */
+/** The second sentences of SL0 to SL4, fixed words: what follows the first of a later setting. */
 const LATER_SECOND = [
   laterSentences("", "version")[1],
-  ...(
-    ["build", "predeploy", "healthcheck", "replicas", "domains"] as const
-  ).map(CS6),
+  ...(["build", "predeploy", "replicas"] as const).map(CS6),
 ]
 
 /**
@@ -142,7 +140,11 @@ export function createSettings(context: Context) {
     }
   }
 
-  /** The settings of `app`'s last deploy, read again when `again`, else as last read. Nothing without a verified team list. */
+  /**
+   * The settings of `app`'s last deploy, read again when `again`, else as
+   * last read, with the routes and health check it signed (specs/015-domains-https,
+   * research R30). Nothing without a verified team list.
+   */
   function lastDeployed(
     server: string,
     app: string,
@@ -153,10 +155,9 @@ export function createSettings(context: Context) {
     const key = `${server}\n${app}`
     if (!again && deployed.has(key)) return deployed.get(key)
     const entry = servers().find((item) => item.name === server)
-    const text = entry
-      ? lastDeployedCompose(profileStore(deps.home), trust, entry, app)
+    const settings = entry
+      ? lastDeployedSettings(profileStore(deps.home), trust, entry, app)
       : undefined
-    const settings = text === undefined ? undefined : deployedSettings(text)
     deployed.set(key, settings)
     return settings
   }

@@ -54,10 +54,11 @@ describe("chooseFormat (contracts/cli.md, the format)", () => {
     })
   })
 
-  test("protocol 3 (RUNNER_PROTOCOL): version 2, nothing said", () => {
-    expect(RUNNER_PROTOCOL).toBe(3)
+  test("protocol 3, and 4 (RUNNER_PROTOCOL): version 2, nothing said", () => {
+    expect(RUNNER_PROTOCOL).toBe(4)
     expect(chooseFormat(at("0.1.0", 3))).toEqual({ format: 2 })
     expect(chooseFormat(at("0.1.1", 3))).toEqual({ format: 2 })
+    expect(chooseFormat(at("0.1.1", 4))).toEqual({ format: 2 })
   })
 
   test("a protocol above this zekno's (RUNNER_PROTOCOL + 1): C7, thrown as a CliError", () => {
@@ -73,5 +74,72 @@ describe("chooseFormat (contracts/cli.md, the format)", () => {
     expect(said).toBe(
       "The runner on prod-1 is version 0.1.2, newer than this zekno's 0.1.1, and speaks a newer protocol. Update zekno to deploy to prod-1. Nothing was signed."
     )
+  })
+})
+
+describe("B10: a deploy with a route or a health check (specs/015-domains-https, contracts/cli.md, CL3 step 1)", () => {
+  const routed = (version: string, protocol: number) => ({
+    ...at(version, protocol),
+    routed: true,
+  })
+  const thrown = (run: () => unknown): unknown => {
+    try {
+      run()
+    } catch (error) {
+      return error
+    }
+    return undefined
+  }
+
+  test("protocol 3, with a route or a health check: B10, thrown as a CliError, nothing signed", () => {
+    const error = thrown(() => chooseFormat(routed("0.1.0", 3)))
+    expect(error).toBeInstanceOf(CliError)
+    expect((error as Error).message).toBe(
+      "The runner on prod-1 is version 0.1.0, too old for domains and health checks. Run `zekno server update prod-1`, then run `zekno deploy` again. Nothing was signed."
+    )
+  })
+
+  test("protocol 3, with neither: version 2, as before", () => {
+    expect(chooseFormat({ ...at("0.1.0", 3), routed: false })).toEqual({
+      format: 2,
+    })
+    expect(chooseFormat(at("0.1.0", 3))).toEqual({ format: 2 })
+  })
+
+  test("below protocol 3, with a route: B10 in place of version 1", () => {
+    expect(
+      (thrown(() => chooseFormat(routed("0.0.9", 2))) as Error).message
+    ).toBe(
+      "The runner on prod-1 is version 0.0.9, too old for domains and health checks. Run `zekno server update prod-1`, then run `zekno deploy` again. Nothing was signed."
+    )
+  })
+
+  test("a runner run one request at a time: B10 without a version, with a route; version 1 without", () => {
+    const oneShot = {
+      server: "prod-1",
+      mode: "one-shot" as const,
+      runner: undefined,
+      carried: "0.1.1",
+    }
+    const error = thrown(() => chooseFormat({ ...oneShot, routed: true }))
+    expect(error).toBeInstanceOf(CliError)
+    expect((error as Error).message).toBe(
+      "The runner on prod-1 is too old for domains and health checks. Run `zekno server update prod-1`, then run `zekno deploy` again. Nothing was signed."
+    )
+    expect(chooseFormat({ ...oneShot, routed: false })).toEqual({ format: 1 })
+  })
+
+  test("protocol 4, with a route: version 2", () => {
+    expect(chooseFormat(routed("0.1.1", 4))).toEqual({ format: 2 })
+  })
+
+  test("a newer protocol says C7 first, route or not", () => {
+    expect(
+      (
+        thrown(() =>
+          chooseFormat(routed("0.1.2", RUNNER_PROTOCOL + 1))
+        ) as Error
+      ).message
+    ).toBe(C7("prod-1", "0.1.2", "0.1.1"))
   })
 })

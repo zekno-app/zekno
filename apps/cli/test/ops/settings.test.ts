@@ -294,9 +294,10 @@ describe("changing (contracts/commands.md, 'Order of checks'; T049)", () => {
     expect(
       thrown(() => prepareSettingChange(deps, "web.memory", undefined, false))
     ).toEqual(["UsageError", CS2])
+    // Domains are a setting since specs/015-domains-https (CL1); replicas are still a later one.
     expect(
-      thrown(() => prepareSettingChange(deps, "web.domains", "x", false))
-    ).toEqual(["WrongInput", CS6("domains")])
+      thrown(() => prepareSettingChange(deps, "web.replicas", "2", false))
+    ).toEqual(["WrongInput", CS6("replicas")])
     expect(
       thrown(() => prepareSettingChange(deps, "web.memroy", "1g", false))
     ).toEqual(["WrongInput", CS5])

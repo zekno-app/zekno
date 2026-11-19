@@ -98,9 +98,10 @@ describe("the test set", () => {
       "they read more than 256 secrets",
       "sets a build for",
       "sets a pre-deploy command for",
-      "sets a health check for",
       "sets replicas for",
-      "sets a domain for",
+      // Settings since specs/015-domains-https (CL1); every rule of theirs is in test/settings/domains-health.test.ts.
+      "deploy.healthcheck.path: use a path such as /health",
+      "networking.domains: use a full name such as shop.example.com",
     ])
       expect([marker, sentences.some((said) => said.includes(marker))]).toEqual(
         [marker, true]

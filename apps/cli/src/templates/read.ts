@@ -377,7 +377,8 @@ function read(name: string, text: string): Template | TemplateFault {
   // 6. Each field of its form.
   const fields = checkFields(top, name, json.lines, json.numbers)
 
-  // 7. `services` by the settings file's steps 3 to 6, as a settings file of version 1 holding them, then its count.
+  // 7. `services` by the settings file's steps 3 to 6, as a settings file of version 1 holding them, then its count. A domain
+  // and a health check are refused by their presence at step 4, as before feature 015 (specs/015-domains-https, CL1).
   const numbers = new Map(json.numbers)
   numbers.set(pathKey(["zekno"]), "1")
   const settings = checkSettingsValue(
@@ -386,7 +387,8 @@ function read(name: string, text: string): Template | TemplateFault {
       ["services", top.get("services")!],
     ]),
     json.lines,
-    numbers
+    numbers,
+    words.notInTemplate
   )
   if (!("services" in settings)) throw servicesFault(settings)
   if (settings.services.length > MAX_SERVICES) return form(words.TF13)

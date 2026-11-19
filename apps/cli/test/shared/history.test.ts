@@ -68,7 +68,31 @@ describe("readDeployEntry", () => {
         },
       ],
       removed: [],
+      // What it signed of the routes and the health check: none (specs/015-domains-https, research R30).
+      routes: [],
+      health: null,
     })
+  })
+
+  test("a version-2 deploy keeps the routes and the health check it signed (specs/015-domains-https, research R30)", async () => {
+    const t = await signingTeam()
+    const routes = [
+      { domain: "www.example.com", service: "web", port: 3000 },
+      { domain: "shop.example.com", service: "web", port: 3000 },
+    ]
+    const health = {
+      timeout: 90,
+      services: [{ service: "web", http: { port: 3000, path: "/health" } }],
+    }
+    const envelope = await t.deployV2(0, COMPOSE, [], [], { routes, health })
+    const entry = readDeployEntry(envelope, t.trust)
+    // Read from under the signature, sorted by domain as they were signed.
+    expect(entry?.deploy.routes).toEqual([routes[1]!, routes[0]!])
+    expect(entry?.deploy.health).toEqual(health)
+    // A version-1 deploy has neither.
+    const v1 = readDeployEntry(await t.deployV1(1, COMPOSE), t.trust)
+    expect(v1?.deploy).not.toHaveProperty("routes")
+    expect(v1?.deploy).not.toHaveProperty("health")
   })
 
   test("undefined for an entry changed after signing, of either kind", async () => {

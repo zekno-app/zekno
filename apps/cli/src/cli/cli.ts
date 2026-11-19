@@ -1,11 +1,11 @@
-import { CoreError, LIMITS, SECRET_NAME } from "@workspace/core"
-import { parseArgs } from "node:util"
+import { CoreError } from "@workspace/core"
 
 import { NO_TEAM_AT_TERMINAL, whichApp, whichServer } from "../asking/asking"
 import { deployAtTerminal } from "../asking/first-deploy"
 import { add, ADD_OPTIONS } from "../commands/add"
 import { deploy, rollback } from "../commands/deploy"
 import { doctor } from "../commands/doctor"
+import { domainAdd, domainRemove } from "../commands/domain"
 import { init } from "../commands/init"
 import { link } from "../commands/link"
 import { logs, parseTail } from "../commands/logs"
@@ -28,6 +28,8 @@ import {
 import { status } from "../commands/status"
 import { teamOnce, type Deps } from "./context"
 import { CliError, UsageError, WrongInput } from "./errors"
+import { GROUPS, HELP, valueAsArgument, WORDS } from "./help"
+import { optionNotTaken, OWN_OPTIONS, parsed, WITHOUT_TEAM } from "./options"
 import { checkTo } from "../ops/deploy"
 import { checkSecretName, sayWhichSecret } from "../ops/secret"
 import { profileStore } from "../profile/profile"
@@ -46,93 +48,8 @@ import {
 } from "../version/newest"
 import { versionCells, versionLines, versionObject } from "../version/version"
 
-export const HELP = `zekno: deploy to your own servers. Secrets are encrypted and deploys are signed on this machine.
-
-  zekno init --name <you>
-  zekno server add <name> --ssh <user@host> [--runner-path <path>]
-  zekno server add <name> --ssh <user@host> --runner-file <path>  (development only)
-  zekno server add <name> --local [--home <dir>]
-  zekno server update <name> [--yes]
-  zekno server ls
-  zekno secret set <NAME> [--app <app>] [--server <name>] [--stdin]
-  zekno secret import <file> [--app <app>] [--server <name>] [--yes]
-  zekno secret rm <NAME> [--app <app>] [--server <name>]
-  zekno secret ls [--app <app>] [--server <name>]
-  zekno deploy [--app <app>] [--server <name>] [-f <compose file>] [--json]
-  zekno rollback [--app <app>] [--server <name>] [--to <number>] [--json]
-  zekno status [--server <name>] [--json]
-  zekno logs [--app <app>] [--server <name>] [--tail <n>] [--no-follow]
-  zekno link [--app <app>] [--server <name>] [-f <compose file>] [--force] [--yes]
-  zekno settings [--json]
-  zekno settings set <service>.<setting> <value> [--yes]
-  zekno settings unset <service>.<setting> [--yes]
-  zekno settings compose
-  zekno settings init
-  zekno add [<template>] [--name <service>] [--for <service>] [--app <app>] [--server <name>] [--yes]
-  zekno add --list [--json]
-  zekno add <template> --show [--json]
-  zekno doctor [--server <name>] [--json]
-  zekno version [--json]
-  zekno --version [--json]
-
-In a folder linked with \`zekno link\`, --app, --server and -f come from its zekno.json. Flags win over it.
-At a terminal a command asks for a server or an app it was not given, and \`zekno deploy\` sets up what a first deploy needs. In a script it asks nothing.`
-
-/** How many words each command takes, counting its own name. */
-const WORDS: Record<string, number> = {
-  init: 1,
-  "server add": 3,
-  "server update": 3,
-  "server ls": 2,
-  "secret set": 3,
-  "secret import": 3,
-  "secret rm": 3,
-  "secret ls": 2,
-  deploy: 1,
-  rollback: 1,
-  status: 1,
-  logs: 1,
-  link: 1,
-  settings: 1,
-  "settings set": 4,
-  "settings unset": 3,
-  "settings compose": 2,
-  "settings init": 2,
-  add: 2,
-  doctor: 1,
-  version: 1,
-}
-
-/**
- * Said when a value follows `zekno secret set NAME`, worded as on the board
- * "Status, lists, errors and piped output". The name is repeated only when it
- * is one: it is put in front of a person as a command to type.
- */
-export function valueAsArgument(name: string | undefined): string {
-  const shown =
-    name !== undefined &&
-    SECRET_NAME.test(name) &&
-    name.length <= LIMITS.secretNameLength
-      ? name
-      : "<NAME>"
-  return `A secret value is never given as an argument. It would stay in your shell history. Run \`zekno secret set ${shown}\` and type it when asked.`
-}
-
-/** The commands that work without a team, or make one: at a terminal every other command with no team says A3. */
-const WITHOUT_TEAM = new Set([
-  "init",
-  "deploy",
-  "doctor",
-  "version",
-  // specs/010-app-settings: the settings commands need no team (contracts/commands.md).
-  "settings",
-  "settings set",
-  "settings unset",
-  "settings compose",
-  "settings init",
-  // specs/012-templates: with no server it says AD1 (contracts/commands.md).
-  "add",
-])
+/** The help, the words of each command, their options and which need a team live in help.ts and options.ts; named here as before. */
+export { HELP, optionNotTaken, valueAsArgument }
 
 /** The project file that applies to `cwd`, or undefined, also when it cannot be read: for a check that may only stop a command early. */
 function readableProject(cwd: string): ProjectLink | undefined {
@@ -142,62 +59,6 @@ function readableProject(cwd: string): ProjectLink | undefined {
     return undefined
   }
 }
-
-/** The options each settings command takes; any other given to one is refused (security review S7). */
-const SETTINGS_OPTIONS: Record<string, readonly string[]> = {
-  settings: ["json"],
-  "settings set": ["yes"],
-  "settings unset": ["yes"],
-  "settings compose": [],
-  "settings init": [],
-}
-
-/** The options every command read before feature 012, as `parseArgs` takes them. */
-const OPTIONS = {
-  name: { type: "string" },
-  ssh: { type: "string" },
-  local: { type: "boolean" },
-  home: { type: "string" },
-  "runner-path": { type: "string" },
-  "runner-file": { type: "string" },
-  yes: { type: "boolean" },
-  app: { type: "string" },
-  server: { type: "string" },
-  stdin: { type: "boolean" },
-  file: { type: "string", short: "f" },
-  to: { type: "string" },
-  tail: { type: "string" },
-  "no-follow": { type: "boolean" },
-  force: { type: "boolean" },
-  json: { type: "boolean" },
-  help: { type: "boolean", short: "h" },
-  version: { type: "boolean" },
-} as const
-
-/** The options only `zekno add` reads (specs/012-templates). */
-const ADD_ONLY = {
-  for: { type: "string", multiple: true },
-  list: { type: "boolean" },
-  show: { type: "boolean" },
-} as const
-
-/**
- * The words and options of a run. Every command but `zekno add` is parsed
- * first with the option table it had before, so an option only `zekno add`
- * reads, or anything else wrong, fails exactly as it did: the same sentence,
- * status 2 (specs/012-templates, research R9; FR-019).
- */
-function parsed(args: string[]) {
-  const options = { ...OPTIONS, ...ADD_ONLY }
-  const at = { args, allowPositionals: true } as const
-  if (parseArgs({ ...at, strict: false, options }).positionals[0] !== "add")
-    parseArgs({ ...at, strict: true, options: OPTIONS })
-  return parseArgs({ ...at, strict: true, options })
-}
-
-/** Said when a settings command is given an option it does not take. `-f` is the short form of `--file`. */
-export const optionNotTaken = (name: string, option: string): string =>
-  `\`zekno ${name}\` does not take ${option === "file" ? "`-f`" : `\`--${option}\``}.`
 
 /**
  * Runs one command and returns the exit status: 0 for success, 1 when the
@@ -216,8 +77,7 @@ export async function run(argv: string[], given: Deps): Promise<number> {
       return command || values.help ? 0 : 2
     }
 
-    const grouped =
-      command === "server" || command === "secret" || command === "settings"
+    const grouped = GROUPS.has(command ?? "")
     const name = `${command} ${grouped ? (second ?? "") : ""}`.trim()
     // Nothing may trail a command. In particular a secret value is never an argument:
     // it would stay in the shell's history and show in the list of processes.
@@ -230,9 +90,9 @@ export async function run(argv: string[], given: Deps): Promise<number> {
     }
     // The settings commands take only their own options: `--app`, `--server` or `-f` would look like a deploy's and change
     // nothing here (specs/010-app-settings, security review S7). Every other command reads its arguments as before.
-    // `zekno add` too (specs/012-templates, AU7).
-    const own = Object.hasOwn(SETTINGS_OPTIONS, name)
-      ? SETTINGS_OPTIONS[name]!
+    // `zekno add` too (specs/012-templates, AU7), and `zekno domain add` and `rm` (specs/015-domains-https, CL2).
+    const own = Object.hasOwn(OWN_OPTIONS, name)
+      ? OWN_OPTIONS[name]!
       : name === "add"
         ? ADD_OPTIONS
         : undefined
@@ -451,6 +311,18 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         return 0
       case "settings init":
         return await settingsInit(deps)
+      case "domain add":
+        // It changes the settings file as `zekno settings set` does: no team, no server (specs/015-domains-https, CL2).
+        return await domainAdd(deps, third, {
+          service: values.service,
+          yes: values.yes === true,
+          json: values.json === true,
+        })
+      case "domain rm":
+        return await domainRemove(deps, third, {
+          yes: values.yes === true,
+          json: values.json === true,
+        })
       case "add":
         // It contacts no server: the app is asked for from this machine's own history (specs/012-templates, SC-005).
         return await add(deps, {

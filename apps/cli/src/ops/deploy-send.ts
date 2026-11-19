@@ -152,7 +152,7 @@ async function deliver(
 
   const outcome = report.outcome
   if (
-    (outcome !== "started" && outcome !== "start_failed") ||
+    !ANSWERED.has(outcome) ||
     report.app !== plan.app ||
     report.sequence !== info.sequence
   ) {
@@ -160,16 +160,31 @@ async function deliver(
       "The runner did not answer as expected, so it is not known whether the deploy was accepted."
     )
   }
+  const ran = outcome as DeployResult["outcome"]
   start()
-  const entry = { envelope: sending.envelope, at: sending.at, outcome }
+  const entry = { envelope: sending.envelope, at: sending.at, outcome: ran }
   plan.team.store.saveHistory(
     plan.server.serverId,
     plan.app,
     answered(going, entry)
   )
-  callbacks.stage?.(outcome === "started" ? "started" : "failed", info)
-  return { ...info, outcome, report, mode: session.mode }
+  // `routes_failed` and `unhealthy`: the app started (specs/015-domains-https, CL3). Their own lines and the fifth stage
+  // come later; until then the stage row says what is known, that it started.
+  callbacks.stage?.(ran === "start_failed" ? "failed" : "started", info)
+  return { ...info, outcome: ran, report, mode: session.mode }
 }
+
+/**
+ * The outcomes of a deploy the runner accepted and recorded with its number,
+ * as the history keeps them: protocol 4's `routes_failed` and `unhealthy`
+ * as themselves (specs/015-domains-https, contracts/cli.md, CL3).
+ */
+const ANSWERED: ReadonlySet<string> = new Set<DeployResult["outcome"]>([
+  "started",
+  "start_failed",
+  "routes_failed",
+  "unhealthy",
+])
 
 /**
  * CL3b: what the server said it holds for the app, as this deploy read it on
@@ -292,9 +307,11 @@ export async function deployVersionOne(
 
 /**
  * Version 2 (CL5 to CL11): made after the runner's number for the app
- * (`previous`), numbered one above it, with no expiry and no later field;
- * sent with `deploy` and the records the runner lacks. A refusal used no
- * number: the entry leaves the history, and `replayed` says C1, C2 or R1
+ * (`previous`), numbered one above it, with no expiry, with the plan's
+ * routes and health check (specs/015-domains-https, contracts/cli.md, CL3,
+ * "Signing"; none when the plan has none) and no other later field; sent
+ * with `deploy` and the records the runner lacks. A refusal used no number:
+ * the entry leaves the history, and `replayed` says C1, C2 or R1
  * (deploy-answer.ts).
  */
 export async function deployVersionTwo(going: Going): Promise<DeployResult> {
@@ -323,6 +340,8 @@ export async function deployVersionTwo(going: Going): Promise<DeployResult> {
       statements: listed.statements,
       removals: listed.removals,
       expiresAt: null,
+      routes: plan.routes ?? [],
+      health: plan.health ?? null,
       signer,
     })
   )

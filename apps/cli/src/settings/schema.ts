@@ -20,6 +20,7 @@
 import { LIMITS } from "@workspace/core"
 
 import { composeText } from "./compose"
+import { acrossRoutes, routeFault } from "./domains-health"
 import { pathKey, readJson, type JsonValue } from "./json"
 import {
   has,
@@ -103,10 +104,23 @@ function inputOf(
   return named ? new Map(inner) : Object.fromEntries(inner)
 }
 
-/** Step 4: the first key this zekno does not know, or a later setting, in the order of the text. */
+/**
+ * A setting a reader other than the settings file's refuses by its presence,
+ * as a later setting is (step 4): its place and rule, or undefined. The
+ * template reader gives one: a template may not name a domain or a health
+ * check (specs/015-domains-https, contracts/cli.md, CL1).
+ */
+export type NotCarried = (
+  svc: string,
+  section: string,
+  setting: string
+) => PlaceRule | undefined
+
+/** Step 4: the first key this zekno does not know, a later setting, or one `notCarried` refuses, in the order of the text. */
 function unknownKey(
   top: ReadonlyMap<string, JsonValue>,
-  lineOf: (path: Path) => number
+  lineOf: (path: Path) => number,
+  notCarried?: NotCarried
 ): SettingsFault | undefined {
   const form = ({ place, rule }: PlaceRule, line: number): SettingsFault => ({
     kind: "form",
@@ -133,6 +147,8 @@ function unknownKey(
           const isLater = LATER.get(section)?.get(setting)
           if (isLater !== undefined)
             return { kind: "later", setting: isLater, service: svc }
+          const refused = notCarried?.(svc, section, setting)
+          if (refused !== undefined) return { kind: "form", ...refused }
           if (!has(known, setting))
             return form(
               words.SV6(lineOf(settingPath), svc, section),
@@ -168,6 +184,9 @@ function faultOf(
   const section = path[2]
   const name = path[4]
   const volume = path[3]
+  // The ids of domains and the health check (specs/015-domains-https, CL1).
+  const routed = routeFault(id, svc, path, lineOf)
+  if (routed !== undefined) return form(routed.said, routed.line)
   switch (id) {
     case "SV7":
       return form(words.SV7(svc))
@@ -238,11 +257,16 @@ function faultOf(
     : form(words.SV5(svc))
 }
 
-/** The settings of one service as the schema gave them; a section, list or object with nothing in it is left out. */
+/**
+ * The settings of one service as the schema gave them; a section, list or
+ * object with nothing in it is left out, but for a health check, where `{}`
+ * is one with neither a path nor a limit.
+ */
 function serviceOf(service: ParsedService): ServiceSettings {
   const { deploy, networking, variables, volumes } = service
   const plain = [...(variables?.plain ?? [])]
   const mounts = [...(volumes ?? [])]
+  const health = deploy?.healthcheck
   return {
     image: service.source.image,
     ...(deploy?.start === undefined ? {} : { start: deploy.start }),
@@ -251,10 +275,23 @@ function serviceOf(service: ParsedService): ServiceSettings {
       : { restart: deploy.restart as ServiceSettings["restart"] }),
     ...(deploy?.memory === undefined ? {} : { memory: deploy.memory }),
     ...(deploy?.cpus === undefined ? {} : { cpus: deploy.cpus.text }),
+    ...(health === undefined
+      ? {}
+      : {
+          health: {
+            ...(health.path === undefined ? {} : { path: health.path }),
+            ...(health.timeout === undefined
+              ? {}
+              : { timeout: health.timeout.value }),
+          },
+        }),
     ...(networking?.port === undefined ? {} : { port: networking.port.value }),
     ...(networking?.publish === undefined
       ? {}
       : { publish: networking.publish.value }),
+    ...(networking?.domains === undefined || networking.domains.length === 0
+      ? {}
+      : { domains: networking.domains }),
     ...(variables?.secrets === undefined || variables.secrets.length === 0
       ? {}
       : { secrets: variables.secrets }),
@@ -288,6 +325,9 @@ export function acrossSettings(settings: Settings): PlaceRule | undefined {
     const paths = (service.volumes ?? []).map(([, path]) => path)
     if (new Set(paths).size !== paths.length) return words.SV30(svc)
   }
+  // specs/015-domains-https, CL1: SV38, SV39, SV44, SV40, SV45.
+  const routed = acrossRoutes(settings)
+  if (routed !== undefined) return routed
   const secrets = new Set(services.flatMap(([, s]) => s.secrets ?? []))
   if (secrets.size > LIMITS.secretsPerDeploy) return words.SV32
   if (Buffer.byteLength(composeText(settings)) > LIMITS.composeBytes)
@@ -324,12 +364,14 @@ function check(text: string): Settings | SettingsFault {
  * the text of each number, by `pathKey`. `checkSettings` calls it after
  * reading a file; the template reader (specs/012-templates, research R2)
  * calls it on a template's `services`, so they are held to the same rules
- * and their faults name the template file's own lines.
+ * and their faults name the template file's own lines, with `notCarried`
+ * for the settings a template may not name.
  */
 export function checkSettingsValue(
   top: ReadonlyMap<string, JsonValue>,
   lines: ReadonlyMap<string, number>,
-  numbers: ReadonlyMap<string, string>
+  numbers: ReadonlyMap<string, string>,
+  notCarried?: NotCarried
 ): Settings | SettingsFault {
   const lineOf = (path: Path): number => lines.get(pathKey(path)) ?? 1
 
@@ -343,7 +385,7 @@ export function checkSettingsValue(
       : { kind: "form", ...words.SV1 }
 
   // 4. Every key, in the order of the text.
-  const unknown = unknownKey(top, lineOf)
+  const unknown = unknownKey(top, lineOf, notCarried)
   if (unknown !== undefined) return unknown
 
   // 5. Each value, in the order of the text: of zod's issues, the one met first.

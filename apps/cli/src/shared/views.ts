@@ -23,8 +23,11 @@ import { join } from "node:path"
 
 import { aliasesTooMany, COMPOSE_READ_BYTES } from "../project/compose-file"
 import type { Team } from "../cli/context"
+import { withRoutes } from "../domains/routes"
 import type { History, ProfileStore, Server } from "../profile/profile"
 import { sanitize } from "../server/sanitize"
+import { deployedSettings } from "../settings/compose"
+import type { Settings } from "../settings/types"
 import { readDeployEntry, type HistoryDeploy } from "./history"
 
 /** Whether an app's services are running, as the runner last said (data-model.md). */
@@ -131,6 +134,16 @@ const accepted = (entries: readonly Verified[]) =>
   entries.filter((entry) => entry.outcome !== "sent")
 
 /**
+ * An outcome as Home and the app's screen show it today. `routes_failed` and
+ * `unhealthy` (specs/015-domains-https, CL3) are deploys that were accepted,
+ * whose app started, and the app's current one: shown as started until the
+ * screens' phase gives them words of their own. Only what is shown; the
+ * history keeps them as themselves.
+ */
+const shownOutcome = (outcome: Verified["outcome"]): DeployRow["outcome"] =>
+  outcome === "routes_failed" || outcome === "unhealthy" ? "started" : outcome
+
+/**
  * The apps this machine has a history for on one server, by the name of each
  * history file. Nothing is verified: it only chooses which of a runner's
  * answers to keep, for the apps Home may show.
@@ -171,7 +184,7 @@ export function appsOf(team: Team, server: Server, home: string): AppRow[] {
       deploy: latest.deploy.sequence,
       at: latest.deploy.createdAt,
       state: "unknown",
-      outcome: latest.outcome,
+      outcome: shownOutcome(latest.outcome),
       signer: latest.signer,
       secrets: latest.deploy.secrets.length,
       previous: accepted(entries).at(-2)?.deploy.sequence,
@@ -234,7 +247,7 @@ function deployRow(
       : undefined
   return {
     sequence: deploy.sequence,
-    outcome,
+    outcome: shownOutcome(outcome),
     at: deploy.createdAt,
     signer,
     teamVersion: teamVersionOf(team, deploy.teamHash),
@@ -341,6 +354,30 @@ export function lastDeployedCompose(
 ): string | undefined {
   return accepted(verifiedDeploys({ store, trust }, server, app)).at(-1)?.deploy
     .compose
+}
+
+/**
+ * The settings of the latest deploy of an app this machine sent that its
+ * runner answered, as `lastDeployedCompose` finds it, read back from its
+ * Compose text, with the routes and the health check it signed put back on
+ * its services (specs/015-domains-https, research R30): what "changed, not
+ * deployed" compares the file with. Undefined when it was not made from
+ * settings, or with none.
+ */
+export function lastDeployedSettings(
+  store: ProfileStore,
+  trust: TeamTrust,
+  server: Server,
+  app: string
+): Settings | undefined {
+  const latest = accepted(verifiedDeploys({ store, trust }, server, app)).at(
+    -1
+  )?.deploy
+  const settings =
+    latest === undefined ? undefined : deployedSettings(latest.compose)
+  return settings === undefined
+    ? undefined
+    : withRoutes(settings, latest!.routes ?? [], latest!.health ?? null)
 }
 
 /** The latest deploy of an app the runner accepted, from this machine's history. */

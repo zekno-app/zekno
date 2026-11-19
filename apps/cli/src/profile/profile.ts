@@ -93,12 +93,21 @@ export type SecretStore = z.infer<typeof SecretStoreSchema>
  * One deploy this machine signed and sent. The envelope carries the number,
  * the app, the server and the service definition under the signature, so none
  * of those are stored beside it. `sent` means no answer was recorded.
+ * `routes_failed` and `unhealthy` are protocol 4's outcomes, recorded as
+ * themselves (specs/015-domains-https, contracts/cli.md, CL3): a deploy that
+ * was accepted, and is the app's current one.
  */
 const HistorySchema = z.array(
   z.strictObject({
     envelope: EnvelopeSchema,
     at: z.string(),
-    outcome: z.enum(["sent", "started", "start_failed"]),
+    outcome: z.enum([
+      "sent",
+      "started",
+      "start_failed",
+      "routes_failed",
+      "unhealthy",
+    ]),
   })
 )
 export type History = z.infer<typeof HistorySchema>

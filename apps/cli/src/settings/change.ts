@@ -10,6 +10,13 @@
  * the person is put into a sentence only once it passed its rule.
  */
 import { sanitize } from "../server/sanitize"
+import {
+  routeChanged,
+  routeIsNow,
+  routeIsSet,
+  routeShown,
+  type RouteKey,
+} from "./domains-health"
 import { checkSettings, isSettings } from "./schema"
 import { settingsText } from "./text"
 import type {
@@ -59,6 +66,14 @@ const SINGLE = new Map<string, Exclude<SettingPath["key"], "plain" | "volume">>(
     ["networking.publish", "publish"],
     ["secrets", "secrets"],
     ["variables.secrets", "secrets"],
+    // specs/015-domains-https, CL1: `domains`, `health` and `health-timeout`, and their places in the file.
+    ["domains", "domains"],
+    ["networking.domains", "domains"],
+    ["health", "health"],
+    ["healthcheck", "health"],
+    ["deploy.healthcheck", "health"],
+    ["health-timeout", "health-timeout"],
+    ["deploy.healthcheck.timeout", "health-timeout"],
   ]
 )
 
@@ -68,13 +83,13 @@ const LATER = new Map<string, Exclude<LaterSetting, "version">>([
   ["source.build", "build"],
   ["predeploy", "predeploy"],
   ["deploy.predeploy", "predeploy"],
-  ["healthcheck", "healthcheck"],
-  ["deploy.healthcheck", "healthcheck"],
   ["replicas", "replicas"],
   ["deploy.replicas", "replicas"],
-  ["domains", "domains"],
-  ["networking.domains", "domains"],
 ])
+
+/** Whether a setting is one of specs/015-domains-https's, which settings/domains-health.ts reads, shows and changes. */
+const isRoute = (key: SettingPath["key"]): key is RouteKey =>
+  key === "domains" || key === "health" || key === "health-timeout"
 
 /**
  * The setting `<service>.<setting>` names (contracts/commands.md's table,
@@ -152,6 +167,8 @@ export function shownValue(path: SettingPath, settings: Settings): string {
       }
       case "volume":
         return service.volumes?.find(([name]) => name === path.name)?.[1]
+      default:
+        return routeShown(service, path.key)
     }
   }
   return sanitize(shown() ?? NOT_SET[path.key])
@@ -175,6 +192,7 @@ function isNow(
   path: SettingPath,
   value: string | number | readonly string[]
 ): boolean {
+  if (isRoute(path.key)) return routeIsNow(service, path.key, value)
   switch (path.key) {
     case "start":
       return (
@@ -205,6 +223,7 @@ function isNow(
 
 /** Whether `path` is set in a service. */
 function isSet(service: ServiceSettings, path: SettingPath): boolean {
+  if (isRoute(path.key)) return routeIsSet(service, path.key)
   if (path.key === "plain")
     return service.plain?.some(([name]) => name === path.name) ?? false
   if (path.key === "volume")
@@ -231,6 +250,7 @@ function changed(
   path: SettingPath,
   value: string | number | readonly string[] | undefined
 ): ServiceSettings {
+  if (isRoute(path.key)) return routeChanged(service, path.key, value)
   const next: Record<string, unknown> = { ...service }
   if (path.key === "plain" || path.key === "volume") {
     const field = path.key === "plain" ? "plain" : "volumes"
@@ -272,15 +292,29 @@ export function applyChange(
   const [svc, service] = settings.services[index]!
   const words = wordsOf(path)
   const now = shownValue(path, settings)
+  // specs/015-domains-https, CL1: a limit is a health check's; with none, CS16 names `health`, refused when it is set.
+  if (path.key === "health-timeout" && service.health === undefined)
+    return {
+      refused: CS16(svc, words.label),
+      status: value === undefined ? 0 : 2,
+    }
   let typed: string | number | readonly string[] | undefined
   if (value === undefined) {
     if (path.key === "image") return { refused: CS15, status: 2 }
+    // A limit left out is 60 seconds already: unset of it changes nothing.
+    if (path.key === "health-timeout" && !isSet(service, path))
+      return { refused: CS8(svc, words.label, now), status: 0 }
     if (!isSet(service, path))
       return { refused: CS16(svc, words.label), status: 0 }
   } else {
     const read = readTyped(path, value)
+    // A domain refused is said as `zekno domain add` says it, naming it (A10, A11).
     if ("refused" in read)
-      return { refused: CS7(words.notA, read.refused), status: 2 }
+      return {
+        refused:
+          path.key === "domains" ? read.refused : CS7(words.notA, read.refused),
+        status: 2,
+      }
     if (isNow(service, path, read.value))
       return { refused: CS8(svc, words.label, now), status: 0 }
     typed = read.value

@@ -15,6 +15,7 @@
 import { isReservedSecretName, LIMITS, SECRET_NAME } from "@workspace/core"
 
 import { holdsHidden } from "../server/sanitize"
+import { readRouteValue } from "./domains-health"
 import {
   BLANK_RULE,
   HIDDEN_RULE,
@@ -351,8 +352,9 @@ export function checkMountPath(path: string): string | undefined {
  * A value as typed for `zekno settings set` or on the settings screen, read
  * as the setting holds it and checked by its rule: a processor limit as its
  * text (`"0.5"`), a port as a number, secrets as names separated by `,`
- * (spaces around each dropped), a plain value exactly as typed. Refused: the
- * rule, as a sentence.
+ * (spaces around each dropped), a plain value exactly as typed; domains and
+ * a health check as settings/domains-health.ts reads them. Refused: the
+ * rule, as a sentence; for domains, the whole sentence to say (A10, A11).
  */
 export function readTyped(
   path: SettingPath,
@@ -387,5 +389,10 @@ export function readTyped(
       return checked(checkPlainValue(text), text)
     case "volume":
       return checked(checkMountPath(text), text)
+    // specs/015-domains-https, CL1: domains, lowered; a health check's path or `up`; its limit.
+    case "domains":
+    case "health":
+    case "health-timeout":
+      return readRouteValue(path.key, text)
   }
 }

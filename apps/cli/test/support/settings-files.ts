@@ -567,12 +567,12 @@ function faulty(): SettingsCase[] {
       "A pre-deploy command is not in this version of zekno yet."
     )
   )
+  // A health check and a domain are settings since specs/015-domains-https (CL1): these are held to their rules.
   add(
-    "a health check",
+    "a health check whose path breaks its rule",
     web({ deploy: { healthcheck: { path: S } } }),
-    later(
-      "sets a health check for web.",
-      "Health checks are not in this version of zekno yet."
+    form(
+      "web, deploy.healthcheck.path: use a path such as /health: no space and no #, at most 1024 characters."
     )
   )
   add(
@@ -583,12 +583,12 @@ function faulty(): SettingsCase[] {
       "Several copies of a service are not in this version of zekno yet."
     )
   )
+  const badDomain = web({ networking: { domains: [S] } })
   add(
-    "a domain",
-    web({ networking: { domains: [S] } }),
-    later(
-      "sets a domain for web.",
-      "Domains are not in this version of zekno yet."
+    "a domain that breaks its rule",
+    badDomain,
+    form(
+      `web, networking.domains: use a full name such as shop.example.com: no wildcard, no address, no port (line ${lineOf(badDomain, S)}).`
     )
   )
 

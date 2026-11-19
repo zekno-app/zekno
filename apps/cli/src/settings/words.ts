@@ -11,6 +11,8 @@
  * fixed words: never a piece of a settings file. `<file>` is a path as
  * `shownFile` cleans it.
  */
+import { ROUTE_NOT_SET, routeWords, type RouteKey } from "./domains-health"
+import type { LaterSetting } from "./types"
 
 /** A place in the file and the rule it breaks, said as `<place>: <rule>` after SR's first sentence. An empty place: the rule alone. */
 export type PlaceRule = { place: string; rule: string }
@@ -269,9 +271,13 @@ export const SV33: PlaceRule = at(
 
 // A later setting (status 1), contracts/settings-file.md.
 
-/** What each later setting is called in SL's first sentence, and SL's second sentence (CS6 too). */
+/**
+ * What each later setting is called in SL's first sentence, and SL's second
+ * sentence (CS6 too). Domains and health checks left this list with feature
+ * 015 (specs/015-domains-https, CL1): their two sentences went.
+ */
 const LATER: Record<
-  "build" | "predeploy" | "healthcheck" | "replicas" | "domains",
+  Exclude<LaterSetting, "version">,
   { sets: string; second: string }
 > = {
   build: {
@@ -282,25 +288,16 @@ const LATER: Record<
     sets: "a pre-deploy command",
     second: "A pre-deploy command is not in this version of zekno yet.",
   },
-  healthcheck: {
-    sets: "a health check",
-    second: "Health checks are not in this version of zekno yet.",
-  },
   replicas: {
     sets: "replicas",
     second: "Several copies of a service are not in this version of zekno yet.",
   },
-  domains: {
-    sets: "a domain",
-    second: "Domains are not in this version of zekno yet.",
-  },
 }
 
-/** SL0 to SL5: the first sentence and the second. SL0 is `version`, the file's own `zekno`. */
+/** SL0 to SL4: the first sentence and the second. SL0 is `version`, the file's own `zekno`. */
 export function laterSentences(
   file: string,
-  setting:
-    "version" | "build" | "predeploy" | "healthcheck" | "replicas" | "domains",
+  setting: LaterSetting,
   svc?: string
 ): [first: string, second: string] {
   if (setting === "version")
@@ -365,13 +362,12 @@ export const CS4 = (
       : `Its services are ${services.join(", ")}.`
   return `${file} has ${missing}. ${list}`
 }
-/** CS5 */
+/** CS5, naming the settings of specs/015-domains-https (CL1) in the order of the file. */
 export const CS5 =
-  "There is no such setting. The settings are image, start, restart, memory, cpus, port, publish, secrets, plain.<NAME> and volumes.<name>."
+  "There is no such setting. The settings are image, start, restart, memory, cpus, health, health-timeout, port, publish, domains, secrets, plain.<NAME> and volumes.<name>."
 /** CS6: SL's second sentence for that setting. */
-export const CS6 = (
-  setting: "build" | "predeploy" | "healthcheck" | "replicas" | "domains"
-): string => LATER[setting].second
+export const CS6 = (setting: Exclude<LaterSetting, "version">): string =>
+  LATER[setting].second
 /** CS7: `That is not <a label>.` then the rule. */
 export const CS7 = (notA: string, rule: string): string => `${notA} ${rule}`
 /** CS8 */
@@ -517,6 +513,7 @@ export type SettingKey =
   | "secrets"
   | "plain"
   | "volume"
+  | RouteKey
 
 /** The rule of a start command refused, as a sentence: SV9 (a) to (e). */
 export const startRule = (problem: StartProblem): string => {
@@ -605,6 +602,8 @@ export function settingWords(key: SettingKey, name = ""): SettingWords {
         notA: "That is not a mount path.",
         rule: "Use an absolute path in the container, such as /data.",
       }
+    default:
+      return routeWords(key)
   }
 }
 
@@ -620,6 +619,7 @@ export const NOT_SET: Record<SettingKey, string> = {
   secrets: "none",
   plain: "none",
   volume: "none",
+  ...ROUTE_NOT_SET,
 }
 
 /** A restart rule as a person reads it: `on-failure` reads `on failure`. */

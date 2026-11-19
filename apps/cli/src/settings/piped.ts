@@ -15,6 +15,31 @@ import type { ServiceSettings, Settings } from "./types"
 /** One piped line: the service, the setting's place, the value. */
 export type PipedLine = readonly [service: string, place: string, value: string]
 
+/**
+ * A health check's lines (specs/015-domains-https, contracts/cli.md, CL1):
+ * its path and its limit as the file writes them, each a line of its own;
+ * one with neither, `deploy.healthcheck` and `{}`, as the file holds it.
+ */
+function healthPlaces(service: ServiceSettings): [string, string][] {
+  const { health } = service
+  if (health === undefined) return []
+  if (health.path === undefined && health.timeout === undefined)
+    return [["deploy.healthcheck", "{}"]]
+  return [
+    ...(health.path === undefined
+      ? []
+      : [["deploy.healthcheck.path", health.path] as [string, string]]),
+    ...(health.timeout === undefined
+      ? []
+      : [
+          ["deploy.healthcheck.timeout", String(health.timeout)] as [
+            string,
+            string,
+          ],
+        ]),
+  ]
+}
+
 /** The places and values of one service that are set, in the order of the file's sections. */
 function placesOf(service: ServiceSettings): [string, string][] {
   const places: [string, string | undefined][] = [
@@ -23,6 +48,7 @@ function placesOf(service: ServiceSettings): [string, string][] {
     ["deploy.restart", service.restart],
     ["deploy.memory", service.memory],
     ["deploy.cpus", service.cpus],
+    ...healthPlaces(service),
     [
       "networking.port",
       service.port === undefined ? undefined : String(service.port),
@@ -31,6 +57,8 @@ function placesOf(service: ServiceSettings): [string, string][] {
       "networking.publish",
       service.publish === undefined ? undefined : String(service.publish),
     ],
+    // Joined as secrets are, with `,` and no space (CL1).
+    ["networking.domains", service.domains?.join(",")],
     ["variables.secrets", service.secrets?.join(",")],
     ...(service.plain ?? []).map(([name, value]): [string, string] => [
       `variables.plain.${name}`,

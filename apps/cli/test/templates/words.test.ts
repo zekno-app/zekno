@@ -168,12 +168,24 @@ describe("file-words.ts: contracts/template-file.md", () => {
       "services.db.variables.plain.A_B"
     )
     expect(file.templatePlace("services")).toBe("services")
-    expect(said(file.laterInTemplate("domains", "db"))).toBe(
-      "services.db.networking.domains: Domains are not in this version of zekno yet."
-    )
     expect(said(file.laterInTemplate("build", "db"))).toBe(
       "services.db.source.build: Building from source is not in this version of zekno yet."
     )
+  })
+
+  test("a domain and a health check: a template still may not name them, with the sentence it has always said (specs/015-domains-https, CL1)", () => {
+    const inFile = (section: string, setting: string) => {
+      const found = file.notInTemplate("db", section, setting)!
+      return said({ ...found, place: file.templatePlace(found.place) })
+    }
+    expect(inFile("networking", "domains")).toBe(
+      "services.db.networking.domains: Domains are not in this version of zekno yet."
+    )
+    expect(inFile("deploy", "healthcheck")).toBe(
+      "services.db.deploy.healthcheck: Health checks are not in this version of zekno yet."
+    )
+    expect(file.notInTemplate("db", "networking", "port")).toBeUndefined()
+    expect(file.notInTemplate("db", "deploy", "replicas")).toBeUndefined()
   })
 })
 

@@ -282,7 +282,7 @@ describe("contracts/settings-file.md", () => {
       expect(said(placeRule)).toBe(sentence)
   })
 
-  test("SL0 to SL5: two sentences each", () => {
+  test("SL0 to SL4: two sentences each; the health check's and the domain's went with specs/015-domains-https (CL1)", () => {
     expect(laterSentences(F, "version")).toEqual([
       "zekno.app.json is written for a later version of zekno.",
       "Update zekno to use it.",
@@ -295,17 +295,9 @@ describe("contracts/settings-file.md", () => {
       "zekno.app.json sets a pre-deploy command for web.",
       "A pre-deploy command is not in this version of zekno yet.",
     ])
-    expect(laterSentences(F, "healthcheck", "web")).toEqual([
-      "zekno.app.json sets a health check for web.",
-      "Health checks are not in this version of zekno yet.",
-    ])
     expect(laterSentences(F, "replicas", "web")).toEqual([
       "zekno.app.json sets replicas for web.",
       "Several copies of a service are not in this version of zekno yet.",
-    ])
-    expect(laterSentences(F, "domains", "web")).toEqual([
-      "zekno.app.json sets a domain for web.",
-      "Domains are not in this version of zekno yet.",
     ])
   })
 })
@@ -355,10 +347,13 @@ describe("contracts/commands.md", () => {
     expect(CS4(F, "api", ["web", "worker"])).toBe(
       "zekno.app.json has no service api. Its services are web, worker."
     )
+    // CS5 names the settings of specs/015-domains-https (CL1); CS6 is a later setting's, replicas'.
     expect(CS5).toBe(
-      "There is no such setting. The settings are image, start, restart, memory, cpus, port, publish, secrets, plain.<NAME> and volumes.<name>."
+      "There is no such setting. The settings are image, start, restart, memory, cpus, health, health-timeout, port, publish, domains, secrets, plain.<NAME> and volumes.<name>."
     )
-    expect(CS6("domains")).toBe("Domains are not in this version of zekno yet.")
+    expect(CS6("replicas")).toBe(
+      "Several copies of a service are not in this version of zekno yet."
+    )
     expect(CS6("build")).toBe(
       "Building from source is not in this version of zekno yet."
     )

@@ -4,8 +4,9 @@
  * and the folders of apps/cli/src import each other only in the directions of
  * plan.md, "Which way imports point", rules 1 to 4 and 6 (FR-007), with the
  * folder settings/ placed among them by specs/010-app-settings/plan.md,
- * "Which way imports point", and the folder templates/ by
- * specs/012-templates/plan.md, "Which way imports point". Rule 5,
+ * "Which way imports point", the folder templates/ by
+ * specs/012-templates/plan.md, "Which way imports point", and the folder
+ * domains/ by specs/015-domains-https/plan.md, "Structure Decision". Rule 5,
  * nothing cli/cli.ts imports statically loads Ink or React, is the walk of
  * main.ts's static imports in test/asking/asking.test.ts.
  *
@@ -59,6 +60,7 @@ const LAYOUT = [
   "asking",
   "cli",
   "commands",
+  "domains",
   "ops",
   "profile",
   "project",
@@ -286,6 +288,8 @@ const BASE = [
   "settings",
   "templates",
   "version",
+  // specs/015-domains-https: its rules, words and routes load no screen.
+  "domains",
 ]
 
 /**
@@ -306,9 +310,16 @@ const allowed = (edge: Edge): boolean => edge.from === "main.ts"
  * The files of cli/ (plan.md, rule 6): cli.ts, arguments and dispatch, which
  * reaches every command; and context.ts and errors.ts, which every folder may
  * import. A file added to cli/ is held to the rule of the second kind, and
- * changes this list.
+ * changes this list: help.ts and options.ts, split from cli.ts before it grew
+ * (specs/015-domains-https, tasks T044).
  */
-const CLI_FILES = ["cli/cli.ts", "cli/context.ts", "cli/errors.ts"]
+const CLI_FILES = [
+  "cli/cli.ts",
+  "cli/context.ts",
+  "cli/errors.ts",
+  "cli/help.ts",
+  "cli/options.ts",
+]
 
 /** A file of cli/ that every folder may import: any but cli/cli.ts. */
 const isSharedCli = (file: string): boolean =>
@@ -328,7 +339,7 @@ const RULES: { rule: string; breaks(edge: Edge): boolean }[] = [
       ["ui", "app", "asking", "commands"].includes(folderOf(edge.to)),
   },
   {
-    rule: "3. shared/, server/, project/, profile/, secrets/, settings/, templates/ and version/ import nothing from app/, commands/, asking/ or ops/, and from ui/ only ui/types.ts.",
+    rule: "3. shared/, server/, project/, profile/, secrets/, settings/, templates/, version/ and domains/ import nothing from app/, commands/, asking/ or ops/, and from ui/ only ui/types.ts.",
     breaks: (edge) =>
       BASE.includes(folderOf(edge.from)) &&
       (["app", "commands", "asking", "ops"].includes(folderOf(edge.to)) ||
@@ -789,7 +800,7 @@ describe("which way imports point in apps/cli/src (plan.md, rules 1 to 4 and 6)"
     })
   }
 
-  test("6. cli/ holds cli.ts, context.ts and errors.ts, and none but cli/cli.ts re-exports from another folder.", () => {
+  test("6. cli/ holds cli.ts, context.ts, errors.ts, help.ts and options.ts, and none but cli/cli.ts re-exports from another folder.", () => {
     expect(
       READ.map(({ file }) => file).filter((file) => folderOf(file) === "cli")
     ).toEqual(CLI_FILES)

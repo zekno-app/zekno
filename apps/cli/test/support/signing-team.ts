@@ -17,6 +17,8 @@ import {
   keyIdOf,
   proposeRoster,
   type Envelope,
+  type Health,
+  type Route,
   type SecretRecord,
   type Signer,
 } from "@workspace/core"
@@ -126,7 +128,9 @@ export async function signingTeam(app = "demo") {
       previous: number,
       compose: string,
       statements: readonly Envelope[] = [],
-      removals: readonly Envelope[] = []
+      removals: readonly Envelope[] = [],
+      // specs/015-domains-https: the routes and the health check, none when left out.
+      routed: { routes?: readonly Route[]; health?: Health | null } = {}
     ) =>
       createDeployV2({
         trust,
@@ -138,6 +142,7 @@ export async function signingTeam(app = "demo") {
         removals,
         expiresAt: null,
         signer,
+        ...routed,
       }),
     /** A secret of `app` set by Ada. */
     secret: (name: string, value: string, version: number) =>

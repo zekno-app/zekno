@@ -285,16 +285,14 @@ describe("SR1 to SR9", () => {
   })
 
   test("a later setting is its two sentences", () => {
+    // Domains are a setting since specs/015-domains-https (CL1); replicas are still a later one.
     const folder = folderWith(
-      DESIGN_FILE.replace(
-        '"networking": { "port": 3000 }',
-        `"networking": { "port": 3000, "domains": ["${SENTINEL}"] }`
-      )
+      DESIGN_FILE.replace('"cpus": 1', `"cpus": 1, "replicas": "${SENTINEL}"`)
     )
     expect(
       refused(() => readSettingsFile({ kind: "default", folder }, folder))
     ).toBe(
-      "zekno.app.json sets a domain for web. Domains are not in this version of zekno yet."
+      "zekno.app.json sets replicas for web. Several copies of a service are not in this version of zekno yet."
     )
   })
 

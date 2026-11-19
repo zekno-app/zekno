@@ -63,14 +63,16 @@ export async function send(
   }
   if (options.json) deps.ui.json({ ...result.report, server: result.server })
   await view.end({
-    outcome: result.outcome,
+    // `routes_failed` and `unhealthy` (specs/015-domains-https, CL3): the app started; their own lines come with the
+    // next phase. The exit status is already CL3's: 1 for either.
+    outcome: result.outcome === "start_failed" ? "start_failed" : "started",
     sequence: result.sequence,
     app: result.app,
     server: result.server,
     secrets: result.secrets,
     ms: Date.now() - began,
   })
-  return result.outcome === "start_failed" ? 1 : 0
+  return result.outcome === "started" ? 0 : 1
 }
 
 /**

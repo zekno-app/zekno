@@ -33,6 +33,9 @@ const ADDED_TO_HELP = [
   "  zekno add [<template>] [--name <service>] [--for <service>] [--app <app>] [--server <name>] [--yes]",
   "  zekno add --list [--json]",
   "  zekno add <template> --show [--json]",
+  // feature 015
+  "  zekno domain add <domain> [--service <name>] [--yes]",
+  "  zekno domain rm <domain> [--yes]",
 ]
 
 describe("with no terminal, every command does what it did before feature 006 (FR-028)", () => {

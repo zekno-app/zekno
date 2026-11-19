@@ -9,7 +9,7 @@
  * service always open on their own line. So a change of one value changes
  * one line, and design.md's example is written back byte for byte.
  */
-import type { ServiceSettings, Settings } from "./types"
+import type { Health, ServiceSettings, Settings } from "./types"
 
 /** What is written: a value as its JSON text, a list, or an object whose members are in the order given. */
 type Node =
@@ -36,7 +36,23 @@ function object(members: [string, Node | undefined][]): Node | undefined {
   return set.length === 0 ? undefined : { kind: "object", members: set }
 }
 
-/** One service's sections, in the order of contracts/settings-file.md, "The settings". */
+/**
+ * A health check (specs/015-domains-https, contracts/cli.md, CL1): its path
+ * and its limit, each only when set, and `{}` with neither, which is a
+ * health check all the same.
+ */
+const healthNode = (health: Health): Node => ({
+  kind: "object",
+  members: setOnly([
+    ["path", health.path === undefined ? undefined : string(health.path)],
+    [
+      "timeout",
+      health.timeout === undefined ? undefined : number(String(health.timeout)),
+    ],
+  ]),
+})
+
+/** One service's sections, in the order of contracts/settings-file.md, "The settings"; `healthcheck` after `cpus` and `domains` after `publish` (CL1). */
 function serviceNode(service: ServiceSettings): Node {
   const has = <T>(value: T | undefined, node: (value: T) => Node) =>
     value === undefined ? undefined : node(value)
@@ -49,6 +65,7 @@ function serviceNode(service: ServiceSettings): Node {
         ["restart", has(service.restart, string)],
         ["memory", has(service.memory, string)],
         ["cpus", has(service.cpus, number)],
+        ["healthcheck", has(service.health, healthNode)],
       ]),
     ],
     [
@@ -56,6 +73,12 @@ function serviceNode(service: ServiceSettings): Node {
       object([
         ["port", has(service.port, (port) => number(String(port)))],
         ["publish", has(service.publish, (port) => number(String(port)))],
+        [
+          "domains",
+          service.domains?.length
+            ? { kind: "list", items: service.domains.map(string) }
+            : undefined,
+        ],
       ]),
     ],
     [
@@ -85,10 +108,11 @@ function serviceNode(service: ServiceSettings): Node {
   return { kind: "object", members: sections, open: true }
 }
 
-/** A node on one line: `{ "a": 1, "b": 2 }`, `["a", "b"]`. */
+/** A node on one line: `{ "a": 1, "b": 2 }`, `["a", "b"]`; an object with nothing in it, `{}`. */
 function flat(node: Node): string {
   if (node.kind === "value") return node.text
   if (node.kind === "list") return `[${node.items.map(flat).join(", ")}]`
+  if (node.members.length === 0) return "{}"
   const members = node.members.map(
     ([key, value]) => `${JSON.stringify(key)}: ${flat(value)}`
   )

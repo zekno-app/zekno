@@ -86,16 +86,10 @@ describe("parseSettingPath (contracts/commands.md's table)", () => {
   })
 
   test("a later setting gives its kind, with or without its section", () => {
-    expect(parseSettingPath("web.domains")).toEqual({ later: "domains" })
-    expect(parseSettingPath("web.networking.domains")).toEqual({
-      later: "domains",
-    })
+    // Domains and the health check are settings since specs/015-domains-https (CL1): see change-routes.test.ts.
     expect(parseSettingPath("web.build")).toEqual({ later: "build" })
     expect(parseSettingPath("web.source.build")).toEqual({ later: "build" })
     expect(parseSettingPath("web.predeploy")).toEqual({ later: "predeploy" })
-    expect(parseSettingPath("web.healthcheck")).toEqual({
-      later: "healthcheck",
-    })
     expect(parseSettingPath("web.replicas")).toEqual({ later: "replicas" })
     expect(parseSettingPath("web.deploy.replicas")).toEqual({
       later: "replicas",

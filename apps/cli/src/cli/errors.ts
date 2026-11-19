@@ -1,3 +1,5 @@
+import { R9 } from "../domains/words"
+
 /** Something the person can fix: shown as one sentence, exit status 1. */
 export class CliError extends Error {}
 
@@ -90,6 +92,8 @@ const REASONS: Record<string, string> = {
   /** R6 */
   expired:
     "The time this deploy had to run had passed by the server's clock. Nothing of it ran. Deploy again, and check the server's clock if it says so again.",
+  // Protocol 4 (specs/015-domains-https, contracts/core.md, K10b): a domain of the deploy is another app's on that server.
+  domain_taken: R9,
 }
 
 export function explain(reason: string): string {

@@ -658,10 +658,11 @@ describe("zekno settings set and unset (T051)", () => {
       out: [],
       err: [CS5],
     })
-    expect(await piped(m, "settings", "set", "web.domains", "x")).toEqual({
+    // Domains are a setting since specs/015-domains-https (CL1); replicas are still a later one.
+    expect(await piped(m, "settings", "set", "web.replicas", "2")).toEqual({
       code: 2,
       out: [],
-      err: [CS6("domains")],
+      err: [CS6("replicas")],
     })
     expect(fileOf(m)).toBe(DESIGN_FILE)
   })

@@ -260,17 +260,44 @@ export const templatePlace = (settingsPlace: string): string =>
     ? "services"
     : `services.${settingsPlace.split(", ").join(".")}`
 
-/** Where each later setting is in a service, by the setting (SL1 to SL5). */
+/** Where each later setting is in a service, by the setting (SL1 to SL4). */
 const LATER_PLACE = {
   build: "source.build",
   predeploy: "deploy.predeploy",
-  healthcheck: "deploy.healthcheck",
   replicas: "deploy.replicas",
-  domains: "networking.domains",
 } as const
 
-/** A later setting of a template's service (SL1 to SL5): its place in the file, and SL's second sentence as the rule. */
+/** A later setting of a template's service (SL1 to SL4): its place in the file, and SL's second sentence as the rule. */
 export const laterInTemplate = (
   setting: keyof typeof LATER_PLACE,
   svc: string
 ): PlaceRule => at(`services.${svc}.${LATER_PLACE[setting]}`, CS6(setting))
+
+/**
+ * The settings a settings file holds since feature 015 and a template may
+ * not name (specs/015-domains-https, contracts/cli.md, CL1), each by its
+ * section and key, with the sentence the template reader has always said for
+ * it: SL3's and SL5's second sentence as they were, kept here when the
+ * settings file's reader stopped saying them. A template is added to the
+ * folder of someone who has not chosen a domain or a health check.
+ */
+const NOT_IN_TEMPLATE: ReadonlyMap<string, string> = new Map([
+  ["deploy.healthcheck", "Health checks are not in this version of zekno yet."],
+  ["networking.domains", "Domains are not in this version of zekno yet."],
+])
+
+/**
+ * A setting of a template's service that a template may not carry, at its
+ * place as the settings rules name a place (`<svc>, <section>.<key>`, which
+ * `templatePlace` turns into the template file's path), with its sentence;
+ * undefined for any other.
+ */
+export const notInTemplate = (
+  svc: string,
+  section: string,
+  setting: string
+): PlaceRule | undefined => {
+  const key = `${section}.${setting}`
+  const rule = NOT_IN_TEMPLATE.get(key)
+  return rule === undefined ? undefined : at(`${svc}, ${key}`, rule)
+}

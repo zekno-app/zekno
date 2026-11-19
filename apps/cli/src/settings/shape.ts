@@ -10,8 +10,11 @@
  * of the file: schema.ts builds the place from the id and the issue's path,
  * and puts a name into it only once the name passed its rule.
  */
+import { isHealthPath } from "@workspace/core"
 import { z } from "zod"
 
+import { fileFault } from "../domains/rule"
+import { checkHealthTimeout, MAX_DOMAINS } from "./domains-health"
 import type { LaterSetting } from "./types"
 import {
   checkCpus,
@@ -81,8 +84,52 @@ const counted = (
 const isList = (value: unknown): boolean => Array.isArray(value)
 const isMap = (value: unknown): boolean => value instanceof Map
 
-/** A setting a later version brings: kept as an optional key of its section, refused by its presence before this schema is used (SL1 to SL5). */
+/** A setting a later version brings: kept as an optional key of its section, refused by its presence before this schema is used (SL1 to SL4). */
 const later = z.unknown().optional()
+
+/**
+ * A service's health check (specs/015-domains-https, contracts/cli.md, CL1):
+ * a strict object of an optional path, by the core library's path rule
+ * (SV42), and an optional limit of 1 to 1,800 seconds (SV43). Anything else,
+ * or not an object, is SV41. `{}` is a health check with neither.
+ */
+const HealthcheckSchema = z.strictObject(
+  {
+    path: checkedString("SV42", isHealthPath).optional(),
+    timeout: checkedNumber("SV43", checkHealthTimeout).optional(),
+  },
+  fails("SV41")
+)
+
+/**
+ * A service's domains (CL1): a list of at most 64 names (SV34, SV37), each
+ * lowercase by the core library's domain rule (SV35; `SV35:ascii` for one
+ * with letters outside ASCII, which this version leaves for later), none
+ * twice (SV36). An empty list is no domain.
+ */
+const DomainsSchema = z
+  .array(
+    z.string(fails("SV34")).superRefine((domain, context) => {
+      const fault = fileFault(domain)
+      if (fault !== undefined)
+        context.addIssue({
+          code: "custom",
+          message: fault === "ascii" ? "SV35:ascii" : "SV35",
+        })
+    }),
+    fails("SV34")
+  )
+  .refine((domains) => domains.length <= MAX_DOMAINS, counted("SV37", isList))
+  .superRefine((domains, context) => {
+    const seen = new Set<string>()
+    for (const [index, domain] of domains.entries()) {
+      if (seen.has(domain)) {
+        context.addIssue({ code: "custom", message: "SV36", path: [index] })
+        return
+      }
+      seen.add(domain)
+    }
+  })
 
 const SourceSchema = z.strictObject(
   {
@@ -109,7 +156,7 @@ const DeploySchema = z.strictObject(
     memory: checkedString("SV11", (memory) => !checkMemory(memory)).optional(),
     cpus: checkedNumber("SV12", checkCpus).optional(),
     predeploy: later,
-    healthcheck: later,
+    healthcheck: HealthcheckSchema.optional(),
     replicas: later,
   },
   fails("SV5")
@@ -119,7 +166,7 @@ const NetworkingSchema = z.strictObject(
   {
     port: checkedNumber("SV13", checkPort).optional(),
     publish: checkedNumber("SV14", checkPort).optional(),
-    domains: later,
+    domains: DomainsSchema.optional(),
   },
   fails("SV5")
 )
@@ -217,7 +264,11 @@ export const SECTIONS: ReadonlyMap<string, object> = new Map<string, object>([
   ["variables", VariablesSchema.shape],
 ])
 
-/** The later settings, by section: the only places they may come (design.md, "The file"). */
+/**
+ * The later settings, by section: the only places they may come (design.md,
+ * "The file"). `deploy.healthcheck` and `networking.domains` are settings of
+ * their own since specs/015-domains-https.
+ */
 export const LATER: ReadonlyMap<
   string,
   ReadonlyMap<string, LaterSetting>
@@ -227,11 +278,9 @@ export const LATER: ReadonlyMap<
     "deploy",
     new Map<string, LaterSetting>([
       ["predeploy", "predeploy"],
-      ["healthcheck", "healthcheck"],
       ["replicas", "replicas"],
     ]),
   ],
-  ["networking", new Map([["domains", "domains"]])],
 ])
 
 /** Whether `key` is an own key of `object`: never one its prototype has. */

@@ -240,6 +240,7 @@ describe("which file, piped (US1, scenario 4; FR-011)", () => {
 })
 
 describe("a file that cannot be used stops everything (US1, scenarios 5 and 6)", () => {
+  // A health check and domains are settings since specs/015-domains-https (CL1), no longer later ones.
   const LATER: [string, string][] = [
     [
       '"build": {}',
@@ -250,24 +251,14 @@ describe("a file that cannot be used stops everything (US1, scenarios 5 and 6)",
       "zekno.app.json sets a pre-deploy command for web. A pre-deploy command is not in this version of zekno yet.",
     ],
     [
-      '"healthcheck": "/health"',
-      "zekno.app.json sets a health check for web. Health checks are not in this version of zekno yet.",
-    ],
-    [
       '"replicas": 2',
       "zekno.app.json sets replicas for web. Several copies of a service are not in this version of zekno yet.",
-    ],
-    [
-      '"domains": ["demo.example.com"]',
-      "zekno.app.json sets a domain for web. Domains are not in this version of zekno yet.",
     ],
   ]
   const PLACE: Record<string, string> = {
     build: "source",
     predeploy: "deploy",
-    healthcheck: "deploy",
     replicas: "deploy",
-    domains: "networking",
   }
 
   test("each later setting, and SV11: status 1, its sentence; nothing connected, signed or written", async () => {
@@ -408,10 +399,11 @@ describe("at a terminal (board `SettingsDeploy`, T031)", () => {
   }, 60_000)
 
   test("a later setting: its first sentence after ✖, its second under it, set in by two columns; nothing deployed", async () => {
+    // Domains are a setting since specs/015-domains-https (CL1); replicas are still a later one.
     const m = await folderWith({
       "zekno.app.json": DESIGN_FILE.replace(
-        '"networking": {',
-        '"networking": { "domains": ["demo.example.com"],'
+        '"deploy": {',
+        '"deploy": { "replicas": 2,'
       ),
     })
     const t = terminal(100, 30)
@@ -421,8 +413,8 @@ describe("at a terminal (board `SettingsDeploy`, T031)", () => {
     await t.ui.close()
     expect(code).toBe(1)
     expect(t.lines()).toEqual([
-      "✖ zekno.app.json sets a domain for web.",
-      "  Domains are not in this version of zekno yet.",
+      "✖ zekno.app.json sets replicas for web.",
+      "  Several copies of a service are not in this version of zekno yet.",
     ])
     expect(m.docker.calls()).toEqual([])
   }, 60_000)
