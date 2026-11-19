@@ -151,3 +151,44 @@ Built in parts, each by an Opus agent with a written brief, verified here (the d
 ## Complexity Tracking
 
 No violation of the constitution to justify.
+
+## As built
+
+Written on 2026-11-19, when the tasks up to T093 were done. The numbers are in `quickstart.md` ("Results"), the review in `security-review.md` (part 7), the screens in `design/walkthrough.md` and the six `Built…` boards beside the approved ones.
+
+**Done**: the core library carries out routes and health checks and refuses `xn--` names; the runner serves a domain through a pinned Caddy with a generated configuration, one network and one random name per routed container, and waits for a health check; the CLI has the two settings, `zekno domain`, `add` and `rm`, the DNS check before signing, the wait for HTTPS, the new outcomes, a rollback that keeps the domains, and the rows in `zekno settings`, `zekno status`, `zekno doctor` and three screens of the app; two docs pages and four stored screens; an independent security review with every finding answered.
+
+**No release, as decided.** A zekno built from this branch still installs runner 0.1.0, which speaks protocol 2: against a released server a deploy with a domain stops before signing (B10). Domains work with a runner that says protocol 4: the tests' runner, `--runner-file`, and runner 0.1.1 once the maintainer publishes it (quickstart, M1 to M7).
+
+**Proven on this machine only.** The gated set ran real Docker with the pinned Caddy, its internal issuer and high ports on Docker Desktop: HTTPS through the proxy, the redirect, `domain_taken`, a restarted container followed, a failed load leaving the earlier configuration, a release with the certificate's folder gone, the health check. Not proven: a certificate from Let's Encrypt, ports 80 and 443, Docker on Linux (search domains, labels a Compose text sets), a real `ssh -G`. Those are the proof on a server (M4, M5).
+
+**What differs from the approved boards and words** (the `Built…` boards show the real program; `design/walkthrough.md` names each row):
+
+- Every deploy panel at a terminal has one row more, `from`, which a deploy from a settings file has shown since feature 010.
+- `zekno domain` lists the domains in the order of their names, as contracts/cli.md CL4 says; the board drew the file's order.
+- Once the service question of `zekno domain add` is answered it is drawn as every list question of zekno is, `✔ Service  web`; the board kept the question with its answer after it. Kept as built.
+- `zekno settings` at a terminal does not draw `health  not set` or `domains  none` (lines C5 and E1): the command prints only the settings that are set. The settings screen draws both. Kept as built.
+- `--skip-dns-check` and a held domain that moved away (B14, B15): the board drew the warning alone; the program draws the deploy after it.
+- B6 has no backticks at a terminal. The app's spinner on the `Healthy` stage is bold, as at a terminal.
+- `zekno doctor` has no line for a taken port (E5): the runner cannot know it without starting the proxy, and the deploy that tried says it (B16; research R34).
+- B11 is never said: the settings file's own rule refuses a domain on a service with no port first.
+- A deploy whose own Compose text publishes port 80 or 443 gets B16, which says "another program", not which app (the spec's edge case asked for the app's name).
+
+**Sentences that are on no board** (each pinned by a test, for the maintainer to approve or change): `Service` as the answered question's label; `zekno could not look up shop.example.com from this machine. The deploy goes on.`; B13 ending `It has no DNS record yet.`; A6 with `your server`; `Say which domain: zekno domain add <domain>.`; `web cannot be checked: no container of web is running. Run zekno logs to see why.` and its host-network form; `prod-1 was not asked`; `point it at the public address of prod-1`; `This folder is not linked to an app. Run zekno link here, then zekno domain again.`; doctor's `an older version` with `Deploy an app with a domain to replace it`; B10 without a version, for a runner run one request at a time; B16's and B19's forms for the server after `zekno server update`; the settings rules' sentences for `domains` and `health` (SV34 to SV45). The app's Domains box foot is the board's own words.
+
+**Readings chosen where the contracts were silent**:
+
+- A rollback takes its routes from the server and its health check from this machine's history, because the server does not hold a health check's path or limit. A rollback from a machine that did not sign the deploy in force keeps the domains and signs no health check.
+- A rollback asks `status` again with routes unless this machine signed the deploy in force with no route. `zekno status` and `zekno doctor` always ask with routes on protocol 4.
+- With `--json`, `zekno deploy` prints none of the DNS or HTTPS lines and does not wait for HTTPS. `--skip-dns-check` also skips the domains the app already holds, saying nothing of them.
+- The wait for HTTPS is 60 seconds in all for a deploy's new domains, from when the wait begins.
+- `zekno server update` sends `proxy` only after it replaced the runner; its failure is a warning.
+- `zekno domain` takes the app and the server from the folder's link only. The app's Domains box is shown when the folder's settings file or this machine's last deploy of the app has a domain, and asks the server in batch mode only.
+- The settings screen changes `domains` as one comma-separated list and `health` as a path or `up`; the limit is changed with `zekno settings set <service>.health-timeout`, a key the boards do not show.
+- In the runner: a load is confirmed by the nonce in what Caddy saved, the log only stops a wait early; a file refused by `caddy validate` is not followed by a load back; the health limit counts from when the wait begins, so the time of the route steps (a first fetch of the proxy's image) is not the app's; more than 16 containers of a service is `no_container`; an invalid `ZEKNO_PROXY_TEST` is `not_loaded`.
+
+**Changed after the review** (security-review.md, part 7): requests are not written to the proxy's log, which is bounded; a released key is deleted also when the proxy is stopped or gone; the health wait keeps its limit; the configuration is validated as a second file before it is in place; `X-Real-Ip` and `Forwarded` are removed from a request; `--dns-search .`; a rollback is not signed on a runner's word that it holds no routes; tighter public-address rules.
+
+**Files that moved from the plan's structure**: the route and health rules of the core are in `deploy/routes-and-checks.ts`; the session's schemas in `protocol/session.ts`; the CLI has `domains/{ip,outcome,words-extra}.ts`, `ops/{deploy-https,server-proxy}.ts`, `shared/at-most.ts`, `app/effects/domains.ts`, `app/screens/deploy-domains.tsx`; the runner has `proxy/{file,log,serve}.ts` and `health/image.ts`.
+
+**Left for later**: the proof on a server and release 0.1.1 (maintainer steps); feature 014's deferred bound in the runner on a claimed secret version; a line in `zekno doctor` for rootless Docker; naming the app that holds port 80 or 443.

@@ -95,7 +95,7 @@ Tests are part of each task: a test that fails first wherever a contract fixes t
 - [x] T075 Tests of each screen in colour against the boards: marks, bold and dim, the rows' order (`test/app/domains-*.test.tsx`, `test/ui/ink/domains-terminal.test.ts`)
 - [x] T076 The screens and `ui/` still load neither the profile nor the core library (`test/layers`)
 - [x] T077 The app at 80 columns and in a window too small: nothing new overflows
-- [ ] T078 CLI: type check, lint, format, all tests, `screens --check` (differences expected only where a stored screen gained a row)
+- [x] T078 CLI: type check, lint, format, all tests, `screens --check` (differences expected only where a stored screen gained a row)
 
 ## Phase 6: Docs
 
@@ -114,10 +114,10 @@ Waits for the maintainer's answer on the first group's name (M8) before `meta.js
 
 - [x] T087 An independent security review by an agent that wrote none of the code: the proxy's configuration and how it is built, the route networks and names, the health check's container, the test switch, the `proxy` and `status` requests, the DNS and HTTPS checks, `ssh -G`, the new commands; findings in `security-review.md`
 - [x] T088 Fix what the review finds, each with a test that fails first
-- [ ] T089 A walkthrough: every board's scene drawn by the real program and compared (`design/walkthrough.md`)
-- [ ] T090 The as-built boards on the canvas, from real captures
-- [ ] T091 `quickstart.md`, "Results"; `plan.md`, "As built"
-- [ ] T092 The final checks from the root and each package, with no cache; the compiled runner; protected files unchanged
+- [x] T089 A walkthrough: every board's scene drawn by the real program and compared (`design/walkthrough.md`)
+- [x] T090 The as-built boards on the canvas, from real captures
+- [x] T091 `quickstart.md`, "Results"; `plan.md`, "As built"
+- [x] T092 The final checks from the root and each package, with no cache; the compiled runner; protected files unchanged
 - [ ] T093 The road map and the feature map
 - [ ] T094 Merge into `dev` on this machine
 
