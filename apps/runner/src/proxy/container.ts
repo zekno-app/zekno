@@ -186,6 +186,10 @@ export async function ensureProxy(
       // No search domain of the host's: a name of a container that is down is never completed into one outside.
       "--dns-search",
       ".",
+      // The proxy is on every routed app's network at once, and a container's network forwards IPv4 by default: with
+      // forwarding off, it carries no packet of one app's container into another app's network. IPv6 is off already.
+      "--sysctl",
+      "net.ipv4.ip_forward=0",
       ...publishArgs(ports),
       "-v",
       `${DATA_VOLUME}:/data`,

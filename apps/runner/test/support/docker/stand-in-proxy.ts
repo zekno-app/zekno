@@ -30,6 +30,7 @@ const WITH_VALUE = new Set([
   "--log-opt",
   "--network",
   "--dns-search",
+  "--sysctl",
   "-p",
   "-v",
   "--mount",

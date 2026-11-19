@@ -305,3 +305,30 @@ or a health check for with B10, as S4's fix does for routes.
 
 **Conclusion.** A server that lies about the health check gains nothing beyond what its own runner
 already decides for that app on that server. Accepted, as R29 accepts its word for its own routes.
+
+## 9. A second audit, with the security-audit skill (2026-11-20)
+
+Before the push to `main`, the maintainer asked for a run of the security-audit skill
+(cloudflare/security-audit-skill). It ran as a scoped pass on its `quick` profile over this
+feature's code, at `dev` 6eac6af: four agents mapped the code, four hunted in twelve coverage
+units, one critic looked for gaps, and three verifiers each tried to refute one candidate. It read
+source only: this machine has no sandbox with the controls the skill requires, so the skill ran
+no code, and so it could confirm nothing. Its files are outside the repository, in
+`~/security-audit-skill/zekno/run-1/` (`REPORT.md`, `NEEDS-VALIDATION.md`, `findings.json`,
+`coverage-ledger.json`).
+
+**Result.** Nothing confirmed, nothing critical or high raised. Nine units closed as covered.
+Three leads survived their verifier and need a real test:
+
+| Lead | State |
+|---|---|
+| A9. The proxy, on every routed app's network at once, has IPv4 forwarding on, so code in one app's container might send one-way packets into another app's network | **Fixed** the same day: the proxy runs with `--sysctl net.ipv4.ip_forward=0` (RN6), with a test that failed first. Observed on Docker Desktop's Linux: a container forwards IPv4 by default (`ip_forward` is 1, on each interface of a container on two networks), IPv6 not, and the setting is accepted with the proxy's capabilities. Whether a packet would have arrived on a Linux server was not tried. A proxy an earlier runner made keeps its options until it is made again; only 0.1.1-dev.1 made one, on a server since cleaned |
+| A10. `docker compose up` has no time limit under the deploy lock, so a container that `up` waits for and that never exits keeps every deploy on that server answering `busy` | **Open**, for the maintainer: a limit needs a number and a sentence. Not new in this feature: `up` has had no limit since the first runner |
+| A11. A released domain's certificate and key are deleted once, a failure is silent, and nothing tries again, though `apply.ts` and RN10 say a later deploy or `proxy` does | **Open**, for the maintainer: the fix keeps the domains still to delete in the state until a deletion succeeds. It is the unfixed half of S2. No outside party can force the failure |
+
+**Not covered by that run**, so nothing is claimed of them: host ports an app publishes against the
+proxy's 80 and 443; what a runner update does to a running proxy; the unsigned requests `state`,
+`logs` and `records`; what the Compose text made from a settings file gives a container; and,
+outside its scope, secrets, the installer and release workflow, the team list, the website and
+templates. Its report also lists 18 hardening notes that are not findings.
+

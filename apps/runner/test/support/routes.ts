@@ -143,11 +143,12 @@ export const up = (app = "web") =>
 
 /**
  * The proxy's `docker run`, as `steps` writes it, with the ports it
- * publishes: its log capped by Docker (security review S1) and no search
- * domain of the host's (review, could not decide 1).
+ * publishes: its log capped by Docker (security review S1), no search
+ * domain of the host's (review, could not decide 1), and packet forwarding
+ * off (the audit of 2026-11-20).
  */
 export const proxyRun = (publish = "-p 80:80 -p 443:443") =>
-  `run -d --name zekno-proxy --label app.zekno.server=<server> --label app.zekno.role=proxy --restart unless-stopped --log-driver local --log-opt max-size=10m --log-opt max-file=3 --network zekno-proxy --dns-search . ${publish} -v zekno-proxy-data:/data -v zekno-proxy-config:/config --mount type=bind,source=<home>/proxy/etc,target=/etc/zekno-proxy,readonly --cap-drop ALL --cap-add NET_BIND_SERVICE --security-opt no-new-privileges caddy@sha256:<digest> caddy run --config /etc/zekno-proxy/caddy.json`
+  `run -d --name zekno-proxy --label app.zekno.server=<server> --label app.zekno.role=proxy --restart unless-stopped --log-driver local --log-opt max-size=10m --log-opt max-file=3 --network zekno-proxy --dns-search . --sysctl net.ipv4.ip_forward=0 ${publish} -v zekno-proxy-data:/data -v zekno-proxy-config:/config --mount type=bind,source=<home>/proxy/etc,target=/etc/zekno-proxy,readonly --cap-drop ALL --cap-add NET_BIND_SERVICE --security-opt no-new-privileges caddy@sha256:<digest> caddy run --config /etc/zekno-proxy/caddy.json`
 
 /** Caddy's validate of the next file in a short-lived container, before the proxy starts on it (security review S7). */
 export const VALIDATE_ALONE =
