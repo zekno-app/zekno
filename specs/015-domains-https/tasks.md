@@ -118,8 +118,8 @@ Waits for the maintainer's answer on the first group's name (M8) before `meta.js
 - [x] T090 The as-built boards on the canvas, from real captures
 - [x] T091 `quickstart.md`, "Results"; `plan.md`, "As built"
 - [x] T092 The final checks from the root and each package, with no cache; the compiled runner; protected files unchanged
-- [ ] T093 The road map and the feature map
-- [ ] T094 Merge into `dev` on this machine
+- [x] T093 The road map and the feature map
+- [x] T094 Merge into `dev` on this machine
 
 ## Maintainer steps
 
