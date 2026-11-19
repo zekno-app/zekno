@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src=".github/assets/logo-mark.png" alt="zekno.app" width="280">
+<img src=".github/assets/logo-mark.png" alt="zekno.dev" width="280">
 
 # Zekno
 
@@ -27,13 +27,13 @@
 
 | Today you can | With | Docs |
 | --- | --- | --- |
-| Deploy a Docker Compose app to a server you own, signed on your machine | `zekno deploy` | [Deploying](https://zekno.app/docs/deploying#zekno-deploy) |
-| Keep secrets encrypted for that one server | `zekno secret set`, `zekno secret import` | [Secrets](https://zekno.app/docs/secrets) |
-| Describe an app by settings in place of a Compose file | `zekno settings` | [App settings](https://zekno.app/docs/settings) |
-| Add a database, its passwords made on your machine | `zekno add postgres` | [Templates](https://zekno.app/docs/templates#zekno-add) |
-| See what is running, read logs, roll back | `zekno`, `zekno logs`, `zekno rollback` | [The terminal app](https://zekno.app/docs/app), [Deploying](https://zekno.app/docs/deploying#zekno-logs) |
-| Give an app a domain, served over HTTPS with a certificate the server obtains itself | `zekno domain add`, `zekno domain` | [Domains and HTTPS](https://zekno.app/docs/domains) |
-| Make a deploy wait until the app answers | `zekno settings set web.health /health` | [Health checks](https://zekno.app/docs/health-checks) |
+| Deploy a Docker Compose app to a server you own, signed on your machine | `zekno deploy` | [Deploying](https://zekno.dev/docs/deploying#zekno-deploy) |
+| Keep secrets encrypted for that one server | `zekno secret set`, `zekno secret import` | [Secrets](https://zekno.dev/docs/secrets) |
+| Describe an app by settings in place of a Compose file | `zekno settings` | [App settings](https://zekno.dev/docs/settings) |
+| Add a database, its passwords made on your machine | `zekno add postgres` | [Templates](https://zekno.dev/docs/templates#zekno-add) |
+| See what is running, read logs, roll back | `zekno`, `zekno logs`, `zekno rollback` | [The terminal app](https://zekno.dev/docs/app), [Deploying](https://zekno.dev/docs/deploying#zekno-logs) |
+| Give an app a domain, served over HTTPS with a certificate the server obtains itself | `zekno domain add`, `zekno domain` | [Domains and HTTPS](https://zekno.dev/docs/domains) |
+| Make a deploy wait until the app answers | `zekno settings set web.health /health` | [Health checks](https://zekno.dev/docs/health-checks) |
 
 Domains and health checks need runner 0.1.1, which is not published yet. Not built yet: teammates, the hosted service, building from source. See the [roadmap](#roadmap).
 
@@ -45,7 +45,7 @@ cd apps/cli && bun run compile   # dist/zekno: one file, for the system you are 
 cd ~/my-app && zekno deploy      # with dist/zekno on your PATH; asks for your name, the server, the app
 ```
 
-The [quick start](https://zekno.app/docs/quick-start) shows each step with what you will see. Zekno is not packaged yet, so it is built from this repository with [Bun](https://bun.sh) 1.4.4.
+The [quick start](https://zekno.dev/docs/quick-start) shows each step with what you will see. Zekno is not packaged yet, so it is built from this repository with [Bun](https://bun.sh) 1.4.4.
 
 ## Overview
 
@@ -188,7 +188,7 @@ The mechanism is end-to-end encryption plus digital signatures. Zekno does not u
 
 Which domain reaches which app is part of the signed deploy, and one app holds a domain on a server at a time. A hosted service, when one exists, could carry a deploy but never add, change or move a domain; it would learn every domain, as the note above says.
 
-The server holds the TLS certificate and private key of each domain it serves, in the storage of the proxy the runner starts there (Caddy, pinned by digest). They are made on the server and never pass through your machine or Zekno. A released domain's certificate and key are deleted, also when the proxy is stopped or gone. The proxy ends TLS for every app with a domain on that server. Apps on one server are not kept apart: a deploy your team signed runs its Compose text with all that Docker allows there, so one app's deploy could read the key of every domain on that server. Certificates come from Let's Encrypt only, and `zekno` never changes DNS. See [what the server holds](https://zekno.app/docs/domains#what-the-server-holds).
+The server holds the TLS certificate and private key of each domain it serves, in the storage of the proxy the runner starts there (Caddy, pinned by digest). They are made on the server and never pass through your machine or Zekno. A released domain's certificate and key are deleted, also when the proxy is stopped or gone. The proxy ends TLS for every app with a domain on that server. Apps on one server are not kept apart: a deploy your team signed runs its Compose text with all that Docker allows there, so one app's deploy could read the key of every domain on that server. Certificates come from Let's Encrypt only, and `zekno` never changes DNS. See [what the server holds](https://zekno.dev/docs/domains#what-the-server-holds).
 
 ### Open-source boundary
 
@@ -199,7 +199,7 @@ Everything that runs on your device or in your browser is public. Everything tha
 | Core library (encryption, signing, manifest format) | `packages/core` | Open |
 | Server runner | `apps/runner` | Open |
 | Command-line tool | `apps/cli` | Open |
-| Website (landing pages, docs, signed-in dashboard) | `apps/web` | Open |
+| Website (landing page and docs) | `apps/web` | Open |
 | Control plane (storage and relay, teams, billing) | Hosted by Zekno | Closed |
 
 The control plane is closed because it is the hosted service we sell. The design means you don't have to trust it: it never receives a key, and your servers refuse anything it sends that your team did not sign. Everything it receives is defined by the protocol types in `packages/core`.
@@ -211,7 +211,7 @@ These protect the security promise. Changes that break them need a very good rea
 1. **Private keys stay out of the interface.** The code that draws screens asks a separate part of the program to encrypt or sign, and never holds a key. This is a rule for any interface. In the CLI today the separation is in the code, not in separate processes: the screens and the code that signs run in one program. Tests in [`apps/cli/test/layers/`](apps/cli/test/layers/) check that no file that draws (`src/ui/`, and the full-screen app's screens in `src/app/screens/`) loads the keychain code or the core library, that `src/ui/` takes only types from the code that encrypts and signs (`src/ops/`), and that `src/ops/` imports nothing that draws.
 2. **Keys are stored in the operating system's keychain**, never in a plain file.
 3. **Nothing in this repository depends on closed code.** The CLI, the runner and the website reach the control plane only through the public protocol in `packages/core`.
-4. **No secret editing in a browser.** A web page is code served fresh on every visit, so a compromised server could serve a page that steals keys. The website's dashboard is read-only for anything secret.
+4. **No secret editing in a browser.** A web page is code served fresh on every visit, so a compromised server could serve a page that steals keys. Nothing on the website handles a key or a secret's value.
 5. **No hosted service may hold a signing key.** Builds that deploy run on the customer's server or in their CI.
 6. **Releases and updates are signed with an offline key**, and whatever installs one verifies that signature itself first. This rule is not met yet: runner releases are not signed. A server installs a runner only when its checksum equals the one the CLI holds, recorded after a second build (see the threat table above).
 7. **No credentials in this repository.** Environment files are ignored by git; only `.env.example` files with placeholder values are committed.
@@ -227,15 +227,15 @@ A Turborepo monorepo on Bun workspaces.
 
 | Path | What it is | Read more |
 | --- | --- | --- |
-| `apps/cli` | The command-line tool, `zekno`, and its full-screen terminal app. Built and in use, for one developer deploying directly over SSH; internal reviews only, unaudited. | [Commands](https://zekno.app/docs/cli), [its README](apps/cli/README.md) |
-| `apps/runner` | The program on your servers: it verifies, decrypts, starts Docker Compose, and reports running state and logs. Built from the repository, it also serves an app's domains over HTTPS through a proxy it manages, and waits for health checks. The first release is 0.1.0; internal reviews only, unaudited. | [Server runner](https://zekno.app/docs/runner), [how a release is made](apps/runner/RELEASING.md) |
+| `apps/cli` | The command-line tool, `zekno`, and its full-screen terminal app. Built and in use, for one developer deploying directly over SSH; internal reviews only, unaudited. | [Commands](https://zekno.dev/docs/cli), [its README](apps/cli/README.md) |
+| `apps/runner` | The program on your servers: it verifies, decrypts, starts Docker Compose, and reports running state and logs. Built from the repository, it also serves an app's domains over HTTPS through a proxy it manages, and waits for health checks. The first release is 0.1.0; internal reviews only, unaudited. | [Server runner](https://zekno.dev/docs/runner), [how a release is made](apps/runner/RELEASING.md) |
 | `packages/core` | Key generation, secret encryption, signed deploys, team membership and protocol types. First version built, unaudited; the control-plane client is not written yet. | [its README](packages/core/README.md) |
-| `apps/web` | The website: the landing page and the docs. The signed-in dashboard is planned. | [Docs](https://zekno.app/docs) |
+| `apps/web` | The website: the landing page and the docs. | [Docs](https://zekno.dev/docs) |
 | `packages/ui` | Shared React components. Scaffolded. | |
 | `packages/eslint-config`, `packages/typescript-config` | Shared ESLint and TypeScript configuration. | |
 
 - `packages/core` contains no framework code. The CLI and the runner both depend on it, so they encrypt and verify in exactly the same way.
-- `apps/web` is the only website. Its dashboard shows status, deploy history, team and billing. It never handles keys or secret values; those stay on your machine.
+- `apps/web` is the only website. It never handles keys or secret values; those stay on your machine.
 
 ### Tech stack
 
@@ -337,7 +337,7 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 
 **Later**
 
-- [ ] The hosted service, teammates and the signed-in dashboard
+- [ ] The hosted service and teammates
 - [ ] Two-person approval for production deploys
 - [ ] An external audit
 

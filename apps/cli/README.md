@@ -12,10 +12,10 @@ Run `zekno` alone at a terminal and a full-screen app opens. Everything the app 
 single command, for scripts.
 
 An app is deployed from a Compose file you write, or from its settings in `zekno.app.json`, which
-zekno turns into Compose text on this machine and signs. See [`zekno settings`](https://zekno.app/docs/settings#zekno-settings).
+zekno turns into Compose text on this machine and signs. See [`zekno settings`](https://zekno.dev/docs/settings#zekno-settings).
 
-How to use it is in the docs: the [quick start](https://zekno.app/docs/quick-start) goes from a
-checkout to an app running on your server, and [Commands](https://zekno.app/docs/cli) lists every
+How to use it is in the docs: the [quick start](https://zekno.dev/docs/quick-start) goes from a
+checkout to an app running on your server, and [Commands](https://zekno.dev/docs/cli) lists every
 command with the page that describes it. This file is for people who build and test zekno.
 
 ## Build from source

@@ -459,7 +459,7 @@ export const openSource = {
     { label: "Core library", status: "open" },
     { label: "Server runner", status: "open" },
     { label: "Command-line tool", status: "open" },
-    { label: "Website and dashboard", status: "open" },
+    { label: "Website", status: "open" },
     { label: "Control plane (hosted by Zekno)", status: "closed" },
   ] satisfies OpenPart[],
 }

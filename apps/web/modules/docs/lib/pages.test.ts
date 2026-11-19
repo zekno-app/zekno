@@ -2,8 +2,9 @@
  * The pages of the docs (specs/013-docs-refresh, contracts/pages.md, "The
  * tests"): no page is too long, the page tree is the contract's, every link
  * leads to a page and a heading that exist, the move list points at real
- * places, no page, README or landing page names the desktop app, each page about the CLI
- * keeps its warning, and the pages and the stored screens agree
+ * places, no page, README or landing page names the desktop app or the
+ * dashboard (both are plans the project keeps to itself), each page about the
+ * CLI keeps its warning, and the pages and the stored screens agree
  * (contracts/screens.md). Heading ids are made the way the site makes them,
  * with the slugger the site's MDX plugin uses (research.md §6).
  */
@@ -278,7 +279,7 @@ describe("the pages of the docs", () => {
     expect(problems).toEqual([])
   })
 
-  test("no page, no README and not the landing page names the desktop app", () => {
+  test("no page, no README and not the landing page names the desktop app or the dashboard", () => {
     const files = [
       ...pageFiles.map((name) => join(PAGES, `${name}.mdx`)),
       ...READMES.map((path) => join(ROOT, path)),
@@ -288,7 +289,9 @@ describe("the pages of the docs", () => {
       read(path)
         .split("\n")
         .map((line, index) => ({ line, number: index + 1 }))
-        .filter(({ line }) => /desktop|electrobun|apps\/desktop/i.test(line))
+        .filter(({ line }) =>
+          /desktop|electrobun|apps\/desktop|dashboard/i.test(line)
+        )
         .map(
           ({ line, number }) =>
             `${relative(ROOT, path)}:${number}: ${line.trim()}`
