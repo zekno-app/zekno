@@ -13,7 +13,8 @@
  * RN10), then the wait for health (RN11), and the outcome is the first of
  * `start_failed`, `routes_failed`, `unhealthy` and `started` that holds
  * (RN12). A deploy of an app with no route and no health check, that held
- * none, makes exactly the calls it made before (RN3).
+ * none, makes exactly the calls it made before when no released domain's
+ * certificate is still to delete (RN3).
  */
 import {
   domainsAfter,
@@ -38,6 +39,7 @@ import {
   writeRecord,
 } from "../home/records"
 import { putRoutesInForce } from "../routes/apply"
+import { retryReleased } from "../routes/released"
 import {
   composeStart,
   follow,
@@ -90,15 +92,17 @@ function recordsFit(dir: string, verified: VerifiedDeployV2): boolean {
 }
 
 /**
- * What follows `up` (RN3, RN11, RN12): nothing for an app with no route and
- * no health check that held none; else the routes put in force, carried out
+ * What follows `up` (RN3, RN11, RN12): for an app with no route and no
+ * health check that held none, only the certificates of released domains
+ * still to delete, tried again; else the routes put in force, carried out
  * as far as they go even when `up` failed, so that a domain this deploy
  * releases is released; then, only when both went well, the wait for health.
+ * A start stopped at its time limit is reported with its `startLimit`.
  */
 async function afterUp(
   dir: string,
   verified: VerifiedDeployV2,
-  started: boolean,
+  started: Pick<RunnerReport, "outcome" | "startLimit">,
   onHealth: (service: string) => void
 ): Promise<RunnerReport> {
   const { app, sequence, routes, health } = verified.deploy
@@ -107,12 +111,15 @@ async function afterUp(
     routes.length === 0 &&
     health === null &&
     !Object.hasOwn(verified.nextState.routes, app)
-  )
-    return { outcome: started ? "started" : "start_failed", ...done }
+  ) {
+    // RN10's first step, for each released domain still to delete; with none, no Docker call. Not reported.
+    await retryReleased(dir, verified.nextState)
+    return { ...started, ...done }
+  }
 
   const inForce = await putRoutesInForce({ dir, app, routes, health })
   // Their own failure is not reported over start_failed.
-  if (!started) return { outcome: "start_failed", ...done }
+  if (started.outcome === "start_failed") return { ...started, ...done }
   if (!inForce.ok)
     return { outcome: "routes_failed", ...done, routes: inForce.failure }
   if (health !== null) {
@@ -139,7 +146,9 @@ export function deploy(
   dir: string,
   input: string,
   onProgress?: (line: string) => void,
-  onHealth: (service: string) => void = () => {}
+  onHealth: (service: string) => void = () => {},
+  /** How long `up` may run: the runner's own limit when left out (docker/compose.ts). */
+  limitMs?: number
 ): Promise<RunnerReport> {
   // K1. The request: at most a message's size, and exactly its schema.
   const request = parseMessage(RunnerDeployRequestSchema, input)
@@ -193,7 +202,8 @@ export function deploy(
       dir,
       verified.value.deploy,
       secrets.value,
-      onProgress
+      onProgress,
+      limitMs
     )
     return afterUp(dir, verified.value, started, onHealth)
   })

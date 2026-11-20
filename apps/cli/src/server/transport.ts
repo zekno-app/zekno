@@ -345,9 +345,34 @@ const SCRIPT_WORDS = 16
 /** SSH's options. Each is a fixed string, placed before `--`, never built from input. */
 const BATCH = ["-o", "BatchMode=yes"] as const
 
-/** `ssh [-o BatchMode=yes] -- <destination> <remote command>`. */
+/** How often SSH sends its keep-alive message, in seconds. */
+const KEEP_ALIVE_SECONDS = 30
+
+/**
+ * SSH's keep-alive, on every connection zekno opens (specs/015-domains-https,
+ * security review, part 10, "Found by the real-server proof"). A deploy can
+ * be silent for minutes: a start that waits, a health check, an image being
+ * fetched. A network that closes silent connections then ends the session
+ * while the runner carries on, and the person is told the connection ended
+ * and never how the deploy went. With it, SSH sends a message through the
+ * encrypted connection every 30 seconds, so the connection is never silent,
+ * and one that is really dead ends after the unanswered messages SSH allows
+ * (three by default) instead of hanging. An option on the command line wins
+ * over the person's SSH settings, so an interval set there is replaced by
+ * this one for zekno's connections; their other settings still apply.
+ */
+const KEEP_ALIVE = ["-o", `ServerAliveInterval=${KEEP_ALIVE_SECONDS}`] as const
+
+/** `ssh -o ServerAliveInterval=30 [-o BatchMode=yes] -- <destination> <remote command>`. */
 function ssh(destination: string, remote: string, batch: boolean): string[] {
-  return ["ssh", ...(batch ? BATCH : []), "--", destination, remote]
+  return [
+    "ssh",
+    ...KEEP_ALIVE,
+    ...(batch ? BATCH : []),
+    "--",
+    destination,
+    remote,
+  ]
 }
 
 /**

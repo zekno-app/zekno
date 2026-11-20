@@ -391,12 +391,12 @@ describe("zekno deploy from nothing (mock-up 3)", () => {
     expect(await s.rosterOnServer()).toBe(2)
     // The installer ran once, as `zekno server add` runs it, and its connection became the session that set the runner up.
     const calls = s.ssh.calls()
-    const install = `-- ${DESTINATION} sh -s -- add ${OWN} release x64 ${s.m.deps.release!.files["linux-x64"].sha256}`
+    const install = `-o ServerAliveInterval=30 -- ${DESTINATION} sh -s -- add ${OWN} release x64 ${s.m.deps.release!.files["linux-x64"].sha256}`
     expect(calls.filter((call) => call.includes("sh -s --"))).toEqual([install])
     expect(calls[0]).toBe(install)
     // Then the apps were read in batch mode, and the deploy went to the runner where the installer put it.
     expect(calls.at(-1)).toBe(
-      `-- ${DESTINATION} ~/.local/bin/zekno-runner session`
+      `-o ServerAliveInterval=30 -- ${DESTINATION} ~/.local/bin/zekno-runner session`
     )
   }, 60_000)
 
@@ -790,7 +790,11 @@ describe("a name typed as new that the server already holds (security review S3)
     expect(
       t.s.ssh
         .calls()
-        .some((call) => /^-- deploy@example\.test \S+ session$/.test(call))
+        .some((call) =>
+          /^-o ServerAliveInterval=30 -- deploy@example\.test \S+ session$/.test(
+            call
+          )
+        )
     ).toBe(true)
   }, 120_000)
 

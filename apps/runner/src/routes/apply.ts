@@ -13,10 +13,12 @@
  * (RN7), and loaded (RN8). Then the state is saved, with the deploy's health
  * check beside its routes, or the configuration of the state as it is is
  * loaded again and the app keeps the routes and the health check it held
- * (RN9). Last, what this deploy released goes: certificates, the proxy's
- * place on a network no route uses, the route network of an app with neither
- * a route nor a health check, and the proxy itself when no app has a route
- * (RN10).
+ * (RN9). The state saved lists each domain the app gave up as released, its
+ * certificate still to delete. Last, what this deploy released goes: the
+ * certificates of the domains on that list, older ones among them, each taken
+ * off once it is known to be gone; the proxy's place on a network no route
+ * uses; the route network of an app with neither a route nor a health check;
+ * and the proxy itself when no app has a route (RN10).
  */
 import {
   withAppRoutes,
@@ -30,7 +32,6 @@ import { isReport, load } from "../commands/commands"
 import type { ContainerInfo } from "../docker/objects"
 import { runDocker } from "../docker/run"
 import { writeState } from "../home/home"
-import { deleteCertificates } from "../proxy/certificates"
 import { findProxy, removeProxy, type RoutesFailure } from "../proxy/container"
 import { PROXY } from "../proxy/log"
 import { loadBack, routedApps, serveRoutes } from "../proxy/serve"
@@ -42,6 +43,7 @@ import {
   routeNetwork,
   type Named,
 } from "./network"
+import { deleteReleased } from "./released"
 
 /** The routes are in force, with the names of each routed or checked service's containers; or why not. */
 export type RoutesInForce =
@@ -153,36 +155,31 @@ async function steps({
     return NOT_LOADED
   }
 
-  await release(dir, server, app, held, wanted, saved)
+  await release(dir, server, app, wanted, saved)
   return { ok: true, names }
 }
 
 /**
  * RN10: what this deploy released, after a load that worked, in order. A
- * failure here is not reported; the next deploy with routes or the `proxy`
- * request puts it right.
+ * failure here is not reported. A certificate not known to be deleted stays
+ * on the state's list of released domains, which the next deploy of any app
+ * and the next `proxy` request try again; the next deploy with routes or the
+ * `proxy` request puts the rest right.
  */
 async function release(
   dir: string,
   server: string,
   app: string,
-  held: AppRoutes | undefined,
   wanted: AppRoutes | null,
   saved: StoredRunnerState
 ): Promise<void> {
   const found = await findProxy(dir, server)
   const proxy = found?.kind === "ours" ? found : undefined
 
-  // 1. The certificate and key of each domain the app held and no longer has,
-  // also when the proxy is stopped or gone (security review S2).
-  const kept = new Set(wanted?.routes.map((route) => route.domain) ?? [])
-  await deleteCertificates(
-    dir,
-    found,
-    (held?.routes ?? [])
-      .map((route) => route.domain)
-      .filter((domain) => !kept.has(domain))
-  )
+  // 1. The certificate and key of each domain on the list, also when the proxy is stopped or gone (security review
+  // S2): those the app held and no longer has, which the saved state added, and any an earlier deletion left. Those
+  // known to be gone are taken off the list.
+  await deleteReleased(dir, found, saved.released)
 
   // 2. The proxy leaves each route network no route uses any more: leaving comes after loading (research R8).
   const routed = new Set(routedApps(saved.routes).map(routeNetwork))

@@ -221,7 +221,7 @@ describe("runner 0.1.0 and this runner on one folder (ST9, ST10, FR-034, US4 sce
         (await deployV2(w, { rosters: w.rosters, ...next })).result
       ).toEqual({ outcome: "started", app: "web", sequence: 2 })
       expect(JSON.parse(w.stateFile())).toMatchObject({
-        v: 3,
+        v: 4,
         formats: { web: 2 },
       })
 
@@ -242,7 +242,7 @@ describe("runner 0.1.0 and this runner on one folder (ST9, ST10, FR-034, US4 sce
           .json
       ).toEqual({ outcome: "ok" })
       expect(JSON.parse(w.stateFile())).toMatchObject({
-        v: 3,
+        v: 4,
         formats: { web: 1 },
       })
       await olderRefusesEverything(runnerTree!, w)

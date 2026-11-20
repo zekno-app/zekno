@@ -25,6 +25,7 @@ import {
 import { dirname, join } from "node:path"
 
 import runnerPackage from "../../../runner/package.json"
+import heldRelease from "../../src/version/runner-release.json"
 import { tempDir } from "../../../runner/test/support/helpers"
 import { doctorJson } from "../../src/commands/doctor"
 import { readCompose } from "../../src/project/compose-read"
@@ -57,6 +58,34 @@ import { terminal } from "../support/terminal"
 
 /** The version the repository's runner reports, and so the one a stand-in release made from it carries: this zekno's. */
 const OWN = runnerPackage.version
+/**
+ * The version of the release file this zekno is built with. A machine with
+ * no stand-in release (no server added over SSH) says this one; it differs
+ * from `OWN` between a change of the runner's version and the second build
+ * that records its checksums.
+ */
+const HELD = heldRelease.version
+/**
+ * Whether that release file holds its checksums. Between the commit that
+ * prepares a prod release and the second build that records them, it holds
+ * none (apps/runner/RELEASING.md, part 4), and doctor says so with D2.
+ */
+const HELD_HAS_CHECKSUMS = Object.values(heldRelease.files).every(
+  (file) => typeof file.sha256 === "string"
+)
+/** The line `zekno` of a machine that uses the release file itself: good, or the warning D2. */
+const HELD_LINE = HELD_HAS_CHECKSUMS
+  ? `this machine\tzekno\tgood\t${CLI_VERSION}, installs runner ${HELD}`
+  : `this machine\tzekno\twarning\t${CLI_VERSION}, installs runner ${HELD}\tThis build holds no checksum for runner ${HELD}, so it cannot install a runner`
+/** How a summary counts that line's warning, when it is one. */
+const HELD_WARNINGS = HELD_HAS_CHECKSUMS ? "no warnings" : "1 warning"
+/**
+ * What the release file on main names when this zekno carries the newest
+ * release: its own version. Main never names a development version, so while
+ * the repository's runner is one (between a dev release and the next prod
+ * release) it is an older, plain version.
+ */
+const NEWEST_ON_MAIN = /-dev\./.test(OWN) ? "0.0.1" : OWN
 const PATH = "~/.local/bin/zekno-runner"
 const COMPOSE = "services:\n  web:\n    image: example/web:1\n"
 /** 133 GB free, as mock-up 5 shows: 129,882,813 KiB is 133,000,000,512 bytes. */
@@ -86,7 +115,7 @@ function github(version: string | "fails", wait = 0) {
 
 /** A connection that is a read in batch mode: the check script, a session, or an older runner's one-shot `status`. */
 const READ_ONLY =
-  /^-o BatchMode=yes -- \S+ (sh -s -- check ~\/\.local\/bin\/zekno-runner|~\/\.local\/bin\/zekno-runner (session|status))$/
+  /^-o ServerAliveInterval=30 -o BatchMode=yes -- \S+ (sh -s -- check ~\/\.local\/bin\/zekno-runner|~\/\.local\/bin\/zekno-runner (session|status))$/
 
 /** An executable script in a folder of its own. */
 function script(text: string): string {
@@ -217,7 +246,7 @@ async function baseline() {
   prod.server.df(ROOMY)
   f.m.compose(COMPOSE)
   expect(await f.m.zekno("link", "--app", "demo", "--server", "prod")).toBe(0)
-  f.m.deps.fetch = github(OWN).fetch
+  f.m.deps.fetch = github(NEWEST_ON_MAIN).fetch
   return { f, prod }
 }
 
@@ -298,11 +327,11 @@ describe("everything in order, and the broken setups of quickstart.md (SC-004)",
     expect(await doctor(f)).toEqual({
       code: 1,
       out: [
-        `this machine\tzekno\tgood\t${CLI_VERSION}, installs runner ${OWN}`,
+        HELD_LINE,
         "this machine\tkey\tproblem\tno team on this machine\tRun zekno deploy in a project folder, or zekno init",
         "this machine\tprofile\tnot checked",
         SERVERS_SKIPPED,
-        "1 problem, no warnings.",
+        `1 problem, ${HELD_WARNINGS}.`,
       ],
       err: [],
     })
@@ -769,7 +798,7 @@ describe("each check, and each result (contracts/doctor.md, The checks)", () => 
     // On this machine.
     const f = await fleet()
     expect(await f.m.zekno("server", "add", "dev", "--local")).toBe(0)
-    f.m.deps.fetch = github(OWN).fetch
+    f.m.deps.fetch = github(NEWEST_ON_MAIN).fetch
     const pids = join(tempDir("pids"), "pids")
     const stalling = join(tempDir("stalling"), "zekno-runner")
     writeFileSync(stalling, stallingRunner(pids))
@@ -892,18 +921,18 @@ exec "${real}" "$@"
   test("a server on this machine: on this machine, its runner's version never compared, Docker and Disk not checked", async () => {
     const f = await fleet()
     expect(await f.m.zekno("server", "add", "dev", "--local")).toBe(0)
-    f.m.deps.fetch = github(OWN).fetch
+    f.m.deps.fetch = github(NEWEST_ON_MAIN).fetch
     expect(await doctor(f)).toEqual({
       code: 0,
       out: [
-        `this machine\tzekno\tgood\t${CLI_VERSION}, installs runner ${OWN}`,
+        HELD_LINE,
         "this machine\tkey\tgood\tin your system keychain",
         "this machine\tprofile\tgood\tverified, team list v2",
         "dev\treachable\tgood\ton this machine",
         "dev\tdocker\tnot checked",
         `dev\trunner\tgood\t${OWN}, on this machine`,
         "dev\tdisk\tnot checked",
-        "No problems, no warnings.",
+        `No problems, ${HELD_WARNINGS}.`,
       ],
       err: [],
     })
@@ -961,7 +990,7 @@ function mockUp5(): Promise<Fleet> {
     staging.stand.ask()
     f.m.compose(COMPOSE)
     expect(await f.m.zekno("link", "--app", "demo", "--server", "prod")).toBe(0)
-    f.m.deps.fetch = github(OWN).fetch
+    f.m.deps.fetch = github(NEWEST_ON_MAIN).fetch
     return f
   })()
   return mockUp
@@ -969,10 +998,14 @@ function mockUp5(): Promise<Fleet> {
 
 /** contracts/doctor.md's `--json` object for mock-up 5, with the team list at version 3. */
 const MOCK_UP_5_JSON = {
-  zekno: "0.1.0",
-  runner: "0.1.0",
+  zekno: CLI_VERSION,
+  runner: OWN,
   machine: [
-    { check: "zekno", result: "good", detail: "0.1.0, installs runner 0.1.0" },
+    {
+      check: "zekno",
+      result: "good",
+      detail: `${CLI_VERSION}, installs runner ${OWN}`,
+    },
     { check: "key", result: "good", detail: "in your system keychain" },
     { check: "profile", result: "good", detail: "verified, team list v3" },
     {
@@ -991,7 +1024,7 @@ const MOCK_UP_5_JSON = {
         {
           check: "runner",
           result: "warning",
-          detail: "0.1.0-dev.1, older than this zekno's 0.1.0",
+          detail: `0.1.0-dev.1, older than this zekno's ${OWN}`,
           next: "Run zekno server update prod",
         },
         { check: "disk", result: "good", detail: "133 GB free" },
@@ -1022,7 +1055,6 @@ const MOCK_UP_5_JSON = {
 describe("mock-up 5: --json, plain lines, the drawn report, --server", () => {
   test("--json: contracts/doctor.md's object, on one line, and nothing else; status 1", async () => {
     const f = await mockUp5()
-    expect(OWN).toBe("0.1.0")
     expect(await doctor(f, "--json")).toEqual({
       code: 1,
       out: [JSON.stringify(MOCK_UP_5_JSON)],
@@ -1035,13 +1067,13 @@ describe("mock-up 5: --json, plain lines, the drawn report, --server", () => {
     expect(await doctor(f)).toEqual({
       code: 1,
       out: [
-        "this machine\tzekno\tgood\t0.1.0, installs runner 0.1.0",
+        `this machine\tzekno\tgood\t${CLI_VERSION}, installs runner ${OWN}`,
         "this machine\tkey\tgood\tin your system keychain",
         "this machine\tprofile\tgood\tverified, team list v3",
         "this machine\tfolder\tgood\tlinked to demo on prod, compose.yaml is readable",
         "prod\treachable\tgood\tover SSH",
         "prod\tdocker\tgood\tCompose 5.6.0",
-        "prod\trunner\twarning\t0.1.0-dev.1, older than this zekno's 0.1.0\tRun zekno server update prod",
+        `prod\trunner\twarning\t0.1.0-dev.1, older than this zekno's ${OWN}\tRun zekno server update prod`,
         "prod\tdisk\tgood\t133 GB free",
         "staging\treachable\tproblem\tSSH needs an answer\tOpen zekno and press enter on staging",
         "staging\tdocker\tnot checked",
@@ -1070,7 +1102,7 @@ describe("mock-up 5: --json, plain lines, the drawn report, --server", () => {
     while (screen.at(-1) === "") screen.pop()
     expect(screen).toEqual([
       "  This machine",
-      "✔ zekno          0.1.0, installs runner 0.1.0",
+      `✔ zekno          ${CLI_VERSION}, installs runner ${OWN}`,
       "✔ Key            in your system keychain",
       "✔ Profile        verified, team list v3",
       "✔ This folder    linked to demo on prod, compose.yaml is readable",
@@ -1078,7 +1110,7 @@ describe("mock-up 5: --json, plain lines, the drawn report, --server", () => {
       "  prod  deploy@203.0.113.7",
       "✔ Reachable      over SSH",
       "✔ Docker         Compose 5.6.0",
-      "! Runner         0.1.0-dev.1, older than this zekno's 0.1.0",
+      `! Runner         0.1.0-dev.1, older than this zekno's ${OWN}`,
       "                 Run zekno server update prod",
       "✔ Disk           133 GB free",
       "",
@@ -1211,7 +1243,7 @@ describe("the newer release on doctor's first line (contracts/version.md, In zek
     const { f } = await baseline()
     const states: unknown[] = []
     for (const fetch of [
-      github(OWN).fetch,
+      github(NEWEST_ON_MAIN).fetch,
       github("0.2.0").fetch,
       github("fails").fetch,
     ]) {
@@ -1228,7 +1260,7 @@ describe("the newer release on doctor's first line (contracts/version.md, In zek
 
   test("the check is asked once, beside the server checks: a slow answer does not wait for them, nor they for it", async () => {
     const { f } = await baseline()
-    const asked = github(OWN, 300)
+    const asked = github(NEWEST_ON_MAIN, 300)
     f.m.deps.fetch = asked.fetch
     let connectedWhileAsking: boolean | undefined
     const connect = f.m.deps.connect

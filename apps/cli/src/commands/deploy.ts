@@ -87,6 +87,10 @@ export async function send(
     ms,
     ...(result.problem === undefined ? {} : { problem: result.problem }),
     ...(https === undefined ? {} : { https }),
+    // B20: the runner stopped waiting for the start at its limit (protocol 5).
+    ...(result.report.startLimit === undefined
+      ? {}
+      : { startLimit: result.report.startLimit }),
   })
   return result.outcome === "started" ? 0 : 1
 }

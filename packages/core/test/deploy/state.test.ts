@@ -1,9 +1,11 @@
 /**
  * The runner's stored state (contracts/state.md, ST1 to ST6 and ST8, as
- * specs/015-domains-https/contracts/core.md changes them): the mark, now 3,
- * reading a state marked 2 and one from before version 2, and the version-1
- * view the version-1 path reads and writes through. The rules of the routes
- * in force are in state-routes.test.ts.
+ * specs/015-domains-https/contracts/core.md changes them): the mark, now 4,
+ * reading a state marked 3 as runner 0.1.1-dev.1 writes it, one marked 2 and
+ * one from before version 2, and the version-1 view the version-1 path reads
+ * and writes through. The rules of the routes in force are in
+ * state-routes.test.ts, those of the released domains in
+ * state-released.test.ts.
  */
 import { describe, expect, test } from "bun:test"
 
@@ -49,24 +51,30 @@ async function markTwoState() {
   }
 }
 
-/** The same state, marked 3, as a runner of feature 015 writes it. */
-async function markedState(): Promise<StoredRunnerState> {
+/** The same state, marked 3, as runner 0.1.1-dev.1 writes it. */
+async function markThreeState() {
   return { ...(await markTwoState()), v: 3, routes: {} }
+}
+
+/** The same state, marked 4, as a runner of this feature writes it. */
+async function markedState(): Promise<StoredRunnerState> {
+  return { ...(await markThreeState()), v: 4, released: [] }
 }
 
 const throwsCoreError = (value: unknown) =>
   expect(() => readRunnerState(value)).toThrow(CoreError)
 
 describe("ST1, ST2: reading", () => {
-  test("a state without a mark reads as v 3 with no routes, each app with a number at 1 and each at 0 at 2", async () => {
+  test("a state without a mark reads as v 4 with no routes and an empty list, each app with a number at 1 and each at 0 at 2", async () => {
     const older = await olderState()
     const before = JSON.stringify(older)
     const read = readRunnerState(older)
     expect(read).toEqual({
       ...older,
-      v: 3,
+      v: 4,
       formats: { a: 1, b: 2 },
       routes: {},
+      released: [],
     })
     // Nothing is written by reading: the input object is as it was.
     expect(JSON.stringify(older)).toBe(before)
@@ -83,11 +91,11 @@ describe("ST1, ST2: reading", () => {
       throwsCoreError(value)
   })
 
-  test("a state marked 2 reads as it was, given no routes, and is not changed", async () => {
+  test("a state marked 2 reads as it was, given no routes and an empty list, and is not changed", async () => {
     const two = await markTwoState()
     const before = JSON.stringify(two)
     const read = readRunnerState(JSON.parse(before))
-    expect(read).toEqual({ ...two, v: 3, routes: {} })
+    expect(read).toEqual({ ...two, v: 4, routes: {}, released: [] })
     expect(Object.keys(read)).toEqual([
       "v",
       "serverId",
@@ -96,6 +104,7 @@ describe("ST1, ST2: reading", () => {
       "secrets",
       "formats",
       "routes",
+      "released",
     ])
     expect(readRunnerState(two)).toEqual(read)
     expect(JSON.stringify(two)).toBe(before)
@@ -114,6 +123,46 @@ describe("ST1, ST2: reading", () => {
       throwsCoreError(broken)
   })
 
+  test("a state marked 3, as runner 0.1.1-dev.1 writes it, reads as it was, given an empty list, and is not changed", async () => {
+    const three = await markThreeState()
+    const before = JSON.stringify(three)
+    const read = readRunnerState(JSON.parse(before))
+    expect(read).toEqual({ ...three, v: 4, released: [] })
+    expect(Object.keys(read)).toEqual([
+      "v",
+      "serverId",
+      "team",
+      "lastSequence",
+      "secrets",
+      "formats",
+      "routes",
+      "released",
+    ])
+    expect(readRunnerState(three)).toEqual(read)
+    expect(JSON.stringify(three)).toBe(before)
+  })
+
+  test("a state marked 3 is read by mark 3's strict rules: no list, and nothing it refused", async () => {
+    const three = await markThreeState()
+    const { routes: _routes, ...noRoutes } = three
+    const { formats: _formats, ...noFormats } = three
+    for (const broken of [
+      // Mark 3 never had the list: a state that has one is marked 4.
+      { ...three, released: [] },
+      { ...three, released: ["old.example.com"] },
+      { ...three, extra: 1 },
+      noRoutes,
+      noFormats,
+      { ...three, routes: [] },
+      { ...three, formats: { a: 1 } },
+      {
+        ...three,
+        routes: { b: { routes: [], health: null, names: {} } },
+      },
+    ])
+      throwsCoreError(broken)
+  })
+
   test("a marked state reads back equal", async () => {
     const marked = await markedState()
     expect(readRunnerState(JSON.parse(JSON.stringify(marked)))).toEqual(marked)
@@ -125,8 +174,13 @@ describe("ST1, ST2: reading", () => {
     const { formats: _formats, ...noFormats } = marked
     const { lastSequence: _lastSequence, ...noNumbers } = marked
     const { routes: _routes, ...noRoutes } = marked
+    const { released: _released, ...noList } = marked
     for (const broken of [
-      { ...marked, v: 4 },
+      { ...marked, v: 5 },
+      { ...marked, v: "4" },
+      // Read as mark 3 or 2, its list or its routes are a field those marks never had.
+      { ...marked, v: 3 },
+      { ...marked, v: 2 },
       { ...marked, v: "3" },
       { ...marked, v: "2" },
       { ...marked, v: 1 },
@@ -134,10 +188,12 @@ describe("ST1, ST2: reading", () => {
       { ...marked, v: null },
       noFormats,
       noNumbers,
-      // Mark 3 has routes, an object.
+      // Mark 4 has routes, an object, and the list.
       noRoutes,
       { ...marked, routes: [] },
       { ...marked, routes: null },
+      noList,
+      { ...marked, released: null },
       { ...marked, extra: 1 },
       // A format for an app the numbers do not have, and the reverse.
       { ...marked, formats: { a: 1, b: 2, c: 2 } },
@@ -155,15 +211,16 @@ describe("ST1, ST2: reading", () => {
 })
 
 describe("ST3: setup", () => {
-  test("newRunnerState is initialRunnerState's fields with v 3, no formats and no routes", async () => {
+  test("newRunnerState is initialRunnerState's fields with v 4, no formats, no routes and an empty list", async () => {
     const { server } = await setup()
     const input = { serverId: server.serverId, team: server.state.team }
     const state = newRunnerState(input)
     expect(state).toEqual({
       ...initialRunnerState(input),
-      v: 3,
+      v: 4,
       formats: {},
       routes: {},
+      released: [],
     })
     expect(readRunnerState(state)).toEqual(state)
   })
@@ -179,16 +236,23 @@ describe("ST3: setup", () => {
 describe("ST5: the version-1 path", () => {
   test("versionOneView is the part verifyDeploy reads, and it passes parseRunnerState", async () => {
     const marked = await markedState()
-    const { v: _v, formats: _formats, routes: _routes, ...older } = marked
+    const {
+      v: _v,
+      formats: _formats,
+      routes: _routes,
+      released: _released,
+      ...older
+    } = marked
     const view = versionOneView(marked)
     expect(view).toEqual(older)
     expect(parseRunnerState(view)).toEqual(view)
   })
 
-  test("afterVersionOneDeploy keeps v, serverId, team, formats and routes and takes lastSequence and secrets", async () => {
-    const marked = holding(await markedState(), {
-      b: appRoutes(["b.example.com"]),
-    })
+  test("afterVersionOneDeploy keeps v, serverId, team, formats, routes and the list and takes lastSequence and secrets", async () => {
+    const marked = {
+      ...holding(await markedState(), { b: appRoutes(["b.example.com"]) }),
+      released: ["old.example.com"],
+    }
     const next: RunnerState = {
       ...versionOneView(marked),
       lastSequence: { a: 4, b: 0 },
@@ -199,13 +263,14 @@ describe("ST5: the version-1 path", () => {
     }
     const after = afterVersionOneDeploy(marked, next)
     expect(after).toEqual({
-      v: 3,
+      v: 4,
       serverId: marked.serverId,
       team: marked.team,
       lastSequence: { a: 4, b: 0 },
       secrets: next.secrets,
       formats: { a: 1, b: 2 },
       routes: { b: appRoutes(["b.example.com"]) },
+      released: ["old.example.com"],
     })
     expect(readRunnerState(after)).toEqual(after)
   })

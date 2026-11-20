@@ -106,6 +106,17 @@ describe("S1: what visitors write to the proxy's log", () => {
     expect(values("--dns-search")).toEqual(["."])
     expect(steps(w)).toContain(proxyRun())
   })
+
+  test("the proxy's run turns packet forwarding off, so it carries nothing from one app's route network to another's", async () => {
+    const { w } = await routed()
+    const run = w.docker
+      .argv()
+      .find((argv) => argv[0] === "run" && argv[1] === "-d")!
+    const values = (flag: string) =>
+      run.flatMap((word, at) => (word === flag ? [run[at + 1]] : []))
+    // The proxy is on every routed app's network at once, and a container's network forwards IPv4 by default.
+    expect(values("--sysctl")).toEqual(["net.ipv4.ip_forward=0"])
+  })
 })
 
 describe("S7: the configuration is validated before it is in place", () => {

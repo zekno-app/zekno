@@ -1745,7 +1745,9 @@ exec sh -c "exec $3"
       }
       await app.effects.checkServers()
       expect(prod().apps[0]?.state).toBe("running")
-      expect(calls().at(-1)).toBe(`-o BatchMode=yes -- ${session}`)
+      expect(calls().at(-1)).toBe(
+        `-o ServerAliveInterval=30 -o BatchMode=yes -- ${session}`
+      )
 
       // Every tick reads over the session the app kept when it started: no new connection, no new login.
       let made = calls().length
@@ -1775,7 +1777,9 @@ exec sh -c "exec $3"
       // Marked as needing an answer, not as a server that could not be reached.
       expect(prod().asks).toBe(true)
       expect(suspended).toEqual([])
-      expect(calls().slice(made)).toEqual([`-o BatchMode=yes -- ${session}`])
+      expect(calls().slice(made)).toEqual([
+        `-o ServerAliveInterval=30 -o BatchMode=yes -- ${session}`,
+      ])
       // Where SSH would ask, it is not tried again in the background, however long it has been: no connection at all.
       made = calls().length
       clock.now += 300_000
@@ -1804,7 +1808,9 @@ exec sh -c "exec $3"
       await tick()
       expect(prod()).toMatchObject({ reachable: true, problem: undefined })
       expect(prod().apps[0]?.state).toBe("running")
-      expect(calls().slice(made)).toEqual([`-o BatchMode=yes -- ${session}`])
+      expect(calls().slice(made)).toEqual([
+        `-o ServerAliveInterval=30 -o BatchMode=yes -- ${session}`,
+      ])
       expect(suspended).toHaveLength(1)
       const kept = lastProcess()
       expect(isAlive(kept)).toBe(true)

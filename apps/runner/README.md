@@ -37,9 +37,10 @@ status 2.
 
 ### Protocol 3
 
-Runner 0.1.0 speaks protocol 2. A runner built from this repository speaks protocol 4, and answers
-`version` with `{"version":"0.1.0","protocol":4}`. No runner release speaks protocol 3 or 4 yet:
-runner 0.1.1, the first that will, is not published.
+Runner 0.1.0 speaks protocol 2. A runner built from this repository speaks protocol 5, and answers
+`version` with `{"version":"0.1.0","protocol":5}`. No runner release speaks protocol 3 or later
+yet: runner 0.1.1, the first that will, is not published. Protocol 5 adds a limit of 30 minutes
+on `docker compose up` ([RN3](../../specs/015-domains-https/contracts/runner.md)).
 
 Protocol 3 means the runner carries out deploy format 2, `zekno.deploy.v2`: each deploy names the
 deploy of the app it was made after (`previous`), may carry an expiry (`expiresAt`), and lists each
@@ -175,7 +176,7 @@ that folder exists and belongs to them (a server set up by an earlier version); 
 |------|------|
 | `server.key` | This server's secret key. Mode `0600`. It never leaves the server. |
 | `server.pub` | This server's public key. |
-| `state.json` | The team list it trusts, the last deploy number per app, the latest version of each secret, and a version mark: `"v": 3`, each app's deploy format under `formats`, and under `routes` the routes and the health check in force of each app that has a domain or a health check, both from the deploy that put them in force, with the names it gave their containers. |
+| `state.json` | The team list it trusts, the last deploy number per app, the latest version of each secret, and a version mark: `"v": 4`, each app's deploy format under `formats`, under `routes` the routes and the health check in force of each app that has a domain or a health check, both from the deploy that put them in force, with the names it gave their containers, and under `released` the released domains whose certificate is not yet known to be deleted. |
 | `records/<app>/<hash>.json` | The latest record of each secret of an app deployed in format 2, named by the hash of its sealed value. Mode `0600`. |
 | `apps/<app>/compose.yaml` | The Compose file of the last accepted deploy. |
 | `proxy/etc/caddy.json` | The proxy's configuration, written whole by the runner. The proxy reads the folder read-only. |
@@ -193,10 +194,10 @@ opens a record only after every check of a deploy that lists it, and checks the 
 again at each deploy. A server keeps at most 8,192 records, and at most 64 MiB of them. Deploys in
 format 1 leave no record.
 
-Runner 0.1.0 writes `state.json` without the mark. A runner that speaks protocol 4 reads such a
-state and writes nothing until its first change (`sync`, `apply` or `deploy`), which writes it
+Runner 0.1.0 writes `state.json` without the mark. A runner that speaks protocol 4 or later reads
+such a state and writes nothing until its first change (`sync`, `apply` or `deploy`), which writes it
 whole with the mark; `setup` writes the mark from the start. A state marked `"v": 2`, which a
-runner of protocol 3 writes, is read as holding no routes. Each app it held when it first read
+runner of protocol 3 writes, is read as holding no routes, and one marked 3 as holding no released domain. Each app it held when it first read
 the state is at format 1 until its first deploy in format 2, and stays at format 2 from then on. An
 app it never held is at format 2 from its first deploy. Once the state has the mark, runner 0.1.0
 cannot read it (see [What to know before you rely on it](#what-to-know-before-you-rely-on-it)).
@@ -278,9 +279,9 @@ same lock:
    as it was and nothing is signalled; put in place and not taken, the configuration built from
    the state as it was is loaded again. Either way the state stays, and the outcome is `not_loaded`.
 5. It deletes the certificate and key of each released domain, also when the proxy is stopped or
-   gone, takes the proxy off the network of an app with no route, removes the route network of an
-   app with no route and no health check, and removes the proxy when no app has a route. The
-   volumes stay.
+   gone; one not known to be deleted stays listed in the state and is tried again at every deploy
+   and every `proxy` request. It takes the proxy off the network of an app with no route, removes
+   the route network of an app with no route and no health check, and the proxy when no app has a route. The volumes stay.
 6. With a health check, it waits for it: one round every 2 seconds until every container of every
    checked service is healthy, or the limit has passed. With a path, `curl` asks each container by
    its name from a short-lived container of the same pinned image on the route network: read-only,
@@ -297,7 +298,7 @@ the JSON of an object, never put together by hand. It is loaded only when it dif
 from the one in force, since each load can drop a few new connections.
 
 A deploy whose app has no route and no health check, and held none, makes no Docker call it did not
-make before. A deploy that stops before its start leaves the app's routes as they were. When
+make before, other than such a deletion tried again. A deploy that stops before its start leaves the app's routes as they were. When
 `docker compose up` fails, the outcome is `start_failed`, as before, and the routes are still
 carried out as far as they go, so a domain the deploy leaves out is released. What it means for an
 app is in the [docs](https://www.zekno.dev/docs/domains#what-the-server-holds).

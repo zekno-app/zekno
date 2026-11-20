@@ -224,10 +224,19 @@ const HealthFailureSchema = z.strictObject({
 })
 
 /**
+ * The longest time limit a report may say a start was stopped at, in
+ * seconds: a day (`startLimit`).
+ */
+const START_LIMIT_SECONDS = 86_400
+
+/**
  * Runner to CLI: what happened. `refused` always carries a reason; nothing
  * else does. `routes_failed` always carries `routes`, and `unhealthy`
- * `health`; nothing else does (core.md, "Outcomes"). There is no free-text
- * field.
+ * `health`; nothing else does (core.md, "Outcomes"). `startLimit` (protocol
+ * 5) is present exactly when the runner stopped waiting for the app's start
+ * at its time limit, which it gives in whole seconds, and only with
+ * `start_failed`; a `start_failed` without it failed for another reason.
+ * There is no free-text field.
  */
 export const RunnerReportSchema = z
   .strictObject({
@@ -244,12 +253,14 @@ export const RunnerReportSchema = z
       .optional(),
     routes: RoutesFailureSchema.optional(),
     health: HealthFailureSchema.optional(),
+    startLimit: z.number().int().min(1).max(START_LIMIT_SECONDS).optional(),
   })
   .refine(
     (report) =>
       (report.outcome === "refused") === (report.reason !== undefined) &&
       (report.outcome === "routes_failed") === (report.routes !== undefined) &&
-      (report.outcome === "unhealthy") === (report.health !== undefined)
+      (report.outcome === "unhealthy") === (report.health !== undefined) &&
+      (report.startLimit === undefined || report.outcome === "start_failed")
   )
 export type RunnerReport = z.infer<typeof RunnerReportSchema>
 

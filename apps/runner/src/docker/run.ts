@@ -32,8 +32,9 @@ const OUTPUT_BYTES = 1024 * 1024
 /**
  * How long the outputs may stay open once Docker has exited. They close with
  * it; a process it left behind could keep them open, and is not waited for.
+ * `up` stopped at its time limit gives its outputs as long (compose.ts).
  */
-const OUTPUT_GRACE_MS = 1000
+export const OUTPUT_GRACE_MS = 1000
 
 /** Reads a stream to its end, keeping at most `limit` bytes of it. */
 async function capped(

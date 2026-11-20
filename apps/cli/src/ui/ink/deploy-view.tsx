@@ -18,6 +18,7 @@ import {
   type DeployStart,
   type HttpsShown,
 } from "../../shared/deploy"
+import { stoppedWaiting } from "../../shared/start-limit"
 import { numberUsed, stagesOf, Summary } from "../parts/deploy-summary"
 import { Panel } from "../parts/panel"
 import { Spinner, Stages } from "../parts/stages"
@@ -38,6 +39,8 @@ export type DeployShown = {
   ms?: number
   /** For `routes_failed` and `unhealthy`: their sentence (B16 to B19, C3, C4; specs/015-domains-https, CL3). */
   problem?: string
+  /** For `start_failed`: the limit in whole seconds at which the runner stopped waiting for the start, when it did (B20). */
+  startLimit?: number
 }
 
 /** The whole seconds since `since`, dim, two spaces after the words: B4's and C2's count, redrawn as it goes. */
@@ -231,8 +234,19 @@ export function DeployBlock({
         <Box flexDirection="column">
           <Lead mark="✖" color={theme.danger}>
             <Text bold>
-              {deploy.server} accepted deploy {deploy.sequence}, but the app did
-              not start.
+              {shown.startLimit === undefined ? (
+                <>
+                  {deploy.server} accepted deploy {deploy.sequence}, but the app
+                  did not start.
+                </>
+              ) : (
+                stoppedWaiting(
+                  deploy.server,
+                  deploy.sequence!,
+                  deploy.app,
+                  shown.startLimit
+                )
+              )}
             </Text>
           </Lead>
           {numberUsed(deploy) ? (

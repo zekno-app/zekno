@@ -266,7 +266,7 @@ describe("what is placed into the script", () => {
       await child.exited
     })
     expect(ssh.calls()).toEqual([
-      "-- deploy@example.test sh -s -- add 0.1.0-dev.1 release",
+      "-o ServerAliveInterval=30 -- deploy@example.test sh -s -- add 0.1.0-dev.1 release",
     ])
   })
 

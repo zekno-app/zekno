@@ -185,9 +185,22 @@ describe("K10b: a domain another app holds", () => {
     expect(reason(verify(w, envelope, { state }))).toBe("accepted")
   })
 
-  test("the next state carries the routes in force over unchanged, whatever the deploy asks", async () => {
+  test("a domain released whose certificate is still to delete is held by no app: any app may name it", async () => {
     const w = await world()
-    const state = shared(w)
+    const state = deepFreeze({ ...shared(w), released: ["old.example.com"] })
+    const { envelope } = await deployV2(w, {
+      app: "blog",
+      routes: [route("old.example.com")],
+    })
+    expect(reason(verify(w, envelope, { state }))).toBe("accepted")
+  })
+
+  test("the next state carries the routes in force and the released domains over unchanged, whatever the deploy asks", async () => {
+    const w = await world()
+    const state = deepFreeze({
+      ...shared(w),
+      released: ["new.example.com", "old.example.com"],
+    })
     const { envelope } = await deployV2(w, {
       previous: 1,
       routes: [route("new.example.com")],
@@ -196,8 +209,10 @@ describe("K10b: a domain another app holds", () => {
     const result = verify(w, envelope, { state })
     if (!result.ok) throw new Error(result.error.code)
     const next = result.value.nextState
-    expect(next.v).toBe(3)
+    expect(next.v).toBe(4)
     expect(next.routes).toEqual(state.routes)
+    expect(next.released).toEqual(["new.example.com", "old.example.com"])
+    expect(Object.isFrozen(next.released)).toBe(true)
     expect(next.formats).toEqual({ web: 2, shop: 2 })
     expect(readRunnerState(next)).toEqual(next)
     expect(Object.isFrozen(next.routes)).toBe(true)

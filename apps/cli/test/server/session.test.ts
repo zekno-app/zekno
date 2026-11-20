@@ -666,7 +666,7 @@ describe("one command, one runner process (FR-034)", () => {
     const fakeSsh = join(dir, "ssh")
     writeFileSync(
       fakeSsh,
-      `#!/bin/sh\nprintf '%s\\n' "$*" >> "${sshLog}"\n[ "$1" = "--" ] || exit 255\nexec sh -c "$3"\n`
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> "${sshLog}"\nwhile [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done\n[ "$1" = "--" ] || exit 255\nexec sh -c "$3"\n`
     )
     chmodSync(fakeSsh, 0o755)
     const calls = () =>
@@ -693,7 +693,9 @@ describe("one command, one runner process (FR-034)", () => {
           wrapper
         )
       ).toBe(0)
-      expect(calls()).toEqual([`-- deploy@example.test ${wrapper} session`])
+      expect(calls()).toEqual([
+        `-o ServerAliveInterval=30 -- deploy@example.test ${wrapper} session`,
+      ])
       m.compose(COMPOSE_V2)
       expect(await m.zekno("deploy", "--app", "web", "--server", "prod")).toBe(
         0
@@ -703,7 +705,9 @@ describe("one command, one runner process (FR-034)", () => {
       )
       expect(await m.zekno("status", "--server", "prod")).toBe(0)
       expect(calls()).toEqual(
-        Array(3).fill(`-- deploy@example.test ${wrapper} session`)
+        Array(3).fill(
+          `-o ServerAliveInterval=30 -- deploy@example.test ${wrapper} session`
+        )
       )
     } finally {
       spy.mockRestore()

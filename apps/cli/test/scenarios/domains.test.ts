@@ -101,7 +101,7 @@ describe("zekno domain add, then zekno deploy (T050)", () => {
     expect(payloadOf(sent!.input.envelope).routes).toEqual([ROUTE])
     expect(payloadOf(sent!.input.envelope).health).toEqual(HEALTH)
     // The runner took it: its state is protocol 4's, and the app's number is 1.
-    expect(stateOf(m).v).toBe(3)
+    expect(stateOf(m).v).toBe(4)
     expect(stateOf(m).lastSequence.shop).toBe(1)
   }, 60_000)
 

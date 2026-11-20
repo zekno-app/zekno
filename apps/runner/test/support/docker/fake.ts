@@ -3,10 +3,11 @@
  * what environment, and exits with the status written in its `exit` file.
  *
  * `compose ... up` prints prepared lines and can be held in the middle until
- * the test lets it go. `compose -p <project> ps` prints a prepared file, or
- * hangs when asked to. `compose -p <project> logs` prints a prepared file
- * and, when the test asks and the call has `--follow`, stays alive afterwards
- * the way Docker does.
+ * the test lets it go, or made never to end (`upNeverEnds`), as an `up`
+ * waiting on a container that never exits does. `compose -p <project> ps`
+ * prints a prepared file, or hangs when asked to. `compose -p <project> logs`
+ * prints a prepared file and, when the test asks and the call has
+ * `--follow`, stays alive afterwards the way Docker does.
  *
  * Since feature 015 (contracts/runner.md, "Tests"), `network`, `run`,
  * `exec`, `logs`, `inspect`, `rm`, `start`, `volume`, `image`, `pull` and
@@ -20,6 +21,7 @@ import {
   existsSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -116,6 +118,17 @@ if [ "$4" = "logs" ]; then
 fi
 if [ -f "$d/up-stdout" ]; then cat "$d/up-stdout"; fi
 if [ -f "$d/up-stderr" ]; then cat "$d/up-stderr" >&2; fi
+if [ -f "$d/up-never" ] && [ "$1" = "compose" ]; then
+  if [ -f "$d/up-never-child" ]; then
+    # A process left behind that keeps both outputs open after this one is stopped.
+    sleep 60 &
+    echo $! > "$d/up-child.pid"
+  fi
+  echo $$ > "$d/up.pid"
+  if [ -f "$d/up-never-prints" ]; then exec yes " Container zekno-web-web-1  Waiting"; fi
+  if [ -f "$d/up-never-child" ]; then wait; fi
+  exec sleep 60
+fi
 if [ -f "$d/up-hold" ]; then
   touch "$d/up-started"
   while [ ! -f "$d/up-go" ]; do sleep 0.05; done
@@ -150,6 +163,27 @@ exit 0
     releaseUp: () => writeFileSync(at("up-go"), ""),
     /** True once an `up` ran to its end. */
     upFinished: () => existsSync(at("up-done")),
+    /**
+     * Makes `compose … up` never end once it has printed its lines
+     * (`upPrints`): it waits for ever, or with `prints` writes a line without
+     * pause for ever. With `leaveChild` it first starts a process that keeps
+     * both outputs open after `up` itself is stopped, as a process Docker
+     * left behind would.
+     */
+    upNeverEnds: (options: { prints?: boolean; leaveChild?: boolean } = {}) => {
+      writeFileSync(at("up-never"), "")
+      if (options.prints) writeFileSync(at("up-never-prints"), "")
+      if (options.leaveChild) writeFileSync(at("up-never-child"), "")
+    },
+    /** Lets the next `up` end again, as before `upNeverEnds`. */
+    upEndsAgain: () => {
+      for (const name of ["up-never", "up-never-prints", "up-never-child"])
+        rmSync(at(name), { force: true })
+    },
+    /** The process id of the last `up` that never ended, once it has started. */
+    upPid: (): number | undefined => pidIn(at("up.pid")),
+    /** The process id of what `up` left behind with `leaveChild`. */
+    upChildPid: (): number | undefined => pidIn(at("up-child.pid")),
     /** What `ps` prints for an app, and the status it exits with. */
     ps: (app: string, output: string, status = 0) => {
       writeFileSync(at(`ps-zekno-${app}`), output)

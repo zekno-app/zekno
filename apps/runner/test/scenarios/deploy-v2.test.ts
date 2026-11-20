@@ -126,7 +126,7 @@ describe("the order", () => {
       sequence: 4,
     })
     const state = stateOf(w.home)
-    expect(state.v).toBe(3)
+    expect(state.v).toBe(4)
     expect(state.lastSequence).toEqual({ web: 4 })
     expect(state.formats).toEqual({ web: 2 })
   })

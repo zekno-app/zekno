@@ -57,8 +57,8 @@ $ zekno doctor
   free disk space where the runner keeps its state. It finds these with a short
   fixed script that only reads, and by asking the runner its version and
   status.
-- **The proxy.** For a server whose runner speaks protocol 4 and holds a
-  domain, one more line after the runner's: whether the proxy that answers
+- **The proxy.** For a server whose runner speaks protocol 4 or later and
+  holds a domain, one more line after the runner's: whether the proxy that answers
   for the domains runs (see [Domains and HTTPS](/docs/domains#what-the-server-holds)).
   A proxy that is missing or stopped is a problem. One from another image
   than the runner's, running or not, is a warning: the next deploy with a

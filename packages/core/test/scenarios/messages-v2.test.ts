@@ -181,8 +181,8 @@ describe("P2: the session's commands and the bound of each answer", () => {
       expect(limit).toBeLessThanOrEqual(LIMITS.messageBytes / 8)
   })
 
-  test("P1: this library speaks protocol 4 since feature 015 (it was 3)", () => {
-    expect(core.RUNNER_PROTOCOL).toBe(4)
+  test("P1: this library speaks protocol 5 since the start limit (it was 4 with feature 015, 3 before)", () => {
+    expect(core.RUNNER_PROTOCOL).toBe(5)
   })
 })
 

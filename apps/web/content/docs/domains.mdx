@@ -27,11 +27,11 @@ text. So only your team can add, change or move a domain.
 - **A service with a port.** The port the service listens on,
   `networking.port`. The proxy reaches it there, over a network of its own;
   the port is not published on the server because of the domain.
-- **A runner that speaks protocol 4.** Runner 0.1.1 is the first release that
-  will. It is not published yet: until it is, a `zekno` built from the
+- **A runner that speaks protocol 4 or later.** Runner 0.1.1 is the first
+  release that will. It is not published yet: until it is, a `zekno` built from the
   repository installs runner 0.1.0, and on a server with that runner a deploy
   with a domain stops before anything is signed. A runner built from the
-  repository speaks protocol 4 (see
+  repository speaks protocol 5 (see
   [An older or a newer runner](/docs/deploying#an-older-or-a-newer-runner)).
 - **Ports 80 and 443 of the server**, free and reachable from the internet.
   The proxy takes both, and Let's Encrypt checks the domain through them. A
@@ -317,7 +317,9 @@ A domain the file does not name is refused, exit status 2:
 
 The next deploy leaves the domain out, and the server releases it: the proxy
 stops answering for it, then its certificate and private key are deleted,
-also when the proxy is stopped or gone. Other apps' domains are untouched. When the last domain on a server is
+also when the proxy is stopped or gone. If that deletion does not work, the
+server tries it again at each later deploy to it, of any app, until the key
+is gone. Other apps' domains are untouched. When the last domain on a server is
 released, the proxy is stopped and removed, and ports 80 and 443 close again.
 Its storage stays on the server, for the next domain.
 
@@ -356,12 +358,13 @@ runner too old for domains (see
 | The proxy's configuration | `proxy/etc/caddy.json` in the [runner's folder](/docs/runner#its-folder), generated whole by the runner and read by the proxy, read-only. A new one is written first to `proxy/etc/caddy.next.json`, and replaces it only once Caddy found it valid. |
 | The proxy's network | A Docker network, `zekno-proxy`, of the proxy alone. Kept when the proxy is removed. |
 | An app's route network | A Docker network, `zekno-route-<app>`, for each app with a domain or a health check. The runner gives each container of a routed or checked service a random name on it. |
-| Which app holds which domain | The routes in force, in the runner's `state.json`. |
+| Which app holds which domain | The routes in force, in the runner's `state.json`, beside the released domains whose certificate is still to be deleted. |
 
 - **The TLS keys of the domains are on the server.** Each certificate's
   private key is made and kept by the proxy, on the server. None passes
   through your machine or through Zekno. A released domain's certificate and
-  key are deleted with the release, also when the proxy is stopped or gone.
+  key are deleted with the release, also when the proxy is stopped or gone;
+  a deletion that fails is tried again at each later deploy until they are gone.
 - **Apps on one server share it.** A deploy your team signed runs its Compose
   text with all that Docker allows on that server, so one app's deploy could
   read the key of every domain there.
