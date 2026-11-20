@@ -2,10 +2,10 @@
   "version": "0.1.1",
   "files": {
     "linux-x64": {
-      "sha256": null
+      "sha256": "717f041499890b387084bb1371ec601a4490e482496c8af23a261f9096191613"
     },
     "linux-arm64": {
-      "sha256": null
+      "sha256": "984f60c1c046465d85aeb47a3e49a4c84721ef1f12c892d3c01f1df9de47efc3"
     }
   }
 }
