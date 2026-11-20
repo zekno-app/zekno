@@ -93,10 +93,10 @@ from any `zekno`, older ones included. From then on:
   `zekno` says `The runner refused the request (unsupported_version).` Its
   `zekno status` still reads the server.
 
-No runner release speaks protocol 3 or later yet, so `zekno server update`
-does not take this step today. When `zekno` runs from a checkout of the repository,
+Runner 0.1.1 speaks protocol 5, so `zekno server update` takes this step on a
+server that runs runner 0.1.0. When `zekno` runs from a checkout of the repository,
 not as a compiled file, a runner on your machine (`--local`) is the
-checkout's own runner, which speaks protocol 5. Going back by restoring a
+checkout's own runner, which speaks protocol 5 too. Going back by restoring a
 runner's folder from a backup is not supported (see the
 [runner page](/docs/runner#what-to-know-before-you-rely-on-it)).
 

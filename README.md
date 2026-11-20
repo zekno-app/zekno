@@ -35,7 +35,7 @@
 | Give an app a domain, served over HTTPS with a certificate the server obtains itself | `zekno domain add`, `zekno domain` | [Domains and HTTPS](https://www.zekno.dev/docs/domains) |
 | Make a deploy wait until the app answers | `zekno settings set web.health /health` | [Health checks](https://www.zekno.dev/docs/health-checks) |
 
-Domains and health checks need runner 0.1.1, which is not published yet. Not built yet: teammates, the hosted service, building from source. See the [roadmap](#roadmap).
+Domains and health checks need runner 0.1.1 or later on the server. Not built yet: teammates, the hosted service, building from source. See the [roadmap](#roadmap).
 
 ## Try it
 
@@ -228,7 +228,7 @@ A Turborepo monorepo on Bun workspaces.
 | Path | What it is | Read more |
 | --- | --- | --- |
 | `apps/cli` | The command-line tool, `zekno`, and its full-screen terminal app. Built and in use, for one developer deploying directly over SSH; internal reviews only, unaudited. | [Commands](https://www.zekno.dev/docs/cli), [its README](apps/cli/README.md) |
-| `apps/runner` | The program on your servers: it verifies, decrypts, starts Docker Compose, and reports running state and logs. Built from the repository, it also serves an app's domains over HTTPS through a proxy it manages, and waits for health checks. The first release is 0.1.0; internal reviews only, unaudited. | [Server runner](https://www.zekno.dev/docs/runner), [how a release is made](apps/runner/RELEASING.md) |
+| `apps/runner` | The program on your servers: it verifies, decrypts, starts Docker Compose, and reports running state and logs. Since release 0.1.1 it also serves an app's domains over HTTPS through a proxy it manages, and waits for health checks. The latest release is 0.1.1; internal reviews only, unaudited. | [Server runner](https://www.zekno.dev/docs/runner), [how a release is made](apps/runner/RELEASING.md) |
 | `packages/core` | Key generation, secret encryption, signed deploys, team membership and protocol types. First version built, unaudited; the control-plane client is not written yet. | [its README](packages/core/README.md) |
 | `apps/web` | The website: the landing page and the docs. | [Docs](https://www.zekno.dev/docs) |
 | `packages/ui` | Shared React components. Scaffolded. | |
@@ -325,10 +325,10 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 - [x] CLI: templates (zekno add), PostgreSQL, MySQL, MongoDB and Redis; contributed by pull request
 - [x] Website: the landing page and the docs
 - [x] Domains with HTTPS and health checks: a proxy the runner manages, certificates from Let's Encrypt, the DNS check before a deploy, `zekno domain` (CLI and runner)
+- [x] Publish runner 0.1.1, which carries domains and health checks: confirmed by a second build, its source proven on a real server as the pre-release 0.1.1-dev.2
 
 **Next**
 
-- [ ] Publish runner 0.1.1, which carries domains and health checks, proven on a real server
 - [ ] Building an app from source
 - [ ] Creating a server
 - [ ] Installing zekno with one command

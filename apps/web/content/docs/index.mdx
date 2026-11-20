@@ -44,14 +44,14 @@ one developer. With them you can:
 - give the app a domain, served over HTTPS with a certificate the server
   obtains itself, and make a deploy wait until the app is healthy
   ([Domains and HTTPS](/docs/domains), [Health checks](/docs/health-checks)).
-  Both need runner 0.1.1, which is not published yet.
+  Both need runner 0.1.1 or later on the server.
 
 | Part | Status |
 | --- | --- |
 | Website (`apps/web`) | Landing page and these docs |
 | Core library (`packages/core`): encryption, signing, team lists, message formats | First version built; internal review only |
-| Command-line tool (`apps/cli`) | Second version built: a full-screen terminal app and single commands for scripts, running state and logs read from your server, and a project file. One developer, deploying directly over SSH. It installs on a server the runner release its build carries, checked against a checksum it holds. The first runner release, 0.1.0, is published. Internal reviews only. See [Commands](/docs/cli) |
-| Server runner (`apps/runner`) | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything. One connection per command. Built for Linux on x86-64 and ARM64 with glibc 2.17 or newer. A runner built from the repository also serves an app's domains over HTTPS, through a proxy it starts on the server, and waits for health checks; no release does yet. Internal reviews only. See [Server runner](/docs/runner) |
+| Command-line tool (`apps/cli`) | Second version built: a full-screen terminal app and single commands for scripts, running state and logs read from your server, and a project file. One developer, deploying directly over SSH. It installs on a server the runner release its build carries, checked against a checksum it holds. The runner release it installs today is 0.1.1. Internal reviews only. See [Commands](/docs/cli) |
+| Server runner (`apps/runner`) | Second version built: verifies, decrypts, starts Docker Compose, and reports running state and logs without changing anything. One connection per command. Built for Linux on x86-64 and ARM64 with glibc 2.17 or newer. Since release 0.1.1 it also serves an app's domains over HTTPS, through a proxy it starts on the server, and waits for health checks. Internal reviews only. See [Server runner](/docs/runner) |
 | Control plane | Not built yet. When built, hosted by Zekno, closed source |
 
 ## A deploy today
@@ -98,7 +98,7 @@ does today. The steps of that design are on
   installs a prod release, such as `0.1.0`; one built from `dev` installs a
   development release, such as `0.1.0-dev.1`. See
   [Installing the runner](/docs/servers#installing-the-runner).
-- **The first runner release is 0.1.0.** A `zekno` built from `main` holds its
+- **The latest runner release is 0.1.1.** A `zekno` built from `main` holds its
   checksums and installs it on a server by itself. Between a release being
   started and its second build, a `zekno` built from that branch holds no
   checksums and says it has no published runner to install.
