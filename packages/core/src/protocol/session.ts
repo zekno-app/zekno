@@ -25,14 +25,18 @@ import { RUNNER_VERSION_PATTERN } from "./version"
 
 /**
  * The protocol this version of the messages belongs to. A runner reports it
- * with its version. 4 (specs/015-domains-https, contracts/core.md, "The
- * protocol"): the runner carries out a deploy's `routes` and `health`,
- * answers `status` with routes when asked, and answers `proxy`. 3
- * (specs/014-deploy-v2, contracts/protocol.md P1): the runner carries out a
- * version-2 deploy with `previous`, `expiresAt` and secrets by version, and
- * answers `deploy` and `records`. Runner 0.1.0 speaks 2.
+ * with its version. 5 (specs/015-domains-https, contracts/core.md, "The
+ * protocol"; security review, lead A10): the runner stops waiting for
+ * `docker compose up` at a time limit, and its report of a version-2
+ * `deploy` may carry `startLimit` with `start_failed`; nothing else changes.
+ * 4 (specs/015-domains-https, contracts/core.md, "The protocol"): the runner
+ * carries out a deploy's `routes` and `health`, answers `status` with routes
+ * when asked, and answers `proxy`. 3 (specs/014-deploy-v2,
+ * contracts/protocol.md P1): the runner carries out a version-2 deploy with
+ * `previous`, `expiresAt` and secrets by version, and answers `deploy` and
+ * `records`. Runner 0.1.0 speaks 2.
  */
-export const RUNNER_PROTOCOL = 4
+export const RUNNER_PROTOCOL = 5
 
 /** Runner to CLI: which runner this is. */
 export const RunnerVersionSchema = z.strictObject({

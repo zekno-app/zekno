@@ -60,4 +60,4 @@ Nine states, each from three sources: the settings file (is it there), the serve
 
 ## Outcomes of a deploy
 
-`refused` (no number used) → `start_failed` → `routes_failed` → `unhealthy` → `started`. The last four use the number, and the app's Compose project is whatever `docker compose up` left.
+`refused` (no number used) → `start_failed` → `routes_failed` → `unhealthy` → `started`. The last four use the number, and the app's Compose project is whatever `docker compose up` left. A `start_failed` of a version-2 deploy carries `startLimit` when the runner stopped waiting for `up` at its time limit of 30 minutes (protocol 5; [contracts/runner.md](./contracts/runner.md), RN3); the history keeps it as `start_failed`, like any other.

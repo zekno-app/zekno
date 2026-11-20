@@ -76,12 +76,15 @@ New module `deploy/routes.ts`:
 
 `RUNNER_PROTOCOL = 4`: the runner carries out `routes` and `health`, answers `status` with routes when asked, and answers `proxy`.
 
-**Outcomes.** `RUNNER_OUTCOMES` gains `routes_failed` and `unhealthy`. `RunnerReportSchema` gains two optional fields:
+`RUNNER_PROTOCOL = 5` (2026-11-20; security review, lead A10): the runner stops waiting for `docker compose up` at a time limit ([runner.md](./runner.md), RN3), and the report of a version-2 `deploy` may carry `startLimit` (below). Nothing else changes: a runner of protocol 4 still carries out routes and health checks, so a zekno of protocol 5 deploys to it with or without them (`ROUTES_PROTOCOL` stays 4) and only says it is older, and a zekno of protocol 4 is told by a runner of protocol 5 to update before it signs anything (C7), since it would not read `startLimit`.
+
+**Outcomes.** `RUNNER_OUTCOMES` gains `routes_failed` and `unhealthy`. `RunnerReportSchema` gains three optional fields:
 
 | Field | Shape | Allowed when |
 |---|---|---|
 | `routes` | `{ failure: "port_taken" \| "no_container" \| "host_network" \| "not_loaded", service?: SERVICE_NAME, port?: 80 \| 443 }` strict | exactly when the outcome is `routes_failed`. `service` exactly with `no_container` and `host_network`; `port` exactly with `port_taken`. |
 | `health` | `{ service: SERVICE_NAME, http: boolean }` strict | exactly when the outcome is `unhealthy`. `http` says whether the check had a path. |
+| `startLimit` (protocol 5) | an integer from 1 to 86,400: the time limit, in whole seconds, at which the runner stopped waiting for `up` | only with `start_failed`, and exactly when the runner stopped waiting at its limit. A `start_failed` without it is a start that failed for another reason, as before. Only the report of a version-2 `deploy` carries it: the report of `apply` (version 1, in a session or one-shot) stays as every older zekno reads it. |
 
 Still no free text in a report.
 

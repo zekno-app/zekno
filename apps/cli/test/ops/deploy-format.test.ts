@@ -54,11 +54,12 @@ describe("chooseFormat (contracts/cli.md, the format)", () => {
     })
   })
 
-  test("protocol 3, and 4 (RUNNER_PROTOCOL): version 2, nothing said", () => {
-    expect(RUNNER_PROTOCOL).toBe(4)
+  test("protocol 3, 4 and 5 (RUNNER_PROTOCOL): version 2, nothing said", () => {
+    expect(RUNNER_PROTOCOL).toBe(5)
     expect(chooseFormat(at("0.1.0", 3))).toEqual({ format: 2 })
     expect(chooseFormat(at("0.1.1", 3))).toEqual({ format: 2 })
     expect(chooseFormat(at("0.1.1", 4))).toEqual({ format: 2 })
+    expect(chooseFormat(at("0.1.1", RUNNER_PROTOCOL))).toEqual({ format: 2 })
   })
 
   test("a protocol above this zekno's (RUNNER_PROTOCOL + 1): C7, thrown as a CliError", () => {
@@ -129,8 +130,11 @@ describe("B10: a deploy with a route or a health check (specs/015-domains-https,
     expect(chooseFormat({ ...oneShot, routed: false })).toEqual({ format: 1 })
   })
 
-  test("protocol 4, with a route: version 2", () => {
+  test("protocol 4 (a runner older than the start limit) and this zekno's, with a route: version 2", () => {
     expect(chooseFormat(routed("0.1.1", 4))).toEqual({ format: 2 })
+    expect(chooseFormat(routed("0.1.1", RUNNER_PROTOCOL))).toEqual({
+      format: 2,
+    })
   })
 
   test("a newer protocol says C7 first, route or not", () => {

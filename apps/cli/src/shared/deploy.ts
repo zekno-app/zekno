@@ -12,6 +12,7 @@
 import { dnsPlain, httpsLivePlain, httpsWaitingPlain } from "../domains/words"
 import type { Ui } from "../ui/types"
 import type { Notice } from "./notice"
+import { stoppedWaitingPlain } from "./start-limit"
 
 /** data-model.md, "Stages of a deploy". A refusal ends a deploy at whatever stage it had reached. */
 export type DeployStage =
@@ -99,7 +100,9 @@ export type DeployStart = {
  * `routes_failed` and `unhealthy`, its sentence (B16 to B19, C3, C4;
  * domains/outcome.ts). `https`: after a start with domains new to the app,
  * each one's end of the wait (B5, B6), in domain order; left out when there
- * was no wait.
+ * was no wait. `startLimit`: for `start_failed`, the limit in whole seconds
+ * at which the runner stopped waiting for the start, as its report gave it
+ * (B20; shared/start-limit.ts); left out for a start that failed otherwise.
  */
 export type DeployEnding =
   | {
@@ -111,6 +114,7 @@ export type DeployEnding =
       ms: number
       problem?: string
       https?: HttpsShown[]
+      startLimit?: number
     }
   | { outcome: "error" }
 
@@ -301,13 +305,25 @@ export const startedSentence = (ending: {
 }): string =>
   `Deploy ${ending.sequence} of ${ending.app} is running on ${ending.server} with ${secretsWords(ending.secrets)}.`
 
-/** The plain line of a deploy the runner accepted but whose app did not start. */
+/**
+ * The plain line of a deploy the runner accepted but whose app did not start;
+ * B20 when the runner stopped waiting for the start at its limit
+ * (`startLimit`).
+ */
 export const failedSentence = (ending: {
   sequence: number
   app: string
   server: string
+  startLimit?: number
 }): string =>
-  `Deploy ${ending.sequence} of ${ending.app} was accepted by ${ending.server}, but the app did not start. Check Docker on the server.`
+  ending.startLimit === undefined
+    ? `Deploy ${ending.sequence} of ${ending.app} was accepted by ${ending.server}, but the app did not start. Check Docker on the server.`
+    : stoppedWaitingPlain(
+        ending.server,
+        ending.sequence,
+        ending.app,
+        ending.startLimit
+      )
 
 /** What to run after a deploy that started, under the result line (board "zekno deploy: success and failure"). */
 export const startedNext = (flags: string): string =>

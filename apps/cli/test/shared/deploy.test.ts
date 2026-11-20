@@ -14,7 +14,12 @@ import {
   httpsLivePlain,
   httpsWaitingPlain,
 } from "../../src/domains/words"
-import { plainDeployView, startedSentence } from "../../src/shared/deploy"
+import {
+  failedSentence,
+  plainDeployView,
+  startedSentence,
+} from "../../src/shared/deploy"
+import { stoppedWaitingPlain } from "../../src/shared/start-limit"
 import { plainUi } from "../../src/ui/plain/plain"
 
 const ENDING = {
@@ -79,6 +84,51 @@ describe("the plain deploy view with domains (CL3)", () => {
       await v.view.end({ outcome, ...ENDING, problem })
       expect({ out: v.out, err: v.err }).toEqual({ out: [], err: [problem] })
     }
+  })
+
+  test("start_failed with startLimit: B20 on standard error in place of today's line, then Docker's lines; without it, today's line (lead A10)", async () => {
+    /** The plain view, with the server's lines kept on standard error beside zekno's own. */
+    const view = (say: boolean) => {
+      const out: string[] = []
+      const err: string[] = []
+      const ui = plainUi(
+        (line) => out.push(line),
+        (line) => err.push(line),
+        (text) => void err.push(text.trimEnd())
+      )
+      return { out, err, view: plainDeployView(ui, say) }
+    }
+    const stopped = view(true)
+    stopped.view.progress(" Container shop-db-1  Waiting")
+    await stopped.view.end({
+      outcome: "start_failed",
+      ...ENDING,
+      startLimit: 1800,
+    })
+    expect({ out: stopped.out, err: stopped.err }).toEqual({
+      out: [],
+      err: [
+        stoppedWaitingPlain("prod-1", 43, "shop", 1800),
+        "remote:  Container shop-db-1  Waiting",
+      ],
+    })
+
+    const failed = view(true)
+    await failed.view.end({ outcome: "start_failed", ...ENDING })
+    expect(failed.err).toEqual([failedSentence(ENDING)])
+    expect(failedSentence(ENDING)).toBe(
+      "Deploy 43 of shop was accepted by prod-1, but the app did not start. Check Docker on the server."
+    )
+
+    // With --json the sentence is not said; Docker's lines still go to standard error.
+    const json = view(false)
+    json.view.progress(" Container shop-db-1  Waiting")
+    await json.view.end({
+      outcome: "start_failed",
+      ...ENDING,
+      startLimit: 1800,
+    })
+    expect(json.err).toEqual(["remote:  Container shop-db-1  Waiting"])
   })
 
   test("with --json, none of it: standard output holds the one object", async () => {

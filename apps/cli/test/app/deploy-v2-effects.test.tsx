@@ -21,6 +21,7 @@ import type { AppEvent } from "../../src/app/state/events"
 import { initialState } from "../../src/app/state/state"
 import type { State } from "../../src/app/state/types"
 import { C1, C5, C6, C7 } from "../../src/shared/deploy-words"
+import { stoppedWaiting } from "../../src/shared/start-limit"
 import { withoutBackticks } from "../../src/ui/ink/marks"
 import { setNumber } from "../support/deploys"
 import { ready, twin, type machine } from "../support/helpers"
@@ -265,5 +266,38 @@ describe("the app's deploys against a runner", () => {
     expect(words(screen)).toContain(
       `✖ ${withoutBackticks(C5("API_KEY", "web", "dev"))}`
     )
+  }, 30_000)
+})
+
+describe("B20: a start the runner stopped waiting for (lead A10)", () => {
+  test("the result line says it in place of today's; the number used and Docker said stay", async () => {
+    const m = await ready()
+    await linked(m)
+    m.docker.upPrints({ stderr: " Container web-db-1  Waiting\n" })
+    const app = await appOn(m)
+    // The runner's answer, as it gives it when `up` did not end within its limit.
+    const w = wire(m.deps)
+    w.rewrite("deploy", (result) => ({
+      ...result,
+      outcome: "start_failed",
+      startLimit: 1800,
+    }))
+    app.d()
+    await app.ended()
+    w.restore()
+    expect(app.failures).toEqual([])
+    const said = stoppedWaiting("dev", 1, "web", 1800)
+    expect(app.state.deploy).toMatchObject({
+      sequence: 1,
+      outcome: "start_failed",
+      result: { tone: "error", text: said },
+    })
+    const screen = app.draw()
+    expect(screen).toMatch(/✔ Checked +✔ Signed +✔ Sent +✖ Starting/)
+    expect(words(screen)).toContain(`✖ ${said}`)
+    expect(screen).toContain("Number 1 is used, so the next deploy will be 2.")
+    expect(screen).toContain("╭─ Docker said ─")
+    expect(screen).toContain("Container web-db-1  Waiting")
+    expect(screen).not.toContain("the app did not start")
   }, 30_000)
 })

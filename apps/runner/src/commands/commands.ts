@@ -208,45 +208,66 @@ export function sync(dir: string, input: string): Promise<RunnerReport> {
 }
 
 /**
+ * How a start ended: `started` when Docker's exit status was 0, else
+ * `start_failed`; with `startLimit`, the limit in whole seconds, when `up`
+ * was stopped at its time limit (protocol 5; specs/015-domains-https,
+ * contracts/core.md, "Outcomes"). Only a version-2 deploy's report carries
+ * `startLimit` (deploy.ts).
+ */
+export type Start =
+  { outcome: "started" } | { outcome: "start_failed"; startLimit?: number }
+
+/** A limit as a report gives it: in whole seconds, rounded up, from 1 to a day. */
+const wholeSeconds = (ms: number): number =>
+  Math.min(86_400, Math.max(1, Math.ceil(ms / 1000)))
+
+/**
  * Saves the Compose text of an accepted deploy and runs `docker compose up`
- * in the runner's own folder. True when Docker's exit status was 0. Never
- * throws: a Compose file that could not be written is a start that failed.
+ * in the runner's own folder, for `limitMs` at most (by default the runner's
+ * own limit, `START_LIMIT_MS` in docker/compose.ts). Never throws: a Compose
+ * file that could not be written is a start that failed.
  */
 export async function composeStart(
   dir: string,
   deploy: { app: string; compose: string },
   secrets: Record<string, string>,
-  onProgress?: (line: string) => void
-): Promise<boolean> {
+  onProgress?: (line: string) => void,
+  limitMs?: number
+): Promise<Start> {
   try {
     const file = writeCompose(dir, deploy.app, deploy.compose)
-    const exit = await composeUp({
-      dir,
-      app: deploy.app,
-      file,
-      secrets,
-      onLine: onProgress,
-    })
-    return exit === 0
+    const ended = await composeUp(
+      { dir, app: deploy.app, file, secrets, onLine: onProgress },
+      limitMs
+    )
+    if ("stoppedAfterMs" in ended)
+      return {
+        outcome: "start_failed",
+        startLimit: wholeSeconds(ended.stoppedAfterMs),
+      }
+    return { outcome: ended.exit === 0 ? "started" : "start_failed" }
   } catch {
-    return false
+    return { outcome: "start_failed" }
   }
 }
 
 /**
  * Saves the Compose text of an accepted deploy and starts it in the runner's
  * own folder. Called only once the deploy's number is used: whatever happens
- * here, the outcome is `started` or `start_failed`.
+ * here, the outcome is `started` or `start_failed`. The report is version 1's,
+ * as every older zekno reads it: a start stopped at its time limit is
+ * `start_failed` with nothing more.
  */
 export async function startApp(
   dir: string,
   deploy: { app: string; sequence: number; compose: string },
   secrets: Record<string, string>,
-  onProgress?: (line: string) => void
+  onProgress?: (line: string) => void,
+  limitMs?: number
 ): Promise<RunnerReport> {
   const { app, sequence } = deploy
-  const started = await composeStart(dir, deploy, secrets, onProgress)
-  return { outcome: started ? "started" : "start_failed", app, sequence }
+  const started = await composeStart(dir, deploy, secrets, onProgress, limitMs)
+  return { outcome: started.outcome, app, sequence }
 }
 
 /**
@@ -261,11 +282,13 @@ export async function startApp(
  * older zekno reads. What is saved is the whole stored state with only the
  * numbers and secret versions changed, so the mark and every app's format
  * survive (V21). No record is kept: version 1 carries none (FR-024).
+ * `limitMs`: how long `up` may run, the runner's own limit when left out.
  */
 export function apply(
   dir: string,
   input: string,
-  onProgress?: (line: string) => void
+  onProgress?: (line: string) => void,
+  limitMs?: number
 ): Promise<RunnerReport> {
   const request = parseMessage(RunnerApplyRequestSchema, input)
   if (!request.ok) return Promise.resolve(refused("invalid_request"))
@@ -296,6 +319,12 @@ export function apply(
 
     writeState(dir, next)
     // From here the deploy is accepted and its number is used, whatever happens next.
-    return startApp(dir, verified.value.deploy, secrets.value, onProgress)
+    return startApp(
+      dir,
+      verified.value.deploy,
+      secrets.value,
+      onProgress,
+      limitMs
+    )
   })
 }
