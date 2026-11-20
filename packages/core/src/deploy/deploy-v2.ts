@@ -58,9 +58,10 @@ export type VerifiedDeployV2 = {
   readonly signer: Member
   /**
    * Save this before anything runs: the number is used, the versions and
-   * `formats[app] = 2` are kept. The routes in force are the state's, as
-   * they were: they change only once the runner has put the deploy's routes
-   * in force (specs/015-domains-https, contracts/runner.md, RN9).
+   * `formats[app] = 2` are kept. The routes in force and the released
+   * domains are the state's, as they were: they change only once the runner
+   * has put the deploy's routes in force (specs/015-domains-https,
+   * contracts/runner.md, RN9, RN10).
    */
   readonly nextState: StoredRunnerState
   /** The records supplied with the deploy, each listed and verified: write them before the state that names them. */
@@ -416,9 +417,9 @@ export function verifyDeployV2(input: {
   const { sealed, write, secrets, keep } = checked.value
 
   // The next state: the number used, the versions kept, the app at format 2,
-  // and the routes in force as they were (core.md, K10b).
+  // and the routes in force and the released domains as they were (core.md, K10b).
   const nextState: StoredRunnerState = Object.freeze({
-    v: 3 as const,
+    v: 4 as const,
     serverId: state.serverId,
     team: state.team,
     lastSequence: Object.freeze({
@@ -428,6 +429,7 @@ export function verifyDeployV2(input: {
     secrets,
     formats: Object.freeze({ ...state.formats, [app]: 2 as const }),
     routes: freezeDeep(state.routes),
+    released: freezeDeep(state.released),
   })
   const result: VerifiedDeployV2 = Object.freeze({
     deploy,

@@ -305,13 +305,14 @@ told to load the new file. The load counts only when what the proxy saved
 holds the new file's nonce, a random mark the runner puts in each file. Only
 then does it save the new routes, with the deploy's health check beside
 them. Then it deletes the certificate and key of each released domain, also
-when the proxy is stopped or gone, and removes the proxy when no app has a
-route. Then it waits for the health check. What each
+when the proxy is stopped or gone (a deletion that fails is tried again at
+every later deploy), and removes the proxy when no app has a route. Then it
+waits for the health check. What each
 step means for your apps is on [Domains and HTTPS](/docs/domains#what-the-server-holds)
 and [Health checks](/docs/health-checks#how-the-check-is-made).
 
 A deploy whose app has no route and no health check, and held none, makes no
-Docker call it did not make before. A deploy that stops before its start
+Docker call it did not make before, other than such a deletion tried again. A deploy that stops before its start
 leaves the app's routes as they were. When `docker compose up` fails, the
 outcome is `start_failed`, as before, and the routes are still carried out
 as far as they go, so a domain the deploy leaves out is released.

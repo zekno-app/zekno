@@ -178,6 +178,68 @@ describe("the stand-in for Docker", () => {
     })
   })
 
+  test("Caddy gets a certificate for each domain it loads; a deletion removes it, inside the proxy or through the volume, unless told to fail", async () => {
+    const { docker, home, call } = setUp()
+    const etc = join(home, "etc")
+    mkdirSync(etc)
+    const host = (domain: string) => ({ match: [{ host: [domain] }] })
+    writeFileSync(
+      join(etc, "caddy.json"),
+      JSON.stringify({
+        apps: {
+          http: {
+            servers: {
+              zekno: {
+                routes: [host("b.example.com"), host("a.example.com"), {}],
+              },
+            },
+          },
+        },
+      })
+    )
+    await call(
+      "run",
+      "-d",
+      "--name",
+      "zekno-proxy",
+      "--mount",
+      `type=bind,source=${etc},target=/etc/zekno-proxy,readonly`,
+      "caddy@sha256:x",
+      "caddy",
+      "run"
+    )
+    expect(docker.model().certificates).toEqual([
+      "a.example.com",
+      "b.example.com",
+    ])
+    const rm = (domain: string) =>
+      `rm -rf "/data/caddy/certificates/"*"/${domain}"`
+    docker.script({ deletionFails: 1 })
+    expect(
+      (await call("exec", "zekno-proxy", "sh", "-c", rm("a.example.com"))).code
+    ).toBe(1)
+    expect(docker.model().certificates).toEqual([
+      "a.example.com",
+      "b.example.com",
+    ])
+    expect(
+      (await call("exec", "zekno-proxy", "sh", "-c", rm("a.example.com"))).code
+    ).toBe(0)
+    expect(docker.model().certificates).toEqual(["b.example.com"])
+    const alone = await call(
+      "run",
+      "--rm",
+      "-v",
+      "zekno-proxy-data:/data",
+      "caddy@sha256:x",
+      "sh",
+      "-c",
+      rm("b.example.com")
+    )
+    expect(alone.code).toBe(0)
+    expect(docker.model().certificates).toEqual([])
+  })
+
   test("a call it is not told about still behaves as up", async () => {
     const { docker, call } = setUp()
     docker.failWith(4)

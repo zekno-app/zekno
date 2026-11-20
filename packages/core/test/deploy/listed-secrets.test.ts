@@ -392,7 +392,7 @@ describe("the next state, what to write and what to keep", () => {
     expect(JSON.stringify(before)).toBe(copy)
     if (!result.ok) throw new Error(result.error.code)
     expect(result.value.nextState).toEqual({
-      v: 3,
+      v: 4,
       serverId: w.server.serverId,
       team: before.team,
       lastSequence: { web: 2, api: 7 },
@@ -403,6 +403,7 @@ describe("the next state, what to write and what to keep", () => {
       },
       formats: { web: 2, api: 1 },
       routes: {},
+      released: [],
     })
     expect(result.value.write).toEqual([newB])
     expect(result.value.keep).toEqual([hashOf(a), hashOf(newB)].sort())

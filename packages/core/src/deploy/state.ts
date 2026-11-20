@@ -9,6 +9,7 @@ import { TeamTrustSchema, type TeamTrust } from "../team/roster"
 import {
   healthBytes,
   HealthInForceSchema,
+  isRoutableDomain,
   RouteSchema,
   type Health,
   type Route,
@@ -92,12 +93,14 @@ export function readVersionOneState(state: RunnerState): RunnerState {
  * The state a runner of the signed deploy's version 2 keeps (contracts/
  * state.md, as specs/015-domains-https/contracts/core.md changes it). It is
  * today's state with a mark, each app's message format and, since feature
- * 015, the routes and the health check in force: mark 3. Any field runner
- * 0.1.0 does not know makes its strict read fail, so an older runner put back
- * after this one has written refuses everything; a runner of feature 014
- * refuses mark 3 too. No released runner wrote mark 3 before an app's entry
- * held its health check, so a mark-3 entry without one is refused like any
- * other field missing.
+ * 015, the routes and the health check in force: mark 3, as runner
+ * 0.1.1-dev.1 writes it; and the released domains whose certificate is not
+ * yet known to be deleted: mark 4. Any field runner 0.1.0 does not know makes
+ * its strict read fail, so an older runner put back after this one has
+ * written refuses everything; a runner of feature 014 refuses mark 3 too, and
+ * runner 0.1.1-dev.1 refuses mark 4. No released runner wrote mark 3 before
+ * an app's entry held its health check, so a mark-3 entry without one is
+ * refused like any other field missing.
  */
 
 /** At most this many containers of one service are routed or checked (core.md, "The state"; runner.md, RN4). */
@@ -122,13 +125,23 @@ export type AppRoutes = {
   >
 }
 
-/** Today's state, with the mark, each app's format and the routes and health checks in force. */
+/**
+ * Today's state, with the mark, each app's format, the routes and health
+ * checks in force, and the released domains whose certificate is still to
+ * delete.
+ */
 export type StoredRunnerState = RunnerState & {
-  readonly v: 3
+  readonly v: 4
   /** Each app's message format: 1 while it may still take version 1, 2 after its first version-2 deploy. */
   readonly formats: Readonly<Record<string, 1 | 2>>
   /** The routes and the health check in force of each app that has a route or a health check. */
   readonly routes: Readonly<Record<string, AppRoutes>>
+  /**
+   * The domains released whose certificate and key are not yet known to be
+   * deleted from the proxy's volume, sorted (runner.md, RN10). None is in
+   * force: a domain routed again is taken off, and keeps its certificate.
+   */
+  readonly released: readonly string[]
 }
 
 /** The same set of keys, so no app has a number without a format or the reverse. */
@@ -147,7 +160,7 @@ const formats = z.record(
   z.union([z.literal(1), z.literal(2)])
 )
 
-/** The state of feature 014, marked 2: read as it was, then given no routes and so no health check. */
+/** The state of feature 014, marked 2: read as it was, then given no routes, so no health check, and no released domain. */
 const MarkTwoSchema = z
   .strictObject({ v: z.literal(2), ...RunnerStateSchema.shape, formats })
   .refine((state) => sameKeys(state.formats, state.lastSequence))
@@ -220,17 +233,53 @@ function routesHold(state: {
   )
 }
 
-const StoredRunnerStateSchema = z
-  .strictObject({
-    v: z.literal(3),
-    ...RunnerStateSchema.shape,
-    formats,
-    routes: z.record(z.string().regex(APP_NAME), AppRoutesSchema),
-  })
+/** The fields of mark 3: today's, each app's format, and the routes and health checks in force. */
+const markThree = {
+  ...RunnerStateSchema.shape,
+  formats,
+  routes: z.record(z.string().regex(APP_NAME), AppRoutesSchema),
+}
+
+/** The state of runner 0.1.1-dev.1, marked 3: read by its strict rules, then given no released domain. */
+const MarkThreeSchema = z
+  .strictObject({ v: z.literal(3), ...markThree })
   .refine((state) => sameKeys(state.formats, state.lastSequence))
   .refine(routesHold)
 
-/** Reads a state marked 3 strictly, or throws `CoreError`. A state with another mark, or none, is not read here. */
+/**
+ * The rules of the released domains (core.md, "The state"): sorted and each
+ * once; none in force for any app, so a domain that is routed is never
+ * deleted; and the domains in force with them at most
+ * `LIMITS.domainsPerServer`, which K15 holds every deploy to (runner.md,
+ * RN2). Each is a domain by the domain rule, checked by the schema.
+ */
+function releasedHold(state: {
+  readonly routes: Readonly<Record<string, AppRoutes>>
+  readonly released: readonly string[]
+}): boolean {
+  if (!sortedAndUnique(state.released)) return false
+  const inForce = new Set<string>()
+  for (const entry of Object.values(state.routes))
+    for (const route of entry.routes) inForce.add(route.domain)
+  return (
+    state.released.every((domain) => !inForce.has(domain)) &&
+    inForce.size + state.released.length <= LIMITS.domainsPerServer
+  )
+}
+
+const StoredRunnerStateSchema = z
+  .strictObject({
+    v: z.literal(4),
+    ...markThree,
+    released: z
+      .array(z.string().refine(isRoutableDomain))
+      .max(LIMITS.domainsPerServer),
+  })
+  .refine((state) => sameKeys(state.formats, state.lastSequence))
+  .refine(routesHold)
+  .refine(releasedHold)
+
+/** Reads a state marked 4 strictly, or throws `CoreError`. A state with another mark, or none, is not read here. */
 export function readMarked(value: unknown): StoredRunnerState {
   const parsed = StoredRunnerStateSchema.safeParse(value)
   if (!parsed.success)
@@ -238,17 +287,26 @@ export function readMarked(value: unknown): StoredRunnerState {
   return parsed.data as StoredRunnerState
 }
 
+/** `value` read by an older mark's strict schema, or `CoreError`. */
+function readOlderMark<T>(schema: z.ZodType<T>, value: unknown): T {
+  const parsed = schema.safeParse(value)
+  if (!parsed.success)
+    throw new CoreError("invalid_argument", "The runner state is not valid.")
+  return parsed.data
+}
+
 /**
  * Reads the state a runner read back from disk (ST1, as core.md changes it).
- * Marked 3, it is read strictly. Marked 2, as a runner of feature 014 wrote
- * it, it is read by that feature's strict rules and given no routes, so no
- * health check in force either. Without
- * a mark, it is a state from before version 2: read by today's strict schema,
- * then marked in memory (ST2), each app with a number of 1 or more at format
- * 1 and each at 0 at format 2, and given no routes. Nothing is written by
- * reading, and the value given is not changed. Throws `CoreError` for
- * anything else, which a runner answers `invalid_state`, never "nothing
- * accepted yet".
+ * Marked 4, it is read strictly. Marked 3, as runner 0.1.1-dev.1 wrote it,
+ * it is read by mark 3's strict rules and given no released domain. Marked
+ * 2, as a runner of feature 014 wrote it, it is read by that feature's
+ * strict rules and given no routes, so no health check in force either, and
+ * no released domain. Without a mark, it is a state from before version 2:
+ * read by today's strict schema, then marked in memory (ST2), each app with a
+ * number of 1 or more at format 1 and each at 0 at format 2, and given no
+ * routes and no released domain. Nothing is written by reading, and the
+ * value given is not changed. Throws `CoreError` for anything else, which a
+ * runner answers `invalid_state`, never "nothing accepted yet".
  */
 export function readRunnerState(value: unknown): StoredRunnerState {
   if (
@@ -256,33 +314,39 @@ export function readRunnerState(value: unknown): StoredRunnerState {
     value !== null &&
     Object.hasOwn(value, "v")
   ) {
-    if ((value as { v: unknown }).v !== 2) return readMarked(value)
-    const two = MarkTwoSchema.safeParse(value)
-    if (!two.success)
-      throw new CoreError("invalid_argument", "The runner state is not valid.")
-    return readMarked({ ...two.data, v: 3, routes: {} })
+    const mark = (value as { v: unknown }).v
+    if (mark === 3) {
+      const three = readOlderMark(MarkThreeSchema, value)
+      return readMarked({ ...three, v: 4, released: [] })
+    }
+    if (mark === 2) {
+      const two = readOlderMark(MarkTwoSchema, value)
+      return readMarked({ ...two, v: 4, routes: {}, released: [] })
+    }
+    return readMarked(value)
   }
   const older = parseRunnerState(value)
   const formats: Record<string, 1 | 2> = {}
   for (const [app, last] of Object.entries(older.lastSequence))
     formats[app] = last >= 1 ? 1 : 2
-  return readMarked({ v: 3, ...older, formats, routes: {} })
+  return readMarked({ v: 4, ...older, formats, routes: {}, released: [] })
 }
 
 /**
- * The state a runner of this feature writes at setup (ST3): marked 3, with
- * no route. It has no format for any app, so it takes no version-1 deploy at
- * all.
+ * The state a runner of this feature writes at setup (ST3): marked 4, with
+ * no route and no released domain. It has no format for any app, so it takes
+ * no version-1 deploy at all.
  */
 export function newRunnerState(input: {
   serverId: string
   team: TeamTrust
 }): StoredRunnerState {
   return readMarked({
-    v: 3,
+    v: 4,
     ...initialRunnerState(input),
     formats: {},
     routes: {},
+    released: [],
   })
 }
 
@@ -300,8 +364,9 @@ export function versionOneView(state: StoredRunnerState): RunnerState {
 /**
  * The state to save after a version-1 deploy (ST5): `state` with the numbers
  * and secret versions of `next`, what `verifyDeploy` gave, and every other
- * part as it was, the routes in force among them. Saving `next` itself would
- * drop the mark, the formats and the routes (V21). Throws `CoreError` when `next` drops an app or adds one without a
+ * part as it was, the routes in force and the released domains among them.
+ * Saving `next` itself would drop the mark, the formats, the routes and the
+ * released domains (V21). Throws `CoreError` when `next` drops an app or adds one without a
  * format (ST8): the version-1 path takes only apps it already holds.
  */
 export function afterVersionOneDeploy(
