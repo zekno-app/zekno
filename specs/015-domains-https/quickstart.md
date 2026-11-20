@@ -78,6 +78,18 @@ The proof (M5), with a zekno run from `dev`, a throwaway profile and its key in 
 
 Not tried: a port held by a program outside Docker (the other of R9's two texts); rootless Docker; a browser, the trust check being curl's and openssl's against the system's store; ARM64; a certificate's renewal, which is 60 days away.
 
+### Runner 0.1.1-dev.2, 2026-11-20
+
+After the audit of 2026-11-20 (security review, parts 9 and 10) the maintainer chose to stay on development releases for now, so the three changes went out as a second one: the proxy with packet forwarding off, a time limit of 30 minutes on a start (protocol 5), and a released domain's certificate deleted until it is gone (state mark 4).
+
+| Step | Result |
+|---|---|
+| The checks at the tagged commit `c385d22` | core 386 pass; runner 374 pass, 1 skip, with the gated set on real Docker; CLI 2,661 pass in a background run, and its 16 tests with real Docker pass on their own; web 54 pass; type check and lint clean |
+| The tag `runner-v0.1.1-dev.2` | the workflow published the pre-release with its four files |
+| The second build | matched, both files, three ways; recorded in `runner-release.json` on `dev` (commit `f833d32`) |
+
+Not tried: this release on a Linux server. The time limit and a deletion that fails were tried with the stand-in for Docker only; whether a helper process of Docker's outlives a stopped `docker compose up` is a question for a real server. The sentence for the time limit (lines.md, B20) is proposed and not approved yet.
+
 ## Maintainer steps
 
 Each is the maintainer's, with a go-ahead at the time. Nothing before M1 needs them.
