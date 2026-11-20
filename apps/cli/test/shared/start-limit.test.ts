@@ -1,6 +1,6 @@
 /**
- * B20 of specs/015-domains-https/design/lines.md (proposed on 2026-11-20, not
- * approved yet): what is said when the runner stopped waiting for the app
+ * B20 of specs/015-domains-https/design/lines.md (approved by the
+ * maintainer on 2026-11-20): what is said when the runner stopped waiting for the app
  * to start at its time limit, exactly, with the limit worded from the
  * report's seconds.
  */

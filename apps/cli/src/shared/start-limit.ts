@@ -3,8 +3,8 @@
  * its time limit (specs/015-domains-https, design/lines.md, B20; security
  * review, lead A10): the report of a version-2 deploy then carries
  * `startLimit`, the limit in whole seconds, with `start_failed`. The wording
- * was proposed on 2026-11-20 and is not approved yet: it lives here only, so
- * it changes in one place. Everything else said about a start that failed
+ * was approved by the maintainer on 2026-11-20; it lives here only, so it
+ * changes in one place. Everything else said about a start that failed
  * stays as it is.
  *
  * A sentence is given names that passed their rule (a server, an app), a

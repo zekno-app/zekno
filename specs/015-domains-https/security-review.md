@@ -345,8 +345,8 @@ failed first, read through, and merged into `dev`.
   refuse, and its outputs are waited for one second more, never longer. The deploy lock is then
   free. What Docker made by then stays as it is, as after any start that failed.
 - The outcome is `start_failed`. The report of a version-2 `deploy` carries `startLimit`, the
-  limit in whole seconds, so the CLI can say what happened (line B20, proposed on 2026-11-20 and
-  not approved yet). The report of the version-1 path is unchanged, since older zeknos read it
+  limit in whole seconds, so the CLI can say what happened (line B20, approved by the
+  maintainer on 2026-11-20). The report of the version-1 path is unchanged, since older zeknos read it
   strictly.
 - A released runner's message changed, so the protocol number is 5. A zekno at 5 still deploys
   to a runner at 4, with and without domains; a zekno at 4 is told to update by a runner at 5.
