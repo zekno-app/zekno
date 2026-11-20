@@ -214,17 +214,18 @@ and signs in the format the runner speaks:
 | --- | --- |
 | Speaks protocol 4 or 5 | Signed in the new format, with its domains and health check |
 | Speaks protocol 3 | Signed in the new format. One with a domain or a health check is not signed |
-| Speaks an older protocol, as every released runner does, 0.1.0 included | Signed in the older format, as before. One with a domain or a health check is not signed |
+| Speaks an older protocol, as runner 0.1.0 does | Signed in the older format, as before. One with a domain or a health check is not signed |
 | From before sessions, so it reports no version | Signed in the older format, as before. One with a domain or a health check is not signed |
 | Speaks a newer protocol than this `zekno` | Not signed |
 
-No runner release speaks protocol 3 or later yet: runner 0.1.1, the first
-that will, is not published. A `zekno` built from the repository still installs
-runner 0.1.0, so on a server with a released runner every deploy is signed in
-the older format, as before: numbered one above the runner's number and the
-highest this machine signed, with every secret sent each time. A runner built
-from the repository speaks protocol 5. Protocol 5 differs from 4 only in what
-a runner says of a start it stopped waiting for (see
+Runner 0.1.1 is the first release that speaks protocol 3 or later: it speaks
+protocol 5, and a `zekno` built from the repository installs it. On a server
+that still runs runner 0.1.0, every deploy is signed in the older format, as
+before: numbered one above the runner's number and the highest this machine
+signed, with every secret sent each time. `zekno server update` brings such a
+server to the new format (see
+[Updating is one way](/docs/servers#updating-is-one-way)). Protocol 5 differs
+from 4 only in what a runner says of a start it stopped waiting for (see
 [Protocol 5](/docs/runner#protocol-5)): a runner of protocol 4 takes every
 deploy as before.
 

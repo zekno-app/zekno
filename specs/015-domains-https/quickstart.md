@@ -111,6 +111,6 @@ Each is the maintainer's, with a go-ahead at the time. Nothing before M1 needs t
 | M3 | Run the second build on this machine and commit the checksums it writes to `runner-release.json` on `dev`. |
 | M4 | Choose the server and the domain for the proof: ports 80 and 443 free on the server, a DNS record you can set. |
 | M5 | The proof, each use of the server with a go-ahead: update the runner, `zekno domain add`, set the record, `zekno deploy`; a browser opens the address with no warning; `zekno rollback` and it still does; `zekno domain rm` and a deploy, and the server no longer answers; run the gated set's Linux questions (research R33); clean up. |
-| M6 | Merge `dev` into `main`, push the tag `runner-v0.1.1`, approve the release in the `prod` environment. |
-| M7 | Second build, commit the checksums on `main`. |
+| M6 | Merge `dev` into `main`, push the tag `runner-v0.1.1`, approve the release in the `prod` environment. Done on 2026-11-20: `main` at 2fdae3e, the release approved by the maintainer. |
+| M7 | Second build, commit the checksums on `main`. Done on 2026-11-20: both files matched, checksums in ee40f7d. Still to do: the short proof of the released files on a server (RELEASING, part 10). |
 | M8 | Say whether the docs' first group keeps its new name. |
