@@ -36,7 +36,7 @@ from the first version:
 | --- | --- | --- |
 | `deploy`, `rollback` | `Deploy <n> of <app> is running on <server> with <k> secrets.` | Yes: "`<k> secret(s)`" became "`<k> secrets`", "`1 secret`" or "`no secrets`" |
 | `deploy` with a domain | Before it: `dns\t<domain>\t<address>` for each new domain that points to the server. After it: `https\t<domain>\tlive\t<last day>` or `https\t<domain>\twaiting` | New. A deploy with no domain prints what it printed before |
-| `deploy --json` | `{"outcome","app","sequence","server"}` | No. A deploy with a domain or a health check can also have the outcome `routes_failed`, with a field `routes`, or `unhealthy`, with a field `health` |
+| `deploy --json` | `{"outcome","app","sequence","server"}` | No. A deploy with a domain or a health check can also have the outcome `routes_failed`, with a field `routes`, or `unhealthy`, with a field `health`. A `start_failed` can have a field `startLimit`, the seconds after which the server stopped waiting for the app to start |
 | `status` | `<server>: team list version <v>`, then `<app>\tdeploy <n>\t<state>`, then `<app>/<NAME>\tversion <v>` | Yes: a third cell, `running`, `stopped`, `partly running` or `unknown`; the apps in Home's order, the latest deploy from your machine first. After an app's line, `domain\t<app>\t<domain>` for each domain the server holds for it |
 | `status --json` | As before, plus `"apps": { "<app>": { "state", "services": [...] } }` | Yes: one added field, and `routes` for a server that holds a domain |
 | `domain` | `<domain>\t<service>\t<port>\t<state>\t<last day>`, one line per domain | New |

@@ -46,9 +46,9 @@ session only: `zekno-runner deploy`, `zekno-runner records` and
 ### Protocol 3
 
 Runner 0.1.0 speaks protocol 2. A runner built from the repository speaks
-protocol 4, and answers `version` with `{"version":"0.1.0","protocol":4}`. No
-runner release speaks protocol 3 or 4 yet: runner 0.1.1, the first that will,
-is not published.
+protocol 5, and answers `version` with `{"version":"0.1.0","protocol":5}`. No
+runner release speaks protocol 3 or later yet: runner 0.1.1, the first that
+will, is not published.
 
 Protocol 3 means the runner carries out deploy format 2, `zekno.deploy.v2`:
 each deploy names the deploy of the app it was made after (`previous`), may
@@ -90,6 +90,12 @@ signed deploy did not. `zekno server update` sends it after an update.
 The runner itself still makes no connection of its own. The proxy connects to
 Let's Encrypt for certificates, and Docker fetches the proxy's pinned image
 the first time it is needed.
+
+### Protocol 5
+
+The runner stops waiting for `docker compose up` after 30 minutes, and the
+result of `deploy` then says so, with `startLimit` (see
+[A start that does not finish](/docs/deploying#a-start-that-does-not-finish)).
 
 ### The session
 
@@ -218,8 +224,8 @@ signature again at each deploy. A server keeps at most 8,192 records, and at
 most 64 MiB of them. Deploys in format 1 leave no record.
 
 Runner 0.1.0 writes `state.json` without the mark. A runner that speaks
-protocol 4 reads such a state and writes nothing until its first change
-(`sync`, `apply` or `deploy`), which writes it whole with the mark; `setup`
+protocol 4 or later reads such a state and writes nothing until its first
+change (`sync`, `apply` or `deploy`), which writes it whole with the mark; `setup`
 writes the mark from the start. A state marked `"v": 2`, which a runner of
 protocol 3 writes, is read as holding no routes. Each app it held when it first read the state
 is at format 1 until its first deploy in format 2, and stays at format 2 from
@@ -437,8 +443,8 @@ procedure, from start to end, and how to withdraw a release, is
   waits for the maintainer's decision. `records` needs no signature either: it
   gives the statements of each app's secrets, their names, versions and who
   set them, never a value. The design accepts that.
-- **Updating it is one way.** Once a runner that speaks protocol 3 or 4 has
-  written its state, runner 0.1.0 cannot read it. Put back by hand, it refuses
+- **Updating it is one way.** Once a runner that speaks protocol 3 or later
+  has written its state, runner 0.1.0 cannot read it. Put back by hand, it refuses
   `status`, `sync`, `apply`, `state` and `logs` with `invalid_state`, and
   `setup` with `already_set_up`, and never reads the state as empty. A `zekno`
   from before deploy format 2 can then deploy only the apps that have had no

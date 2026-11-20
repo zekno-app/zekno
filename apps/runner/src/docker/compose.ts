@@ -1,5 +1,8 @@
 import { isReservedSecretName } from "@workspace/core"
 
+import { stopChild } from "./inspect"
+import { OUTPUT_GRACE_MS } from "./run"
+
 /** What the Docker command itself needs from the runner's environment. */
 const PASSED_THROUGH = [
   "PATH",
@@ -70,23 +73,66 @@ export async function readLines(
 }
 
 /**
+ * How long `docker compose up` may run before the runner stops waiting for it
+ * (specs/015-domains-https, security review, lead A10). An `up` that never
+ * returns, such as one waiting on a container that never exits, would hold
+ * the deploy lock for ever.
+ */
+export const START_LIMIT_MS = 30 * 60 * 1000
+
+/**
+ * How `up` ended: with Docker's exit status (127 when Docker could not be
+ * started at all), or stopped once it had run for `stoppedAfterMs`, its limit.
+ */
+export type UpEnded = { exit: number } | { stoppedAfterMs: number }
+
+/**
+ * Waits for Docker's outputs to end (`outputs`), then for its exit, for
+ * `limitMs` at most. Past that Docker is stopped (`stopChild`), and its
+ * outputs get `OUTPUT_GRACE_MS` more to close, never longer: a process it
+ * left behind could keep them open.
+ */
+async function withinLimit(
+  child: Bun.Subprocess,
+  outputs: Promise<unknown>,
+  limitMs: number
+): Promise<UpEnded> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<"late">((resolve) => {
+    timer = setTimeout(() => resolve("late"), limitMs)
+  })
+  const first = await Promise.race([outputs.then(() => child.exited), late])
+  clearTimeout(timer)
+  if (first !== "late") return { exit: first }
+  await stopChild(child)
+  await Promise.race([outputs.catch(() => {}), Bun.sleep(OUTPUT_GRACE_MS)])
+  return { stoppedAfterMs: limitMs }
+}
+
+/**
  * Starts an app with Docker Compose. The secrets exist only in the
  * environment of the Docker process: Compose reads them from there, and they
- * are never written to disk by the runner. Returns Docker's exit status.
+ * are never written to disk by the runner. Gives Docker's exit status, or,
+ * when `up` is still running once `limitMs` has passed, stops it and says so;
+ * whatever Docker made by then is left as it is. Never throws, and gives no
+ * line to `onLine` once it has returned.
  */
-export async function composeUp(input: {
-  /**
-   * The runner's own folder, where Docker runs: Compose reads files from the
-   * folder it runs in, and wherever the runner was started is not the
-   * runner's to trust (research R14).
-   */
-  dir: string
-  app: string
-  file: string
-  secrets: Record<string, string>
-  /** Given each line Docker prints. Without it, Docker's output goes to standard error. */
-  onLine?: (line: string) => void
-}): Promise<number> {
+export async function composeUp(
+  input: {
+    /**
+     * The runner's own folder, where Docker runs: Compose reads files from the
+     * folder it runs in, and wherever the runner was started is not the
+     * runner's to trust (research R14).
+     */
+    dir: string
+    app: string
+    file: string
+    secrets: Record<string, string>
+    /** Given each line Docker prints. Without it, Docker's output goes to standard error. */
+    onLine?: (line: string) => void
+  },
+  limitMs = START_LIMIT_MS
+): Promise<UpEnded> {
   const env: Record<string, string> = {}
   for (const [name, value] of Object.entries(input.secrets)) {
     // A reserved name would change how Docker runs, so it never reaches Docker's environment.
@@ -109,8 +155,11 @@ export async function composeUp(input: {
   try {
     const { onLine } = input
     if (onLine) {
+      let returned = false
       // Reporting a line must never stop the deploy: it carries on when nobody is reading.
       const report = (line: string) => {
+        // A line read after the answer is not this request's any more.
+        if (returned) return
         try {
           onLine(line)
         } catch {
@@ -125,11 +174,15 @@ export async function composeUp(input: {
         stderr: "pipe",
       })
       // Docker's exit status decides the outcome, even if its output could not be read.
-      await Promise.all([
+      const outputs = Promise.all([
         readLines(child.stdout, report, PROGRESS_LINE),
         readLines(child.stderr, report, PROGRESS_LINE),
       ]).catch(() => {})
-      return await child.exited
+      try {
+        return await withinLimit(child, outputs, limitMs)
+      } finally {
+        returned = true
+      }
     }
     // Standard output is reserved for the runner's one JSON line.
     const child = Bun.spawn(argv, {
@@ -139,11 +192,17 @@ export async function composeUp(input: {
       stdout: "pipe",
       stderr: "inherit",
     })
-    const output = await new Response(child.stdout).text()
+    const chunks: Uint8Array[] = []
+    const reading = (async () => {
+      for await (const chunk of child.stdout) chunks.push(chunk)
+    })()
+    const ended = await withinLimit(child, reading, limitMs)
+    // What Docker printed, written once and as a whole, as it always was: up to the stop, when it was stopped.
+    const output = new TextDecoder().decode(Buffer.concat(chunks))
     if (output) process.stderr.write(output)
-    return await child.exited
+    return ended
   } catch {
     // Docker is not installed, or could not be started at all.
-    return 127
+    return { exit: 127 }
   }
 }

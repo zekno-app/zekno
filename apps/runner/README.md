@@ -37,9 +37,10 @@ status 2.
 
 ### Protocol 3
 
-Runner 0.1.0 speaks protocol 2. A runner built from this repository speaks protocol 4, and answers
-`version` with `{"version":"0.1.0","protocol":4}`. No runner release speaks protocol 3 or 4 yet:
-runner 0.1.1, the first that will, is not published.
+Runner 0.1.0 speaks protocol 2. A runner built from this repository speaks protocol 5, and answers
+`version` with `{"version":"0.1.0","protocol":5}`. No runner release speaks protocol 3 or later
+yet: runner 0.1.1, the first that will, is not published. Protocol 5 adds a limit of 30 minutes
+on `docker compose up` ([RN3](../../specs/015-domains-https/contracts/runner.md)).
 
 Protocol 3 means the runner carries out deploy format 2, `zekno.deploy.v2`: each deploy names the
 deploy of the app it was made after (`previous`), may carry an expiry (`expiresAt`), and lists each
@@ -193,8 +194,8 @@ opens a record only after every check of a deploy that lists it, and checks the 
 again at each deploy. A server keeps at most 8,192 records, and at most 64 MiB of them. Deploys in
 format 1 leave no record.
 
-Runner 0.1.0 writes `state.json` without the mark. A runner that speaks protocol 4 reads such a
-state and writes nothing until its first change (`sync`, `apply` or `deploy`), which writes it
+Runner 0.1.0 writes `state.json` without the mark. A runner that speaks protocol 4 or later reads
+such a state and writes nothing until its first change (`sync`, `apply` or `deploy`), which writes it
 whole with the mark; `setup` writes the mark from the start. A state marked `"v": 2`, which a
 runner of protocol 3 writes, is read as holding no routes. Each app it held when it first read
 the state is at format 1 until its first deploy in format 2, and stays at format 2 from then on. An

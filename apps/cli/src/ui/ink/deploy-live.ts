@@ -174,6 +174,9 @@ export function liveDeploy(
           ...(ending.outcome !== "error" && ending.problem !== undefined
             ? { problem: ending.problem }
             : {}),
+          ...(ending.outcome !== "error" && ending.startLimit !== undefined
+            ? { startLimit: ending.startLimit }
+            : {}),
         },
       })
       await app.waitUntilRenderFlush()

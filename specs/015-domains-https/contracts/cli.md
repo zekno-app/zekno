@@ -63,6 +63,7 @@ A lookup that fails for another reason than "no record" (no network, a resolver 
 | `routes_failed` | `✔ Started` | B16 (`port_taken`), B17 (`no_container`), B18 (`host_network`), B19 (`not_loaded`) | 1 |
 | `unhealthy` | `✖ Healthy` | C3 with a path, C4 without | 1 |
 | `start_failed` | as today | as today | 1 |
+| `start_failed` with `startLimit` (protocol 5; any version-2 deploy, with a domain or not) | as today | B20 in place of today's result line, at a terminal, in the app and in plain output; the line about the number, "Docker said" and what to run next as today. `--json` gives the report as it came, `startLimit` included | 1 |
 | refused `domain_taken`, `too_large` | as a refusal today | R9, R10 | 1 |
 
 With a health check the stage row has a fifth stage, `Healthy` (C1): in progress from the first `health` event, with the live line C2 under it; done when the outcome is `started`. B17 and B18 name the first domain that reaches the service the report names. "Number N is used" is not said after `routes_failed` or `unhealthy`: the deploy is the app's current one.

@@ -18,7 +18,7 @@ Nothing in this table is taken from a deploy.
 
 ## RN1. Docker calls
 
-Every new call goes through `docker/run.ts`: it runs `ZEKNO_DOCKER || "docker"` with the environment the existing calls use, a time limit, and returns `{ code, stdout, stderr }` with each output capped. No shell is involved: arguments are passed as a list. The existing `composeUp`, `appStates` and `followLogs` stay as they are.
+Every new call goes through `docker/run.ts`: it runs `ZEKNO_DOCKER || "docker"` with the environment the existing calls use, a time limit, and returns `{ code, stdout, stderr }` with each output capped. No shell is involved: arguments are passed as a list. The existing `composeUp`, `appStates` and `followLogs` stay as they are, except that `composeUp` has a time limit since 2026-11-20 (RN3).
 
 ## RN2. Before the number is used
 
@@ -32,6 +32,8 @@ After the state with the new number is written and `docker compose up` has retur
 - Otherwise RN4 to RN10, then RN11 when the deploy has a health check.
 
 If `up` failed (exit status not 0), the outcome is `start_failed` as today, and RN4 to RN10 are still carried out as far as they go, so that a domain released by this deploy is released; their own failure is not reported over `start_failed`. RN11 is skipped.
+
+**The time limit on `up`** (2026-11-20; security review, lead A10; protocol 5). `docker compose up` gets 30 minutes (`START_LIMIT_MS` in `docker/compose.ts`, defined there once, with no setting to change it). An `up` that has not returned by then, such as one waiting on a `depends_on` container that never exits, is stopped as every other Docker call is (`stopChild`: asked, then killed after 2 seconds), and its outputs get at most `OUTPUT_GRACE_MS` (1 second, `docker/run.ts`) more to close, since a process Docker left behind could keep them open. No line Docker prints after that is sent. Nothing else is done to the app: what Docker made stays as it is, exactly as after any failed start. The start counts as failed (`start_failed`), with all that follows above, and the lock is released when the command ends, as always. This holds for every start: the version-2 `deploy` and version 1's `apply`, in a session and one-shot. Only the report of `deploy` says the limit was hit, with `startLimit`, the limit in whole seconds ([core.md](./core.md), "Outcomes"); the report of `apply` is `start_failed` with nothing more, as every older zekno reads it.
 
 ## RN4. The containers of a service
 
@@ -102,7 +104,7 @@ One round every 2 seconds until every container of every listed service is healt
 
 ## RN12. The outcome
 
-In this order: `start_failed` (as today); `routes_failed` (RN4 to RN9); `unhealthy` (RN11); `started`.
+In this order: `start_failed` (as today, with `startLimit` when `up` was stopped at its time limit, RN3); `routes_failed` (RN4 to RN9); `unhealthy` (RN11); `started`.
 
 ## RN13. `status` with routes, and `proxy`
 
@@ -115,5 +117,6 @@ In this order: `start_failed` (as today); `routes_failed` (RN4 to RN9); `unhealt
 - The stand-in for Docker (`test/support`) is extended first, so that each of `network`, `run`, `exec`, `logs`, `inspect`, `rm`, `start` and `compose ps` can be scripted and is recorded; a call it is not told about still behaves as today.
 - Every rule above has a scenario against the real runner program with the stand-in: the calls made and their order (joining before loading, loading before leaving, `exec kill` and never `kill -s`), the file written, the state before and after, the outcome.
 - A deploy without a route or a health check makes exactly today's calls.
+- The time limit on `up` (RN3; `test/docker/compose.test.ts`, `test/scenarios/start-limit.test.ts`): the stand-in's `up` can be made never to end, to print without pause for ever, or to leave a process behind that keeps its outputs open. With a limit of two seconds passed in, the deploy answers `start_failed` with `startLimit`, the stand-in is gone, the lock is free (the next deploy is not `busy`) and the number is used; with a route, the routes are still carried out; `apply`, in a session and one-shot, answers `start_failed` with no `startLimit`; no line is sent once the answer is given; an `up` that ends in time is unchanged.
 - The health check in force (`test/scenarios/health-in-force.test.ts`): what the entry holds and `status` with routes answers after a deploy with a health check and no route, with both, with a route and none, after a later deploy without one, after `routes_failed` and after `unhealthy`; `status` without the input unchanged; K15's refusal past `LIMITS.healthBytesPerServer`; an entry without `health` answered `invalid_state`.
 - A gated set with real Docker and the pinned image (it never pulls; skipped with a line that says why): a deploy with a domain answers over HTTPS through the proxy with a certificate for that domain; HTTP is redirected; a second app cannot take the domain; a release stops the answer and deletes the certificate's folder; a container restarted behind its name is followed; a broken configuration leaves the earlier one serving; the health check passes, fails on 500 and on no answer, and follows no redirect; everything named `zekno-*` that the test made is removed.

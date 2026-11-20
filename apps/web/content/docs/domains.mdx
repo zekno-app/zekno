@@ -27,11 +27,11 @@ text. So only your team can add, change or move a domain.
 - **A service with a port.** The port the service listens on,
   `networking.port`. The proxy reaches it there, over a network of its own;
   the port is not published on the server because of the domain.
-- **A runner that speaks protocol 4.** Runner 0.1.1 is the first release that
-  will. It is not published yet: until it is, a `zekno` built from the
+- **A runner that speaks protocol 4 or later.** Runner 0.1.1 is the first
+  release that will. It is not published yet: until it is, a `zekno` built from the
   repository installs runner 0.1.0, and on a server with that runner a deploy
   with a domain stops before anything is signed. A runner built from the
-  repository speaks protocol 4 (see
+  repository speaks protocol 5 (see
   [An older or a newer runner](/docs/deploying#an-older-or-a-newer-runner)).
 - **Ports 80 and 443 of the server**, free and reachable from the internet.
   The proxy takes both, and Let's Encrypt checks the domain through them. A

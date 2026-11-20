@@ -52,8 +52,8 @@ async function status() {
 }
 
 describe("the number and the commands", () => {
-  test("protocol 4, and proxy is a command of a session", () => {
-    expect(core.RUNNER_PROTOCOL).toBe(4)
+  test("protocol 4 or later (5 since the start limit, start-limit.test.ts), and proxy is a command of a session", () => {
+    expect(core.RUNNER_PROTOCOL).toBeGreaterThanOrEqual(4)
     expect(SESSION_COMMANDS.at(-1)).toBe("proxy")
     expect(reads(SessionRequestSchema, { command: "proxy" })).toBe(true)
     expect(

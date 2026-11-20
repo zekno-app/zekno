@@ -24,6 +24,7 @@ import { SETTINGS_FILE } from "../../settings/file"
 import { chooseSource, present, readSource } from "../../settings/source"
 import type { DeploySource, DeployText } from "../../settings/types"
 import { DP5, DP6 } from "../../settings/words"
+import { stoppedWaiting } from "../../shared/start-limit"
 import { seconds } from "../../shared/time"
 import { appNames, latestAccepted, secretNamesOf } from "../../shared/views"
 import type { Effect } from "../state/events"
@@ -440,10 +441,14 @@ export function createDeploys(context: Context) {
         dispatch({ type: "deploy-https", shown })
       )
       const { outcome } = result
+      const { startLimit } = result.report
       const text =
         result.problem ??
         (outcome === "start_failed"
-          ? `${server.name} accepted deploy ${result.sequence}, but the app did not start.`
+          ? startLimit === undefined
+            ? `${server.name} accepted deploy ${result.sequence}, but the app did not start.`
+            : // B20: the runner stopped waiting for the start at its limit (protocol 5).
+              stoppedWaiting(server.name, result.sequence, app, startLimit)
           : `${app} is live on ${server.name} in ${seconds(ended - started)}`)
       dispatch({
         type: "deploy-ended",
