@@ -88,7 +88,17 @@ After the audit of 2026-11-20 (security review, parts 9 and 10) the maintainer c
 | The tag `runner-v0.1.1-dev.2` | the workflow published the pre-release with its four files |
 | The second build | matched, both files, three ways; recorded in `runner-release.json` on `dev` (commit `f833d32`) |
 
-Not tried: this release on a Linux server. The time limit and a deletion that fails were tried with the stand-in for Docker only; whether a helper process of Docker's outlives a stopped `docker compose up` is a question for a real server. The sentence for the time limit (lines.md, B20) is proposed and not approved yet.
+The proof of 0.1.1-dev.2, the same day, on the maintainer's server (Ubuntu 26.04.1, x86-64, Docker Engine 29.8.2, as root), with a zekno run from `dev`, a throwaway profile and its key in a file:
+
+1. `zekno server add` over SSH installed runner 0.1.1-dev.2 from the pre-release: the file has the recorded checksum and answers `{"version":"0.1.1-dev.2","protocol":5}`. The state it wrote has mark 4 and an empty `released`.
+2. A deploy with `test.zekno.dev` and a health check: live over HTTPS with a certificate the system's trust store accepts, HTTP answers 308. In the proxy, `ip_forward` is 0, and so is `forwarding` on every interface, the proxy being on two networks; the host's own is 1.
+3. A deletion made to fail: the certificate's folder was made immutable (`chattr +i`), then the domain removed and deployed. The deploy ran, the proxy went, ports 80 and 443 were free, the folder was still there, and the state listed `test.zekno.dev` under `released`. A second deploy, still locked: still listed. Unlocked, then a deploy of another app with no route and no health check: the folder is gone and `released` is empty. That last try went through the short-lived container, the proxy being gone.
+4. A start that never ends (a service that waits for one that never exits), with a keep-alive on the SSH connection: after 30 minutes and 3 seconds `zekno deploy` ended with status 1 and line B20, word for word, with Docker's last lines under it. On the server neither `docker compose` nor its helper process was left, what Docker had made stayed as it was, and the number was used. While it waited, another deploy was told the runner was in the middle of another deploy; right after, the next deploy ran.
+5. Clean-up: every container, network, volume and image of the proof, the runner and `/var/lib/zekno` removed; nothing named zekno is left, and both ports are free.
+
+**Found by the proof, not fixed.** The first try of step 4 had no keep-alive: the network between this machine and the server closed the silent SSH connection after 4 minutes and 34 seconds, and `zekno deploy` ended with "The connection to the runner ended before it answered." The runner carried on by itself, stopped `up` at its limit and freed the lock, but nobody was told. zekno gives `ssh` no keep-alive, and this machine's SSH settings have none, so any deploy that is silent for longer than a network allows ends this way, and B20 cannot arrive over such a network. For the maintainer to decide: zekno could give `ssh` a keep-alive (`ServerAliveInterval`) when the person's own SSH settings set none.
+
+Not tried: ARM64; rootless Docker; the terminal form of B20 on a real server (the plain form was; the terminal form is pinned by tests); the `proxy` request's own try of the list.
 
 ## Maintainer steps
 

@@ -351,8 +351,8 @@ failed first, read through, and merged into `dev`.
 - A released runner's message changed, so the protocol number is 5. A zekno at 5 still deploys
   to a runner at 4, with and without domains; a zekno at 4 is told to update by a runner at 5.
 - **What is left.** The limit is a fixed number. The runner stops the `docker` program it
-  started; whether a helper process of Docker's can outlive it and carry on is not known from the
-  stand-in and is looked at in the real-server proof. An `up` that exited while a process it left
+  started; on the real server of 2026-11-20 no helper process of Docker's outlived it (Docker
+  Engine 29.8.2, Compose 5.6.0). An `up` that exited while a process it left
   behind keeps its outputs open is reported as stopped at the limit; before, it never returned.
   With no session, Docker's output is still collected in memory with no cap, now for 30 minutes
   at most.
@@ -383,3 +383,12 @@ failed first, read through, and merged into `dev`.
     as released; if the proxy then starts again with it, a later deletion removes a certificate
     it holds in memory and it asks for a new one. The exposure is one more certificate request.
   - A version-1 deploy does not try the list.
+
+### Found by the real-server proof of 2026-11-20
+
+Both fixes and A9's were proven on the maintainer's server with runner 0.1.1-dev.2
+(`quickstart.md`, "Runner 0.1.1-dev.2"). The proof found one thing more, an availability gap and
+not new: zekno gives `ssh` no keep-alive, so a network that closes silent connections ends a
+deploy's session while the runner carries on (here after 4 minutes and 34 seconds). The person is
+told the connection ended and not how the deploy went; the server stays consistent, and the next
+`zekno status` shows what runs. **Open**, for the maintainer.
