@@ -1,11 +1,11 @@
 {
-  "version": "0.1.1-dev.1",
+  "version": "0.1.1-dev.2",
   "files": {
     "linux-x64": {
-      "sha256": "5a302b76d9ff62e40d8c928afe309fcc8fac4f957acb5f8336f2b1ea82740a65"
+      "sha256": "9dedaa22522f3454dbd0f97fbb04b732517ed46ff8a97e3c18fc2ba817fc3a2c"
     },
     "linux-arm64": {
-      "sha256": "d5a54bb6ef75e90108ea62f1c1df31ec5262e0214e07553753c054bb19045d85"
+      "sha256": "faba3031237b8cefa53d937025207f5db8523622355833b2f9f4aceba002cde9"
     }
   }
 }
