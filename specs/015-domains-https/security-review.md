@@ -323,8 +323,8 @@ Three leads survived their verifier and need a real test:
 | Lead | State |
 |---|---|
 | A9. The proxy, on every routed app's network at once, has IPv4 forwarding on, so code in one app's container might send one-way packets into another app's network | **Fixed** the same day: the proxy runs with `--sysctl net.ipv4.ip_forward=0` (RN6), with a test that failed first. Observed on Docker Desktop's Linux: a container forwards IPv4 by default (`ip_forward` is 1, on each interface of a container on two networks), IPv6 not, and the setting is accepted with the proxy's capabilities. Whether a packet would have arrived on a Linux server was not tried. A proxy an earlier runner made keeps its options until it is made again; only 0.1.1-dev.1 made one, on a server since cleaned |
-| A10. `docker compose up` has no time limit under the deploy lock, so a container that `up` waits for and that never exits keeps every deploy on that server answering `busy` | **Open**, for the maintainer: a limit needs a number and a sentence. Not new in this feature: `up` has had no limit since the first runner |
-| A11. A released domain's certificate and key are deleted once, a failure is silent, and nothing tries again, though `apply.ts` and RN10 say a later deploy or `proxy` does | **Open**, for the maintainer: the fix keeps the domains still to delete in the state until a deletion succeeds. It is the unfixed half of S2. No outside party can force the failure |
+| A10. `docker compose up` has no time limit under the deploy lock, so a container that `up` waits for and that never exits keeps every deploy on that server answering `busy` | **Fixed** on 2026-11-20 (part 10): `up` is stopped after 30 minutes, the number the maintainer chose |
+| A11. A released domain's certificate and key are deleted once, a failure is silent, and nothing tries again, though `apply.ts` and RN10 say a later deploy or `proxy` does | **Fixed** on 2026-11-20 (part 10): the state lists each released domain until its deletion is known to have worked, and every deploy and `proxy` request tries again |
 
 **Not covered by that run**, so nothing is claimed of them: host ports an app publishes against the
 proxy's 80 and 443; what a runner update does to a running proxy; the unsigned requests `state`,
@@ -332,3 +332,54 @@ proxy's 80 and 443; what a runner update does to a running proxy; the unsigned r
 outside its scope, secrets, the installer and release workflow, the team list, the website and
 templates. Its report also lists 18 hardening notes that are not findings.
 
+## 10. The two open leads of part 9, fixed (2026-11-20)
+
+The maintainer decided both the same day: a limit of 30 minutes on a start, and a released
+domain's certificate deleted until it is gone. Each was built in its own branch with tests that
+failed first, read through, and merged into `dev`.
+
+### A10. A start has a time limit
+
+- `docker compose up` is stopped once it has run for 30 minutes (`START_LIMIT_MS`,
+  `apps/runner/src/docker/compose.ts`): the Docker process gets a signal to end, then one it cannot
+  refuse, and its outputs are waited for one second more, never longer. The deploy lock is then
+  free. What Docker made by then stays as it is, as after any start that failed.
+- The outcome is `start_failed`. The report of a version-2 `deploy` carries `startLimit`, the
+  limit in whole seconds, so the CLI can say what happened (line B20, proposed on 2026-11-20 and
+  not approved yet). The report of the version-1 path is unchanged, since older zeknos read it
+  strictly.
+- A released runner's message changed, so the protocol number is 5. A zekno at 5 still deploys
+  to a runner at 4, with and without domains; a zekno at 4 is told to update by a runner at 5.
+- **What is left.** The limit is a fixed number. The runner stops the `docker` program it
+  started; whether a helper process of Docker's can outlive it and carry on is not known from the
+  stand-in and is looked at in the real-server proof. An `up` that exited while a process it left
+  behind keeps its outputs open is reported as stopped at the limit; before, it never returned.
+  With no session, Docker's output is still collected in memory with no cap, now for 30 minutes
+  at most.
+
+### A11. A released domain's certificate is deleted until it is gone
+
+- The stored state, mark 4, has `released`: the domains released whose certificate is not yet
+  known to be deleted. The write that releases a domain adds it; a domain routed again is taken
+  off in the same write and keeps its certificate. The schema refuses a list that names a domain
+  in force, so a routed domain's certificate can never be deleted from the list.
+- `deleteCertificates` says which are known to be gone: the deletion exited 0, or Docker says the
+  volume does not exist. A Docker that did not answer, a proxy of another server's, a failure or
+  a timeout leave the domain on the list. A timeout ends the round, so a Docker that hangs costs
+  one wait, not one per domain.
+- The list is tried after a load that worked, at every `proxy` request, and after `up` at a
+  deploy of an app with no route, which otherwise makes exactly the calls it made before.
+- The list counts toward `LIMITS.domainsPerServer` at K15, so the state always fits.
+- A mark-3 state of runner 0.1.1-dev.1 is read and given an empty list; runner 0.1.1-dev.1
+  refuses mark 4, as every runner refuses a mark it does not know.
+- **What is left.**
+  - Nothing reports the list. `status` with routes could carry it, so that `zekno doctor` can
+    say a released key is still on a server; that needs a sentence and the maintainer's word.
+  - `zekno server update` sends `proxy` only to a server with a route, so after the last domain
+    is released with a failed deletion, the next try is the next deploy.
+  - A refusal `too_large` caused by the list is worded by the CLI as the general one, since the
+    CLI cannot see the list. It takes 1,024 domains in force and waiting together.
+  - When a load and the load back both fail, the proxy's file can hold a domain the state lists
+    as released; if the proxy then starts again with it, a later deletion removes a certificate
+    it holds in memory and it asks for a new one. The exposure is one more certificate request.
+  - A version-1 deploy does not try the list.

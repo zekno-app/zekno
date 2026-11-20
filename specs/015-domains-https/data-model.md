@@ -21,9 +21,13 @@ Holds no address, no certificate and no key.
 
 A rollback signs the routes and the health check the server holds for the app (its entry in the runner's state, as `status` with routes answers them), whichever machine signed the deploy in force.
 
-## On the server: the runner's state (mark 3)
+## On the server: the runner's state (mark 4)
 
 `routes[app] = { routes: Route[], health: Health | null, names: { [service]: { container, name }[] } }`. The routes and the health check **in force**: written together, from one signed deploy, only after the proxy loaded a configuration that has those routes. Who holds a domain is computed from it. Names are `z` and 32 hex characters, made by the runner, never by a deploy. The health checks of all apps take at most 256 KiB as `status` with routes writes them.
+
+`released: string[]`, sorted: the domains released whose certificate and key are not yet known to be deleted from the proxy's volume. None of them is in force, and the domains in force and these together are at most 1,024. A domain goes on it in the same write that releases it, and comes off when a deletion is known to have worked (tried at every later deploy and every `proxy` request) or when an app routes it again, which then keeps its certificate. Not reported by `status`.
+
+Mark 3, as runner 0.1.1-dev.1 writes it, is the same without `released`: it is read with `released` empty, and saved as mark 4 at the first write.
 
 Transitions of an app's entry, each under the deploy lock:
 
@@ -32,7 +36,7 @@ Transitions of an app's entry, each under the deploy lock:
 | none | a deploy with routes or a health check reaches its start, and the configuration loads | the wanted routes, the deploy's health check and the names given |
 | any | the configuration does not load, or a container is not found (`routes_failed`) | unchanged: the routes and health check of the deploy that wrote it |
 | any | a deploy with a route or a health check, loaded, then not healthy in time (`unhealthy`) | that deploy's routes and health check: saved before the wait |
-| routes | a deploy that leaves a domain out, loaded | the entry without it, with that deploy's health check; its certificate deleted |
+| routes | a deploy that leaves a domain out, loaded | the entry without it, with that deploy's health check; the domain on `released` until its certificate is known to be deleted |
 | any | a deploy with routes and no health check, loaded | its routes, health check `null` |
 | any | a deploy with no route and no health check, loaded | none; its route network removed |
 | any | a deploy that stops before its start (refused, a failed check) | unchanged |
@@ -43,7 +47,7 @@ Transitions of an app's entry, each under the deploy lock:
 |---|---|
 | `<home>/proxy/etc/caddy.json` | rewritten whole whenever the routes in force or the names change; always computable from the state |
 | container `zekno-proxy` | from the first route on the server to the last; made again when its image is not the pinned one |
-| volume `zekno-proxy-data` | certificates, their keys and the Let's Encrypt account; kept when the container goes; a domain's folder deleted when it is released |
+| volume `zekno-proxy-data` | certificates, their keys and the Let's Encrypt account; kept when the container goes; a domain's folder deleted when it is released, and tried again at every later deploy and `proxy` request until it is gone |
 | volume `zekno-proxy-config` | Caddy's own copy of the last configuration it loaded; read to confirm a load |
 | network `zekno-route-<app>` | while the app has a route or a health check |
 

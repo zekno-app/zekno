@@ -2,9 +2,11 @@
  * The stand-in's answers to `docker run` and `docker exec` (specs/015-
  * domains-https, contracts/runner.md, "Tests"): the proxy's container and
  * what Caddy does with its file, a health check's curl, Caddy's validate in
- * a short-lived container before the proxy starts, and the short-lived
- * container that deletes a released domain's certificate while the proxy
- * does not run. Used by `stand-in.ts`; answers from the model (`model.ts`).
+ * a short-lived container before the proxy starts, and the deletion of a
+ * released domain's certificate, inside the proxy or in the short-lived
+ * container that mounts its volume while it does not run: the certificates
+ * on the volume are Caddy's for each domain it loaded, until one is deleted.
+ * Used by `stand-in.ts`; answers from the model (`model.ts`).
  */
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -118,6 +120,48 @@ function validate(
     : fail("{}\n")
 }
 
+/** Caddy loaded `text`: what it saves, and a certificate on the volume for each domain it serves, as it gets one. */
+function loaded(model: Model, text: string) {
+  model.autosave = text
+  const config = JSON.parse(text) as {
+    apps?: {
+      http?: {
+        servers?: Record<
+          string,
+          { routes?: { match?: { host?: string[] }[] }[] }
+        >
+      }
+    }
+  }
+  const hosts = Object.values(config.apps?.http?.servers ?? {}).flatMap(
+    (server) =>
+      (server.routes ?? []).flatMap((route) =>
+        (route.match ?? []).flatMap((match) => match.host ?? [])
+      )
+  )
+  model.certificates = [
+    ...new Set([...(model.certificates ?? []), ...hosts]),
+  ].sort()
+}
+
+/** The one shell line the runner runs on the proxy's volume: `rm -rf` of a domain's certificate folder. */
+const DELETION = /^rm -rf "\/data\/caddy\/certificates\/"\*"\/([a-z0-9.-]+)"$/
+
+/** The deletion of a released domain's certificate: it leaves the volume, unless the test said this one fails. */
+function deleteCertificate(model: Model, script: string): Answer {
+  const domain = DELETION.exec(script)?.[1]
+  if (domain === undefined)
+    return fail(`sh: the stand-in does not run ${script}\n`)
+  if ((model.script.deletionFails ?? 0) > 0) {
+    model.script.deletionFails! -= 1
+    return fail(`rm: can't remove '/data/caddy/certificates': I/O error\n`)
+  }
+  model.certificates = (model.certificates ?? []).filter(
+    (each) => each !== domain
+  )
+  return {}
+}
+
 /** A proxy starting on its file: Caddy saves and serves it, or exits. */
 export function startProxy(model: Model, proxy: FakeContainer) {
   const text = proxyConfig(proxy)
@@ -127,7 +171,7 @@ export function startProxy(model: Model, proxy: FakeContainer) {
     proxy.running = false
     return
   }
-  model.autosave = text!
+  loaded(model, text!)
   if (!model.script.startSilent)
     log.push(caddyLine("serving initial configuration"))
 }
@@ -161,8 +205,8 @@ export function run(model: Model, words: string[]): Answer {
       return curl(model, all("--network")[0] ?? "", command.at(-1) ?? "")
     if (command[0] === "caddy" && command[1] === "validate")
       return validate(model, bindMounts(all("--mount")), command)
-    // The deletion of a released domain's certificate: nothing the model keeps.
-    if (command[0] === "sh") return {}
+    // The deletion of a released domain's certificate, on the volume it mounts.
+    if (command[0] === "sh") return deleteCertificate(model, command.at(-1)!)
   }
   const failing = model.script.runFails
   delete model.script.runFails
@@ -236,12 +280,13 @@ export function exec(model: Model, ref: string, command: string[]): Answer {
         })
       )
     else if (reload !== "silent") {
-      if (reload === "ok") model.autosave = text!
+      if (reload === "ok") loaded(model, text!)
       log.push(caddyLine("successfully reloaded config from file", fields))
     }
     return {}
   }
   if (command[0] === "grep")
     return model.autosave.includes(command.at(-2)!) ? {} : { code: 1 }
+  if (command[0] === "sh") return deleteCertificate(model, command.at(-1)!)
   return {}
 }

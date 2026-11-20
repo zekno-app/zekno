@@ -107,12 +107,18 @@ export async function inspectContainer(
   return raw ? toContainer(raw) : undefined
 }
 
-/** Whether Docker has the named volume; false also when Docker did not answer. */
+/**
+ * Whether Docker has the named volume: false only when Docker says there is
+ * none, undefined when Docker did not answer, so a volume never counts as
+ * missing because Docker could not be asked.
+ */
 export async function volumeExists(
   dir: string,
   name: string
-): Promise<boolean> {
-  return (await runDocker(dir, ["volume", "inspect", name])).code === 0
+): Promise<boolean | undefined> {
+  const result = await runDocker(dir, ["volume", "inspect", name])
+  if (result.code === 0) return true
+  return /no such volume/i.test(result.stderr) ? false : undefined
 }
 
 /** One network by name: its labels and containers, `missing` when there is none, or undefined when Docker did not answer. */

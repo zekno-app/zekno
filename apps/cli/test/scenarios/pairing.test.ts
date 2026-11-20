@@ -264,8 +264,8 @@ describe("SC-006: the zekno from before version 2, and runner 0.1.0 put back", (
       expect(mine.at(-1)).toBe(
         "Deploy 1 of other is running on dev with no secrets."
       )
-      // Protocol 4's runner writes the state marked 3 (specs/015-domains-https, contracts/core.md, "The state").
-      expect(stateIn(runnerHome).v).toBe(3)
+      // Protocol 4's runner writes the state marked 4 (specs/015-domains-https, contracts/core.md, "The state").
+      expect(stateIn(runnerHome).v).toBe(4)
 
       // The older zekno can no longer deploy either app, and says why it skipped the newer entry of each history.
       for (const app of ["web", "other"]) {

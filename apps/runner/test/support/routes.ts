@@ -76,6 +76,8 @@ export const stateOf = (home: string) =>
         names: Record<string, { container: string; name: string }[]>
       }
     >
+    /** The released domains whose certificate is still to delete. */
+    released: string[]
   }
 
 /** The proxy's configuration file in the runner's folder, as text, or undefined. */

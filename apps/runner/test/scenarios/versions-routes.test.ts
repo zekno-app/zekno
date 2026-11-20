@@ -1,9 +1,10 @@
 /**
  * Old and new programs with routes (specs/015-domains-https, US7; core.md,
  * "The state"): a version-1 deploy can never be taken for an app that holds a
- * domain; a state marked 2 is read and written as 3; the runner of feature
+ * domain; a state marked 2 is read and written as 4; the runner of feature
  * 014 put back on a folder this runner wrote refuses everything; and the
- * zekno of feature 014 stops before signing for this runner. The programs of
+ * zekno of feature 014 stops before signing for this runner. Mark 3, as
+ * runner 0.1.1-dev.1 writes it, is in routes-released-state.test.ts. The programs of
  * feature 014 are taken from this clone's history; those cases are skipped,
  * with the reason printed once, in a clone without it.
  */
@@ -83,17 +84,17 @@ describe("a version-1 deploy and the routes in force (FR-036)", () => {
         })
       ).json
     ).toEqual({ outcome: "started", app: "api", sequence: 2 })
-    expect(stateOf(w.home)).toMatchObject({ v: 3, routes })
+    expect(stateOf(w.home)).toMatchObject({ v: 4, routes })
   })
 })
 
 describe('a state marked 2 (core.md, "The state")', () => {
-  test("is read with no routes and left as it is by reads; the first write marks it 3", async () => {
+  test("is read with no routes and left as it is by reads; the first write marks it 4", async () => {
     const w = await world()
     const marked = JSON.parse(
       readFileSync(stateFile(w.home), "utf8")
     ) as Record<string, unknown>
-    const { routes: _routes, ...rest } = marked
+    const { routes: _routes, released: _released, ...rest } = marked
     writeFileSync(stateFile(w.home), JSON.stringify({ ...rest, v: 2 }))
     const bytes = readFileSync(stateFile(w.home), "utf8")
 
@@ -112,9 +113,10 @@ describe('a state marked 2 (core.md, "The state")', () => {
       "started"
     )
     expect(stateOf(w.home)).toMatchObject({
-      v: 3,
+      v: 4,
       lastSequence: { web: 1 },
       routes: { web: { routes: [APP] } },
+      released: [],
     })
   })
 })
@@ -140,11 +142,11 @@ describe("the programs of feature 014 beside this runner (US7)", () => {
           .text()
           .then((text) => JSON.parse(text) as Record<string, unknown>)
       }
-      // Runner 014 writes the state marked 2; this runner reads it, then writes mark 3.
+      // Runner 014 writes the state marked 2; this runner reads it, then writes mark 4.
       const marked = JSON.parse(
         readFileSync(stateFile(w.home), "utf8")
       ) as Record<string, unknown>
-      const { routes: _routes, ...rest } = marked
+      const { routes: _routes, released: _released, ...rest } = marked
       writeFileSync(stateFile(w.home), JSON.stringify({ ...rest, v: 2 }))
       expect(await older("status")).toMatchObject({ serverId: w.serverId })
       expect(await older("version")).toEqual({ version: "0.1.0", protocol: 3 })
@@ -152,7 +154,7 @@ describe("the programs of feature 014 beside this runner (US7)", () => {
       expect((await deployRoutes(w, 0, { routes: [APP] })).result.outcome).toBe(
         "started"
       )
-      expect(stateOf(w.home).v).toBe(3)
+      expect(stateOf(w.home).v).toBe(4)
 
       const bytes = readFileSync(stateFile(w.home), "utf8")
       const invalid = { outcome: "refused", reason: "invalid_state" }

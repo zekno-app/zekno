@@ -58,19 +58,19 @@ describe("domainHolders", () => {
 })
 
 describe("domainsAfter", () => {
-  test("the domains the server would hold with this app's routes replaced", async () => {
+  test("the domains the state would count with this app's routes replaced: those in force and those still to delete", async () => {
     const state = await held()
     // As it is.
     expect(domainsAfter(state, "shop", state.routes.shop!.routes)).toBe(3)
-    // The app gives up one, takes two, or gives up all.
-    expect(domainsAfter(state, "shop", [route("shop.example.com")])).toBe(2)
+    // The app gives up one, takes two, or gives up all: one given up counts until its certificate is deleted.
+    expect(domainsAfter(state, "shop", [route("shop.example.com")])).toBe(3)
     expect(
       domainsAfter(state, "blog", [
         route("blog.example.com"),
         route("news.example.com"),
       ])
     ).toBe(4)
-    expect(domainsAfter(state, "shop", [])).toBe(1)
+    expect(domainsAfter(state, "shop", [])).toBe(3)
     // An app that holds none yet, and an app with a health check only.
     expect(domainsAfter(state, "new", [route("new.example.com")])).toBe(4)
     expect(domainsAfter(state, "api", [route("api.example.com")])).toBe(4)
@@ -129,10 +129,16 @@ describe("withAppRoutes", () => {
     expect(added.routes.old).toEqual(appRoutes(["old.example.com"], 8))
     const removed = withAppRoutes(state, "shop", null)
     expect(Object.keys(removed.routes).sort()).toEqual(["api", "blog"])
-    // The numbers, formats and everything else are as they were.
-    const { routes: _routes, ...rest } = state
+    // What the app gave up is still to delete (state-released.test.ts); the numbers, formats and the rest are as they were.
+    expect(replaced.released).toEqual(["www.shop.example.com"])
+    expect(removed.released).toEqual([
+      "shop.example.com",
+      "www.shop.example.com",
+    ])
+    expect(added.released).toEqual([])
+    const { routes: _routes, released: _released, ...rest } = state
     for (const next of [replaced, removed]) {
-      const { routes: _next, ...others } = next
+      const { routes: _next, released: _list, ...others } = next
       expect(others).toEqual(rest)
       expect(readRunnerState(next)).toEqual(next)
     }

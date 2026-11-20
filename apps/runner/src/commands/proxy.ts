@@ -11,9 +11,11 @@
  * `proxy`: under the deploy lock, makes the proxy what the state needs, from
  * the state alone: started, made again from the pinned image, its
  * configuration loaded when it differs, or removed when no app has a route.
- * It names no container and carries out no route a signed deploy did not put
- * in force, so it needs no signature, as a restart by Docker needs none
- * (research R21). `zekno server update` sends it after an update.
+ * Once it is, the certificate of each released domain still to delete is
+ * tried again, and those known to be gone are taken off the state's list
+ * (RN10). It names no container and carries out no route a signed deploy did
+ * not put in force, so it needs no signature, as a restart by Docker needs
+ * none (research R21). `zekno server update` sends it after an update.
  */
 import {
   healthInForce,
@@ -25,6 +27,7 @@ import {
 
 import { proxyState, removeProxy } from "../proxy/container"
 import { routedApps, serveRoutes } from "../proxy/serve"
+import { retryReleased } from "../routes/released"
 import { isReport, load, locked, refused, status } from "./commands"
 
 /**
@@ -83,14 +86,16 @@ export function proxy(
       outcome: "routes_failed",
       routes: { failure: "not_loaded" },
     }
-    // RN10's last step: no app has a route, so no proxy runs.
-    if (routedApps(state.routes).length === 0)
-      return (await removeProxy(dir, state.serverId))
-        ? { proxy: "none" }
-        : notLoaded
-    // RN6 to RN8, from the state alone.
+    // RN10's last step: no app has a route, so no proxy runs. Then RN10's first, for what is still to delete.
+    if (routedApps(state.routes).length === 0) {
+      if (!(await removeProxy(dir, state.serverId))) return notLoaded
+      await retryReleased(dir, state)
+      return { proxy: "none" }
+    }
+    // RN6 to RN8, from the state alone; then RN10's first step, for what is still to delete.
     const served = await serveRoutes(dir, state.serverId, state.routes)
     if (!served.ok) return { outcome: "routes_failed", routes: served.failure }
+    await retryReleased(dir, state)
     return { proxy: "running" }
   })
 }

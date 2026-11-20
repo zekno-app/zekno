@@ -9,6 +9,12 @@
  * that mounts the volume, and a released domain's key never stays on disk
  * because the proxy was stopped or gone (security review S2).
  *
+ * The deletion says which domains' certificates are known to be gone. The
+ * others stay in the state's list of released domains, and are tried again
+ * at every deploy and every `proxy` request until a deletion works
+ * (`routes/released.ts`), so a failed `docker exec` or a Docker that did not
+ * answer never leaves a key on disk for good.
+ *
  * No OCSP staple is deleted any more: Let's Encrypt has stopped OCSP, and the
  * glob `ocsp/<domain>-*` also reached another domain's staple, releasing
  * `a.example.co` deleting `a.example.co-op.example.com`'s (security review
@@ -17,7 +23,7 @@
 import { isRoutableDomain } from "@workspace/core"
 
 import { volumeExists } from "../docker/objects"
-import { runDocker } from "../docker/run"
+import { NOT_STARTED, runDocker, TIMED_OUT } from "../docker/run"
 import { DATA_VOLUME, type FoundProxy } from "./container"
 import { PROXY_IMAGE } from "./image"
 import { PROXY } from "./log"
@@ -39,44 +45,76 @@ function deletion(domain: string): string | undefined {
 }
 
 /**
- * Deletes the certificate and key of each of `domains`: inside the proxy
- * when it runs; else, when it is this runner's and stopped or gone, through a
- * short-lived container with no network and no capability, and only when
- * the volume is there, since mounting one that is not would make it. A proxy
- * of another server's, or a Docker that did not answer, is not touched. A
- * failure is not reported (RN10).
+ * Runs the deletion of each domain with `run`, in order, and gives the
+ * domains whose deletion exited 0. A call Docker did not finish in its time,
+ * or that could not start, ends the round: Docker is not answering, and each
+ * call after it would wait out its own limit. What was not tried is not gone.
+ */
+async function eachDeleted(
+  scripts: readonly { domain: string; script: string }[],
+  run: (script: string) => Promise<number>
+): Promise<string[]> {
+  const gone: string[] = []
+  for (const { domain, script } of scripts) {
+    const code = await run(script)
+    if (code === 0) gone.push(domain)
+    else if (code === TIMED_OUT || code === NOT_STARTED) break
+  }
+  return gone
+}
+
+/**
+ * Deletes the certificate and key of each of `domains`, and gives those known
+ * to be gone. Inside the proxy when it runs: gone when the deletion exited 0.
+ * Else, when it is this runner's and stopped or gone, through a short-lived
+ * container with no network and no capability, only when the volume is
+ * there, since mounting one that is not would make it: gone when the deletion
+ * exited 0; every one gone when Docker says there is no volume, since there
+ * is nothing to delete. None is gone when the proxy is another server's,
+ * which is not touched, nor when Docker did not answer, about the proxy or
+ * about the volume. A domain that does not match the domain rule is never
+ * put in a shell, so it is never gone. Nothing here is reported (RN10).
  */
 export async function deleteCertificates(
   dir: string,
   proxy: FoundProxy | undefined,
   domains: readonly string[]
-): Promise<void> {
-  const scripts = domains
-    .map(deletion)
-    .filter((script): script is string => script !== undefined)
+): Promise<string[]> {
+  const scripts = domains.flatMap((domain) => {
+    const script = deletion(domain)
+    return script === undefined ? [] : [{ domain, script }]
+  })
   if (scripts.length === 0 || proxy === undefined || proxy.kind === "foreign")
-    return
-  if (proxy.kind === "ours" && proxy.running) {
-    for (const script of scripts)
-      await runDocker(dir, ["exec", PROXY, "sh", "-c", script])
-    return
-  }
-  if (!(await volumeExists(dir, DATA_VOLUME))) return
-  for (const script of scripts)
-    await runDocker(dir, [
-      "run",
-      "--rm",
-      "--network",
-      "none",
-      "--cap-drop",
-      "ALL",
-      "--security-opt",
-      "no-new-privileges",
-      "-v",
-      `${DATA_VOLUME}:/data`,
-      PROXY_IMAGE,
-      "sh",
-      "-c",
-      script,
-    ])
+    return []
+  if (proxy.kind === "ours" && proxy.running)
+    return eachDeleted(
+      scripts,
+      async (script) =>
+        (await runDocker(dir, ["exec", PROXY, "sh", "-c", script])).code
+    )
+  const volume = await volumeExists(dir, DATA_VOLUME)
+  if (volume === false) return scripts.map((each) => each.domain)
+  if (volume === undefined) return []
+  return eachDeleted(
+    scripts,
+    async (script) =>
+      (
+        await runDocker(dir, [
+          "run",
+          "--rm",
+          "--network",
+          "none",
+          "--cap-drop",
+          "ALL",
+          "--security-opt",
+          "no-new-privileges",
+          "-v",
+          `${DATA_VOLUME}:/data`,
+          PROXY_IMAGE,
+          "sh",
+          "-c",
+          script,
+        ])
+      ).code
+  )
 }

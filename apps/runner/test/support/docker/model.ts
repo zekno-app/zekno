@@ -1,8 +1,8 @@
 /**
  * What the stand-in for Docker remembers between calls (specs/015-domains-
  * https, contracts/runner.md, "Tests"): containers, networks, the proxy's
- * log and what it last loaded, and what a test has asked the next calls to
- * do. Kept as one JSON file in the stand-in's folder, read and written whole
+ * log, what it last loaded and the certificates on its volume, and what a
+ * test has asked the next calls to do. Kept as one JSON file in the stand-in's folder, read and written whole
  * by each call; the runner makes its calls one at a time, under its lock.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
@@ -61,6 +61,8 @@ export type Script = {
   imageMissing?: boolean
   /** Each `pull` fails. */
   pullFails?: boolean
+  /** How many deletions of a released domain's certificate, inside the proxy or in a short-lived container, exit 1 and leave it. */
+  deletionFails?: number
 }
 
 export type Model = {
@@ -72,6 +74,12 @@ export type Model = {
   logs: Record<string, string[]>
   /** The proxy's `/config/caddy/autosave.json`: what it last loaded. */
   autosave: string
+  /**
+   * The domains with a certificate and key on the proxy's volume, sorted:
+   * Caddy gets one for each domain of a configuration it loads, and the
+   * runner's deletion of a released domain's removes it.
+   */
+  certificates: string[]
   script: Script
 }
 
@@ -86,6 +94,7 @@ export function readModel(dir: string): Model {
       volumes: [],
       logs: {},
       autosave: "",
+      certificates: [],
       script: {},
     }
   return JSON.parse(readFileSync(path, "utf8")) as Model
