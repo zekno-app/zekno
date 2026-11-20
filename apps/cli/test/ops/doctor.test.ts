@@ -66,6 +66,20 @@ const OWN = runnerPackage.version
  */
 const HELD = heldRelease.version
 /**
+ * Whether that release file holds its checksums. Between the commit that
+ * prepares a prod release and the second build that records them, it holds
+ * none (apps/runner/RELEASING.md, part 4), and doctor says so with D2.
+ */
+const HELD_HAS_CHECKSUMS = Object.values(heldRelease.files).every(
+  (file) => typeof file.sha256 === "string"
+)
+/** The line `zekno` of a machine that uses the release file itself: good, or the warning D2. */
+const HELD_LINE = HELD_HAS_CHECKSUMS
+  ? `this machine\tzekno\tgood\t${CLI_VERSION}, installs runner ${HELD}`
+  : `this machine\tzekno\twarning\t${CLI_VERSION}, installs runner ${HELD}\tThis build holds no checksum for runner ${HELD}, so it cannot install a runner`
+/** How a summary counts that line's warning, when it is one. */
+const HELD_WARNINGS = HELD_HAS_CHECKSUMS ? "no warnings" : "1 warning"
+/**
  * What the release file on main names when this zekno carries the newest
  * release: its own version. Main never names a development version, so while
  * the repository's runner is one (between a dev release and the next prod
@@ -313,11 +327,11 @@ describe("everything in order, and the broken setups of quickstart.md (SC-004)",
     expect(await doctor(f)).toEqual({
       code: 1,
       out: [
-        `this machine\tzekno\tgood\t${CLI_VERSION}, installs runner ${HELD}`,
+        HELD_LINE,
         "this machine\tkey\tproblem\tno team on this machine\tRun zekno deploy in a project folder, or zekno init",
         "this machine\tprofile\tnot checked",
         SERVERS_SKIPPED,
-        "1 problem, no warnings.",
+        `1 problem, ${HELD_WARNINGS}.`,
       ],
       err: [],
     })
@@ -911,14 +925,14 @@ exec "${real}" "$@"
     expect(await doctor(f)).toEqual({
       code: 0,
       out: [
-        `this machine\tzekno\tgood\t${CLI_VERSION}, installs runner ${HELD}`,
+        HELD_LINE,
         "this machine\tkey\tgood\tin your system keychain",
         "this machine\tprofile\tgood\tverified, team list v2",
         "dev\treachable\tgood\ton this machine",
         "dev\tdocker\tnot checked",
         `dev\trunner\tgood\t${OWN}, on this machine`,
         "dev\tdisk\tnot checked",
-        "No problems, no warnings.",
+        `No problems, ${HELD_WARNINGS}.`,
       ],
       err: [],
     })
