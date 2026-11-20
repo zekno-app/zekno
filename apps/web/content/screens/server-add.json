@@ -10,7 +10,7 @@
   ],
   "lines": [
     [["dim","$ zekno server add prod-1 --ssh deploy@203.0.113.7"]],
-    [["","  Installed the runner 0.1.1-dev.1 at ~/.local/bin/zekno-runner. It matched the checksum this zekno"]],
+    [["","  Installed the runner 0.1.1-dev.2 at ~/.local/bin/zekno-runner. It matched the checksum this zekno"]],
     [["","  holds."]],
     [["green","✔"],[""," Connected \"prod-1\" and added it to the team list."]],
     [["","  "],["dim","Server code"],[""," "],["bold","C5VJ-2PRX-8DQM-K7TW-4NHA"]],
