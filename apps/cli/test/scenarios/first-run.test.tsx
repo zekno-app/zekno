@@ -421,7 +421,7 @@ describe("adding a server over SSH (board 'Add a server')", () => {
       expect(steps.added?.state).toBe("done")
       // The installer's connection became the session: one SSH connection in all.
       expect(ssh.calls()).toEqual([
-        `-- deploy@203.0.113.7 sh -s -- add ${OWN} release x64 ${m.deps.release!.files["linux-x64"].sha256}`,
+        `-o ServerAliveInterval=30 -- deploy@203.0.113.7 sh -s -- add ${OWN} release x64 ${m.deps.release!.files["linux-x64"].sha256}`,
       ])
       expect(profileServers(m)[0]?.target).toEqual({
         kind: "ssh",
@@ -477,7 +477,7 @@ describe("adding a server over SSH (board 'Add a server')", () => {
         0
       )
       expect(ssh.calls().at(-1)).toBe(
-        `-- deploy@203.0.113.7 ${RUNNER_PATHS.user} session`
+        `-o ServerAliveInterval=30 -- deploy@203.0.113.7 ${RUNNER_PATHS.user} session`
       )
     })
   }, 60_000)
@@ -763,8 +763,8 @@ describe("SSH questions inside the app (research R10)", () => {
       // Asked once in batch mode, which failed; then once without, which went on to the session.
       const install = `deploy@203.0.113.7 sh -s -- add ${OWN} release x64 ${m.deps.release!.files["linux-x64"].sha256}`
       expect(ssh.calls()).toEqual([
-        `-o BatchMode=yes -- ${install}`,
-        `-- ${install}`,
+        `-o ServerAliveInterval=30 -o BatchMode=yes -- ${install}`,
+        `-o ServerAliveInterval=30 -- ${install}`,
       ])
       expect(timeline).toEqual([
         `suspend ${handOverNote("deploy@203.0.113.7")}`,
@@ -776,8 +776,8 @@ describe("SSH questions inside the app (research R10)", () => {
       timeline.length = 0
       await app.effects.checkServers()
       expect(ssh.calls().slice(-2)).toEqual([
-        `-o BatchMode=yes -- deploy@203.0.113.7 ${RUNNER_PATHS.user} session`,
-        `-- deploy@203.0.113.7 ${RUNNER_PATHS.user} session`,
+        `-o ServerAliveInterval=30 -o BatchMode=yes -- deploy@203.0.113.7 ${RUNNER_PATHS.user} session`,
+        `-o ServerAliveInterval=30 -- deploy@203.0.113.7 ${RUNNER_PATHS.user} session`,
       ])
       expect(timeline).toEqual([
         `suspend ${handOverNote("deploy@203.0.113.7")}`,
@@ -803,7 +803,7 @@ describe("SSH questions inside the app (research R10)", () => {
     expect(suspended).toEqual([])
     expect(ssh.calls()).toHaveLength(1)
     expect(ssh.calls()[0]).toStartWith(
-      "-o BatchMode=yes -- deploy@203.0.113.7 sh -s -- add"
+      "-o ServerAliveInterval=30 -o BatchMode=yes -- deploy@203.0.113.7 sh -s -- add"
     )
   }, 60_000)
 
@@ -846,8 +846,8 @@ describe("SSH questions inside the app (research R10)", () => {
       let made = ssh.calls().length
       await app.effects.checkServers()
       expect(ssh.calls().slice(made)).toEqual([
-        `-o BatchMode=yes -- ${SESSION}`,
-        `-- ${SESSION}`,
+        `-o ServerAliveInterval=30 -o BatchMode=yes -- ${SESSION}`,
+        `-o ServerAliveInterval=30 -- ${SESSION}`,
       ])
       expect(suspended).toEqual([handOverNote("deploy@203.0.113.7")])
       expect(prod()).toMatchObject({
@@ -875,8 +875,8 @@ describe("SSH questions inside the app (research R10)", () => {
         "the connection to end"
       )
       expect(ssh.calls().slice(made)).toEqual([
-        `-o BatchMode=yes -- ${SESSION}`,
-        `-- ${SESSION}`,
+        `-o ServerAliveInterval=30 -o BatchMode=yes -- ${SESSION}`,
+        `-o ServerAliveInterval=30 -- ${SESSION}`,
       ])
       expect(suspended).toHaveLength(2)
       expect(prod()).toMatchObject({
@@ -896,8 +896,8 @@ describe("SSH questions inside the app (research R10)", () => {
       app.press({ kind: "enter" })
       await app.until(() => prod().reachable === true, "the connection")
       expect(ssh.calls().slice(made)).toEqual([
-        `-o BatchMode=yes -- ${SESSION}`,
-        `-- ${SESSION}`,
+        `-o ServerAliveInterval=30 -o BatchMode=yes -- ${SESSION}`,
+        `-o ServerAliveInterval=30 -- ${SESSION}`,
       ])
       expect(suspended).toHaveLength(3)
       expect(prod().asks).toBeUndefined()
@@ -958,8 +958,8 @@ describe("SSH questions inside the app (research R10)", () => {
       expect(top(app.state).name).toBe("home")
       const install = `deploy@203.0.113.7 sh -s -- add ${OWN} release x64 ${m.deps.release!.files["linux-x64"].sha256}`
       expect(ssh.calls()).toEqual([
-        `-o BatchMode=yes -- ${install}`,
-        `-- ${install}`,
+        `-o ServerAliveInterval=30 -o BatchMode=yes -- ${install}`,
+        `-o ServerAliveInterval=30 -- ${install}`,
       ])
       expect(suspended).toHaveLength(1)
       // Read over the session it was added over, which checked it is the server that was added, on this team.
@@ -1084,8 +1084,8 @@ describe("`zekno server add --ssh` and `zekno server update`", () => {
     )
     // The file went on the installer's connection; the session needed a second.
     expect(ssh.calls()).toEqual([
-      `-- deploy@example.test sh -s -- add ${OWN} file ${sha256(realRunner(m.docker.path))}`,
-      `-- deploy@example.test ${RUNNER_PATHS.user} session`,
+      `-o ServerAliveInterval=30 -- deploy@example.test sh -s -- add ${OWN} file ${sha256(realRunner(m.docker.path))}`,
+      `-o ServerAliveInterval=30 -- deploy@example.test ${RUNNER_PATHS.user} session`,
     ])
     expect(server.calls("curl")).toEqual([])
     // --runner-file goes with --ssh only, and not with --runner-path.
@@ -1966,7 +1966,7 @@ describe("a release with a dev version, as a zekno built from dev carries it", (
     })
     const sha = m.deps.release.files["linux-x64"].sha256
     expect(ssh.calls()).toEqual([
-      `-- deploy@example.test sh -s -- add 0.1.0-dev.1 release x64 ${sha}`,
+      `-o ServerAliveInterval=30 -- deploy@example.test sh -s -- add 0.1.0-dev.1 release x64 ${sha}`,
     ])
     expect(m.out).toContain(
       "Installed the runner 0.1.0-dev.1 at ~/.local/bin/zekno-runner. It matched the checksum this zekno holds."
@@ -1991,7 +1991,7 @@ describe("a release with a dev version, as a zekno built from dev carries it", (
       expect(top(app.state).name).toBe("home")
       const sha = m.deps.release!.files["linux-x64"].sha256
       expect(ssh.calls()).toEqual([
-        `-- deploy@example.test sh -s -- add 0.1.0-dev.1 release x64 ${sha}`,
+        `-o ServerAliveInterval=30 -- deploy@example.test sh -s -- add 0.1.0-dev.1 release x64 ${sha}`,
       ])
       expect(app.state.adding?.steps.runner).toEqual({
         state: "done",
@@ -2022,7 +2022,7 @@ describe("a release with a dev version, as a zekno built from dev carries it", (
     })
     expect(m.lastErr()).toBe(NO_RELEASE)
     expect(ssh.calls()).toEqual([
-      "-- deploy@example.test sh -s -- add 0.1.0-dev.1 release",
+      "-o ServerAliveInterval=30 -- deploy@example.test sh -s -- add 0.1.0-dev.1 release",
     ])
     expect(readFileSync(join(m.home, "profile.json"), "utf8")).toBe(profile)
     expect(existsSync(server.runnerPath)).toBe(false)

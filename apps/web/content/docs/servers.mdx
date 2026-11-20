@@ -109,6 +109,17 @@ server id.
 zekno server ls
 ```
 
+## The SSH connection
+
+`zekno` reaches a server with your own `ssh` program and your own SSH
+settings: keys, host names, jump hosts. It adds one option of its own,
+`ServerAliveInterval=30`, so SSH sends a small message through the connection
+every 30 seconds. Without it, a deploy that is silent for a few minutes, such
+as one waiting for a slow start, can have its connection closed by a network
+in between: the server carries on, and `zekno` can only say that the
+connection ended. An interval in your own SSH settings is replaced by this
+one for `zekno`'s connections; your other settings apply as they are.
+
 ## Installing the runner
 
 `zekno server add <name> --ssh <user@host>` with no `--runner-path` runs a

@@ -391,4 +391,9 @@ Both fixes and A9's were proven on the maintainer's server with runner 0.1.1-dev
 not new: zekno gives `ssh` no keep-alive, so a network that closes silent connections ends a
 deploy's session while the runner carries on (here after 4 minutes and 34 seconds). The person is
 told the connection ended and not how the deploy went; the server stays consistent, and the next
-`zekno status` shows what runs. **Open**, for the maintainer.
+`zekno status` shows what runs. **Fixed** the same day, as the maintainer decided: every `ssh`
+zekno starts carries `-o ServerAliveInterval=30` (`apps/cli/src/server/transport.ts`). It replaces
+an interval of the person's own SSH settings for zekno's connections: reading those settings
+first, with `ssh -G`, would run their `Match exec` lines twice at every connection. A connection
+that is really dead now ends after the unanswered messages SSH allows, three by default, where it
+could hang before. No runner change, so no release.

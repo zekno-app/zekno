@@ -101,7 +101,7 @@ function github(version: string | "fails", wait = 0) {
 
 /** A connection that is a read in batch mode: the check script, a session, or an older runner's one-shot `status`. */
 const READ_ONLY =
-  /^-o BatchMode=yes -- \S+ (sh -s -- check ~\/\.local\/bin\/zekno-runner|~\/\.local\/bin\/zekno-runner (session|status))$/
+  /^-o ServerAliveInterval=30 -o BatchMode=yes -- \S+ (sh -s -- check ~\/\.local\/bin\/zekno-runner|~\/\.local\/bin\/zekno-runner (session|status))$/
 
 /** An executable script in a folder of its own. */
 function script(text: string): string {

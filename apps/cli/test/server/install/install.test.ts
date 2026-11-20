@@ -80,7 +80,7 @@ describe("running the installer over SSH", () => {
       "done",
     ])
     expect(ssh.calls()).toEqual([
-      `-- deploy@example.test sh -s -- add ${VERSION} release x64 ${sha}`,
+      `-o ServerAliveInterval=30 -- deploy@example.test sh -s -- add ${VERSION} release x64 ${sha}`,
     ])
   })
 
@@ -140,7 +140,7 @@ describe("running the installer over SSH", () => {
       ).rejects.toThrow(unreachable("deploy@example.test"))
     })
     expect(refused.calls()).toEqual([
-      `-o BatchMode=yes -- deploy@example.test sh -s -- add ${VERSION} release`,
+      `-o ServerAliveInterval=30 -o BatchMode=yes -- deploy@example.test sh -s -- add ${VERSION} release`,
     ])
   })
 
