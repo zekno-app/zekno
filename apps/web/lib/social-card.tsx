@@ -68,7 +68,7 @@ export async function renderSocialCard() {
         >
           <div style={{ display: "flex", fontSize: 44, fontWeight: 600 }}>
             <span>zekno</span>
-            <span style={{ color: colors.brand }}>.app</span>
+            <span style={{ color: colors.brand }}>.dev</span>
           </div>
           <div
             style={{
