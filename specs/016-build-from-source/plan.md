@@ -1,0 +1,322 @@
+# Implementation Plan: Build from source
+
+**Branch**: `016-build-from-source` | **Date**: 2026-11-27 | **Spec**: [spec.md](./spec.md)
+
+**Input**: [spec.md](./spec.md) (131 requirements, every point decided or taken as recommended), the proposed words in [design/lines.md](./design/lines.md) and the 18 boards (not approved yet), [research.md](./research.md) (D1 to D6, the hand test R1 to R10, parts 6 and 8), the four maps of 2026-11-27 in [research/](./research/) (`map-core.md`, `map-runner.md`, `map-cli.md`, `map-checks.md`), and the design of feature 010 ([deploy-v2.md](../010-app-settings/deploy-v2.md), part 4.1 (b), Q1 to Q18). Revised the same day after two reviews of the plan: one for security, one as the engineer and tester who must build and prove it.
+
+## Summary
+
+`zekno deploy` in a folder of code builds the image on the customer's own server and runs it. The code is packed the same way on every machine, sealed for the server in pieces, and signed with the recipe, the builder and what the build reads. The runner checks every piece before the number is used, builds in one fixed way with the server's own Docker, keeps the images of three deploys per app, and keeps none of the builder's output.
+
+- **Step 1** (runner 0.1.2-dev.1, protocol 6): a folder with a Dockerfile. Plain variables the Dockerfile declares with `ARG` reach the build.
+- **Step 1b** (in 0.1.2-dev.1 if ready, else in 0.1.2-dev.2): secrets the settings name one by one, as mounted build secrets.
+- **Step 2** (runner 0.1.2-dev.2, protocol 7): a folder with no Dockerfile, planned by a pinned Railpack on the developer's machine and built with its pinned frontend.
+- **Before any of it**: a check on GitHub's Linux machines, run on every push, with a server stand-in that holds pinned Docker engines. Its first runs answer what the maps found on Docker Desktop only, before the runner's build code is written.
+- **Core library**: the build entry names its builder; the pack's one form, its pieces and their bound; the key; three requests (`pack`, `builds`, `builder`); one outcome (`build_failed`); state mark 5.
+- **Runner**: a second lock, held only for short spans; staging; the checks; the fixed build command; a watch that stops a build when the team list no longer allows it; kept images; the cache bound; the free-disk floor; Docker's own build record removed; a restart path that finds every client of a build by a token written before it starts.
+- **CLI**: the Build section of the settings; choosing files as Docker does; a Dockerfile reader; the uncommitted-changes line read from `.git`; the summary and the first-time questions; the upload, also while another app builds; the build stage; rollback, status, doctor and `zekno logs --build`; Railpack in step 2.
+
+## Needs the maintainer
+
+Each item has options and a recommendation. The plan goes on the recommendation until the maintainer says otherwise. Where work must wait for an answer, the item says so. Items 26 to 29 were added by the reviews of the plan; the numbers of items 1 to 25 are unchanged, since the contracts cite them.
+
+### Tools and packages (M3, M4, FR-091)
+
+1. **Railpack's pin (M3, step 2).** Which version does zekno pin, and how are its checksums and digests established? (a) The release that is current when step 2 starts, once the Railpack checks R1 to R10 and R16 have run on it. (b) 0.43.1, the version of the hand test. **Recommended: (a).** Either way: the maintainer fetches the release's `checksums.txt` on the Mac's own network, the check fetches it on GitHub's, and both must match. The SHA-256 of the `railpack` program inside each of the four archives (macOS and Linux, x86-64 and ARM64) is recorded. The frontend and every image the version's plans can name are resolved to their multi-processor index digests on both networks and compared. The hosts the download redirects to are listed. Any program `railpack prepare` itself downloads (check R16) is pinned the same way, or step 2 waits. All of it goes into `apps/cli/src/railpack/railpack-release.json` in one reviewed change. Step 2's CLI work waits for this file. **The tool that verifies a build attestation**, where Railpack publishes one: (i) `gh attestation verify`, GitHub's command-line program, run once by the maintainer at M3; (ii) `cosign`; (iii) none, the checksums compared from two networks only. **Recommended: (i) if the pinned release carries an attestation, else (iii).**
+2. **The engines of the Linux check (M4).** How does the check get Docker Engine 29.5 and older engines, since GitHub's `ubuntu-24.04` lists 28.0.4 and `ubuntu-26.04` lists 29.4.2 (looked up in runner-images' published lists on 2026-11-27, not run on GitHub)? (A) Install a pinned `docker-ce` on GitHub's machine. (B) The official `docker:<version>-dind` image (the runner's Linux build does not start in it). (C) A server stand-in: `ubuntu:24.04` by digest, privileged, with Docker's own apt packages at exact versions (the repository key's fingerprint checked first), Ubuntu's `openssh-server` and `iproute2`, and Ubuntu's own `docker.io` and `docker-buildx` for the older-engine job. **Recommended: (C)**, one script on GitHub and on the Mac. Engines: the floor 29.5.0 with buildx 0.34.1 to start; `floor-no-buildx` (29.5.0 without `docker-buildx-plugin`, the only engine that shows `no_build_plugin`); older 29.4.3, and Ubuntu's `docker.io` (29.1.3 in Ubuntu's archive on 2026-11-27, looked up) with and without its buildx; the newest 29.10.1, raised by hand. **Also named here for approval**: the base images of the real-Docker fixtures, each pinned by digest in `pins.json`; the SC-003 client container, which uses the same `ubuntu:24.04` digest; the second, independent tar reader of CO19, written inside the test rather than taken from the machine (`bsdtar` or Python). Every digest in `pins.json` (`ubuntu:24.04`, the fixtures' images, item 3 (b)'s image if chosen) and item 11 (b)'s frontend digest if chosen is fetched on two networks, the Mac's and GitHub's, compared, and recorded in one reviewed change, as item 1 does for Railpack.
+3. **The check's private registry** (for private base images, L8). (a) Ubuntu's `docker-registry` 2.8.2 inside the stand-in. (b) The official `registry` image by digest. (c) A small registry written in the repository. **Recommended: (a)**: no Docker Hub pull, the same apt source.
+4. **An ARM64 job on GitHub** (`ubuntu-24.04-arm`, free on a public repository)? It moves the ARM64 build of FR-089b from the Mac only to every push. **Recommended: yes.**
+5. **A macOS job on GitHub**, so the fingerprint of SC-013 and the Railpack plan made on macOS are compared with Linux on every push? It changes FR-089b, which puts the macOS side on the Mac by hand. **Recommended: yes**, and the Mac's hand run stays.
+6. **A newest-engine leg**, pinned and raised by hand, in the proof job and in the `checks` job, where it runs L2, L8, L9, L12, L13, L15, L17 and L18 on both stores ([quickstart.md](./quickstart.md), "The jobs")? Without it, the checks that FR-037c and FR-037d rest on run only at the floor, while servers run newer engines. **Recommended: yes.**
+7. **Is `linux checks` a required check for `dev`?** A ruleset setting, the maintainer's own. **Recommended: yes, once it has passed on `dev` after step 1's merge.**
+8. **Reading `.dockerignore` and Dockerfiles.** (a) Written in the project, about 750 lines with tests against real BuildKit in the check. (b) The packages `@balena/dockerignore` and `dockerfile-ast` (the second brings two language-server packages). **Recommended: (a)**: the reader is a security check that refuses what it cannot resolve, and code from outside would run in the program that holds the signing key.
+9. **Reading `.git` for the uncommitted-changes line.** (a) Written in the project, about 400 lines, files only. (b) The package `isomorphic-git`. (c) Running `git`, which can run programs the repository names (FR-017a forbids it). **Recommended: (a).**
+10. **How pieces are compressed.** (a) zstd level 3 from Bun's built-in `node:zlib`, imported by the core library, its first runtime import, so the bound on what a piece opens to is written once. (b) The same, with the CLI and the runner passing compress and decompress functions to core. (c) gzip, also built in, 25 times slower on random data. **Recommended: (a).** No package is added either way. The choice fixes the format of what is sealed: changing it later costs a protocol number.
+
+### Directions
+
+11. **A `# syntax=` line (point 4, FR-034, FR-037c).** On Docker Desktop and in nested engines 29.5.3 and 29.10.1, `--build-arg BUILDKIT_SYNTAX=dockerfile.v0` did not make the builder ignore the line: it looked for an image `docker.io/library/dockerfile.v0` and failed (map-runner E02, map-checks T4; buildx 0.35 among them). (a) zekno refuses a Dockerfile with a `# syntax=` line before signing, and the runner refuses it before the number is used. (b) The runner pins Docker's official Dockerfile frontend by digest (fetched on two networks, item 2); every server pulls it, and it then receives build secrets. (c) Point 4 (a) as decided, if the Linux check shows `dockerfile.v0` works. **Recommended: run L2 first (phase 0); (c) only if it works at the floor and at the newest engine, on both stores; else (a).** (c) decided at the floor alone is not enough: servers run newer engines, and the line's frontend would then read the Dockerfile. **Whatever this item decides**, a `# syntax=` line in a build whose `secrets` is not empty is refused by zekno before signing and by the runner before the number (`unsupported_version`), so FR-037c never rests on `BUILDKIT_SYNTAX` being honoured (a proposed spec change, below). Both sides use one pattern from core (CO6). With (a), B15 becomes a refusal, and the floor stays 29.5.0, with a buildx floor the check sets. The runner's build command waits for this answer.
+12. **How a step built with a named secret is kept from other builds (FR-037d, step 1b).** A changed or absent secret does not make BuildKit run a cached step again, and `--no-cache` alone lets the next build reuse the step it ran (E05). (a) The runner adds `--add-host zekno-<salt>:127.0.0.1`, the salt made from the app and the listed fingerprints of its named secrets. It worked on Docker Desktop (E05); Docker does not document that `--add-host` is in the cache key. (b) A builder per app (`docker-container` driver), which needs BuildKit's image on every server, a new tool. (c) A build that reads a secret reuses no step and gets a random salt. (c) is not a fallback for (a): its salt is an `--add-host` too, so it rests on the same behaviour. **Recommended: (a)**, once L15 shows on every engine and store the check covers (the floor and the newest, item 6) that two salts never share a step. If L15 shows that `--add-host` is not in the cache key on any engine the check covers, neither (a) nor (c) holds, and the choice comes back to the maintainer before step 1b is built (FR-037d): (b); a salt carried by another cache-key input that L15 also proves (not tried; for example Docker's documented argument `BUILDKIT_SANDBOX_HOSTNAME`, which FR-036's list would then name); or no build secrets in this feature. **And on a server newer than the check covered**: the runner records the newest Docker Engine and buildx the check covered (`builder/covered.ts`, raised only with a passing check). A build with secrets on a newer engine or buildx is (i) refused before the number (`docker_unchecked`, CO10), and zekno stops before signing when `builder` told it the versions; or (ii) built with the salt, and the record and `zekno doctor --builds` say the engine was not checked. **Recommended: (i)**, as FR-037d asks where the plan cannot show it. Its cost: after a Docker update on the server, such builds wait for a runner whose recorded versions were raised. FR-037d asks for this answer before step 1b is built.
+13. **The Docker client's proxy settings** reach every build step (E10). The client adds both `HTTP_PROXY` and `http_proxy` (and so on for each name) from `config.json`; E10 showed the five upper-case names, passed empty, also removing the lower-case ones, but only on buildx 0.35, whose proxy handling matches names in any case. (a) The runner passes all ten names empty: `HTTP_PROXY`, `HTTPS_PROXY`, `FTP_PROXY`, `NO_PROXY`, `ALL_PROXY` and `http_proxy`, `https_proxy`, `ftp_proxy`, `no_proxy`, `all_proxy`; FR-036's list of allowed arguments names them (a proposed spec change, below). L8 runs at the floor and the newest engine. (b) The runner uses its own `DOCKER_CONFIG`, which loses the server's registry logins and can lose the build plugin. **Recommended: (a).**
+14. **File times in the pack.** With one fixed time, a web server that serves files from the image can keep serving a stale file whose size did not change (its `ETag` is made from time and size). (A) The pack holds one fixed time; the runner gives each file the build's start time as it streams the checked pack to the builder. (B) A time made from each file's content. (C) One fixed time, said in the docs. **Recommended: (A)**, once check L4b shows BuildKit leaves file times out of its cache checksums, as Docker's documentation of the build cache says. Otherwise (C).
+15. **App names that end with a hyphen** are allowed today and are not valid in an image name. (a) Refuse their builds before signing. (b) Change how built images are named. **Recommended: (a).**
+16. **Long names in the pack.** (a) Refuse, before signing, a name the ustar header cannot hold: one that no `/` splits into a prefix of at most 155 bytes and a name of at most 100 bytes, a folder's trailing `/` counted (`splitsAsUstar`, CO5, used by zekno's walk, the writer and the runner's checker alike). (b) Pax records, with a larger checker in the runner. **Recommended: (a)**: line C7 already refuses long names, and one predicate keeps every side the same.
+17. **`ONBUILD` triggers of a base image** run in this build, and one could name another app's built image, which zekno cannot see before signing. (a) The runner fails a build whose recorded materials name any image under `zekno.invalid/`, with a new reason `reserved_image` added to FR-031a's fixed list (a proposed spec change, below), if check L9 shows local images appear there. (a) acts only after the build ran: by then the step, or a frontend under item 11 (c), has read the other app's image, which holds its code, and with the network could have sent it. (b) Accept it and say so in the docs. (c) The runner hands every build a source policy it writes itself, outside the pack, that denies every `docker-image://zekno.invalid/*` source: buildx's policy option where the server's buildx has it, or BuildKit's source-policy file; L9 checks it on each engine, and (a) is kept as the record. **Recommended: (c) if L9 shows the policy holds on the floor and the newest engine, with (a) beside it; else (a) if L9 shows the materials; else (b).**
+18. **`zekno settings compose` for a service whose key needs the network or the server.** (a) For a Railpack plan, a build secret's listed fingerprint, or a build whose base key this machine's history shows with a fresh generation, the image line shows a marked placeholder for the key, and a note on standard error says why. For a Dockerfile build with no secret, the folder is packed and the key printed with `fresh` null, and a note on standard error says that a fresh build made from any machine changes it. (b) The command reaches the network and the server. **Recommended: (a)**, an exception to FR-011's "byte for byte" for those services only (a proposed spec change, below). [contracts/cli.md](./contracts/cli.md) CL1 says the same.
+19. **A folder with only `Dockerfile.prod`** (no file named exactly `Dockerfile`). (a) List such files (`Dockerfile.*` and `*.Dockerfile` at the top) in the first question (A14), so the person chooses. (b) Keep FR-004's reading: the folder has no Dockerfile. **Recommended: (a).**
+20. **Proxy settings for `railpack prepare`** (step 2). (a) None of the person's environment. (b) Pass `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`. **Recommended: (a)**: a proxy address can hold a password, and FR-056 allows no secret in Railpack's environment.
+21. **Today's sentences that change for apps that do not build** (lines C26, G16, G18; lines.md unclear point 14). (a) Approve them as a second exception to FR-074: G18 lists the settings and must name the new ones. (b) Keep today's sentence where the service sets no build. **Recommended: (a).** No frozen plain transcript holds any of them.
+
+### Words and boards (M2)
+
+22. **The nineteen choices of `lines.md`.** The plan follows each recommendation. Three change how the spec reads: A-c (`Don't build` says `Nothing was done.`, not FR-002's sentence), D-e (`Reused` where the spec says "kept"), G-a (Railway's names, `source.root` and the `build` section).
+23. **Lines that change with this plan.** From the first draft: R11 is said for `pack_mismatch`; R15 goes (a credential name is malformed, and zekno never signs one); F11 is also said for `malformed` from a runner below protocol 6; D14 says the next run sends the code again (FR-020 keeps no sealed piece between runs); G43 ends `Nothing was signed.` when found before signing; E15 is made from seconds; E19 reads `build.reason`; new lines for a buildx too old (with item 11 (a)), for pieces still missing after three rounds, for B15 as a refusal (item 11 (a)), and for a proposed `.dockerignore` line dropped because the Dockerfile copies that path; step 2 changes the docs' promise that only `zekno version` and `zekno doctor` contact GitHub. From the reviews: C7's new form is for a name the pack's form cannot hold (item 16), not only a last part over 100 bytes; B26 and C19 gain a form for `.git` (it carries the repository's history and configuration); new stops for several Dockerfiles with `build.dockerfile` left out, for a `source.root` that is or holds the home folder or zekno's own folder, and for a `# syntax=` line in a build that reads a secret (item 11); a new warning when the server reports an older fresh generation than this machine's history, which is then signed; a live line while zekno waits for another app's build after uploading (item 29), with E15 said only when that wait runs out; an I25 form for a plan zekno cannot read whole; R14 also said to an upload (`pack` answers `low_disk`); E14 goes, since no deploy answers `runner_restarted`, and G30 says it in `zekno status`; G26's help line reads `zekno logs --build [--app <app>] [--server <name>]` (item 24); A18 and G25 say `This writes zekno.app.json and .dockerignore.` when a `.dockerignore` is proposed, and A5 shows `**/node_modules` and `**/.venv`, as the proposal writes them; a G20 form for `set <service>.image` under `zekno.invalid`; with item 12 (i), an F line and an R line for a Docker newer than the check covered; with item 28 (b), a doctor line naming a build record that still runs; new K lines for `storage.mdx`, `changing-settings.mdx` and `app.mdx`; the docs' list of what is left out unless named and agreed to gains `.git`; the docs say what C13 cannot catch (a name that resolves to a private address, a redirect) and that the checksum (C12) is the control.
+24. **The help lines** appended to the frozen test's list (`ADDED_TO_HELP`), as features 010, 012 and 015 did: `zekno deploy --fresh`, `zekno logs --build [--app <app>] [--server <name>]`, `zekno doctor --builds`, and in step 2 `zekno settings plan`. Nothing else in that file changes. `--server` is in the line because the saved output is kept per server and app (CL9); a line can only be appended, so it is written whole the first time. Assumed accepted unless the maintainer says otherwise.
+
+### Steps (each with its own go-ahead)
+
+25. **M5 to M10**: the merges into `dev`, the tags `runner-v0.1.2-dev.1` and `runner-v0.1.2-dev.2`, the second builds, the one proof on the maintainer's own server at the end of step 2 (a domain the maintainer can point, ports 80 and 443 free, Docker Engine 29.5 or newer with its build plugin), and whether and when 0.1.2 is released. See [quickstart.md](./quickstart.md), "Maintainer steps".
+
+### Added by the reviews of the plan
+
+26. **A tracing tool for check R16** (what `railpack prepare` starts, writes and reaches on the machine that signs, step 2). (a) `strace -f` from Ubuntu's archive, on GitHub's Linux machine and in the Linux stand-in on the Mac; the macOS run records hosts and files with programs macOS carries (`fs_usage`, `nettop`), nothing installed. (b) No tool: Railpack's source at the pinned version is read instead. **Recommended: (a)**: the run is what signs, and reading cannot show what a hostile folder's own configuration makes it start. Any program the project supplies that Railpack starts goes to the maintainer before step 2.
+27. **A build's time limit when its runner has died (FR-039).** The runner is started per request, so nothing on the server watches an orphaned build client until a request arrives (RB15). (a) The client runs under coreutils `timeout` at a fixed path (`/usr/bin/timeout -k 2 <seconds left> docker buildx build …`), so the signed limit holds without the runner; the disk floor still waits for a request. A program on the server the runner has not needed before. (b) The runner starts a detached watcher of its own (the runner program in another mode), written in the project, which holds the limit and the disk floor; more code, and it can die too. (c) Nothing more: an orphan is stopped by the next request that reads the state; the docs say a build whose runner died can run past its limit until then. **Recommended: (a) if L5 shows on Linux what E04c showed on Docker Desktop (a silent step outlives its runner), else (c).**
+28. **A Docker record that stays `Running` after its build was stopped (FR-039).** While it does, the runner keeps `building` and answers every deploy on the server `busy` (RB10, RB15). (a) Hold every deploy `busy` until the record leaves `Running`, however long; a stuck record then denies deploys to the whole server until someone acts. (b) Once no process of that build is alive and the record has stayed `Running` for 10 minutes past the stop, clear `building`, record the outcome, keep the ref file for a later removal, and have `zekno doctor` name the record that still runs. **Recommended: (b)**, a reading of FR-039's "until no step of the build still runs" in which a record with no client alive for 10 minutes is taken as stale. A proposed spec change if accepted (below).
+29. **An upload for a later deploy while another app builds (FR-044, point 7 (a)).** zekno learns which pieces to send only from `pack_missing`, and while a build holds the deploy lock its `deploy` is answered `busy` at once, so nothing would be uploaded. (a) On `busy` with `building`, zekno sends with `pack` every piece of its builds that `builds` `check` does not report kept, then waits in the same run with a live line, bounded by that build's remaining limit, and sends `deploy` again with the same envelope; when the wait runs out, E15. (b) zekno ends with E15 and uploads nothing; FR-044's upload clause then changes (a proposed spec change, below). Uploading and then ending is no option: the next run seals again (FR-020) and nothing staged matches. **Recommended: (a)**, at a terminal and with no terminal alike; Ctrl-C during the wait says D14.
+
+### Proposed spec changes
+
+Found by the reviews of the plan. The spec is not changed here; each waits for the maintainer.
+
+- **FR-036** names the ten proxy names the runner passes empty among the arguments that may reach a build (item 13). Reason: the client's proxy settings otherwise reach every step (E10), and naming only the upper-case five rests on one buildx version's case handling.
+- **FR-042a and the edge case "A `# syntax=` line in a build that reads a secret"**: refused before signing, and by the runner before the number, rather than ignored (item 11). Reason: FR-037c must not rest on `BUILDKIT_SYNTAX` being honoured by every engine a server may run.
+- **FR-031a's fixed list** gains `reserved_image`, with item 17 (a) or (c).
+- **FR-039**: a stopped build whose record stays `Running` with no client alive for 10 minutes is taken as ended (item 28 (b)). Reason: otherwise one stuck record denies deploys to the whole server with no end.
+- **FR-044's upload clause**, only if the maintainer chooses item 29 (b): "an upload for a later deploy" is dropped, and a deploy that finds the server building uploads nothing.
+- **The edge case "Ctrl-C or a dropped connection during the upload"** says "The next deploy sends what is missing". With FR-020, a new run seals again and sends the code again. Proposed wording: "Within the same run, a cut upload resumes with the pieces the server lacks, also over a new connection; a later run sends the code again." ([contracts/cli.md](./contracts/cli.md) CL7 step 12 reopens the connection within the run.)
+- **FR-011** gains item 18's exception to "byte for byte"; **FR-074** gains item 21's second exception; **FR-004**'s reading changes with item 19 (a); item 22's choices A-c, D-e and G-a change how the spec reads. These were already items; they are listed here so the spec changes are in one place.
+
+## Technical Context
+
+**Language/Version**: TypeScript on Bun 1.4.4, as the repository is.
+
+**Primary Dependencies**: none new in any `package.json`. Built-ins used for the first time: zstd from `node:zlib`, libsodium's streaming BLAKE2b (`crypto_generichash_init`, `_update`, `_final`, already in `libsodium-wrappers`), `Bun.Archive` (reading Railpack's archive), `Bun.CryptoHasher` (git's blob ids), `fs.statfsSync` (free disk). New programs, each approved under M3: on the developer's machine, Railpack at the pinned version, fetched and checked by zekno (step 2); on the server, Docker's build plugin (buildx), which most installs carry, and Railpack's frontend and images, pulled by digest during a build (step 2), and coreutils `timeout` only with item 27 (a); in the check, the stand-in's pinned packages and the fixtures' images (item 2), and a tracing tool for R16 (item 26).
+
+**Storage**: the runner's folder gains `state.lock`, `packs/`, `building/`, `kept/` and `buildx/`; `state.json` is mark 5, and its `building` holds the run token every build client of that deploy carries. Outside it, one folder `zekno-unpacked/` for each build's work folder. Docker's own storage holds the images, the build cache and, briefly, Docker's record of each build. On the developer's machine, `~/.zekno` gains `agreed.json`, `builds/`, `tmp/` (one folder per run), `tools/railpack/` and `plans/`; the history keeps each deploy's builds.
+
+**Testing**: `bun --no-env-file test` in each package, tests first where a contract fixes behaviour. The runner's scenarios run the real runner against the stand-in for Docker, which learns `buildx` in a file of its own. A gated set runs real Docker on the Mac. The Linux check (`.github/workflows/linux-checks.yml`) runs the gated sets in the server stand-in on GitHub's machines on every push, and the same script runs on the Mac.
+
+**Target Platform**: the CLI on macOS and Linux, x86-64 and ARM64. The runner on Linux x86-64 and ARM64. A server that builds needs Docker Engine 29.5.0 or newer with its build plugin (item 11 may change the floor; item 12 (i) refuses builds with secrets above the newest engine the check covered); a server without them still runs images.
+
+**Project Type**: a CLI, a server program and a library in one repository, plus the docs site.
+
+**Performance Goals**: SC-003, measured in the Mac's stand-in over a link held to 10 Mbit/s and 50 ms: under 30 seconds for a 10 MB folder, under 150 seconds for 100 MB, from packing to the build's start. A deploy that does not build makes no new request and takes no longer. A deploy with nothing changed sends 0 bytes (SC-004). The runner should check 512 MiB of pieces in seconds: derived from per-piece times measured on the Mac for one 8 MiB piece (zstd 4 ms to compress and 3 ms to decompress, opening 18 ms) and the streamed hash's 230 MB/s (about 35 ms per piece); neither a whole 512 MiB nor the tar checker was run.
+
+**Constraints**: nothing opened from the code is written to the runner's folder; the runner keeps none of the builder's output and removes Docker's record of each build; a build never gets the host's network, devices, SSH keys, other files or outputs; no secret value, and nothing made from one by a plain hash, is signed or relayed; frozen plain transcripts hold; no file over 500 lines; each module in a folder named for its subject; no folder named `build`.
+
+**Scale/Scope**: 512 MiB and 50,000 entries per pack, 64 pieces and 8 builds per deploy, 2 hours per build, staging of 2 GiB for 24 hours, the images of 3 deploys per app, a build cache of 10 GiB after each deploy, a free-disk floor of 2 GiB.
+
+## Decisions where the maps differ
+
+The four maps were written apart. Where they differ, this plan decides as follows. The rows after "When step 1b ships" were decided after the reviews of the plan.
+
+| Point | The maps | Decided | Why |
+|---|---|---|---|
+| The pack's form | core: ustar, no pax, names up to 255 bytes, one fixed time; CLI: a pax record past 100 bytes, time 0, paths up to 4,096 bytes | core's form, with item 14 for times and item 16 for names | The runner's checker then parses two entry types and no records, and rebuilds each header to compare all 512 bytes. One predicate (`splitsAsUstar`) decides which names fit, on every side. |
+| What the server is asked before signing | CLI: one new request `build facts`; runner: `builds` and `builder`; core: `builds` | `builder` (the server's Docker) and `builds` (the apps that build; one app's kept images, fresh generations, the build under way) | `doctor` needs the first without an app, `status` the second without Docker calls. `version` and `status` keep their shapes, so older zeknos still read them. |
+| How an image is known again | design: the iidfile; E01 (Desktop): iidfile is the config digest, `.Id` the manifest digest; T10 (nested 29.5.3): equal | Both digests from the metadata file, kept in the state; a kept name counts only when `.Id` is one of them | Right on either store, whichever result Linux gives. |
+| The fresh build | core: a deploy number inside the key, read from the server before signing; runner: left to core | core's (D-C3), with the newer of the server's word and this machine's history signed (CL7 step 9) | FR-021a, SC-019, US5 sc4 and US8 sc1 ask exactly this. Taking the newer means an answer that omits or lowers a generation can never make zekno sign an older image's key. |
+| The build under way | core: `building` in the state; runner: a `building.json` marker with the client's process id | `building` in the state, written in the same write as the number, holding the phase and a random run token; no `building.json` | The token is known before any client starts, and every client of the deploy carries it, so a runner that dies at any point leaves nothing the next request cannot find. A process id is known only after the start. |
+| Builder output events | core: `build` and `build_line` with a part; runner: today's `progress` plus one `build_error` | `build`, `build_line` and `build_error` | Each line must say which build it is from, for the saved output; the failing step must not be dropped, as `progress` can be. |
+| `pack` | core: input `{ envelope, piece }`, answer frame 4 KiB; runner: `{ envelope, chunk }`, 64 KiB | core's | The answer carries no event. |
+| `pack_missing` | core: at most 72 hashes; runner: 64 and per build `gone` or `changed` | at most 72 (64 code, 8 plan pieces), and per build `gone` or `changed` | A Railpack plan travels as its own piece; G43 and G44 need the second part. |
+| `busy` | core: `{ app, seconds, limit }`; runner: with `phase` | runner's, with `phase` stored in the state's `building` | E15's words differ while the app starts; the phase must survive the process that set it. |
+| A credential name for a build secret | runner: refused by the verifier; core: a schema rule | a schema rule (`malformed`); R15 goes | zekno can then never sign one, and every runner refuses it with no number used. |
+| Order of the runner's checks | runner: kept, Docker, pieces, disk | kept, Docker, disk, limits, secrets, pieces | A server short of disk, or a deploy whose secrets do not open, says so before zekno uploads up to 512 MiB. |
+| An image built before a team list change stopped it | runner: recorded and reusable | not recorded, and removed; so is every image of a deploy that ends `build_failed` | FR-043's safer reading, and SC-012: an image no record names would never be removed. |
+| Where the Linux check's code lives | runner: beside its own tests; checks map: `apps/runner/test/support/linux-server/` | the checks map's place, with one pins file read by the workflow and by the Mac | Code for end-to-end checks lives in the package under test, and the stand-in is a server for the runner. |
+| When step 1b ships | spec: with step 1's release if ready, else step 2's | planned inside 0.1.2-dev.1, after step 1 and its own review; with 0.1.2-dev.2 if item 12 or its checks are not done in time | One protocol number for Dockerfile builds with secrets is simpler for every pairing. |
+| When the state lock is held | runner: from K2 to the number, Docker calls and the 512 MiB check included | only for short spans: no Docker call and no piece read while it is held, but by version 1's `apply` | A team list update that removes a stolen key must land within its 120-second wait, whatever Docker or a resent deploy does. |
+| Old images and the cache prune | runner: after the answer | before the answer | zekno closes the session once it has the answer and stops a local runner 5 seconds later; work after the answer would be cut. |
+| Where the team list is checked again | runner: once, after every build | before each build, every 5 seconds during one, after the builds, and at the number for a deploy that builds nothing | A key removed during a build stops that build, not only its start (FR-044, FR-031a "stopped after a team list change"). |
+
+## Constitution Check
+
+*GATE: checked before the maps and again after the contracts, and again after the reviews of the plan. All pass.*
+
+| Principle | How this plan complies | Status |
+|---|---|---|
+| I. Security Promise First | The code, the recipe, the builder and what the build reads are signed; the code is sealed for the server's key from the signed team list, so no relay and no later hosted service can read it. A secret value is never signed or relayed, nor anything made from it by a plain hash; a named build secret never leaves the customer's server. No key is held anywhere new. The runner builds only what a signed deploy names, in one fixed way, and never from Compose text; a key the team list removes stops its build. Nothing here reaches a service of Zekno's. | Pass |
+| II. Honest Surface | Every new line is a line approved on the boards (M2). What the signature does not cover, what the server holds in plain text, what a build can do with a secret and the network, what C13 cannot catch, and what a 1 GB server does (not measured) are said where builds are described. Facts read or derived and not run are marked so. "Runner" everywhere. Pre-alpha and unaudited stay visible. | Pass |
+| III. Read the Installed Docs First | Docker's behaviour was run, not remembered (maps, E01 to E12, T1 to T11), and two claims of the research failed when run. No check is relied on until the Linux check has run it on the engines the spec names; FR-033's guarantee against the host's network and devices, read from source only, is run by L18 on every engine that builds. Bun's zstd, streaming hash and `statfs` were probed. No framework code changes beyond the docs pages. | Pass |
+| IV. One Design System | New screens use the parts that exist: the deploy panel, the stage row, `DeployBlock`, the "Docker said" panel, the summary of `zekno add`, the settings report, the doctor report. The docs page uses the existing MDX parts. | Pass |
+| V. Motion With Purpose | Only the spinner that exists, on the build stage while it runs and while zekno waits for another app's build. | Pass |
+| VI. Accessible and Fast by Default | Every state has a mark and words. With no terminal every fact is one plain line on standard error and standard output keeps today's result line. Text from the server passes through `sanitize` before it is drawn or printed. The docs page is static. | Pass |
+| VII. Verified Before Done | Tests first where a contract fixes behaviour; every refusal, reason and outcome has a test; real Docker on the Mac and in the Linux stand-in; an independent security review per step; a walkthrough of the real screens against the boards; `bun --no-env-file run typecheck`, `lint` and `build` from the root pass at the end of each step; the docs pages that change are checked in a real browser at phone and desktop widths, in both themes, with reduced motion. Reports say what ran where, and what did not. | Pass |
+
+Technology constraints: no dependency is added to any `package.json`. Railpack is a program zekno fetches at run time, approved under M3 (item 1). New folders are named for their subject; none is named `build`.
+
+## Project Structure
+
+### Documentation (this feature)
+
+```text
+specs/016-build-from-source/
+├── spec.md, checklists/
+├── research.md              # D1 to D6, the hand test, the reports, the checked claims
+├── research/                # the four maps of 2026-11-27
+├── design/                  # lines.md, README.md and the 18 boards (proposed)
+├── plan.md                  # this file
+├── data-model.md
+├── contracts/
+│   ├── core.md              # the build entry, the pack, pieces, the key, messages, state mark 5
+│   ├── runner.md            # locks, staging, checks, the build command, kept images, restarts
+│   └── cli.md               # settings, files, the summary, the session, outcomes, Railpack
+├── quickstart.md            # how each story is shown to work, where, the jobs, and the maintainer steps
+└── tasks.md                 # next step (/speckit-tasks)
+```
+
+### Source Code (repository root)
+
+```text
+packages/core/src/
+├── pack/                       # new
+│   ├── tar.ts                  # the one form: names, splitsAsUstar, byte order, header writer, the end
+│   ├── check.ts                # the streaming checker; yields entries (Railpack folder)
+│   └── pieces.ts               # cut at 8 MiB, zstd, seal; openPiece for a verified deploy
+├── crypto/hash.ts              # a streaming hash; domains plan, build-reads, build-salt
+├── deploy/builds.ts            # new: BuildSchema (builder union), image grammar, buildKey, F6 build rules
+├── deploy/build-names.ts       # new: names a build is never given; credential names; SYNTAX_LINE
+├── deploy/carried-out.ts       # new: the table of what this core carries out (F7)
+├── deploy/gate.ts              # new: K4 to K10, shared by verifyDeployV2 and `pack`; stillAllowed
+├── deploy/deploy-v2.ts         # takes `builds` as an input; uses gate.ts (stays under 400 lines)
+├── deploy/later-fields.ts      # predeploy only
+├── deploy/kept-builds.ts       # new: mark 5's builds part, keepAfter, the drop list
+├── deploy/build-record.ts      # new: the record of FR-066 (a side file's schema)
+├── deploy/state.ts             # mark 5
+├── deploy/state-marks.ts       # new: marks 4, 3, 2 and none read forward (split from state.ts)
+├── deploy/railpack-plan.ts     # new, step 2: the plan's strict schema, railpackPlanImages
+└── protocol/{session,limits,result,protocol}.ts, protocol/build-messages.ts (new)
+
+apps/runner/src/
+├── home/locks.ts               # new: the deploy lock and the state lock (split from home.ts); RB15 in the D wrapper
+├── home/home.ts                # new paths
+├── pack/                       # new: stage.ts, open.ts (open, bound, stream, check), unpack.ts (step 2)
+├── builder/                    # new: args.ts, run.ts, progress.ts, reasons.ts, metadata.ts, history.ts, facts.ts,
+│                               #   restart.ts (stopRun: the run token in /proc), watch.ts (time, disk, team list), covered.ts
+├── kept/                       # new: reuse.ts, retain.ts, prune.ts, records.ts, leftovers.ts (images of a failed deploy)
+├── disk/free.ts                # new: statfs readings and the floor
+├── docker/compose.ts           # `up --no-build`
+├── commands/                   # pack.ts, builds.ts, builder.ts (new); deploy-build.ts (new, K14a to B3); deploy.ts, commands.ts
+└── session/session.ts          # the new commands
+
+apps/runner/test/support/docker/stand-in-buildx.ts   # new: what the stand-in for Docker learns of buildx (fake.ts is 319 lines)
+
+apps/cli/src/
+├── pack/                       # new: ignore.ts, walk.ts, secret-looking.ts, limits.ts, propose.ts, chunks.ts, spool.ts, facts.ts, words.ts
+├── dockerfile/                 # new: lex.ts, instructions.ts, expand.ts, reference.ts, images.ts, args.ts, words.ts
+├── git/                        # new: find.ts, config.ts, index-file.ts, objects.ts, packs.ts, changes.ts
+├── railpack/                   # new, step 2: railpack-release.json, release.ts, fetch.ts, kept.ts, run.ts, plan.ts, words.ts
+├── settings/                   # new: build-shape.ts, build-values.ts, build-reach.ts, build-words.ts, build-rows.ts;
+│                               #   changed: shape, types, schema (imports build-shape.ts only), change, text, write, rows,
+│                               #   piped, compose; words.ts split first
+├── server/session.ts           # changed: EVENTS.deploy gains build, build_line, build_error; clean() sanitizes line, step, error;
+│                               #   split first (487 lines): the event kinds and clean() move to server/session-events.ts
+├── project/compose-build.ts    # new: a hand-written Compose file that builds, or names zekno.invalid
+├── asking/first-build.ts       # new; asking/connect-server.ts split from first-deploy.ts (539 lines) first
+├── ops/                        # new: deploy-build.ts, build-reads.ts, deploy-upload.ts, status-builds.ts, doctor-builds.ts, logs-build.ts;
+│                               #   changed: deploy-format.ts, deploy.ts, deploy-send.ts, status.ts; doctor.ts (764 lines) split first
+├── profile/agreed.ts           # new: answers kept on this machine
+├── profile/build-output.ts     # new: the saved output of an app's last build
+├── profile/run-folder.ts       # new: this run's own ~/.zekno/tmp/<random>/, and the removal of folders older than 24 hours
+├── shared/{deploy,history}.ts, shared/build-words.ts (new)
+├── ui/types.ts, ui/ink/build-summary.tsx (new), ui/parts/deploy-summary.tsx, ui/ink/deploy-view.tsx, ui/plain/plain.ts
+├── app/effects/deploy-build.ts (new, split from deploys.ts), app/screens/deploy-build.tsx (new: J1 to J12, beside deploy.tsx),
+│   app/screens/settings-build-layout.ts (new, beside settings-layout.ts), app/screens/{deploy,app,settings*}.tsx
+└── cli/{help,options}.ts, commands/{deploy,logs,settings,doctor}.ts
+
+apps/runner/test/support/linux-server/   # new: the stand-in script and pins.json, for GitHub and the Mac
+.github/workflows/linux-checks.yml      # new: the check on every push (rules LC1 to LC10 held by a test)
+apps/web/content/docs/                  # building.mdx (new), meta.json (lists building); settings, changing-settings, deploying,
+                                        #   app, doctor, secrets, output, cli, security, runner, storage, index
+apps/web/content/screens/               # recaptured and new stored screens
+README.md, apps/cli/README.md, apps/runner/README.md, apps/runner/RELEASING.md
+```
+
+**Structure Decision**: the existing packages. Each new subject gets a folder: `pack` in the core library, the runner and the CLI (each about its own side of the pack); `builder`, `kept` and `disk` in the runner; `dockerfile`, `git` and `railpack` in the CLI. Tests mirror them under `test/`. The four new CLI folders join the layers test's `LAYOUT` and `BASE`: they import nothing from `ops/`, `ui/` (but `ui/types.ts`), `app/`, `commands/` or `asking/`; `railpack-release.json` joins `DATA_FILES`. Files over 500 lines (`ops/doctor.ts`, `settings/words.ts`, `asking/first-deploy.ts`) and near it (`server/session.ts`, `app/effects/deploys.ts`, `app/screens/app.tsx`, `settings/rows.ts`, `deploy/deploy-v2.ts`, `deploy/state.ts`, `home/home.ts`) are split inside their folders, with no change of behaviour, before anything is added. Files near 500 lines that this work would grow keep their size, and the new code goes into a file beside them: `app/screens/deploy.tsx` (423 lines; the build's screens in `deploy-build.tsx`), `settings/schema.ts` (447; the Build section's shape in `build-shape.ts`), `app/screens/settings-layout.ts` (442; `settings-build-layout.ts`), and the runner's stand-in for Docker (`fake.ts` 319, `stand-in.ts` 224; buildx in `stand-in-buildx.ts`).
+
+## What does not change
+
+- Version 1, and a version-2 deploy with no build: its requests, its lines, its exit status. The frozen plain transcripts, but for appended help lines (item 24).
+- The answers of `version`, `status`, `status` with routes, `records`, `logs` and `proxy`, so every older zekno still reads them.
+- A Compose file written by hand with no `build:` and no `zekno.invalid` name, and a settings file whose services run images: deployed as today (FR-005). The one stated exception is FR-074's.
+- Routes, health checks and the proxy of feature 015.
+- `apps/cli/e2e.config.ts`, `apps/cli/tests/`, the key file, `bun.lock`, every `package.json` dependency list, the landing page.
+- No runner release until M7: until then `runner-release.json` names 0.1.1, and a zekno built from this branch stops before signing a build for every released server (F1).
+
+## Phases
+
+Each part is built from a written brief, then checked here (the diff read, typecheck, lint, tests, the failing case tried) and committed before the next. The maintainer's steps are M1 to M10 of the spec; [quickstart.md](./quickstart.md) gives their state.
+
+### Phase 0: before any build code
+
+1. **Splits** of the files named in the Structure Decision, with no change of behaviour; every test passes as before.
+2. **The Linux check**: the pins file, the stand-in script (on GitHub and the Mac), `linux-checks.yml` with the jobs of [quickstart.md](./quickstart.md), "The jobs", and the test of rules LC1 to LC10. Needs item 2 (M4) before the workflow lands.
+3. **The checks in record mode**: each L check prints what it saw on each engine and store, and asserts nothing yet. The first runs answer, on x86-64: T4 and E02 (`dockerfile.v0`, at the floor and the newest), E01 and T10 (image identity), E04 and E04c (stopping), E05 (secret steps reused), E07 (cache spaces), E08 (Compose with runner 0.1.1's flags; L1 runs runner 0.1.1 itself), E10 (proxies, both cases), L4b (file times and the cache), L9 (materials, and item 17 (c)'s policy), L7 (disk of a 512 MiB build). L18 (no host network, device, insecure step or SSH agent) asserts from its first run: it runs RB7's argument list as written in the contract until `args.ts` exists, then the list `args.ts` builds.
+4. **Answers before code**: items 11, 13, 14, 17 and 27 are put to the maintainer with what the check found. Item 12 waits for L15 and comes before step 1b.
+
+Testable then: the workflow on every push, each finding written with where it ran. Nothing in `apps/` or `packages/` behaves differently.
+
+### Step 1: a folder with a Dockerfile (runner 0.1.2-dev.1, protocol 6)
+
+Order of work:
+
+1. **Core** (tests first): the pack form, `splitsAsUstar` and its checker, pieces and their bound, the streaming hash, the build entry and its key, the names never given and `SYNTAX_LINE`, F6's build rules and the Compose rule, the carried-out table (Railpack and secrets refused), the shared gate and `stillAllowed`, `pack_missing`, `pack_mismatch`, `low_disk`, `docker_too_old`, `no_build_plugin`, `build_failed` and its reasons, the three requests, the events, state mark 5 with `phase`, the run token and the drop list, protocol 6.
+2. **Runner**: the two locks and their spans; `pack` and staging, with the disk floor; the checks K14a to K14d; the build command and its environment; output to events; the time limit, the disk watch and the team list watch; image identity, processor, records and base digests; the images of a deploy that does not succeed; Docker's record removed; the team check after the build; `up --no-build`; kept images, the drop list and the cache prune, before the answer; the restart path, from every request that takes the deploy lock and in its bounded part from the others; `builds` and `builder`.
+3. **CLI logic, without words**: the Build section and `source.root`; the Compose rule; choosing files and the summary's facts; the Dockerfile reader; the `.git` line; the first deploy's flow; `agreed.json`; the session with builds (requests, sealing, upload, the wait while another app builds, reconnecting during the upload, events, outcomes, history); rollback; `zekno status`, `zekno doctor --builds`, `zekno logs --build`; `--json`. Its tests check outcomes, exit statuses and which line is said (by its id in `lines.md`), not words. No sentence is written in this item (FR-092).
+4. **CLI words and screens**, after M2: every sentence of plain output, the screens and `--json`'s text, written into the `*-words.ts` files from the approved boards; the block and its questions, the panel's rows, the build stage and its live line, a failed build and its panel, the app's deploy, app and settings screens; the stored screens; the help lines.
+5. **Docs**: `building.mdx` and `meta.json`'s entry for it; the pages that change (`settings`, `changing-settings`, `deploying`, `app`, `doctor`, `secrets`, `output`, `cli`, `security`, `runner`, `storage`, `index`), the README, the runner's README and RELEASING notes, each sentence as the boards approve it (K lines). `storage.mdx` gains what is kept on the machine (`builds/`, `agreed.json`, `tmp/`, `tools/railpack/`, `plans/`) and on the server (`packs/`, `building/`, `kept/`, `buildx/`, `zekno-unpacked/`), and its sentence "App state and logs are never stored" is rewritten on the boards. K20 is filled from the check's findings. Each page that changes is checked in a real browser at phone and desktop widths, in both themes, with reduced motion.
+6. **The checks assert**: L1 to L11, L4b and L17 turn from record to assert (L18 asserts from the start); the proof job (B4) and the older-engine job (B5) run the step's scenarios; the released job runs runner 0.1.1 against a build (FR-083).
+7. **Review**: an independent security review of step 1's surface (FR-088: packing, sealing and sending; the runner's checks; the build command; kept builds and pruning; the Compose rule; plain variables) in `security-review.md`, each finding fixed with a test that failed first, or answered. A walkthrough of the real screens against the boards (`design/walkthrough.md`). Typecheck, lint, `bun --no-env-file run build` from the root, tests without cache, format, `screens --check`, the compiled runner.
+8. **Release**: M5 merge into `dev`; M6 the maintainer reads the step's proof from the check on the commit to tag; M7 the tag `runner-v0.1.2-dev.1`, the second build and its checksums on `dev`, then the update from 0.1.1 in the released job (B6).
+
+Testable when: after 1, core's unit tests and the refusals of runner 0.1.1 (older-programs tests); after 2, the runner's scenarios with the stand-in for Docker and the gated set on the Mac; after 3, the CLI's scenarios against the repository's runner, and the proof job in the Linux stand-in; after 4, the stored screens and every sentence word for word.
+
+### Step 1b: named build secrets (in 0.1.2-dev.1 if ready, else 0.1.2-dev.2)
+
+1. Item 12 answered, with L12 to L16 in record mode at the floor, and L12, L13 and L15 also at the newest engine, on both stores.
+2. **Core**: the carried-out table lifts build secrets; `buildSalt`; the credential rule is already in step 1.
+3. **Runner**: `--secret id=<NAME>,env=ZEKNO_BUILD_SECRET_<i>`; the salt (item 12); a `# syntax=` line in a build with secrets refused before the number (item 11); with item 12 (i), `docker_unchecked` above the covered versions; a cached step where none is allowed ends `cache_used`.
+4. **CLI**: `build.secrets` and its rules; the summary's rows (B10, B19, H2, H3); the question H4 and its answer in `agreed.json`; H9 to H16; the `# syntax=` refusal for a build with secrets; rollback G45 and G46; the docs K5 and K18.
+5. **Checks**: L12 to L16 assert at the floor, and L12, L13 and L15 at the newest too; SC-021 and SC-022 in the proof job, which gives H4's yes by writing the throwaway profile's `agreed.json` before the deploy, as a test seam and never an option, and also shows that the same deploy without it stops with H9.
+6. **Review**: its own security review (named secrets, the salt, the question, `agreed.json`), before it is merged.
+7. **Release**: merged with step 1 under M5 and tagged with it at M7; or merged under M8 and tagged with step 2. `BUILD_SECRETS_PROTOCOL` is then 6 or 7.
+
+### Step 2: a folder with no Dockerfile (runner 0.1.2-dev.2, protocol 7)
+
+1. **M3**: item 1, the pin file. Railpack checks R1 to R10 and R16 in record mode on it, R6 checking that the release has a file for each of the four systems. Their answers decide how plain variables reach the frontend (FR-036d), whether no network and a fresh build reach Railpack's steps (else both stay refused), whether the frontend honours the recipe's ignore file, and (R16, item 26) what `railpack prepare` starts, writes and reaches on the machine that signs.
+2. **Core**: the carried-out table lifts Railpack (secrets, a fresh build and no network stay refused); the plan's strict schema and `railpackPlanImages`; the plan piece; protocol 7.
+3. **Runner**: the folder (`zekno-unpacked/<random>/code`, exclusive creates, fixed modes, deleted after); the plan outside it with an empty ignore file; the Railpack build command; FR-049a's checks.
+4. **CLI**: `railpack/` (pin, fetch, check, keep, run on a copy of the packed files with a home of its own for each run, plan read by the strict schema to digests in one form); the first question I1 or I2; I5 to I30; `zekno settings plan`; doctor's G40; the never-fetches test allows `railpack/fetch.ts`.
+5. **Screens and docs** for step 2, after M2.
+6. **Checks**: R1 to R10 and R16 assert; B1 (ARM64) and B3 (macOS) with items 4 and 5; the proof job's Railpack scenarios: a folder deploys and answers, nothing changed sends nothing, a failed build leaves the app answering, a rollback reuses the kept image (SC-016, SC-004).
+7. **Review**: its own security review (the Railpack fetch and run, the folder, the plan check, variables handed to the frontend).
+8. **Release**: M8 merge (with step 1b if it waited), read the proof, the tag `runner-v0.1.2-dev.2`, the second build. M9 the one proof on the maintainer's server, covering steps 1, 1b and 2 with a real domain. M10 when the maintainer chooses.
+
+## Risks
+
+| Risk | What is done about it |
+|---|---|
+| `BUILDKIT_SYNTAX=dockerfile.v0` does not work on Linux either, or stops working on a later engine (E02, T4) | L2 runs at the floor and the newest on both stores; item 11 has a recommended way either answer; a build with secrets never rests on it (item 11). |
+| FR-037d rests on BuildKit behaviour Docker does not document (`--add-host` in the cache key, E05) | L15 at the floor and the newest, on both stores, fails if two salts ever share a step. (c)'s random salt is an `--add-host` too, so only (b) does not rest on it; if L15 fails, item 12 goes back to the maintainer before step 1b. Above the newest engine covered, item 12 (i) refuses builds with secrets. |
+| Railpack's frontend may not honour `cache-key`, `secrets-hash`, the recipe's ignore file, no cache, or variables as build secrets | R4 and R7 to R10 run before step 2 relies on them; what is not shown stays refused before signing (a fresh build, no network, secrets). |
+| `railpack prepare` starts or downloads programs on the machine that signs, or reads a hostile folder's configuration | R16 records what it starts, writes and reaches (item 26); downloads are pinned under M3 or step 2 waits; each run gets a home of its own. |
+| A build goes on after its runner dies (E04c) | The run token in the state before the client starts; every request that takes the deploy lock, and in a bounded form `sync`, `pack`, `builds` and `status`, stops every process of that run, waits until Docker's record is no longer `Running`, removes it and the run's images, and records `runner_restarted`. With no request, nothing on the server stops it: item 27. |
+| A Docker record never leaves `Running`, so every deploy is `busy` | Item 28: after 10 minutes with no process of the run alive, the record is taken as stale and `zekno doctor` names it. |
+| The image id differs by store (E01, T10) | Both digests from the metadata file; L4 on both stores. |
+| The client's proxy settings reach build steps (E10) | Item 13, both cases of every name. |
+| The runner's builds push other build records out of Docker's history (about 50 by default); on this Mac, 19 of the maintainer's oldest records were pushed out while the maps ran | The runner removes its own record after each build, so it holds at most one at a time; the docs say what remains. |
+| Free disk is read in the wrong place when the containerd store keeps layers outside Docker's root | The floor holds for the least of Docker's root, `/var/lib/containerd`, the runner's folder and the work folder; L7 on both stores. Staging is held to the same floor (`pack` answers `low_disk`). |
+| Out of memory is guessed from exit code 137 or the builder's "cannot allocate memory" | L6 records what the builder prints; the reason list is the runner's, never the builder's text; nothing is claimed about a real 1 GB server. |
+| A team list update waits for the state lock | The state lock is never held during a Docker call or while pieces are read (but by version 1's `apply`, as today); a resent deploy after `pack_mismatch` finds its pieces deleted. A runner scenario with Docker hanging at each call holds a `sync` to its 120 seconds. |
+| Images a failed deploy made, or a runner that died left, are tagged and never recorded, so nothing would remove them (SC-012) | Removed by their tags at the end of the failed deploy, by RB15, and before a build reuses a tag; scenarios end with no `zekno.invalid/*` tag the state does not name. |
+| Adding `build_failed` to the history's outcome list makes an older zekno on the same machine call that app's history damaged, as `unhealthy` did | Said in the release notes; zekno updates are by hand. |
+| Up to 512 MiB of sealed pieces wait on the developer's disk until the upload ends | Sealed for the server only, in this run's own folder under `~/.zekno/tmp/`, deleted when the run ends; at a run's start, only folders older than 24 hours are deleted, so two runs at once never delete each other's pieces. |
+| The uncommitted-changes line warns often (Git LFS, line endings, build output git ignores) | It never stops a deploy; the docs say when it shows. |
+| A stand-in container is not a server (no systemd, the host's kernel, privileged nesting) | The one proof on a real server at the end of step 2; option A of item 2 stays the fallback. |
+| Docker Hub's pull limits on GitHub's machines | A failed pull is run again; a mirror is asked of the maintainer only if it keeps happening. |
+| The Dockerfile reader and the ignore rules drift from Docker | L17 compares them with real BuildKit on every push, at the floor and the newest; a pattern zekno cannot reproduce exactly is refused, never guessed. |
+| Files near or over 500 lines | Split first, phase 0, or the new code goes into a file beside them (Structure Decision). |
+
+## Complexity Tracking
+
+No violation of the constitution to justify. The complexity this plan takes on knowingly:
+
+| Added | Why needed | Simpler alternative rejected because |
+|---|---|---|
+| A second lock, held only for short spans | A team list update that removes a stolen key must not wait up to two hours (point 7), nor for Docker or a 512 MiB check | One lock refuses that update for the whole build |
+| A team list watch during the build | A removed key's build must stop, not run up to 16 hours with the network and the named secrets | Checking only after the build lets the key's steps run to the end |
+| Readers of `.dockerignore`, Dockerfiles and `.git` written in the project (about 1,150 lines) | What is signed must be what is built, and a name that cannot be resolved must be refused | Packages bring code from outside into the signing program (items 8, 9) |
+| A server stand-in with pinned engines | GitHub's machines carry no Docker 29.5 | Option A works on GitHub only; the Mac would need a second way |
+| A fresh generation read from the server before signing | So a fresh build lasts and a rollback still runs the deploy it names | A flag outside the key makes the fresh image and the older one share one name |
+| State mark 5, a drop list and two side files (`kept/`, `packs/`) | Kept images decide what runs again and belong under the strict state; an image whose removal failed stays named until it succeeds; the detailed records stay out of the state so it stays small | All in `state.json` makes every read and write larger |
