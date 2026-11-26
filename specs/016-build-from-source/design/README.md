@@ -1,0 +1,54 @@
+# Design of feature 016, build from source
+
+**Status**: proposed, not approved. The 18 boards were drawn on 2026-11-26 and are on the design canvas since 2026-11-27. The maintainer approves the words and the look of every new screen and line on these boards before anything is built (spec FR-092, maintainer step M2). Screens are built last, so a board can still change before its screen exists.
+
+The words of every new or changed line are in [`lines.md`](./lines.md), with the example values, the habits kept, and the nineteen choices put to the maintainer. The boards draw those lines. They go on the design canvas (https://claude.ai/artifact/BVuvZPZTReLa4TSHfyzMJW), in a row "Build from source (spec 016)", and are kept here as files.
+
+## The boards
+
+Each board is 1760 pixels wide: two frames of 100 columns side by side, in 12.5px Geist Mono on 15px rows, as the boards of 014 and 015 are. The boards are taller than one screen (1,800 to 6,500 pixels), because each row is drawn in the run where a person meets it and its output with no terminal has a frame of its own. A board whose rows ship in more than one step draws the later rows under a heading that names their step.
+
+| Board | Step | Shows | Rows of `lines.md` |
+|---|---|---|---|
+| `BuildFirstDeploy.dc.html` | 1 | The first `zekno deploy` in a folder with a Dockerfile and no settings file: the block of what it sends and writes, the proposed `.dockerignore`, the question and its answers, several Dockerfiles, `Don't build`, no terminal. Beside it, `zekno settings init` in the same folder, and today's "Deploy from which file?" | A1 to A18, G25 |
+| `BuildSummary.dc.html` | 1; 1b; 2 | The summary before signing at a later deploy: its rows, the panel's two new rows, each warning and note, the yes of a first deploy from a folder, a secret-looking file named in the settings and its question, a fresh build; and the same facts as plain lines on standard error. Under "Step 1b": B19 and B10's secret. Under "Step 2": B9's Railpack row | B1 to B29, D12, D13 |
+| `BuildStops.dc.html` | 1 | Every stop before signing: the size and the number of files, an empty folder, a file that cannot be read or changed, a name that cannot be sent, a Compose file that builds, the images and the `ADD` lines refused, the limits on plain variables and builds, a missing stage or Dockerfile, a secret-looking file with no yes, `--fresh` with nothing to build | C1 to C21 |
+| `BuildSettingsFaults.dc.html` | 1; 1b | The faults of the settings file, today's refusal of a build that goes, a settings file that names Railpack read by a zekno of step 1, and what zekno 0.1.1 says to a settings file that builds. Under "Step 1b": C31 | C22 to C31, F5, F8 to F10 |
+| `BuildRunner.dc.html` | 1; 1b; 2 | The runner's new refusals, and what old and new programs say to each other, with today's lines that stay. Under "Step 1b": R15, F3. Under "Step 2": F2 | R11 to R15, F1 to F4, F6, F7, F11 to F14 |
+| `BuildDeploy.dc.html` | 1 | The deploy while it runs: the stage row with the build stage, the upload's line, the builder's latest line, "reused, nothing sent", the result with the line on how to reach the app, Ctrl-C and a dropped connection, a rollback that reuses a kept build, and plain output | D1 to D18 |
+| `BuildFailed.dc.html` | 1 | A failed build: the lead line, the number, the "Docker said" panel with the failing step and its error, its first line when lines were left out, and the line on where the whole output is read | E1 to E6 |
+| `BuildFailedWhy.dc.html` | 1 | Each reason a build fails, with its lead and its line of what to do: a file left out, out of memory, the time limit, disk, another processor, a fresh build that used the cache, a team list change, a runner restart; the busy server, `zekno logs --build`, plain output and `--json` | E7 to E19 |
+| `BuildSettings.dc.html` | 1; 1b; 2 | The Build section and `source.root` in `zekno settings`, piped, `settings set` and `unset`, the values refused, `settings compose`, `settings init`'s pointer, the help's new lines. Under "Step 1b": G7 and the `secrets` pieces of G9, G11, G18. Under "Step 2": G21, G23, G24 and the Railpack pieces of G10, G20, G26 | G1 to G26 |
+| `BuildStatus.dc.html` | 1; 1b; 2 | The new rows of `zekno status` and `zekno doctor`, and the refusals of `zekno rollback`. Under "Step 1b": G45, G46. Under "Step 2": G31, G40 | G27 to G46 |
+| `BuildSecrets.dc.html` | 1b; 2 | A build secret named with `settings set`, the summary's row, the warning on a base image named by tag, the first-time question with its images, no terminal, each refusal, a rollback after the secret was set again or removed, and a runner too old to give a build its secrets. Under "Step 2": H15, H16 | H1 to H19, H4a, B18, B19, C31, F3, G45, G46 |
+| `BuildRailpack.dc.html` | 2 | A folder with no Dockerfile: the first question, the fetch line, what Railpack found, the second question, the short plan in the summary, `zekno settings plan`, a plan that changed and why, no lockfile, `zekno settings init` in that folder, no terminal | I1 to I19, I29 to I31, G23, G24 |
+| `BuildRailpackStops.dc.html` | 2 | Every stop before signing with Railpack, and a runner of step 1 | I20 to I28, F2 |
+| `BuildAppDeploy.dc.html` | 1; 1b; 2 | The full-screen app's deploy screen: the panel's rows, the stage row, the live line, the summary above the panel, `o`, a failed build, the header's time, leaving while it builds | J1 to J9 |
+| `BuildAppScreens.dc.html` | 1; 1b; 2 | `d` in a folder that needs `zekno deploy` once, or a first-time question in the app (choice J-a); the app screen's list and details; the settings screen with the Build section and a change. Under "Step 1b": J16's `secrets` row. Under "Step 2": J10's folder with no Dockerfile | J10 to J20 |
+| `BuildReadme.dc.html` | 1; 1b; 2 | The README: each new or changed sentence in its place, today's beside it where one changes, each in the form of its step | K1 to K10 |
+| `BuildDocs.dc.html` | 1 | The docs: the new page "Building from source", and each new or changed sentence on its page, today's beside it where one changes, with the runner's new protocol sections, as they read after step 1 | K11 to K28 |
+| `BuildDocsLater.dc.html` | 1b; 2 | The same pages of the docs as they read once build secrets and Railpack ship | K11 to K28, the forms of steps 1b and 2 |
+
+Some rows are drawn on two boards, once where they show and once beside the lines they belong with: B18, B19, C31, D12, D13, F2, F3, G23, G24, G25, G45 and G46.
+
+## How they are drawn
+
+- With the program's own components, at 100 columns, as the boards of 014 and 015 were: the deploy panel and the stage row (`ui/parts/deploy-summary.tsx`, `ui/parts/stages.tsx`), `DeployBlock` and the "Docker said" panel (`ui/ink/deploy-view.tsx`), `Line` and its marks (`ui/ink/lines.tsx`, `ui/ink/marks.tsx`), the list and yes-or-no questions (`ui/ink/questions.tsx`, `ui/ink/yes-or-no.tsx`), the summary of `zekno add` (`ui/ink/addition-report.tsx`), `zekno settings`' report and its change line (`ui/ink/settings-report.tsx`), and `zekno doctor`'s report (`ui/ink/doctor-report.tsx`). Only the sentences and the rows are new.
+- The screens that exist come from the docs' stored captures (`apps/web/content/screens`) and the app's real screens (`app/screens/deploy.tsx`, `app/screens/settings.tsx`, `app/screens/app.tsx`), with only the proposed rows added.
+- Example values only: the ones at the top of `lines.md` (`shop`, `web`, `worker`, `prod-1`, `~/code/shop`, 1,204 files and 18 MB, deploys 6 and 7). Nothing from a real server, folder or account.
+- Dark, as every Zekno surface is by default, in 12.5px Geist Mono on the docs' colours for the program's marks.
+- A changed line is drawn beside today's line, marked as today's. Plain output is drawn beside the terminal where a row has it.
+- Where `lines.md` puts a choice, the board draws the recommended option and names the other in a note, so the maintainer decides on the board.
+- A refusal's first sentence is drawn bold and fits one line of 100 columns with its mark. A failed build's lead (part E) keeps its whole line, both sentences, within 100 columns, with only the first sentence bold. `lines.md` was checked for both.
+
+## Before drawing
+
+- The nineteen choices of `lines.md` ("Choices for the maintainer"): A-a, A-b, A-c, B-a, B-b, B-c, D-a to D-e, E-a, E-b, G-a, G-b, G-c, I-a, I-b, J-a. The settings' names (G-a) change rows on most boards, so it is best decided first.
+- Each board names the steps its rows ship in: 1, 1b or 2. Step 1b ships no later than the release that ends step 2 (spec FR-081).
+- Open point 14 of `lines.md`: today's sentences that change for apps that do not build (C26, G16, G18), an exception to FR-074 the maintainer approves or not.
+
+## How the boards were made
+
+A small drawing kit prints each line the way the program prints it and refuses any line wider than 100 columns. It was checked against six of the docs' stored captures of the real program, cell for cell. One script per board uses it. The kit and the scripts are kept outside the repository's tracked files, in `.specify/design-kits/016/`, so a board can be drawn again after a choice is made. The boards were checked as text, not rendered.
+
+The docs board was split in two after drawing, `BuildDocs` and `BuildDocsLater`, because the canvas holds a board of at most 8,000 pixels.
