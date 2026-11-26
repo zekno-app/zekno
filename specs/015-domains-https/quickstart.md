@@ -100,6 +100,20 @@ The proof of 0.1.1-dev.2, the same day, on the maintainer's server (Ubuntu 26.04
 
 Not tried: ARM64; rootless Docker; the terminal form of B20 on a real server (the plain form was; the terminal form is pinned by tests); the `proxy` request's own try of the list.
 
+### Runner 0.1.1, 2026-11-26
+
+The release of 2026-11-20 (tag `runner-v0.1.1` on `main` at 2fdae3e, second build matched, checksums in ee40f7d), proven on the maintainer's server (Ubuntu 26.04, x86-64, Docker Engine 29.8.2 with Compose 5.6.0, as root) with a throwaway profile and its key in a file. `main` and `dev` held the same files that day, so the zekno run from `dev` is the one built from `main`.
+
+1. A zekno that carries 0.1.1 was given the 0.1.1-dev.2 file with `--runner-file` and refused it: `The runner did not start on the server: it did not answer with version 0.1.1.` Nothing was left on the server.
+2. The zekno of f833d32, which carries 0.1.1-dev.2, installed that runner with `zekno server add` and deployed an app with the domain `test.zekno.dev` and a health check: `https	test.zekno.dev	live	2027-02-24`.
+3. With the zekno that carries 0.1.1, `zekno status` said: ``The runner on prod is version 0.1.1-dev.2, older than this zekno's 0.1.1. Everything works with it. To bring it to 0.1.1, run `zekno server update prod`. Version 0.1.1-dev.2 is a development release.``
+4. `zekno server update prod --yes`: `Updated the runner on prod from 0.1.1-dev.2 to 0.1.1. It matched the checksum this zekno holds.` The file on the server has the recorded SHA-256 (717f0414…) and answers `{"version":"0.1.1","protocol":5}`. The state the development release wrote (mark 4, `released` empty) was read as it was, and the domain kept answering over HTTPS (200, a certificate from Let's Encrypt that the system's store trusts).
+5. `zekno deploy` again: `Deploy 2 of proof is running on prod with no secrets.` The domain answered as before, and `zekno doctor --server prod` ended with `No problems, no warnings.`
+
+The server was cleaned up after (no container, image, volume or network left, nothing named zekno, ports 80 and 443 free), and the throwaway key and profile were deleted.
+
+Not tried: updating a server from 0.1.0 to 0.1.1; ARM64; rootless Docker.
+
 ## Maintainer steps
 
 Each is the maintainer's, with a go-ahead at the time. Nothing before M1 needs them.
@@ -112,5 +126,5 @@ Each is the maintainer's, with a go-ahead at the time. Nothing before M1 needs t
 | M4 | Choose the server and the domain for the proof: ports 80 and 443 free on the server, a DNS record you can set. |
 | M5 | The proof, each use of the server with a go-ahead: update the runner, `zekno domain add`, set the record, `zekno deploy`; a browser opens the address with no warning; `zekno rollback` and it still does; `zekno domain rm` and a deploy, and the server no longer answers; run the gated set's Linux questions (research R33); clean up. |
 | M6 | Merge `dev` into `main`, push the tag `runner-v0.1.1`, approve the release in the `prod` environment. Done on 2026-11-20: `main` at 2fdae3e, the release approved by the maintainer. |
-| M7 | Second build, commit the checksums on `main`. Done on 2026-11-20: both files matched, checksums in ee40f7d. Still to do: the short proof of the released files on a server (RELEASING, part 10). |
+| M7 | Second build, commit the checksums on `main`. Done on 2026-11-20: both files matched, checksums in ee40f7d. The short proof of the released files (RELEASING, part 10) was run on 2026-11-26, below. |
 | M8 | Say whether the docs' first group keeps its new name. |

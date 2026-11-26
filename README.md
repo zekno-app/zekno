@@ -325,7 +325,7 @@ The apps will talk to the control plane over HTTPS. A local mock for development
 - [x] CLI: templates (zekno add), PostgreSQL, MySQL, MongoDB and Redis; contributed by pull request
 - [x] Website: the landing page and the docs
 - [x] Domains with HTTPS and health checks: a proxy the runner manages, certificates from Let's Encrypt, the DNS check before a deploy, `zekno domain` (CLI and runner)
-- [x] Publish runner 0.1.1, which carries domains and health checks: confirmed by a second build, its source proven on a real server as the pre-release 0.1.1-dev.2
+- [x] Publish runner 0.1.1, which carries domains and health checks: confirmed by a second build and proven on a real server
 
 **Next**
 
