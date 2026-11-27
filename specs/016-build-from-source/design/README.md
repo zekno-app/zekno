@@ -2,7 +2,7 @@
 
 **Status**: proposed, not approved. The 18 boards were drawn on 2026-11-26 and are on the design canvas since 2026-11-27. The maintainer approves the words and the look of every new screen and line on these boards before anything is built (spec FR-092, maintainer step M2). Screens are built last, so a board can still change before its screen exists.
 
-The words of every new or changed line are in [`lines.md`](./lines.md), with the example values, the habits kept, and the nineteen choices put to the maintainer. The boards draw those lines. They go on the design canvas (https://claude.ai/artifact/BVuvZPZTReLa4TSHfyzMJW), in a row "Build from source (spec 016)", and are kept here as files.
+The words of every new or changed line are in [`lines.md`](./lines.md), with the example values, the habits kept, and the nineteen choices put to the maintainer. The boards draw those lines. They go on the design canvas (https://claude.ai/artifact/BVuvZPZTReLa4TSHfyzMJW), on its page "Build from source (016)", and are kept here as files.
 
 ## The boards
 
