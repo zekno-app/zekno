@@ -60,27 +60,62 @@ function ownedFolder(path: string): boolean {
   }
 }
 
+const runsAsRoot = () =>
+  typeof process.getuid === "function" && process.getuid() === 0
+
 export function homeDir(): string {
   if (process.env.ZEKNO_RUNNER_HOME) return process.env.ZEKNO_RUNNER_HOME
   const userHome = homedir()
   return defaultHome({
-    isRoot: typeof process.getuid === "function" && process.getuid() === 0,
+    isRoot: runsAsRoot(),
     userHome,
     userFolderSetUp: isSetUp(userFolder(userHome)),
     ownsSystemFolder: ownedFolder(SYSTEM_HOME),
   })
 }
 
+/** An app's name as the core library holds it (`APP_NAME`): the only app name a build's path is made of. */
+const APP = /^[a-z0-9][a-z0-9-]{0,62}$/
+/** A build key, or a staged piece's fingerprint: 64 lowercase hex (contracts/core.md CO1). */
+const HEX64 = /^[0-9a-f]{64}$/
+
+/** `name` when it matches `pattern`; else throws, so no path is ever made of another name. */
+function checked(name: string, pattern: RegExp): string {
+  if (typeof name !== "string" || !pattern.test(name))
+    throw new Error("A path of the runner's is made of checked names only.")
+  return name
+}
+
 export const paths = (dir: string) => ({
   secretKey: join(dir, "server.key"),
   publicKey: join(dir, "server.pub"),
   state: join(dir, "state.json"),
+  /** The deploy lock, "D" (specs/016-build-from-source, contracts/runner.md RB1). */
   lock: join(dir, "lock"),
+  /** The state lock, "S": every read-then-write of the state, `packs/` and `kept/` (RB1). */
+  stateLock: join(dir, "state.lock"),
   compose: (app: string) => join(dir, "apps", app, "compose.yaml"),
   proxy: join(dir, "proxy"),
   proxyEtc: join(dir, "proxy", "etc"),
   proxyConfig: join(dir, "proxy", "etc", "caddy.json"),
   proxyNext: join(dir, "proxy", "etc", "caddy.next.json"),
+  // Feature 016 (contracts/runner.md, "Names and paths the runner uses"). Each
+  // throws for an app name or a key that did not pass core's patterns.
+  /** The sealed pieces staged for an app's deploy (RB2). */
+  packs: (app: string) => join(dir, "packs", checked(app, APP)),
+  /** Which deploy the staged pieces are for: the payload's hash (RB2). */
+  packDeploy: (app: string) =>
+    join(dir, "packs", checked(app, APP), "deploy.json"),
+  /** One staged piece, by its fingerprint (RB2). */
+  packPiece: (app: string, fingerprint: string) =>
+    join(dir, "packs", checked(app, APP), checked(fingerprint, HEX64)),
+  /** The pieces of the deploy being checked or built (RB3 K14d). */
+  building: (app: string) => join(dir, "building", checked(app, APP)),
+  /** The detailed record of one kept build, written mode 600 (RB11, RB14). */
+  kept: (app: string, key: string) =>
+    join(dir, "kept", checked(app, APP), `${checked(key, HEX64)}.json`),
+  /** buildx's own folder: `buildxConfig` makes it (RB7). */
+  buildx: join(dir, "buildx"),
 })
 
 export const token = () => randomBytes(12).toString("hex")
@@ -123,6 +158,71 @@ export function isPrivate(dir: string): boolean {
     if ((info.mode & 0o077) !== 0) return false
   }
   return true
+}
+
+/**
+ * buildx's own folder, `<home>/buildx/`, as an absolute path: the value of
+ * `BUILDX_CONFIG` for every build client (contracts/runner.md, "Names and
+ * paths the runner uses"; RB7, RB12). Made on first use, mode 700; once
+ * there, it and what buildx wrote in it are left as they are.
+ */
+export function buildxConfig(dir: string): string {
+  const path = resolve(paths(dir).buildx)
+  ensureDir(path)
+  return path
+}
+
+/**
+ * Where builds are unpacked when nothing says otherwise (FR-031, FR-050):
+ * `/var/lib/zekno-unpacked` for root, else `~/.local/state/zekno-unpacked`,
+ * also for a user whose runner's folder is the system one. Never inside the
+ * runner's folder.
+ */
+export function defaultUnpacked(input: {
+  isRoot: boolean
+  userHome: string
+}): string {
+  return input.isRoot
+    ? "/var/lib/zekno-unpacked"
+    : join(input.userHome, ".local", "state", "zekno-unpacked")
+}
+
+/**
+ * The folder that holds the work folders of builds: `ZEKNO_RUNNER_UNPACKED`
+ * when set (a seam for tests, as `ZEKNO_RUNNER_HOME` is for the runner's
+ * folder), else `defaultUnpacked`. Made mode 700 when it is not there, then
+ * checked as the runner's folder is (`isPrivate`): a folder of another user,
+ * or one others can enter, throws, and is left as it is.
+ */
+export function unpackedDir(): string {
+  const dir =
+    process.env.ZEKNO_RUNNER_UNPACKED ||
+    defaultUnpacked({ isRoot: runsAsRoot(), userHome: homedir() })
+  ensureDir(dir)
+  if (!isPrivate(dir))
+    throw new Error("The folder for unpacked builds is not private.")
+  return dir
+}
+
+/**
+ * Makes a build's own work folder, `unpackedDir()/<24 hex>/`, mode 700, and
+ * gives its path. The name is random (`token`, 12 bytes from crypto); a
+ * name already there, a folder or a file, is never used again: the next
+ * name is tried. `nextName` is a seam for tests.
+ */
+export function workFolder(nextName: () => string = token): string {
+  const root = unpackedDir()
+  for (;;) {
+    const path = join(root, nextName())
+    try {
+      mkdirSync(path, { mode: 0o700 })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") continue
+      throw error
+    }
+    chmodSync(path, 0o700)
+    return path
+  }
 }
 
 function syncDir(dir: string): void {

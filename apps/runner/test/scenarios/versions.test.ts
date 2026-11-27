@@ -36,9 +36,13 @@ type World = Awaited<ReturnType<typeof world>>
 
 /**
  * Every part of a marked state (contracts/state.md, "The shape"), with the
- * routes in force since feature 015 (specs/015-domains-https, core.md).
+ * routes in force since feature 015 (specs/015-domains-https, core.md), and
+ * each app's builds and the build under way since feature 016 (specs/
+ * 016-build-from-source, contracts/core.md CO13).
  */
 const PARTS = [
+  "building",
+  "builds",
   "formats",
   "lastSequence",
   "released",
@@ -108,7 +112,7 @@ describe("the stored state carries its mark, and every write keeps it whole (ST3
     })
     expect(setup.code).toBe(0)
     expect(stateOf(home)).toEqual({
-      v: 4,
+      v: 5,
       serverId: setup.json!.serverId,
       team: team.trust,
       lastSequence: {},
@@ -116,15 +120,19 @@ describe("the stored state carries its mark, and every write keeps it whole (ST3
       formats: {},
       routes: {},
       released: [],
+      builds: {},
+      building: null,
     })
     // world() sets up, then syncs a team list: still marked, every part there.
     const w = await world()
     expect(Object.keys(stateOf(w.home)).sort()).toEqual(PARTS)
     expect(stateOf(w.home)).toMatchObject({
-      v: 4,
+      v: 5,
       formats: {},
       routes: {},
       released: [],
+      builds: {},
+      building: null,
     })
   })
 
@@ -137,7 +145,9 @@ describe("the stored state carries its mark, and every write keeps it whole (ST3
           part !== "v" &&
           part !== "formats" &&
           part !== "routes" &&
-          part !== "released"
+          part !== "released" &&
+          part !== "builds" &&
+          part !== "building"
       )
     )
 
@@ -146,14 +156,14 @@ describe("the stored state carries its mark, and every write keeps it whole (ST3
     expect(
       (await runner(w.home, w.docker.path, "sync", { rosters })).json
     ).toEqual({ outcome: "ok" })
-    expect(stateOf(w.home)).toMatchObject({ v: 4, formats: { web: 1 } })
+    expect(stateOf(w.home)).toMatchObject({ v: 5, formats: { web: 1 } })
     expect(Object.keys(stateOf(w.home)).sort()).toEqual(PARTS)
 
     const synced = { ...w, rosters, trust: newer.trust }
     expect((await apply(synced, 2)).json?.outcome).toBe("started")
     expect(Object.keys(stateOf(w.home)).sort()).toEqual(PARTS)
     expect(stateOf(w.home)).toMatchObject({
-      v: 4,
+      v: 5,
       formats: { web: 1 },
       lastSequence: { web: 2 },
     })
@@ -161,7 +171,7 @@ describe("the stored state carries its mark, and every write keeps it whole (ST3
     expect((await deploy(synced, 2)).outcome).toBe("started")
     expect(Object.keys(stateOf(w.home)).sort()).toEqual(PARTS)
     expect(stateOf(w.home)).toMatchObject({
-      v: 4,
+      v: 5,
       formats: { web: 2 },
       lastSequence: { web: 3 },
     })
@@ -186,7 +196,7 @@ describe("the version-1 path on this runner", () => {
       sequence: 2,
     })
     const after = stateOf(w.home)
-    expect(after.v).toBe(4)
+    expect(after.v).toBe(5)
     expect(after.formats).toEqual({ web: 1, api: 2 })
     expect(after.lastSequence).toEqual({ web: 2, api: 4 })
     expect(after.serverId).toBe(before.serverId)

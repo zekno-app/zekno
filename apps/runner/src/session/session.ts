@@ -4,7 +4,9 @@
  * same lock and passes the same checks as its one-shot command. `deploy`,
  * `records` and `proxy` have no one-shot command: they exist only here
  * (contracts/protocol.md, P2; specs/015-domains-https, contracts/runner.md,
- * RN13). Nor does `status` with routes: the one-shot `status` reads no input.
+ * RN13), nor do `pack`, `builds` and `builder` (specs/016-build-from-source,
+ * contracts/core.md CO12). Nor does `status` with routes: the one-shot
+ * `status` reads no input.
  */
 import {
   LIMITS,
@@ -17,8 +19,17 @@ import {
 } from "@workspace/core"
 
 import { version as runnerVersion } from "../../package.json"
-import { apply, refused, setup, status, sync } from "../commands/commands"
+import { builder } from "../commands/builder"
+import { builds } from "../commands/builds"
+import {
+  apply,
+  refused,
+  setupRequest,
+  statusRequest,
+  sync,
+} from "../commands/commands"
 import { deploy } from "../commands/deploy"
+import { pack } from "../commands/pack"
 import { proxy, statusWithRoutes } from "../commands/proxy"
 import { records } from "../commands/records"
 import { appStates, followLogs } from "../docker/inspect"
@@ -171,9 +182,13 @@ async function handle(
         return version()
       case "status":
         // With an input, only `{ "routes": true }`, and the answer has the routes in force.
-        return text === "" ? status(dir) : await statusWithRoutes(dir, text)
+        // RB15's bounded part comes first when the state's `building` is set (specs/016-build-from-source, RB1).
+        return text === ""
+          ? await statusRequest(dir)
+          : await statusWithRoutes(dir, text)
       case "setup":
-        return setup(dir, text)
+        // Takes the deploy lock on a server set up, so RB15 runs first when `building` is set (RB1).
+        return await setupRequest(dir, text)
       case "sync":
         return await sync(dir, text)
       case "apply":
@@ -194,6 +209,15 @@ async function handle(
         return records(dir, text)
       case "proxy":
         return await proxy(dir, text)
+      // Protocol 6 (specs/016-build-from-source, contracts/core.md CO12): a
+      // sealed piece staged before its deploy, what the runner keeps of each
+      // app's builds, and what the server can build with.
+      case "pack":
+        return await pack(dir, text)
+      case "builds":
+        return await builds(dir, text)
+      case "builder":
+        return await builder(dir, text)
       case "state":
         return await appStates(dir, closed)
       case "logs": {
@@ -209,6 +233,11 @@ async function handle(
           closed
         )
       }
+      default:
+        // A command of the session's list this runner has no case for, as one
+        // a later protocol could add: refused as an unknown one, never left
+        // with no result.
+        return refused("invalid_request")
     }
   } catch {
     // Details stay out of the answer: they could describe the server's files.

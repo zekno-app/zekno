@@ -159,8 +159,8 @@ describe("zekno-runner session", () => {
     // Docker was started the way the one-shot command starts it, with the secrets in its environment only.
     const calls = w.docker.calls()
     expect(calls.map((call) => call.args)).toEqual([
-      `compose -p zekno-web -f ${join(w.home, "apps/web/compose.yaml")} up -d --remove-orphans`,
-      `compose -p zekno-web -f ${join(w.home, "apps/web/compose.yaml")} up -d --remove-orphans`,
+      `compose -p zekno-web -f ${join(w.home, "apps/web/compose.yaml")} up -d --remove-orphans --no-build`,
+      `compose -p zekno-web -f ${join(w.home, "apps/web/compose.yaml")} up -d --remove-orphans --no-build`,
     ])
     expect(calls.map((call) => call.env.GREETING)).toEqual([
       SECRET,
@@ -261,8 +261,8 @@ describe("zekno-runner session", () => {
         (await s.request({ command: "status" })).result
       ).ok
     ).toBe(true)
-    // `deploy` is a command since protocol 3; `pack` is one no runner knows yet.
-    expect(await s.request({ command: "pack" })).toEqual({
+    // `deploy` is a command since protocol 3, `pack` since protocol 6; `shutdown` is one no runner knows.
+    expect(await s.request({ command: "shutdown" })).toEqual({
       events: [],
       result: refusal,
     })
@@ -301,6 +301,38 @@ describe("zekno-runner session", () => {
     ).toBe(true)
     expect((await s.close()).code).toBe(0)
     expect(w.docker.calls()).toEqual([])
+  })
+
+  test("pack, builds and builder refuse an input that is not their own invalid_request, and the session goes on", async () => {
+    // Feature 016 (specs/016-build-from-source, contracts/core.md CO12): `pack`,
+    // `builds` and `builder` are commands of protocol 6, carried out since
+    // T070, T092 and T093 (test/scenarios/pack.test.ts, builds-command.test.ts,
+    // builder-command.test.ts). An input outside their schemas is refused
+    // before anything is read or asked of Docker, never left with no result.
+    const w = await world()
+    const s = session(w.home, w.docker.path)
+    const inputs: Record<string, unknown[]> = {
+      pack: [undefined, {}, { apps: ["web"] }],
+      builds: [[], { apps: [] }, { apps: ["web"], extra: 1 }],
+      builder: [[], { usage: false }, { apps: ["web"] }],
+    }
+    for (const [command, refusedInputs] of Object.entries(inputs))
+      for (const input of refusedInputs)
+        expect(
+          await s.request(
+            input === undefined ? { command } : { command, input }
+          )
+        ).toEqual({
+          events: [],
+          result: { outcome: "refused", reason: "invalid_request" },
+        })
+    expect((await s.request({ command: "version" })).result).toEqual({
+      version: pkg.version,
+      protocol: RUNNER_PROTOCOL,
+    })
+    expect((await s.close()).code).toBe(0)
+    expect(w.docker.calls()).toEqual([])
+    expectValidFrames(s.frames)
   })
 
   test("a line longer than the message limit is refused without ending the session", async () => {
@@ -391,10 +423,12 @@ describe("zekno-runner session", () => {
         })
       ).result
     ).toEqual({ outcome: "refused", reason: "busy" })
+    // `sync` takes the state lock only, never the deploy lock: it is answered meanwhile
+    // (specs/016-build-from-source, contracts/runner.md RB1).
     expect(
       (await s.request({ command: "sync", input: { rosters: w.rosters } }))
         .result
-    ).toEqual({ outcome: "refused", reason: "busy" })
+    ).toEqual({ outcome: "ok" })
     writeFileSync(join(w.home, "lock"), "999999") // no such process
     expect(
       (

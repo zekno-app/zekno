@@ -28,7 +28,7 @@ import {
   type StoredRunnerState,
 } from "@workspace/core"
 
-import { isReport, load } from "../commands/commands"
+import { isReport, load, withState } from "../commands/commands"
 import type { ContainerInfo } from "../docker/objects"
 import { runDocker } from "../docker/run"
 import { writeState } from "../home/home"
@@ -143,13 +143,21 @@ async function steps({
     return { ok: false, failure: served.failure }
   }
 
-  // RN9, loaded: the state read again, then written with this app's routes in force.
-  const fresh = load(dir)
+  // RN9, loaded: under the state lock, the state read again, then written with this app's routes in force and
+  // every other part as it is now, the team lists a `sync` saved meanwhile among them (specs/016-build-from-source,
+  // contracts/runner.md RB1). A state that does not read, or the lock still held after its wait, is not loaded.
   let saved: StoredRunnerState
   try {
-    if (isReport(fresh)) throw new Error("The state did not read.")
-    saved = withAppRoutes(fresh.state, app, wanted)
-    writeState(dir, saved)
+    const written = await withState<{ saved: StoredRunnerState }>(
+      dir,
+      (fresh) => {
+        const next = withAppRoutes(fresh.state, app, wanted)
+        writeState(dir, next)
+        return { saved: next }
+      }
+    )
+    if (isReport(written)) throw new Error("The state was not saved.")
+    saved = written.saved
   } catch {
     await loadBack(dir, server, state.routes)
     return NOT_LOADED

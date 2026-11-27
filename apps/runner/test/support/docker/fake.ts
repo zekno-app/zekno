@@ -14,6 +14,12 @@
  * `compose -p <project> ps -q <service>` are answered by a model of Docker
  * (`stand-in.ts`, `stand-in-proxy.ts`, `model.ts`)
  * that a test can script, and are recorded with the other calls, in order.
+ * Since feature 016 (specs/016-build-from-source, contracts/runner.md,
+ * "Tests"), so are `version`, `info`, `context show`, `buildx version`,
+ * `inspect`, `build`, `history ls|inspect|rm`, `prune` and `du`
+ * (`stand-in-buildx.ts`) and the images builds tag, and `compose … up
+ * --no-build` refuses a built image that is not there; each call records
+ * whether the state lock was held.
  * Every other call still behaves as `up` does, as it always has.
  */
 import {
@@ -32,7 +38,10 @@ import {
   composeLabels,
   newId,
   readModel,
+  settle,
   type FakeContainer,
+  type FakeImage,
+  type FakeRecord,
   type Model,
   type Script,
 } from "./model"
@@ -42,9 +51,18 @@ export type DockerCall = {
   args: string
   env: Record<string, string>
   cwd: string
+  /**
+   * Whether `<home>/state.lock` existed when the call started (RB1: no
+   * Docker call is made holding S). `<home>` is the parent of
+   * `BUILDX_CONFIG` when it ends with `/buildx`, as a build's is, else the
+   * folder the call was made in, as `runDocker` makes it in `<home>`.
+   */
+  stateLock: boolean
 }
 
 const STAND_IN = join(import.meta.dir, "stand-in.ts")
+const STAND_IN_BUILDX = join(import.meta.dir, "stand-in-buildx.ts")
+const STAND_IN_COMPOSE = join(import.meta.dir, "stand-in-compose.ts")
 
 function readCalls(log: string): DockerCall[] {
   if (!existsSync(log)) return []
@@ -64,6 +82,7 @@ function readCalls(log: string): DockerCall[] {
         args: lines.find((entry) => entry.startsWith("ARGS "))!.slice(5),
         env,
         cwd,
+        stateLock: lines.includes("LOCK yes"),
       }
     })
 }
@@ -80,21 +99,36 @@ export function fakeDocker() {
   const log = join(dir, "calls.log")
   const inspectLog = join(dir, "inspect.log")
   const at = (name: string) => join(dir, name)
-  const record = `{ echo "ARGS $*"; echo "CWD $(pwd -P)"; env | sed 's/^/ENV /'; echo END; } >> "${log}"`
+  const lock = `if [ -e "$h/state.lock" ]; then echo "LOCK yes"; else echo "LOCK no"; fi`
+  const record = `{ echo "ARGS $*"; echo "CWD $(pwd -P)"; ${lock}; env | sed 's/^/ENV /'; echo END; } >> "${log}"`
   // Started from its own folder once the call's folder is recorded: Bun starts slowly in a crowded temporary folder.
   const standIn = `cd "${import.meta.dir}" && exec "${process.execPath}" "${STAND_IN}" "$d" "$@"`
+  // Feature 016: `exec`, so the process the runner started is the one that answers, told the call's folder.
+  const buildx = `w="$(pwd -P)"; cd "${import.meta.dir}" && exec "${process.execPath}" "${STAND_IN_BUILDX}" "$d" "$w" "$@"`
   writeFileSync(
     path,
     `#!/bin/sh
 d="${dir}"
+case "$BUILDX_CONFIG" in */buildx) h="\${BUILDX_CONFIG%/buildx}" ;; *) h="$(pwd -P)" ;; esac
 case "$1" in
   network|run|exec|logs|inspect|rm|start|volume|image|pull) ${record}; ${standIn} ;;
+  version|info) ${record}; ${buildx} ;;
+  context) if [ "$2" = "show" ]; then ${record}; ${buildx}; fi ;;
+  buildx)
+    case "$2" in
+      version|inspect|build|prune|du) ${record}; ${buildx} ;;
+      history) case "$3" in ls|inspect|rm) ${record}; ${buildx} ;; esac ;;
+    esac ;;
 esac
 if [ "$1" = "compose" ] && [ "$4" = "ps" ] && [ "$5" = "-q" ]; then ${record}; ${standIn}; fi
 if [ "$4" = "ps" ] || [ "$4" = "logs" ]; then
-  { echo "ARGS $*"; echo "CWD $(pwd -P)"; env | sed 's/^/ENV /'; echo END; } >> "${inspectLog}"
+  { echo "ARGS $*"; echo "CWD $(pwd -P)"; ${lock}; env | sed 's/^/ENV /'; echo END; } >> "${inspectLog}"
 else
   ${record}
+fi
+# Feature 016: with --no-build, Compose refuses a built image that is not there (E08).
+if [ "$1" = "compose" ]; then
+  case " $* " in *" --no-build "*) w="$(pwd -P)"; (cd "${import.meta.dir}" && "${process.execPath}" "${STAND_IN_COMPOSE}" "$d" "$w" "$@") || exit 1 ;; esac
 fi
 if [ "$4" = "ps" ]; then
   if [ -f "$d/ps-hang" ]; then echo $$ > "$d/ps.pid"; exec sleep 60; fi
@@ -299,10 +333,47 @@ exit 0
         model.volumes = model.volumes.filter((each) => each !== name)
       })
     },
-    /** What the next calls do (`model.ts`, `Script`), added to what was said before. */
+    /** What the next calls do (`model.ts`, `Script`), added to what was said before; a `docker` or `build` part adds to the earlier one. */
     script(change: Script) {
-      changeModel(dir, (model) => Object.assign(model.script, change))
+      changeModel(dir, (model) => {
+        const docker = change.docker && {
+          ...model.script.docker,
+          ...change.docker,
+        }
+        const build = change.build && { ...model.script.build, ...change.build }
+        Object.assign(
+          model.script,
+          change,
+          docker ? { docker } : {},
+          build ? { build } : {}
+        )
+      })
     },
+    /** Tags an image as a build would, or as a hand-made tag would (a leftover, a retag), and gives it. */
+    image(tag: string, change: Partial<FakeImage> = {}): FakeImage {
+      return changeModel(dir, (model) => {
+        const manifest = `sha256:${newId()}`
+        const made: FakeImage = {
+          tag,
+          id: manifest,
+          manifest,
+          config: `sha256:${newId()}`,
+          architecture: "amd64",
+          size: 7_340_032,
+          ...change,
+        }
+        model.images = [
+          ...model.images.filter((each) => each.tag !== tag),
+          made,
+        ]
+        return made
+      })
+    },
+    /** The folder that stands for `/proc`: each build's `<pid>/environ` while it runs (RB15). */
+    procRoot: join(dir, "proc"),
+    /** Docker's records of the builds, each as buildx would show it now (`settle`). */
+    records: (): FakeRecord[] =>
+      changeModel(dir, (model) => model.records.map((each) => settle(each))),
     /** The model as it is now. */
     model: (): Model => readModel(dir),
     /** The argument lists of the calls the model answered, in order, each exactly as passed. */

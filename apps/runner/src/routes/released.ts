@@ -11,7 +11,7 @@
  */
 import { withoutReleased, type StoredRunnerState } from "@workspace/core"
 
-import { isReport, load } from "../commands/commands"
+import { withState } from "../commands/commands"
 import { writeState } from "../home/home"
 import { deleteCertificates } from "../proxy/certificates"
 import { findProxy, type FoundProxy } from "../proxy/container"
@@ -19,8 +19,11 @@ import { findProxy, type FoundProxy } from "../proxy/container"
 /**
  * Deletes the certificate of each of `released`, the list as the state has
  * it, with the proxy as `found` says, then saves the state with those known
- * to be gone taken off. The state is read again before it is written, and
- * written only when the list changed.
+ * to be gone taken off. The deletions are Docker calls, made under the
+ * deploy lock alone; the write takes the state lock, reads the state again,
+ * changes only the list, and is made only when the list changed (specs/
+ * 016-build-from-source, contracts/runner.md RB1). Still held after its
+ * wait, the lock leaves the list as it is, for the next try.
  */
 export async function deleteReleased(
   dir: string,
@@ -30,11 +33,11 @@ export async function deleteReleased(
   try {
     const gone = await deleteCertificates(dir, found, released)
     if (gone.length === 0) return
-    const fresh = load(dir)
-    if (isReport(fresh)) return
-    const next = withoutReleased(fresh.state, gone)
-    if (next.released.length !== fresh.state.released.length)
-      writeState(dir, next)
+    await withState(dir, (fresh) => {
+      const next = withoutReleased(fresh.state, gone)
+      if (next.released.length !== fresh.state.released.length)
+        writeState(dir, next)
+    })
   } catch {
     // Not saved: the domains stay on the list, and the next try deletes them again.
   }

@@ -3,7 +3,7 @@
  * core.md, "The state"; runner.md, RN2, RN9, RN10), against the real runner
  * program and the stand-in for Docker: a domain in force is never deleted,
  * whatever the list held; K15 counts the list; and a state marked 3 by runner
- * 0.1.1-dev.1 is read and saved as mark 4. The tries themselves are in
+ * 0.1.1-dev.1 is read and saved as mark 5. The tries themselves are in
  * routes-certificates.test.ts.
  */
 import { describe, expect, test } from "bun:test"
@@ -144,7 +144,7 @@ const dev1 = olderTree(RUNNER_DEV_1)
 
 describe('the mark (core.md, "The state")', () => {
   test.skipIf(dev1 === undefined)(
-    "a state marked 3 by runner 0.1.1-dev.1 is read, left as it is by reads, and saved as mark 4 at the first write; 0.1.1-dev.1 put back refuses mark 4",
+    "a state marked 3 by runner 0.1.1-dev.1 is read, left as it is by reads, and saved as mark 5 at the first write; 0.1.1-dev.1 put back refuses mark 5",
     async () => {
       const w = await world()
       const older = (command: string) => {
@@ -170,7 +170,15 @@ describe('the mark (core.md, "The state")', () => {
         "started"
       )
       // The state as runner 0.1.1-dev.1 writes it: marked 3, without the list.
-      const { released: _released, ...rest } = stateOf(w.home)
+      const {
+        released: _released,
+        builds: _builds,
+        building: _building,
+        ...rest
+      } = JSON.parse(readFileSync(stateFile(w), "utf8")) as Record<
+        string,
+        unknown
+      >
       writeFileSync(stateFile(w), JSON.stringify({ ...rest, v: 3 }), {
         mode: 0o600,
       })
@@ -187,13 +195,13 @@ describe('the mark (core.md, "The state")', () => {
       })
       expect(readFileSync(stateFile(w), "utf8")).toBe(bytes)
 
-      // The first write: the release, saved as mark 4 with its deletion still to do.
+      // The first write: the release, saved as mark 5 with its deletion still to do.
       w.docker.script({ deletionFails: 1 })
       expect((await deployRoutes(w, 1, { routes: [] })).result.outcome).toBe(
         "started"
       )
       expect(stateOf(w.home)).toMatchObject({
-        v: 4,
+        v: 5,
         lastSequence: { web: 2 },
         routes: {},
         released: ["app.example.com"],

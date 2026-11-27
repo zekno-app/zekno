@@ -151,6 +151,11 @@ export async function composeUp(
     "up",
     "-d",
     "--remove-orphans",
+    // Never a build from Compose text, for every app, built or not
+    // (specs/016-build-from-source, contracts/runner.md RB13; FR-076): a
+    // service with `build:` whose image is not there does not start (E08).
+    // A registry image is pulled as before.
+    "--no-build",
   ]
   try {
     const { onLine } = input

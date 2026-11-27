@@ -2,14 +2,19 @@
  * Helpers for the runner's tests of deploy version 2 (specs/014-deploy-v2):
  * an envelope of any kind signed the way the core library signs, a state as
  * runner 0.1.0 leaves it, the record files a runner keeps, and version-2
- * deploys built and sent the way a zekno of this feature sends them.
+ * deploys built and sent the way a zekno of this feature sends them, with
+ * builds since feature 016 (specs/016-build-from-source, contracts/core.md
+ * CO1, CO2, CO4).
  */
 import {
+  buildKey,
+  builtImageName,
   createDeployV2,
   createSecret,
   createSecretRemoval,
   keyIdOf,
   parseRunnerState,
+  type Build,
   type Envelope,
   type SecretRecord,
   type Signer,
@@ -106,13 +111,34 @@ export function recordFiles(home: string): RecordFile[] {
 /** The value each deploy sets when a test names none, as `buildDeploy` does. */
 export const GREETING = "hello from the test"
 
+/** A build as a test gives it: everything but its key, which `buildDeployV2` works out (CO4). */
+export type BuildRecipeInput = Omit<Build, "key">
+
+/**
+ * A Compose text that runs each built image of `app`, by `builtImageName`
+ * (CO2): the first as the service `web`, with GREETING as `COMPOSE` has it,
+ * each next one as `web-2`, `web-3` and on.
+ */
+export function composeRunning(app: string, keys: readonly string[]): string {
+  const services = keys.map((key, index) =>
+    index === 0
+      ? `  web:\n    image: ${builtImageName(app, key)}\n    environment:\n      - GREETING\n`
+      : `  web-${index + 1}:\n    image: ${builtImageName(app, key)}\n`
+  )
+  return `services:\n${services.join("")}`
+}
+
 /**
  * Sets `values` for the app and signs a version-2 deploy made against
  * `previous` that lists them, with `statements` listed too (records the
  * runner already holds, not sent again) and `removals` removed. Each value is
  * a new record (`createSecret`) at `secretVersion`, by default the number this
- * deploy will have, as `buildDeploy` numbers its secrets. Gives the envelope
- * and the records it made; the test decides which records to send.
+ * deploy will have, as `buildDeploy` numbers its secrets. Each of `builds` is
+ * given its key against this deploy's listing (CO4), in CO1's order of
+ * fields, and is signed as `createDeployV2`'s own `builds`; with builds and no
+ * `compose`, the Compose text runs each built image (`composeRunning`). Gives
+ * the envelope and the records it made; the test decides which records to
+ * send.
  */
 export async function buildDeployV2(input: {
   trust: TeamTrust
@@ -129,6 +155,8 @@ export async function buildDeployV2(input: {
   /** Feature 015: the routes and health check the deploy signs. */
   routes?: Parameters<typeof createDeployV2>[0]["routes"]
   health?: Parameters<typeof createDeployV2>[0]["health"]
+  /** Feature 016: the builds the deploy signs, each without its key. */
+  builds?: readonly BuildRecipeInput[]
   later?: Parameters<typeof createDeployV2>[0]["later"]
 }): Promise<{ envelope: Envelope; records: SecretRecord[] }> {
   const { trust, serverId, signer } = input
@@ -152,20 +180,48 @@ export async function buildDeployV2(input: {
     removals.push(
       await createSecretRemoval({ trust, serverId, app, ...removal, signer })
     )
+  const statements = [
+    ...records.map((record) => record.envelope),
+    ...(input.statements ?? []),
+  ]
+  // The listing as the deploy will carry it: each statement's name and hash.
+  const listed = statements.map((statement) => {
+    const { name, hash } = payloadOf(statement) as {
+      name: string
+      hash: string
+    }
+    return { name, hash }
+  })
+  const builds: Build[] = (input.builds ?? []).map((recipe) => ({
+    key: buildKey(recipe, listed),
+    pack: recipe.pack,
+    builder: recipe.builder,
+    args: recipe.args,
+    secrets: recipe.secrets,
+    network: recipe.network,
+    timeout: recipe.timeout,
+    fresh: recipe.fresh,
+  }))
+  const compose =
+    input.compose ??
+    (builds.length === 0
+      ? COMPOSE
+      : composeRunning(
+          app,
+          builds.map((build) => build.key)
+        ))
   const envelope = await createDeployV2({
     trust,
     serverId,
     app,
     previous: input.previous,
-    compose: input.compose ?? COMPOSE,
-    statements: [
-      ...records.map((record) => record.envelope),
-      ...(input.statements ?? []),
-    ],
+    compose,
+    statements,
     removals,
     expiresAt: input.expiresAt ?? null,
     routes: input.routes,
     health: input.health,
+    builds,
     later: input.later,
     signer,
   })

@@ -4,6 +4,8 @@
  * stand-in's shell script (`fake.ts`) records each call, then runs this with
  * its folder and Docker's arguments for `network`, `run`, `exec`, `logs`,
  * `inspect`, `rm`, `start`, `volume`, `image`, `pull` and `compose … ps -q`.
+ * An `image` call that names a built image (`zekno.invalid/…`) is
+ * answered by `stand-in-buildx-records.ts` (specs/016-build-from-source).
  * It answers from the model (`model.ts`) the way Docker 29 does, as far as
  * the runner reads it, and writes each call's argument list to `argv.jsonl`
  * so a test sees every argument exactly as it was passed. `run` and `exec`,
@@ -14,6 +16,7 @@ import { appendFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { changeModel, findContainer, newId, type Model } from "./model"
+import { image as builtImage, namesBuilt } from "./stand-in-buildx-records"
 import { exec, fail, out, run, startProxy, type Answer } from "./stand-in-proxy"
 
 const [dir, ...args] = process.argv.slice(2) as [string, ...string[]]
@@ -184,6 +187,8 @@ function answer(model: Model): Answer {
     return inspect(model, rest[0] === "--type" ? rest.slice(2) : rest)
   if (verb === "exec") return exec(model, rest[0]!, rest.slice(1))
   if (verb === "volume") return volume(model, rest)
+  // Feature 016: the images builds tag, `zekno.invalid/<app>:<key>`.
+  if (verb === "image" && namesBuilt(rest)) return builtImage(model, rest)
   if (verb === "image" && rest[0] === "inspect")
     return image(model, "inspect", rest.at(-1)!)
   if (verb === "pull") return image(model, "pull", rest.at(-1)!)

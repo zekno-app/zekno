@@ -83,7 +83,7 @@ describe("the runner", () => {
 
     const [call] = docker.calls()
     expect(call!.args).toBe(
-      `compose -p zekno-web -f ${join(home, "apps/web/compose.yaml")} up -d --remove-orphans`
+      `compose -p zekno-web -f ${join(home, "apps/web/compose.yaml")} up -d --remove-orphans --no-build`
     )
     expect(call!.env.GREETING).toBe("hello from the test")
     // Reserved names never override what Docker itself runs with.

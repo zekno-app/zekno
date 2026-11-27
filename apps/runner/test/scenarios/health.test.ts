@@ -279,7 +279,7 @@ describe("services in order, and a check with no route", () => {
     const { result } = await deployRoutes(w, 0, { health: PATH_CHECK })
     expect(result.outcome).toBe("started")
     expect(steps(w, { web: web! }).slice(0, 7)).toEqual([
-      `compose -p zekno-web -f <home>/apps/web/compose.yaml up -d --remove-orphans`,
+      `compose -p zekno-web -f <home>/apps/web/compose.yaml up -d --remove-orphans --no-build`,
       "compose -p zekno-web ps -q web",
       "inspect --type container <web>",
       "network inspect zekno-route-web",
@@ -299,7 +299,7 @@ describe("services in order, and a check with no route", () => {
     const before = w.docker.calls().length
     expect((await deployRoutes(w, 1)).result.outcome).toBe("started")
     expect(steps(w, { web: web! }).slice(before)).toEqual([
-      `compose -p zekno-web -f <home>/apps/web/compose.yaml up -d --remove-orphans`,
+      `compose -p zekno-web -f <home>/apps/web/compose.yaml up -d --remove-orphans --no-build`,
       "inspect --type container zekno-proxy",
       "inspect --type container zekno-proxy",
       "network inspect zekno-route-web",

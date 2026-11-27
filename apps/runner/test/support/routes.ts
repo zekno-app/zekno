@@ -139,9 +139,9 @@ export function steps(w: World, ids: Record<string, string> = {}): string[] {
   })
 }
 
-/** The `up` call of an app, as `steps` writes it. */
+/** The `up` call of an app, as `steps` writes it: never a build from Compose text (specs/016-build-from-source, RB13). */
 export const up = (app = "web") =>
-  `compose -p zekno-${app} -f <home>/apps/${app}/compose.yaml up -d --remove-orphans`
+  `compose -p zekno-${app} -f <home>/apps/${app}/compose.yaml up -d --remove-orphans --no-build`
 
 /**
  * The proxy's `docker run`, as `steps` writes it, with the ports it

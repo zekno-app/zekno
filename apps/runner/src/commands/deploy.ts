@@ -15,6 +15,15 @@
  * (RN12). A deploy of an app with no route and no health check, that held
  * none, makes exactly the calls it made before when no released domain's
  * certificate is still to delete (RN3).
+ *
+ * Since feature 016 (specs/016-build-from-source, contracts/runner.md RB3),
+ * a deploy that builds takes the steps of RB3's table in its order: K1 to
+ * K14 here; K14a to K14c in `deploy-build.ts` (which builds are kept, and,
+ * when one is not, whether Docker can build and the disk holds it); K15 and
+ * K16 here; K14d in `deploy-build.ts` (the code checked); K17 here, which
+ * writes the number with the state's `building` when a build is not kept;
+ * then U and R in `deploy-after.ts`, before the answer. A deploy of an app
+ * with no build asks Docker nothing more than before.
  */
 import {
   domainsAfter,
@@ -24,12 +33,17 @@ import {
   parseMessage,
   RunnerDeployRequestSchema,
   verifyDeployV2,
+  withBuilding,
+  type Building,
+  type RunnerDeployRequest,
   type RunnerReport,
   type SecretRecord,
+  type ServerSecretKey,
+  type StoredRunnerState,
   type VerifiedDeployV2,
 } from "@workspace/core"
 
-import { waitHealthy } from "../health/wait"
+import type { StatFs } from "../disk/free"
 import { writeState } from "../home/home"
 import {
   readRecord,
@@ -38,17 +52,18 @@ import {
   removeUnnamed,
   writeRecord,
 } from "../home/records"
-import { putRoutesInForce } from "../routes/apply"
-import { retryReleased } from "../routes/released"
+import { dropBuilding } from "../pack/open"
 import {
-  composeStart,
   follow,
   isReport,
   load,
   locked,
   refused,
   withinLimits,
+  withState,
 } from "./commands"
+import { afterNumber } from "./deploy-after"
+import { buildingOf, checkCode, planBuilds } from "./deploy-build"
 
 /** The ciphertext hash the signed listing names for a supplied record: the name of its file. */
 const listedHash = (verified: VerifiedDeployV2, record: SecretRecord) =>
@@ -91,120 +106,228 @@ function recordsFit(dir: string, verified: VerifiedDeployV2): boolean {
   )
 }
 
-/**
- * What follows `up` (RN3, RN11, RN12): for an app with no route and no
- * health check that held none, only the certificates of released domains
- * still to delete, tried again; else the routes put in force, carried out
- * as far as they go even when `up` failed, so that a domain this deploy
- * releases is released; then, only when both went well, the wait for health.
- * A start stopped at its time limit is reported with its `startLimit`.
- */
-async function afterUp(
-  dir: string,
-  verified: VerifiedDeployV2,
-  started: Pick<RunnerReport, "outcome" | "startLimit">,
-  onHealth: (service: string) => void
-): Promise<RunnerReport> {
-  const { app, sequence, routes, health } = verified.deploy
-  const done = { app, sequence }
-  if (
-    routes.length === 0 &&
-    health === null &&
-    !Object.hasOwn(verified.nextState.routes, app)
-  ) {
-    // RN10's first step, for each released domain still to delete; with none, no Docker call. Not reported.
-    await retryReleased(dir, verified.nextState)
-    return { ...started, ...done }
-  }
-
-  const inForce = await putRoutesInForce({ dir, app, routes, health })
-  // Their own failure is not reported over start_failed.
-  if (started.outcome === "start_failed") return { ...started, ...done }
-  if (!inForce.ok)
-    return { outcome: "routes_failed", ...done, routes: inForce.failure }
-  if (health !== null) {
-    const waited = await waitHealthy({
-      dir,
-      app,
-      health,
-      names: inForce.names,
-      // The limit is the app's: the time the routes took, such as a first fetch of the proxy's image, is not counted.
-      deadline: Date.now() + health.timeout * 1000,
-      onHealth,
-    })
-    if (!waited.ok)
-      return {
-        outcome: "unhealthy",
-        ...done,
-        health: { service: waited.service, http: waited.http },
-      }
-  }
-  return { outcome: "started", ...done }
+/** A deploy that passed K4 to K16: verified against `state`, with its secrets opened. */
+type Checked = {
+  verified: VerifiedDeployV2
+  secrets: Record<string, string>
+  /** The state K4 to K14 read, after K3. */
+  state: StoredRunnerState
 }
 
+/** What in-process tests give a deploy (K14c's free space), as they give `up` its limit. */
+export type DeployOptions = {
+  /** Stands for `fs.statfsSync` on each place a build writes to (RB6). */
+  readonly statfs?: StatFs
+}
+
+/**
+ * K4 to K14 against `state`: the envelope, the signer, the payload, the
+ * order, the expiry and the secrets, each listed secret's record supplied or
+ * held here and verified now.
+ */
+function verify(
+  dir: string,
+  request: RunnerDeployRequest,
+  state: StoredRunnerState
+): VerifiedDeployV2 | RunnerReport {
+  const verified = verifyDeployV2({
+    envelope: request.envelope,
+    records: request.records,
+    held: (app, hash) => readRecord(dir, app, hash),
+    state,
+    now: new Date(),
+    via: "session",
+  })
+  return verified.ok ? verified.value : refused(verified.error.code)
+}
+
+/**
+ * K15: what the runner would hold after the deploy fits what it may hold
+ * and report, the domains and the health checks of every app with this
+ * deploy's in place of the app's among them (RN2); else `too_large`.
+ */
+function beyondLimits(
+  dir: string,
+  verified: VerifiedDeployV2
+): RunnerReport | undefined {
+  const { app, routes, health } = verified.deploy
+  if (
+    !withinLimits(verified.nextState) ||
+    !recordsFit(dir, verified) ||
+    domainsAfter(verified.nextState, app, routes) > LIMITS.domainsPerServer ||
+    healthBytesAfter(verified.nextState, app, health) >
+      LIMITS.healthBytesPerServer
+  )
+    return refused("too_large")
+  return undefined
+}
+
+/** K4 to K15 against `state`, as K17 runs them again. */
+function check(
+  dir: string,
+  request: RunnerDeployRequest,
+  state: StoredRunnerState
+): VerifiedDeployV2 | RunnerReport {
+  const verified = verify(dir, request, state)
+  if (isReport(verified)) return verified
+  return beyondLimits(dir, verified) ?? verified
+}
+
+/**
+ * The answer to a deploy that finds the deploy lock held (specs/016-build-
+ * from-source, contracts/runner.md RB1; core.md CO10): `busy` at once, with
+ * the build under way when the state's `building` is set, read without a
+ * lock: its app, the whole seconds since it started (0 when its start is
+ * ahead of this clock), its limit and its phase.
+ */
+function busyAnswer(dir: string): RunnerReport {
+  const loaded = load(dir)
+  if (isReport(loaded) || loaded.state.building === null) return refused("busy")
+  const { app, since, limit, phase } = loaded.state.building
+  const seconds = Math.max(
+    0,
+    Math.floor((Date.now() - Date.parse(since)) / 1000)
+  )
+  return { ...refused("busy"), building: { app, seconds, limit, phase } }
+}
+
+/**
+ * The locks (specs/016-build-from-source, contracts/runner.md RB1; data-
+ * model.md, "The locks"; FR-044): the deploy lock for the whole deploy; the
+ * state lock for K3 to K14, for K14d's move of the pieces, then again at
+ * K17, and around each later state write (the routes and the released
+ * domains, in routes/), each reading the state again and changing only its
+ * own part. No Docker call is made, and no piece is read, while the state
+ * lock is held. A `sync` takes the state lock only, so it may land between
+ * K14 and K17: K17 then runs K4 to K16 again against the state it reads.
+ */
 export function deploy(
   dir: string,
   input: string,
   onProgress?: (line: string) => void,
   onHealth: (service: string) => void = () => {},
   /** How long `up` may run: the runner's own limit when left out (docker/compose.ts). */
-  limitMs?: number
+  limitMs?: number,
+  options: DeployOptions = {}
 ): Promise<RunnerReport> {
   // K1. The request: at most a message's size, and exactly its schema.
   const request = parseMessage(RunnerDeployRequestSchema, input)
   if (!request.ok) return Promise.resolve(refused("invalid_request"))
-  // K2. Set up, the deploy lock, a private folder and key, a state that reads.
-  return locked(dir, async () => {
-    const loaded = load(dir)
-    if (isReport(loaded)) return loaded
+  // K2. Set up, a private folder, the deploy lock: held by another run, busy at once (busyAnswer).
+  return locked(
+    dir,
+    async () => {
+      // K3 to K14, under the state lock: a key and a state that read; the team lists sent with it, saved whole
+      // with the mark when they changed; the deploy checked against them.
+      const first = await withState<
+        | {
+            verified: VerifiedDeployV2
+            state: StoredRunnerState
+            key: ServerSecretKey
+          }
+        | RunnerReport
+      >(dir, (loaded) => {
+        const followed = follow(loaded.state, request.value.rosters)
+        if (isReport(followed)) return followed
+        if (followed !== loaded.state) writeState(dir, followed)
+        const verified = verify(dir, request.value, followed)
+        if (isReport(verified)) return verified
+        return { verified, state: followed, key: loaded.secretKey }
+      })
+      if (isReport(first)) return first
+      const { app } = first.verified.deploy
 
-    // K3. The team lists sent with it, saved whole with the mark when they changed.
-    const followed = follow(loaded.state, request.value.rosters)
-    if (isReport(followed)) return followed
-    if (followed !== loaded.state) writeState(dir, followed)
+      // K14a to K14c, under the deploy lock alone (deploy-build.ts): which builds are kept, and, only when one
+      // is not, whether Docker can build and the disk holds it. A deploy with no build asks Docker nothing.
+      const plan = await planBuilds(
+        dir,
+        first.state,
+        first.verified,
+        options.statfs
+      )
+      if (isReport(plan)) return plan
 
-    // K4 to K14. The envelope, the signer, the payload, the order, the expiry and the
-    // secrets, each listed secret's record supplied or held here and verified now.
-    const verified = verifyDeployV2({
-      envelope: request.value.envelope,
-      records: request.value.records,
-      held: (app, hash) => readRecord(dir, app, hash),
-      state: followed,
-      now: new Date(),
-      via: "session",
-    })
-    if (!verified.ok) return refused(verified.error.code)
+      // K15. What the runner would hold fits.
+      const beyond = beyondLimits(dir, first.verified)
+      if (beyond !== undefined) return beyond
 
-    // K15. What the runner would hold after it fits what it may hold and report, the domains and the health
-    // checks of every app with this deploy's in place of the app's among them (RN2).
-    const { app, routes, health } = verified.value.deploy
-    if (
-      !withinLimits(verified.value.nextState) ||
-      !recordsFit(dir, verified.value) ||
-      domainsAfter(verified.value.nextState, app, routes) >
-        LIMITS.domainsPerServer ||
-      healthBytesAfter(verified.value.nextState, app, health) >
-        LIMITS.healthBytesPerServer
-    )
-      return refused("too_large")
+      // K16. Every listed secret opens, or none is used.
+      const opened = openSecrets(first.verified, first.key)
+      if (!opened.ok) return refused("secrets_mismatch")
+      const checked: Checked = {
+        verified: first.verified,
+        secrets: opened.value,
+        state: first.state,
+      }
 
-    // K16. Every listed secret opens, or none is used.
-    const secrets = openSecrets(verified.value, loaded.secretKey)
-    if (!secrets.ok) return refused("secrets_mismatch")
+      // K14d (deploy-build.ts): the pieces of each build not kept moved from staging under the state lock, then
+      // checked under the deploy lock alone. Its refusals leave no piece in building/<app>/.
+      const code = await checkCode(
+        dir,
+        request.value.envelope,
+        first.verified,
+        plan,
+        first.key
+      )
+      if (isReport(code)) return code
 
-    // K17. The records first, then the state that names them: the number is used
-    // here, before anything starts. Then the files no live secret names go.
-    for (const record of verified.value.write)
-      writeRecord(dir, app, listedHash(verified.value, record), record)
-    writeState(dir, verified.value.nextState)
-    removeUnnamed(dir, app, verified.value.keep)
-    const started = await composeStart(
-      dir,
-      verified.value.deploy,
-      secrets.value,
-      onProgress,
-      limitMs
-    )
-    return afterUp(dir, verified.value, started, onHealth)
-  })
+      // K17, under the state lock, the state read again. When it changed since K4 to K14 read it, K4 to K16 run
+      // again against it (FR-044). Then the records first, then the state that names them: the number is used
+      // here, with `building` when a build is not kept (CO13), before anything starts. Then the files no live
+      // secret names go.
+      let accepted: (Checked & { building: Building | null }) | RunnerReport
+      try {
+        accepted = await withState<
+          (Checked & { building: Building | null }) | RunnerReport
+        >(dir, (fresh) => {
+          let use = checked
+          if (!Bun.deepEquals(fresh.state, checked.state)) {
+            const again = check(dir, request.value, fresh.state)
+            if (isReport(again)) return again
+            const reopened = openSecrets(again, fresh.secretKey)
+            if (!reopened.ok) return refused("secrets_mismatch")
+            use = {
+              verified: again,
+              secrets: reopened.value,
+              state: fresh.state,
+            }
+          }
+          const { verified } = use
+          // Made, and read back by core's rules, before anything is written.
+          const building = buildingOf(verified.deploy, plan)
+          const next =
+            building === null
+              ? verified.nextState
+              : withBuilding(verified.nextState, building)
+          for (const record of verified.write)
+            writeRecord(dir, app, listedHash(verified, record), record)
+          writeState(dir, next)
+          removeUnnamed(dir, app, verified.keep)
+          return { ...use, building }
+        })
+      } catch (error) {
+        if (plan.toBuild.length > 0) dropBuilding(dir, app)
+        throw error
+      }
+      if (isReport(accepted)) {
+        // A refusal at K17 leaves no piece K14d moved.
+        if (plan.toBuild.length > 0) dropBuilding(dir, app)
+        return accepted
+      }
+
+      // The number is used. B1 and B2 come here for `plan.toBuild` (T086, deploy-build.ts), then B3 (T087,
+      // deploy-after.ts), once the build command is settled (T073, after check L2). Then U and R (deploy-after.ts),
+      // and the answer.
+      return afterNumber(dir, {
+        verified: accepted.verified,
+        secrets: accepted.secrets,
+        plan,
+        building: accepted.building,
+        onProgress,
+        onHealth,
+        limitMs,
+      })
+    },
+    () => busyAnswer(dir)
+  )
 }

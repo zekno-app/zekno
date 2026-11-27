@@ -27,6 +27,7 @@ import {
   type StoredRunnerState,
 } from "@workspace/core"
 
+import { boundedRestart, restart, type RestartBounds } from "../builder/restart"
 import { composeUp } from "../docker/compose"
 import {
   isPrivate,
@@ -38,7 +39,7 @@ import {
   writeKeys,
   writeState,
 } from "../home/home"
-import { acquireLock } from "../home/locks"
+import { acquireLock, withStateLock } from "../home/locks"
 
 type Reason = NonNullable<RunnerReport["reason"]>
 export const refused = (reason: Reason): RunnerReport => ({
@@ -108,6 +109,8 @@ export const withinLimits = (state: RunnerState): boolean =>
  * Sets the server up for one team. Runs once: a server that already has a key
  * is left alone. Whoever runs this first decides which team the server
  * obeys, so nobody else should be able to start the runner before then.
+ * It takes the deploy lock, then the state lock, and is `busy` at once when
+ * either is held (specs/016-build-from-source, contracts/runner.md RB1).
  */
 export function setup(
   dir: string,
@@ -122,10 +125,26 @@ export function setup(
   )
   if (!team.ok) return refused(team.error.code)
 
-  // The folder is taken now, and made private, before the lock is made in it.
+  // The folder is taken now, and made private, before the locks are made in it.
   takeDir(dir)
-  const release = acquireLock(dir)
-  if (!release) return refused("busy")
+  const releaseDeploy = acquireLock(dir)
+  if (!releaseDeploy) return refused("busy")
+  let releaseState: (() => void) | undefined
+  try {
+    releaseState = acquireLock(dir, "state.lock")
+  } catch (error) {
+    // A state lock that cannot be made (a full disk): the deploy lock is not left held for this process's life.
+    releaseDeploy()
+    throw error
+  }
+  if (!releaseState) {
+    releaseDeploy()
+    return refused("busy")
+  }
+  const release = () => {
+    releaseState()
+    releaseDeploy()
+  }
   try {
     if (isSetUp(dir)) return refused("already_set_up")
     const keys = generateServerKeyPair()
@@ -144,6 +163,24 @@ export function setup(
   } finally {
     release()
   }
+}
+
+/**
+ * `setup` as a request (specs/016-build-from-source, contracts/runner.md
+ * RB1 fifth bullet; data-model.md, "The locks"). On a server not yet set
+ * up: `setup`. On one set up, it takes the deploy lock as every request
+ * that takes it does, so RB15 runs first when the state's `building` is
+ * set, and answers `already_set_up`, or `busy` while another run holds the
+ * lock or a record of that build still runs. A folder others could write
+ * gets no lock made in it, and the answer it always had.
+ */
+export async function setupRequest(
+  dir: string,
+  input: string
+): Promise<RunnerSetupResponse | RunnerReport> {
+  const request = parseMessage(RunnerSetupRequestSchema, input)
+  if (!request.ok || !isSetUp(dir) || !isPrivate(dir)) return setup(dir, input)
+  return locked(dir, () => Promise.resolve(refused("already_set_up")))
 }
 
 /** What the server holds, as every zekno reads it: built from the version-1 view, so its shape never changes (FR-033). */
@@ -170,19 +207,62 @@ export function status(dir: string): RunnerStatus | RunnerReport {
 }
 
 /**
- * Runs one piece of work while holding the lock, so two runs never
- * interleave. The folder is checked before the lock is made in it: a folder
- * others could write is refused, and left as it is (security review S3).
+ * `status` as a request (specs/016-build-from-source, contracts/runner.md
+ * RB1 sixth bullet): RB15's bounded part first, then `status`'s answer,
+ * whose shape never changes.
+ */
+export async function statusRequest(
+  dir: string
+): Promise<RunnerStatus | RunnerReport> {
+  await boundedFirst(dir)
+  return status(dir)
+}
+
+/**
+ * The bounds RB15 runs with where requests come in: the contract's, with
+ * the folder that stands for `/proc` taken from `ZEKNO_RUNNER_PROC` when it
+ * is set, a seam for tests as `ZEKNO_RUNNER_UNPACKED` is (the stand-in for
+ * Docker keeps its build clients' entries there). Never set on a server.
+ */
+function requestBounds(): RestartBounds {
+  const procRoot = process.env.ZEKNO_RUNNER_PROC
+  return procRoot ? { procRoot } : {}
+}
+
+/**
+ * RB15 under the deploy lock when the state, read again, has `building`
+ * set: D was free or its holder gone, so no runner watches that build any
+ * more (RB1, fifth bullet). True once the request may go on; false while a
+ * record of that build still runs, and `building` stays.
+ */
+async function restartFirst(dir: string): Promise<boolean> {
+  const loaded = load(dir)
+  // A state that does not read is the work's to report.
+  if (isReport(loaded) || loaded.state.building === null) return true
+  return (await restart(dir, loaded.state, requestBounds())).cleared
+}
+
+/**
+ * Runs one piece of work while holding the deploy lock, so two deploys never
+ * interleave (specs/016-build-from-source, contracts/runner.md RB1). The
+ * folder is checked before the lock is made in it: a folder others could
+ * write is refused, and left as it is (security review S3). When another
+ * run holds the lock, the answer is `busy` at once, or what `busy` gives.
+ * RB15 runs first when the state's `building` is set, and while a record
+ * of that build still runs the answer is what `busy` gives: a deploy's
+ * answer then carries `building`, phase `stopping`.
  */
 export async function locked<Answer = RunnerReport>(
   dir: string,
-  work: () => Promise<Answer | RunnerReport>
+  work: () => Promise<Answer | RunnerReport>,
+  busy: () => RunnerReport = () => refused("busy")
 ): Promise<Answer | RunnerReport> {
   if (!isSetUp(dir)) return refused("not_set_up")
   if (!isPrivate(dir)) return refused("invalid_state")
   const release = acquireLock(dir)
-  if (!release) return refused("busy")
+  if (!release) return busy()
   try {
+    if (!(await restartFirst(dir))) return busy()
     return await work()
   } catch (error) {
     // The core library reports unusable stored state this way.
@@ -193,18 +273,93 @@ export async function locked<Answer = RunnerReport>(
   }
 }
 
-/** Takes newer team lists. */
-export function sync(dir: string, input: string): Promise<RunnerReport> {
-  const request = parseMessage(RunnerSyncRequestSchema, input)
-  if (!request.ok) return Promise.resolve(refused("invalid_request"))
-  return locked(dir, async () => {
+/**
+ * RB15's bounded part where a request that takes no deploy lock for its own
+ * work comes in: `sync`, `pack`, `builds` and `status` (RB1, sixth bullet).
+ * When the state, read without a lock (the runner writes it atomically),
+ * has `building` set, D is tried once, without waiting: held by another
+ * run, nothing is done; got, `boundedRestart` runs and D is released before
+ * the request's own work. Never throws, and never waits for a record.
+ */
+export async function boundedFirst(dir: string): Promise<void> {
+  if (!isSetUp(dir) || !isPrivate(dir)) return
+  const seen = load(dir)
+  if (isReport(seen) || seen.state.building === null) return
+  let release: (() => void) | undefined
+  try {
+    release = acquireLock(dir)
+  } catch {
+    return
+  }
+  if (!release) return
+  try {
+    // Read again under D: the run that held it may have cleared it since.
     const loaded = load(dir)
-    if (isReport(loaded)) return loaded
-    const next = follow(loaded.state, request.value.rosters)
-    if (isReport(next)) return next
-    if (next !== loaded.state) writeState(dir, next)
-    return { outcome: "ok" }
-  })
+    if (!isReport(loaded) && loaded.state.building !== null)
+      await boundedRestart(dir, loaded.state, requestBounds())
+  } catch {
+    // What is left waits for a later request; this one goes on.
+  } finally {
+    release()
+  }
+}
+
+/** How long a request waits for the state lock; tests pass a short one. */
+export type StateWait = { waitMs?: number }
+
+/**
+ * Runs `work` under the state lock with the state read again (RB1): every
+ * read-then-write of the state takes it, and changes only its own part of
+ * what it read. The answer is `work`'s, or why it did not run: the folder or
+ * the state that does not read, or `busy` once the wait has passed. No
+ * Docker call is made, and no piece is read, inside `work`.
+ */
+export async function withState<Answer>(
+  dir: string,
+  work: (loaded: Loaded) => Answer | Promise<Answer>,
+  wait: StateWait = {}
+): Promise<Answer | RunnerReport> {
+  if (!isSetUp(dir)) return refused("not_set_up")
+  if (!isPrivate(dir)) return refused("invalid_state")
+  try {
+    return await withStateLock(
+      dir,
+      () => {
+        const loaded = load(dir)
+        return isReport(loaded) ? loaded : work(loaded)
+      },
+      wait
+    )
+  } catch (error) {
+    if (error instanceof CoreError) return refused("invalid_state")
+    throw error
+  }
+}
+
+/**
+ * Takes newer team lists, under the state lock only (RB1): never the deploy
+ * lock for its own work, so a `sync` is answered during a deploy, and a team
+ * list that removes a stolen key lands within the wait whatever a deploy
+ * does (FR-044). RB15's bounded part comes first (`boundedFirst`).
+ */
+export async function sync(
+  dir: string,
+  input: string,
+  wait: StateWait = {}
+): Promise<RunnerReport> {
+  const request = parseMessage(RunnerSyncRequestSchema, input)
+  if (!request.ok) return refused("invalid_request")
+  await boundedFirst(dir)
+  return withState<RunnerReport>(
+    dir,
+    (loaded) => {
+      const next = follow(loaded.state, request.value.rosters)
+      if (isReport(next)) return next
+      if (next !== loaded.state) writeState(dir, next)
+      return { outcome: "ok" }
+    },
+    wait
+  )
 }
 
 /**
@@ -283,6 +438,11 @@ export async function startApp(
  * numbers and secret versions changed, so the mark and every app's format
  * survive (V21). No record is kept: version 1 carries none (FR-024).
  * `limitMs`: how long `up` may run, the runner's own limit when left out.
+ *
+ * It holds the deploy lock and the state lock for its whole span, `up`
+ * among it, as it held its one lock before feature 016: the one request
+ * that calls Docker under the state lock (specs/016-build-from-source,
+ * contracts/runner.md RB1).
  */
 export function apply(
   dir: string,
@@ -292,39 +452,38 @@ export function apply(
 ): Promise<RunnerReport> {
   const request = parseMessage(RunnerApplyRequestSchema, input)
   if (!request.ok) return Promise.resolve(refused("invalid_request"))
-  return locked(dir, async () => {
-    const loaded = load(dir)
-    if (isReport(loaded)) return loaded
+  return locked(dir, () =>
+    withState<RunnerReport>(dir, async (loaded) => {
+      const followed = follow(loaded.state, request.value.rosters)
+      if (isReport(followed)) return followed
+      if (followed !== loaded.state) writeState(dir, followed)
 
-    const followed = follow(loaded.state, request.value.rosters)
-    if (isReport(followed)) return followed
-    if (followed !== loaded.state) writeState(dir, followed)
+      const verified = verifyDeploy({
+        ...request.value.deploy,
+        state: versionOneView(followed),
+      })
+      if (!verified.ok) return refused(verified.error.code)
+      // The app is known only from under the signature, so the gate comes after it, before any write.
+      if (!takesVersionOne(followed, verified.value.deploy.app))
+        return refused("unsupported_version")
+      const next = afterVersionOneDeploy(followed, verified.value.nextState)
+      // What a runner holds must always fit the answers that report it (`status`, `state`),
+      // so a deploy of one app or one secret more than that is refused before anything is opened.
+      if (!withinLimits(next)) return refused("too_large")
 
-    const verified = verifyDeploy({
-      ...request.value.deploy,
-      state: versionOneView(followed),
+      // Open before saving: a deploy whose secrets cannot be opened must not use up its number.
+      const secrets = openSecrets(verified.value, loaded.secretKey)
+      if (!secrets.ok) return refused("secrets_mismatch")
+
+      writeState(dir, next)
+      // From here the deploy is accepted and its number is used, whatever happens next.
+      return startApp(
+        dir,
+        verified.value.deploy,
+        secrets.value,
+        onProgress,
+        limitMs
+      )
     })
-    if (!verified.ok) return refused(verified.error.code)
-    // The app is known only from under the signature, so the gate comes after it, before any write.
-    if (!takesVersionOne(followed, verified.value.deploy.app))
-      return refused("unsupported_version")
-    const next = afterVersionOneDeploy(followed, verified.value.nextState)
-    // What a runner holds must always fit the answers that report it (`status`, `state`),
-    // so a deploy of one app or one secret more than that is refused before anything is opened.
-    if (!withinLimits(next)) return refused("too_large")
-
-    // Open before saving: a deploy whose secrets cannot be opened must not use up its number.
-    const secrets = openSecrets(verified.value, loaded.secretKey)
-    if (!secrets.ok) return refused("secrets_mismatch")
-
-    writeState(dir, next)
-    // From here the deploy is accepted and its number is used, whatever happens next.
-    return startApp(
-      dir,
-      verified.value.deploy,
-      secrets.value,
-      onProgress,
-      limitMs
-    )
-  })
+  )
 }

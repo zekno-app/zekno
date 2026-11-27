@@ -16,6 +16,9 @@
  * (RN10). It names no container and carries out no route a signed deploy did
  * not put in force, so it needs no signature, as a restart by Docker needs
  * none (research R21). `zekno server update` sends it after an update.
+ * Its one state write, the list of released domains, takes the state lock
+ * and reads the state again (routes/released.ts; specs/016-build-from-source,
+ * contracts/runner.md RB1).
  */
 import {
   healthInForce,
@@ -28,13 +31,22 @@ import {
 import { proxyState, removeProxy } from "../proxy/container"
 import { routedApps, serveRoutes } from "../proxy/serve"
 import { retryReleased } from "../routes/released"
-import { isReport, load, locked, refused, status } from "./commands"
+import {
+  boundedFirst,
+  isReport,
+  load,
+  locked,
+  refused,
+  status,
+} from "./commands"
 
 /**
  * `status` with routes: today's fields, the routes in force, the health
  * checks in force, and the proxy's state. Each app's routes and health check
  * are those of its entry in the state, which one signed deploy wrote together
- * (runner.md, RN9): what a rollback signs again.
+ * (runner.md, RN9): what a rollback signs again. RB15's bounded part comes
+ * first, as for every `status` (specs/016-build-from-source, contracts/
+ * runner.md RB1 sixth bullet).
  */
 export async function statusWithRoutes(
   dir: string,
@@ -42,6 +54,7 @@ export async function statusWithRoutes(
 ): Promise<RunnerStatusWithRoutes | RunnerReport> {
   const request = parseMessage(RunnerStatusRequestSchema, input)
   if (!request.ok) return refused("invalid_request")
+  await boundedFirst(dir)
   const today = status(dir)
   if (isReport(today)) return today
   const loaded = load(dir)

@@ -12,7 +12,13 @@
  */
 import { LIMITS } from "@workspace/core"
 
-import { apply, refused, setup, status, sync } from "./commands/commands"
+import {
+  apply,
+  refused,
+  setupRequest,
+  statusRequest,
+  sync,
+} from "./commands/commands"
 import { homeDir } from "./home/home"
 import { runSession, stdoutSink, version } from "./session/session"
 
@@ -63,12 +69,13 @@ async function main(): Promise<number> {
   if (command === "version") {
     result = version()
   } else if (command === "status") {
-    result = status(dir)
+    // RB15's bounded part first, as in a session (specs/016-build-from-source, RB1).
+    result = await statusRequest(dir)
   } else {
     const input = await readInput()
     if (input === undefined)
       result = { outcome: "refused", reason: "invalid_request" }
-    else if (command === "setup") result = setup(dir, input)
+    else if (command === "setup") result = await setupRequest(dir, input)
     else if (command === "sync") result = await sync(dir, input)
     else result = await apply(dir, input)
   }

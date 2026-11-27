@@ -7,6 +7,7 @@
  * session), and with Docker's output on standard error (one-shot).
  */
 import { afterEach, describe, expect, test } from "bun:test"
+import { chmodSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { composeUp, START_LIMIT_MS } from "../../src/docker/compose"
@@ -188,6 +189,85 @@ describe("the limit on up (lead A10)", () => {
       process.env.ZEKNO_DOCKER = join(tempDir("no-docker"), "docker")
       expect(await up(tempDir("compose-up"), 500, [])).toEqual({ exit: 127 })
       expect(await up(tempDir("compose-up"), 500)).toEqual({ exit: 127 })
+    },
+    TEST_MS
+  )
+})
+
+/**
+ * Never building from Compose text (specs/016-build-from-source, T088;
+ * contracts/runner.md RB13; FR-076, SC-009): `up` runs with `--no-build`
+ * for every app, built or not, so a service with `build:` never builds, and
+ * one whose image is not there does not start (E08).
+ */
+describe("the arguments of up (RB13)", () => {
+  /** A Docker that writes each argument it was given on a line of its own, and its folder. */
+  function recorder(): { argv: () => string[]; cwd: () => string } {
+    const dir = tempDir("compose-argv")
+    const path = join(dir, "docker")
+    writeFileSync(
+      path,
+      `#!/bin/sh\nfor a in "$@"; do printf '%s\\n' "$a"; done > "${dir}/argv"\npwd -P > "${dir}/cwd"\n`
+    )
+    chmodSync(path, 0o755)
+    process.env.ZEKNO_DOCKER = path
+    return {
+      argv: () =>
+        readFileSync(join(dir, "argv"), "utf8").split("\n").slice(0, -1),
+      cwd: () => readFileSync(join(dir, "cwd"), "utf8").trim(),
+    }
+  }
+
+  test(
+    "the exact list, with each line given to the caller and one-shot",
+    async () => {
+      const dir = realpathSync(tempDir("compose-up"))
+      const file = join(dir, "apps", "web", "compose.yaml")
+      const expected = [
+        "compose",
+        "-p",
+        "zekno-web",
+        "-f",
+        file,
+        "up",
+        "-d",
+        "--remove-orphans",
+        "--no-build",
+      ]
+      const docker = recorder()
+      const given = { dir, app: "web", file, secrets: {} }
+      expect(await composeUp({ ...given, onLine: () => {} }, 10_000)).toEqual({
+        exit: 0,
+      })
+      expect(docker.argv()).toEqual(expected)
+      expect(docker.cwd()).toBe(dir)
+      expect(await composeUp(given, 10_000)).toEqual({ exit: 0 })
+      expect(docker.argv()).toEqual(expected)
+    },
+    TEST_MS
+  )
+
+  test(
+    "a built image that is not there is refused, and a registry image starts as before (E08)",
+    async () => {
+      const { docker, dir } = setUp()
+      const file = join(dir, "compose.yaml")
+      const built = `zekno.invalid/web:${"1".repeat(64)}`
+      writeFileSync(
+        file,
+        `services:\n  web:\n    build: .\n    image: ${built}\n`
+      )
+      const given = { dir, app: "web", file, secrets: {} }
+      expect(await composeUp(given, 10_000)).toEqual({ exit: 1 })
+      expect(docker.upFinished()).toBe(false)
+      // Once the image is there, the same text starts, and nothing is built.
+      docker.image(built)
+      expect(await composeUp(given, 10_000)).toEqual({ exit: 0 })
+      writeFileSync(file, "services:\n  web:\n    image: example/web:1\n")
+      expect(await composeUp(given, 10_000)).toEqual({ exit: 0 })
+      expect(
+        docker.calls().filter((call) => call.args.includes("buildx"))
+      ).toEqual([])
     },
     TEST_MS
   )

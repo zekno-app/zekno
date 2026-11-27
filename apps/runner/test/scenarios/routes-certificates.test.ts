@@ -34,7 +34,7 @@ describe("a deletion that fails (RN10, step 1)", () => {
   test("keeps the domain on the list, written with the release itself; the outcome is still started", async () => {
     const w = await releasedButKept()
     const state = stateOf(w.home)
-    expect(state.v).toBe(4)
+    expect(state.v).toBe(5)
     expect(Object.keys(state.routes)).toEqual(["api"])
     expect(state.released).toEqual(["app.example.com"])
     expect(deletions(steps(w))).toEqual([CERTIFICATES("app.example.com")])

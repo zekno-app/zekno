@@ -17,12 +17,14 @@ import { join } from "node:path"
 
 import {
   buildDeployV2,
+  composeRunning,
   deployV2,
   GREETING,
   leftAsItWas,
   olderState,
   payloadOf,
   signPayload,
+  type BuildRecipeInput,
 } from "../support/deploy-v2"
 import { buildDeploy, filesUnder, runner, world } from "../support/helpers"
 
@@ -126,7 +128,7 @@ describe("the order", () => {
       sequence: 4,
     })
     const state = stateOf(w.home)
-    expect(state.v).toBe(4)
+    expect(state.v).toBe(5)
     expect(state.lastSequence).toEqual({ web: 4 })
     expect(state.formats).toEqual({ web: 2 })
   })
@@ -154,7 +156,7 @@ describe("Docker Compose's working folder", () => {
     )
     const [call] = w.docker.calls()
     expect(call!.args).toBe(
-      `compose -p zekno-web -f ${join(w.home, "apps/web/compose.yaml")} up -d --remove-orphans`
+      `compose -p zekno-web -f ${join(w.home, "apps/web/compose.yaml")} up -d --remove-orphans --no-build`
     )
     expect(realpathSync(process.cwd())).not.toBe(realpathSync(w.home))
     expect(call!.cwd).toBe(realpathSync(w.home))
@@ -191,29 +193,45 @@ describe("Docker Compose's working folder", () => {
 /*
  * Routes and the health check are carried out since feature 015 (specs/
  * 015-domains-https, contracts/core.md, "Carried out"; their scenarios are in
- * routes*.test.ts and health.test.ts). Builds and the pre-deploy command are
- * still refused.
+ * routes*.test.ts and health.test.ts). At step 1 of feature 016 (specs/
+ * 016-build-from-source, contracts/core.md CO7), a Railpack build, a build
+ * with secrets and the pre-deploy command are still refused.
  */
-describe("what this runner does not carry out yet (FR-036, SC-003)", () => {
+describe("what this runner does not carry out yet (FR-036, FR-083, SC-003)", () => {
   const route = { domain: "demo.example.com", service: "web", port: 3000 }
-  const recipe: Omit<Build, "key"> = {
+  const recipe: BuildRecipeInput = {
     pack: { hash: "a".repeat(64), size: 1, chunks: ["b".repeat(64)] },
-    dockerfile: "Dockerfile",
-    target: null,
+    builder: { name: "dockerfile", dockerfile: "Dockerfile", target: null },
     args: [],
     secrets: [],
     network: "default",
     timeout: 1800,
+    fresh: null,
   }
   const build: Build = { key: buildKey(recipe, []), ...recipe }
+  const railpack: BuildRecipeInput = {
+    ...recipe,
+    builder: {
+      name: "railpack",
+      version: "0.9.2",
+      frontend: `ghcr.io/railwayapp/railpack-frontend:0.9.2@sha256:${"c".repeat(64)}`,
+      images: [`ghcr.io/railwayapp/railpack-builder@sha256:${"d".repeat(64)}`],
+      plan: { hash: "e".repeat(64), size: 1, piece: "f".repeat(64) },
+    },
+  }
+  const withSecrets: BuildRecipeInput = { ...recipe, secrets: ["GREETING"] }
   const predeploy = { service: "web", command: ["bin/migrate"], timeout: 600 }
 
-  test("a deploy with one build or a pre-deploy command, each alone, is unsupported_version: no number used, Docker not called", async () => {
+  test("a deploy with a Railpack build, a build with secrets or a pre-deploy command, each alone, is unsupported_version: no number used, Docker not called", async () => {
     const w = await ready()
-    for (const later of [{ builds: [build] }, { predeploy }])
+    for (const change of [
+      { builds: [railpack] },
+      { builds: [withSecrets] },
+      { later: { predeploy } },
+    ])
       await refused(
         w,
-        await against(w, 1, "web", { later }),
+        await against(w, 1, "web", change),
         "unsupported_version"
       )
     expect(stateOf(w.home).lastSequence).toEqual({ web: 1 })
@@ -226,7 +244,10 @@ describe("what this runner does not carry out yet (FR-036, SC-003)", () => {
     const offByOne = `${build.key.slice(0, -1)}${build.key.endsWith("0") ? "1" : "0"}`
     for (const change of [
       { routes: [{ ...route, domain: "demo.invalid" }] },
-      { builds: [{ ...build, key: offByOne }] },
+      {
+        builds: [{ ...build, key: offByOne }],
+        compose: composeRunning("web", [offByOne]),
+      },
       { extra: 1 },
       { v: 3 },
     ])
