@@ -16,7 +16,7 @@ import {
   createDeployV2,
   RunnerReportSchema,
 } from "@workspace/core"
-import { readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import runnerPackage from "../../../runner/package.json"
@@ -33,11 +33,13 @@ import { buildRefusal } from "../../src/ops/deploy-send-build"
 import { runnerOlder, updateRunner } from "../../src/ops/doctor-words"
 import { runnerRelation, runnerWarning } from "../../src/ops/server"
 import { profileStore } from "../../src/profile/profile"
+import { RUN_FOLDERS } from "../../src/profile/run-folder"
 import { withSession } from "../../src/server/session"
 import { connect } from "../../src/server/transport"
 import { SETTINGS_FILE } from "../../src/settings/values"
 import { BuildStop, exitStatusOf } from "../../src/shared/build-lines"
 import { readDeployEntry } from "../../src/shared/history"
+import { standInSessions } from "../support/build-session"
 import { COMPOSE_V1, COMPOSE_V2, machine } from "../support/helpers"
 import {
   olderMachine,
@@ -46,7 +48,12 @@ import {
   RELEASED,
   todaysRunner,
 } from "../support/older-runner"
-import { sshStandIn, standInServer, withSsh } from "../support/stand-in-server"
+import {
+  snapshot,
+  sshStandIn,
+  standInServer,
+  withSsh,
+} from "../support/stand-in-server"
 
 const releasedTree = olderTree(RELEASED)
 
@@ -181,27 +188,41 @@ describe("specs/016-build-from-source, CL13: zekno 0.1.1 beside this feature", (
   )
 })
 
+/** The runner version this zekno carries in the cases beside runner 0.1.1. */
+const CARRIED = "0.1.2-dev.1"
+
+/**
+ * This zekno, carrying `CARRIED`, with a team and the server `prod`: a
+ * stand-in server reached over the stand-in `ssh`, whose runner is runner
+ * 0.1.1 from git with the stand-in Docker. `over` runs work with `ssh`
+ * meaning the stand-in.
+ */
+async function besideReleased() {
+  const m = machine()
+  m.deps.release = {
+    version: CARRIED,
+    files: {
+      "linux-x64": { sha256: null },
+      "linux-arm64": { sha256: null },
+    },
+  }
+  const server = standInServer()
+  const ssh = sshStandIn(server)
+  server.installed(olderRunnerScript(releasedTree!, m.docker.path))
+  const over = <T>(work: () => Promise<T>) => withSsh(ssh, work)
+  expect(await m.zekno("init", "--name", "Ada")).toBe(0)
+  const added = ["server", "add", "prod", "--ssh", "prod.example"]
+  const at = ["--runner-path", "~/.local/bin/zekno-runner"]
+  expect(await over(() => m.zekno(...added, ...at))).toBe(0)
+  return { m, server, over }
+}
+
 describe("specs/016-build-from-source, CL13: this zekno beside runner 0.1.1", () => {
   test.skipIf(releasedTree === undefined)(
     "F13 and F14 as today; an image deploy as in 015; a build stops with F1 before signing; a signed build handed anyway is malformed, no number used",
     async () => {
-      const m = machine()
-      const carried = "0.1.2-dev.1"
-      m.deps.release = {
-        version: carried,
-        files: {
-          "linux-x64": { sha256: null },
-          "linux-arm64": { sha256: null },
-        },
-      }
-      const server = standInServer()
-      const ssh = sshStandIn(server)
-      server.installed(olderRunnerScript(releasedTree!, m.docker.path))
-      const over = <T>(work: () => Promise<T>) => withSsh(ssh, work)
-      expect(await m.zekno("init", "--name", "Ada")).toBe(0)
-      const added = ["server", "add", "prod", "--ssh", "prod.example"]
-      const at = ["--runner-path", "~/.local/bin/zekno-runner"]
-      expect(await over(() => m.zekno(...added, ...at))).toBe(0)
+      const { m, over } = await besideReleased()
+      const carried = CARRIED
       const relation = runnerRelation(
         "session",
         { version: "0.1.1", protocol: 5 },
@@ -319,6 +340,50 @@ describe("specs/016-build-from-source, CL13: this zekno beside runner 0.1.1", ()
             readDeployEntry(entry.envelope, team.trust)?.deploy.sequence
         )
       ).toEqual([1, 2])
+    },
+    60_000
+  )
+
+  test.skipIf(releasedTree === undefined)(
+    "`zekno deploy` of a folder with a Dockerfile stops with F1, exit status 1, and nothing is signed: no number used, no history entry, no `pack` sent, no run folder left",
+    async () => {
+      const { m, server, over } = await besideReleased()
+      // A folder with a Dockerfile, whose settings file builds its one service, and no compose.yaml.
+      writeFileSync(join(m.project, "Dockerfile"), "FROM alpine:3.20\n")
+      const settings = join(m.project, SETTINGS_FILE)
+      writeFileSync(
+        settings,
+        settingsOf('"build": { "builder": "dockerfile" }')
+      )
+      const runner = snapshot(server.folder)
+      const stand = standInSessions(m.deps, {})
+      const where = ["--app", "shop", "--server", "prod"]
+      m.err.length = 0
+      expect(await over(() => m.zekno("deploy", ...where))).toBe(1)
+      expect(m.err).toEqual(["F1"])
+      expect(exitStatusOf("F1")).toBe(1)
+
+      // One session, asked for the runner's version only: no `status`, no `builder`, no `builds`, no `pack`, no `deploy`.
+      expect(stand.connections()).toBe(1)
+      expect(stand.commands()).toEqual(["version"])
+      expect(snapshot(server.folder)).toEqual(runner)
+      const team = await openTeam(m.deps)
+      const prod = team.profile.servers[0]!
+      const sent = () => team.store.history(prod.serverId, "shop")
+      expect(sent()).toEqual([])
+      // The run's folder was opened for the pack's pieces before the session, and is gone.
+      expect(readdirSync(join(m.home, RUN_FOLDERS))).toEqual([])
+
+      // No number was used: a deploy of images next is number 1.
+      rmSync(settings)
+      m.compose(COMPOSE_V1)
+      expect(await over(() => m.zekno("deploy", ...where))).toBe(0)
+      expect(
+        sent().map(
+          (entry) =>
+            readDeployEntry(entry.envelope, team.trust)?.deploy.sequence
+        )
+      ).toEqual([1])
     },
     60_000
   )

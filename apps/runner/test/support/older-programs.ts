@@ -21,6 +21,12 @@ export const BEFORE = "e7b0146d33a4683aace174f2e0c3d1e4ee1e3b19"
  * carried out. Its runner writes the state marked 2 and refuses mark 3.
  */
 export const DEPLOY_V2 = "92788251a92a8b89c9b631dfb39f11ce3d3d0b81"
+/**
+ * Runner 0.1.1, the release before feature 016 (specs/016-build-from-source,
+ * contracts/runner.md RB18; core.md CO18): protocol 5, the state marked 4,
+ * routes and domains, and no build.
+ */
+export const RELEASED = "runner-v0.1.1"
 
 const ROOT = join(import.meta.dir, "../../../..")
 /** What is taken from git: the core library and the two programs. */

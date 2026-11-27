@@ -327,26 +327,46 @@ const alive = (pid: number) => {
   }
 }
 
-/** Runs `work` holding the model's lock: a file holding the holder's pid, taken over once that process is gone. */
-function holdingLock<T>(dir: string, work: () => T): T {
+/** How long a call waits for the model's lock before it gives up. */
+export const LOCK_WAIT_MS = 60_000
+
+const codeOf = (error: unknown) => (error as NodeJS.ErrnoException).code
+
+/**
+ * Runs `work` holding the model's lock: a file holding the holder's pid,
+ * taken over once that process is gone. The wait has an end: a call left
+ * behind by a test that is over must stop by itself, not wait for ever on a
+ * lock nobody will free. An error other than "the lock is taken" ends it at
+ * once, for the same reason.
+ */
+function holdingLock<T>(dir: string, work: () => T, waitMs: number): T {
   const lock = join(dir, "model.lock")
   // Written whole, then linked into place: a process killed at any point
   // leaves no lock, or one naming it, never an empty one.
   const mine = join(dir, `model.lock.${process.pid}`)
   writeFileSync(mine, String(process.pid))
+  const until = Date.now() + waitMs
   try {
     for (;;) {
       try {
         linkSync(mine, lock)
         break
-      } catch {
+      } catch (error) {
+        if (codeOf(error) !== "EEXIST") throw error
         let holder = Number.NaN
         try {
           holder = Number(readFileSync(lock, "utf8"))
-        } catch {
-          continue
+        } catch (unread) {
+          // Freed between the two calls: try again.
+          if (codeOf(unread) === "ENOENT") continue
+          throw unread
         }
         if (!alive(holder)) rmSync(lock, { force: true })
+        else if (Date.now() >= until)
+          throw new Error(
+            `The stand-in's lock in ${dir} was still held by process ${holder} after ${waitMs} ms.`,
+            { cause: error }
+          )
         else Bun.sleepSync(2)
       }
     }
@@ -361,13 +381,21 @@ function holdingLock<T>(dir: string, work: () => T): T {
 }
 
 /** Changes the model in place on disk, under its lock. */
-export function changeModel<T>(dir: string, change: (model: Model) => T): T {
-  return holdingLock(dir, () => {
-    const model = readModel(dir)
-    const result = change(model)
-    writeModel(dir, model)
-    return result
-  })
+export function changeModel<T>(
+  dir: string,
+  change: (model: Model) => T,
+  waitMs = LOCK_WAIT_MS
+): T {
+  return holdingLock(
+    dir,
+    () => {
+      const model = readModel(dir)
+      const result = change(model)
+      writeModel(dir, model)
+      return result
+    },
+    waitMs
+  )
 }
 
 /**
