@@ -7,7 +7,7 @@ How each user story is shown to work, end to end, step by step, and where. Contr
 | Place | What it is | What it cannot show |
 |---|---|---|
 | **Mac, tests** | `bun --no-env-file test` in each package: the real runner program with the stand-in for Docker, stand-ins for the SSH host, Railpack's release and `railpack` | real Docker |
-| **Mac, real Docker** | the gated sets on Docker Desktop, run by hand | Linux; QEMU lets a build for the wrong processor run |
+| **Mac, real Docker** | the gated sets on Docker Desktop, run by hand; none of them builds: every build of this feature runs in the stand-in's own engine, never Docker Desktop's | Linux; QEMU lets a build for the wrong processor run |
 | **Linux stand-in, Mac** | the server stand-in container on the Mac, the same script as on GitHub, with a client container for SC-003 (the same `ubuntu:24.04` digest) | a server's kernel and init; the Mac's VM is shared |
 | **GitHub** | `linux checks` on every push: the stand-in on `ubuntu-24.04` (x86-64), and on ARM64 and macOS (items 4 and 5) | a real domain and a public certificate; a real 1 GB server |
 | **Server proof** | the maintainer's own server, once, at the end of step 2 (M9), each use with a go-ahead | an older engine; out of memory; ARM64 unless the server is |
@@ -28,7 +28,7 @@ The Linux stand-in, on the Mac (phase 0 writes it; it reads `apps/runner/test/su
 
 ```sh
 bun --no-env-file apps/runner/test/support/linux-server/server.ts up --engine floor --store containerd
-ZEKNO_LINUX_SERVER=zekno-check-<id>-server bun --no-env-file test   # in apps/runner, then apps/cli
+ZEKNO_LINUX_SERVER=zekno-check-<id>-server bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job checks --engine floor --store containerd
 bun --no-env-file apps/runner/test/support/linux-server/server.ts down --id <id>
 ```
 
@@ -41,7 +41,7 @@ All on `ubuntu-24.04` unless marked, in parallel, each with a time limit, with n
 | Job | Stand-in | Runs | Time limit |
 |---|---|---|---|
 | `checks` (engine: floor, newest × store: containerd, overlay2) | the floor runs every check of the row; the newest runs L2, L8, L9, L12, L13, L15, L17 and L18 | L2 to L5, L4b, L7 to L10, L12 to L18, R1, R4 to R10, R16 (Linux side), B2, the Linux half of R2 and R3 | 40 min |
-| `older-engine` | 29.4.3; Ubuntu's `docker.io` with and without its buildx; `floor-no-buildx` | L2, L3 observed; B5 (on `floor-no-buildx`: `no_build_plugin`, R13, G35) | 20 min |
+| `older-engine` | 29.4.3; Ubuntu's `docker.io` with and without its buildx; `floor-no-buildx` | L2, L3 and L4 observed; B5 (on `floor-no-buildx`: `no_build_plugin`, R13, G35) | 20 min |
 | `memory` | the floor, held to 1 GB | L6 | 15 min |
 | `released` | the floor | L1 (runner 0.1.1 itself); FR-083 for runner 0.1.1; B6 | 15 min |
 | `proof` (engine: floor, newest) | containerd | B4, each step's scenarios | 30 min |
@@ -67,7 +67,7 @@ Where: GitHub, on every push to the branch; the Linux stand-in on the Mac while 
 
 - **Mac, tests** (`apps/cli/test/scenarios/build-first-deploy.test.ts`): a fixture folder with only `Dockerfile` (`EXPOSE 3000`), at a stand-in terminal. Run `zekno deploy`. Expect A1 to A12 before the key question: the block, the settings file it would write, `PORT=3000`, the proposed `.dockerignore` when there is none. Answer `Build, port 3000`. Expect `zekno.app.json` with `build.builder` `dockerfile` and `networking.port` 3000, and the deploy going on, with the stage row `✔ Checked ✔ Signed ✔ Sent ✔ Built ✔ Started`. Answer `Don't build` instead: nothing written, `✖ Nothing was done.`, exit status 1. With no terminal: today's sentence for a folder with no Compose file, exit status 1, nothing written. With `Dockerfile` and `Dockerfile.dev`: A14 asks which. A settings file with no `build.dockerfile` in a folder holding `Dockerfile` and `Dockerfile.prod`, or a sent `api/Dockerfile`: the new stop naming them, exit status 1. On macOS, a file `dockerfile` and a setting `Dockerfile`: C20.
 - **Mac, tests**: a fixture with a 600 MB `node_modules` (made by the test, sparse files) and no `.dockerignore`. Expect the proposal to list `**/node_modules`, and the summary to send none of it.
-- **Linux stand-in, Mac and GitHub** (job `proof`): from a client with a throwaway `ZEKNO_HOME` and no terminal, `zekno server add stand-in --ssh root@<stand-in> --runner-file <runner compiled from this commit>`, then `zekno deploy --json`, and again without `--json`, in the fixture `dockerfile-web` (which holds its `zekno.app.json`). Expect the `--json` outcome `started` with its builds, B29's facts and D17's `remote:` lines on standard error, today's result line on standard output, the app answering on its port inside the stand-in, the image `zekno.invalid/<app>:<key>` on the stand-in's Docker, and no registry asked for it. Then `zekno domain add` and deploy again with no change: nothing sent, nothing built (the `--json` outcome says every build was reused), and the domain answering over HTTPS with Caddy's internal authority. The stage row and D6's `✔ Reused` are shown by the in-process scenarios with a stand-in terminal.
+- **Linux stand-in, Mac and GitHub** (job `proof`): from a client with a throwaway `ZEKNO_HOME` and no terminal, `zekno server add stand-in --ssh root@<stand-in> --runner-path /usr/local/bin/zekno-runner` (the runner compiled from this commit, which `server.ts up` placed there), then `zekno deploy --json`, and again without `--json`, in the fixture `dockerfile-web` (which holds its `zekno.app.json`). Expect the `--json` outcome `started` with its builds, B29's facts and D17's `remote:` lines on standard error, today's result line on standard output, the app answering on its port inside the stand-in, the image `zekno.invalid/<app>:<key>` on the stand-in's Docker, and no registry asked for it. Then `zekno domain add` and deploy again with no change: nothing sent, nothing built (the `--json` outcome says every build was reused), and the domain answering over HTTPS with Caddy's internal authority. The stage row and D6's `✔ Reused` are shown by the in-process scenarios with a stand-in terminal.
 - **Linux stand-in, Mac** (ARM64) and **GitHub** (x86-64, and ARM64 by item 4): the same image built for each processor (US1 sc8).
 - **Server proof**: the same with a real domain and a public certificate (M9).
 
@@ -207,6 +207,40 @@ Not part of it: an out-of-memory build, an older engine, ARM64 unless the server
 ## Results
 
 Filled in as each step ends: the counts of each package's tests, the jobs of `linux checks` on the tagged commit, each L and R finding with where it ran, SC-003's times, and the server proof.
+
+The digests of `pins.json`, printed by `bun --no-env-file apps/runner/test/support/linux-server/digests.ts` (T006), for T023 to compare with GitHub's run:
+
+```text
+Mac network, 2026-11-27: ubuntu:24.04 ubuntu@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b (as pins.json)
+Mac network, 2026-11-27: busybox:1.36.1 busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662 (as pins.json)
+```
+
+### Phase 0 on the Mac (T022, 2026-11-27)
+
+Every check written so far ran in the stand-in on the Mac: the floor and the newest on both stores, 29.4.3, Ubuntu's `docker.io` with and without its buildx, the floor without buildx, the floor held to 1 GB, and the released runner. Every record line, as printed, is in [results/phase-0-mac.md](results/phase-0-mac.md), each marked `Mac stand-in, ARM64, 2026-11-27`. QEMU is registered in Docker Desktop's VM (map-checks T11), and the Mac's records alone settle nothing: the items wait for GitHub's x86-64 run (T023, T024).
+
+`server.ts up` took 33 to 77 seconds and an engine swap 4 to 14 seconds. After each stand-in, `down` said nothing named `zekno-check-*` was left, no image was added or removed but its own, and the Mac's build records were 18 before and after. What the Mac saw, in short:
+
+| Check | Seen on the Mac | Bears on |
+|---|---|---|
+| L1 | Runner 0.1.1, sent a signed Compose text with a `build:` section, let Compose build the image on the server (three contexts tried) | FR-083 |
+| L2 | With `BUILDKIT_SYNTAX=dockerfile.v0` the build fails: the builder asks Docker Hub for an image named `dockerfile.v0`. Without it, the frontend a `# syntax=` line names is fetched. The same with buildx 0.30.1, 0.34.1 and 0.39.1. A `Dockerfile.rego` inside the pack changes nothing | item 11 |
+| L3 | Another app's cache namespace did not see the first app's cached file; the same app's next build did | FR-035 |
+| L4 | The iidfile equals `containerimage.config.digest`; `.Id` equals `containerimage.digest`; the same pack again is cached and both stay the same | FR-061 |
+| L4b | The same content with file times a day later: its `COPY` was cached | item 14 |
+| L5 | With its reader killed, a silent step ran on for about 80 seconds, to its end; with the client itself killed, the build ended at once | item 27 |
+| L6 | A step asking for 1.6 GB in a stand-in held to 1 GB was killed (`ResourceExhausted`, exit 102 after 3 s); the running app kept running and dockerd answered | FR-043a |
+| L7 | A 512 MiB context grew Docker's root by at most 2.50 GiB on containerd's store and 1.50 GiB on overlay2 | FR-040, the 2 GiB floor |
+| L8 | A private base resolved through the stand-in's login; no proxy value of `config.json` reached a step | FR-036 |
+| L9 | The materials name a local `zekno.invalid/` image, also behind `ONBUILD`. buildx reads a `--policy` file only from the context's folder, so a pack on standard input can be given none. BuildKit's source-policy file stopped both builds before any step and let the control build | item 17 |
+| L10 | After `docker buildx history rm`, what the step printed was still in one file under Docker's root, on both stores | FR-031b, K14 |
+| L12 | After the record's removal the secret's value was found nowhere on disk, nor in the image | FR-037 |
+| L13 | In a build with a secret, the frontend a `# syntax=` line names was fetched; the value was in no log | FR-037c |
+| L14 | The stand-in has no git, so the `ADD` of a git address failed before any request: nothing learnt about `GIT_AUTH_TOKEN` yet | FR-037b |
+| L15 | Builds with different salts never shared a step; the same salt again reused its own step | item 12 |
+| L16 | A secret copied into the app's cache folder was not there in a later build with no cached step | FR-037g |
+| L17 | The same files copied and the same stages read on the floor and the newest, both stores | CL2, CL3 |
+| L18 | Passed: host network and insecure steps were refused; a build signed `none` had no address and reached nothing | FR-033 |
 
 ## Maintainer steps
 
