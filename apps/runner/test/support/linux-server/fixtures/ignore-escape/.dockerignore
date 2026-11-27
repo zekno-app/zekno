@@ -1,0 +1,14 @@
+# Single characters and classes, beside check L17's other forms.
+file?.txt
+[ab]*.log
+!b-keep.log
+**/*.bak
+# A folder, and the files of another.
+tmp
+tmp2/*
+/root-only.md
+spaced.md  
+\#tag
+.env*
+dist
+**/node_modules

@@ -1,0 +1,1 @@
+ignore-escape: tmp/t.txt

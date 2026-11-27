@@ -1,0 +1,18 @@
+# Everything is left out, then exceptions bring parts back: the last pattern that matches wins.
+**
+!Dockerfile
+!src
+src/**/*.snap
+!src/keep/**/*.snap
+# A folder, and the files of another.
+src/vendor
+src/gen/*
+# An exception under a folder that ** left out.
+!docs/**/public-*.md
+# A leading slash, then trailing spaces.
+!/top.txt
+!readme.md    
+# An escaped hash.
+!\#notes.md
+# A file the test writes at run time, under a folder the repository ignores.
+!node_modules/pkg/index.js

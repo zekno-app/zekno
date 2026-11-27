@@ -1,0 +1,1 @@
+ignore-escape: file10.txt

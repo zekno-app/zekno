@@ -1,0 +1,22 @@
+# Check L17's ignore rules, as Docker reads them (contracts/cli.md, CL2).
+# A line that starts with # is a comment.
+# A folder, and an exception for one file inside it.
+logs
+!logs/keep.log
+# The files of a folder, not the folder itself.
+cache/*
+# At any depth.
+**/*.tmp
+**/node_modules
+# A leading slash is dropped: this names the top only.
+/top-only.txt
+# Trailing spaces are trimmed.
+notes.txt   
+# An escaped hash, and a hash after a space, are names.
+\#hash.txt
+ #spaced.txt
+# Names the repository keeps out of a commit, written at run time.
+.env*
+build
+!build/keep.txt
+dist/

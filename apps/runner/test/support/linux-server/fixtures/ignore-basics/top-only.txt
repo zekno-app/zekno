@@ -1,0 +1,1 @@
+ignore-basics: top-only.txt

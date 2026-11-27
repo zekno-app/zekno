@@ -1,0 +1,1 @@
+ignore-escape: spaced.md

@@ -1,0 +1,11 @@
+# A POSIX class, which zekno cannot reproduce exactly and refuses (contracts/cli.md, CL2):
+# check L17 records what BuildKit does with it.
+[[:digit:]]*.txt
+!1-keep.txt
+**/*.old
+# A folder, and the files of another.
+logs
+logs2/*
+/top.txt
+trail.txt   
+\#x

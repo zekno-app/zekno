@@ -1,0 +1,1 @@
+ignore-escape: tmp2/t2.txt

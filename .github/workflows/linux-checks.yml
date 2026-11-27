@@ -1,0 +1,461 @@
+# The Linux checks of building from source (specs/016-build-from-source: research/map-checks.md,
+# part 8; quickstart.md, "The jobs"). Each Linux job starts the stand-in, a privileged Ubuntu
+# container whose Docker is pinned in apps/runner/test/support/linux-server/pins.json, runs its
+# checks inside it, and removes it. The machine's own engine only starts the stand-in: no check
+# runs against it. Which job runs which check, on which engine and store, is jobs.ts beside
+# pins.json; workflow.test.ts there holds this file to it and to the rules LC1 to LC10. Of a
+# check still to write, run-checks.ts says so in one line; this file says nothing of it.
+#
+# It runs on every push to a branch, and on a pull request only from a fork: a branch of this
+# repository is already checked by its push. The code runs with a token that can only read and
+# with no repository secret. Nothing is published or pushed, and no account is used: every key,
+# team, password and secret value a check needs is made during the run.
+#
+# It reports; on its own it stops nothing. Making it a required check is the maintainer's setting.
+name: linux checks
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Nothing by default; each job reads only.
+permissions: {}
+
+# A newer push to the same branch replaces the run for the older one.
+concurrency:
+  group: linux-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The floor runs every check of the row and the newest its own list, on both stores. It waits
+  # for macos and runs whatever macos did, but not once the run is cancelled (a newer push
+  # replaced it): the check files of B3 and R16 hand on SC-013's fingerprint and Railpack's plan
+  # through GITHUB_OUTPUT, and a missing one fails only the comparison that needs it.
+  checks:
+    needs: macos
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [floor, newest]
+        store: [containerd, overlay2]
+    steps:
+      # Pinned to the same full commits as the other workflows.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.pin.outputs.bun }}
+
+      # No package's install script runs.
+      - name: Install
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # up compiles the runner of this commit for the stand-in's processor and places it there.
+      # Its first line names the run, which the last step reads even when up stopped half-way.
+      - name: Compile the runner and start the stand-in
+        id: up
+        env:
+          ENGINE: ${{ matrix.engine }}
+          STORE: ${{ matrix.store }}
+        run: |
+          set -euo pipefail
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts up --engine "$ENGINE" --store "$STORE" 2>&1 | tee "$RUNNER_TEMP/linux-server-up.log"
+          grep -E -m 1 -x 'ZEKNO_LINUX_SERVER=zekno-check-[a-z0-9]{8}-server' "$RUNNER_TEMP/linux-server-up.log" >> "$GITHUB_ENV"
+
+      - name: Run the checks
+        env:
+          ENGINE: ${{ matrix.engine }}
+          STORE: ${{ matrix.store }}
+          ZEKNO_MACOS_FINGERPRINT: ${{ needs.macos.outputs.fingerprint }}
+          ZEKNO_MACOS_PLAN: ${{ needs.macos.outputs.plan }}
+        run: bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job checks --engine "$ENGINE" --store "$STORE"
+
+      # Removes what the run made, by exact name, and says whether the machine is as before up.
+      - name: Remove the stand-in
+        if: always()
+        run: |
+          set -euo pipefail
+          id=""
+          if [[ -f "$RUNNER_TEMP/linux-server-up.log" ]]; then
+            id=$(sed -n -E 's/^zekno-check-([a-z0-9]{8}): remove what this run makes with .*$/\1/p' "$RUNNER_TEMP/linux-server-up.log")
+          fi
+          if [[ ! "$id" =~ ^[a-z0-9]{8}$ ]]; then
+            echo "server.ts up made no stand-in in this job, so there is nothing to remove."
+            exit 0
+          fi
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts down --id "$id"
+
+  # The engines below the floor, one after another in one stand-in, observed. A swap that fails
+  # skips the checks of its engine only.
+  older-engine:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.pin.outputs.bun }}
+
+      - name: Install
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Compile the runner and start the stand-in
+        id: up
+        run: |
+          set -euo pipefail
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts up --engine older --store containerd 2>&1 | tee "$RUNNER_TEMP/linux-server-up.log"
+          grep -E -m 1 -x 'ZEKNO_LINUX_SERVER=zekno-check-[a-z0-9]{8}-server' "$RUNNER_TEMP/linux-server-up.log" >> "$GITHUB_ENV"
+
+      - name: Run the checks on older
+        run: bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job older-engine --engine older --store containerd
+
+      - name: Swap to distro
+        id: swap_distro
+        if: ${{ !cancelled() && steps.up.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          id=${ZEKNO_LINUX_SERVER#zekno-check-}
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts engine --id "${id%-server}" --engine distro
+
+      - name: Run the checks on distro
+        if: ${{ !cancelled() && steps.swap_distro.outcome == 'success' }}
+        run: bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job older-engine --engine distro --store containerd
+
+      - name: Swap to distro-no-buildx
+        id: swap_distro_no_buildx
+        if: ${{ !cancelled() && steps.up.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          id=${ZEKNO_LINUX_SERVER#zekno-check-}
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts engine --id "${id%-server}" --engine distro-no-buildx
+
+      - name: Run the checks on distro-no-buildx
+        if: ${{ !cancelled() && steps.swap_distro_no_buildx.outcome == 'success' }}
+        run: bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job older-engine --engine distro-no-buildx --store containerd
+
+      - name: Swap to floor-no-buildx
+        id: swap_floor_no_buildx
+        if: ${{ !cancelled() && steps.up.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          id=${ZEKNO_LINUX_SERVER#zekno-check-}
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts engine --id "${id%-server}" --engine floor-no-buildx
+
+      - name: Run the checks on floor-no-buildx
+        if: ${{ !cancelled() && steps.swap_floor_no_buildx.outcome == 'success' }}
+        run: bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job older-engine --engine floor-no-buildx --store containerd
+
+      - name: Remove the stand-in
+        if: always()
+        run: |
+          set -euo pipefail
+          id=""
+          if [[ -f "$RUNNER_TEMP/linux-server-up.log" ]]; then
+            id=$(sed -n -E 's/^zekno-check-([a-z0-9]{8}): remove what this run makes with .*$/\1/p' "$RUNNER_TEMP/linux-server-up.log")
+          fi
+          if [[ ! "$id" =~ ^[a-z0-9]{8}$ ]]; then
+            echo "server.ts up made no stand-in in this job, so there is nothing to remove."
+            exit 0
+          fi
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts down --id "$id"
+
+  # The floor, the whole stand-in held to 1 GB with no swap.
+  memory:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.pin.outputs.bun }}
+
+      - name: Install
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Compile the runner and start the stand-in
+        id: up
+        run: |
+          set -euo pipefail
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts up --engine floor --store containerd --memory 1g 2>&1 | tee "$RUNNER_TEMP/linux-server-up.log"
+          grep -E -m 1 -x 'ZEKNO_LINUX_SERVER=zekno-check-[a-z0-9]{8}-server' "$RUNNER_TEMP/linux-server-up.log" >> "$GITHUB_ENV"
+
+      - name: Run the checks
+        run: bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job memory --engine floor --store containerd
+
+      - name: Remove the stand-in
+        if: always()
+        run: |
+          set -euo pipefail
+          id=""
+          if [[ -f "$RUNNER_TEMP/linux-server-up.log" ]]; then
+            id=$(sed -n -E 's/^zekno-check-([a-z0-9]{8}): remove what this run makes with .*$/\1/p' "$RUNNER_TEMP/linux-server-up.log")
+          fi
+          if [[ ! "$id" =~ ^[a-z0-9]{8}$ ]]; then
+            echo "server.ts up made no stand-in in this job, so there is nothing to remove."
+            exit 0
+          fi
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts down --id "$id"
+
+  # The released runner beside the runner of this commit, at the floor.
+  released:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      # The whole history, which is the repository's own and public: L1 reads the checksums
+      # runner-release.json held at an earlier commit.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.pin.outputs.bun }}
+
+      - name: Install
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Compile the runner and start the stand-in
+        id: up
+        run: |
+          set -euo pipefail
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts up --engine floor --store containerd 2>&1 | tee "$RUNNER_TEMP/linux-server-up.log"
+          grep -E -m 1 -x 'ZEKNO_LINUX_SERVER=zekno-check-[a-z0-9]{8}-server' "$RUNNER_TEMP/linux-server-up.log" >> "$GITHUB_ENV"
+
+      - name: Run the checks
+        run: bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job released --engine floor --store containerd
+
+      - name: Remove the stand-in
+        if: always()
+        run: |
+          set -euo pipefail
+          id=""
+          if [[ -f "$RUNNER_TEMP/linux-server-up.log" ]]; then
+            id=$(sed -n -E 's/^zekno-check-([a-z0-9]{8}): remove what this run makes with .*$/\1/p' "$RUNNER_TEMP/linux-server-up.log")
+          fi
+          if [[ ! "$id" =~ ^[a-z0-9]{8}$ ]]; then
+            echo "server.ts up made no stand-in in this job, so there is nothing to remove."
+            exit 0
+          fi
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts down --id "$id"
+
+  # Each step's proof, at the floor and the newest, on containerd.
+  proof:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [floor, newest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.pin.outputs.bun }}
+
+      - name: Install
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Compile the runner and start the stand-in
+        id: up
+        env:
+          ENGINE: ${{ matrix.engine }}
+        run: |
+          set -euo pipefail
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts up --engine "$ENGINE" --store containerd 2>&1 | tee "$RUNNER_TEMP/linux-server-up.log"
+          grep -E -m 1 -x 'ZEKNO_LINUX_SERVER=zekno-check-[a-z0-9]{8}-server' "$RUNNER_TEMP/linux-server-up.log" >> "$GITHUB_ENV"
+
+      - name: Run the checks
+        env:
+          ENGINE: ${{ matrix.engine }}
+        run: bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job proof --engine "$ENGINE" --store containerd
+
+      - name: Remove the stand-in
+        if: always()
+        run: |
+          set -euo pipefail
+          id=""
+          if [[ -f "$RUNNER_TEMP/linux-server-up.log" ]]; then
+            id=$(sed -n -E 's/^zekno-check-([a-z0-9]{8}): remove what this run makes with .*$/\1/p' "$RUNNER_TEMP/linux-server-up.log")
+          fi
+          if [[ ! "$id" =~ ^[a-z0-9]{8}$ ]]; then
+            echo "server.ts up made no stand-in in this job, so there is nothing to remove."
+            exit 0
+          fi
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts down --id "$id"
+
+  # The floor on GitHub's ARM64 machine (plan item 4); up compiles the runner for ARM64 there.
+  arm64:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.pin.outputs.bun }}
+
+      - name: Install
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Compile the runner and start the stand-in
+        id: up
+        run: |
+          set -euo pipefail
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts up --engine floor --store containerd 2>&1 | tee "$RUNNER_TEMP/linux-server-up.log"
+          grep -E -m 1 -x 'ZEKNO_LINUX_SERVER=zekno-check-[a-z0-9]{8}-server' "$RUNNER_TEMP/linux-server-up.log" >> "$GITHUB_ENV"
+
+      - name: Run the checks
+        run: bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job arm64 --engine floor --store containerd
+
+      - name: Remove the stand-in
+        if: always()
+        run: |
+          set -euo pipefail
+          id=""
+          if [[ -f "$RUNNER_TEMP/linux-server-up.log" ]]; then
+            id=$(sed -n -E 's/^zekno-check-([a-z0-9]{8}): remove what this run makes with .*$/\1/p' "$RUNNER_TEMP/linux-server-up.log")
+          fi
+          if [[ ! "$id" =~ ^[a-z0-9]{8}$ ]]; then
+            echo "server.ts up made no stand-in in this job, so there is nothing to remove."
+            exit 0
+          fi
+          bun --no-env-file apps/runner/test/support/linux-server/server.ts down --id "$id"
+
+  # The macOS side (plan item 5), on a pinned GitHub macOS machine with no Docker. Its checks
+  # write `fingerprint` and `plan` to GITHUB_OUTPUT, which run-checks.ts hands them unchanged.
+  macos:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: macos-15
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      fingerprint: ${{ steps.checks.outputs.fingerprint }}
+      plan: ${{ steps.checks.outputs.plan }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read the Bun version
+        id: pin
+        run: |
+          set -euo pipefail
+          manager=$(jq -r .packageManager package.json)
+          if [[ ! "$manager" =~ ^bun@[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The root package.json does not pin a Bun version." >&2
+            exit 1
+          fi
+          echo "bun=${manager#bun@}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.pin.outputs.bun }}
+
+      - name: Install
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run the checks
+        id: checks
+        run: bun --no-env-file apps/runner/test/support/linux-server/run-checks.ts --job macos

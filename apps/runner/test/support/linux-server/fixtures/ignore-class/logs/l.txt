@@ -1,0 +1,1 @@
+ignore-class: logs/l.txt
