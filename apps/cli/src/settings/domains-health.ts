@@ -4,7 +4,7 @@
  * `deploy.healthcheck`. Their rules, their words, and what `zekno settings
  * set` and `unset` do with the keys `<service>.domains`, `<service>.health`
  * and `<service>.health-timeout`. The rest of settings/ calls in here, so
- * that words.ts, over 500 lines already, does not grow.
+ * that words.ts does not grow.
  *
  * - `domains`: 1 to 64 lowercase names held to the core library's domain
  *   rule, none twice in the file, under a service with a port. Typed, the

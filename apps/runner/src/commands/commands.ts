@@ -29,7 +29,6 @@ import {
 
 import { composeUp } from "../docker/compose"
 import {
-  acquireLock,
   isPrivate,
   isSetUp,
   readKeys,
@@ -39,6 +38,7 @@ import {
   writeKeys,
   writeState,
 } from "../home/home"
+import { acquireLock } from "../home/locks"
 
 type Reason = NonNullable<RunnerReport["reason"]>
 export const refused = (reason: Reason): RunnerReport => ({

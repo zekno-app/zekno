@@ -23,14 +23,16 @@
  *
  * Like the rest of what `cli.ts` loads, this module loads neither Ink nor
  * React (main.ts loads the interface only once DEV is out of the environment).
+ *
+ * Its words are in first-deploy-words.ts, and adding the server, with the
+ * server questions' words, in connect-server.ts (specs/016-build-from-source,
+ * contracts/cli.md CL14).
  */
 import { acceptedLinks } from "../project/accepted"
 import { flagsAgain, fromRow, send, shownFile } from "../commands/deploy"
-import { SSH_IDENTITY } from "../commands/server"
 import { expectedValues } from "../project/compose-file"
 import {
   openTeam,
-  remoteThroughUi,
   reopenTeam,
   type Deps,
   type Team,
@@ -43,7 +45,6 @@ import {
   NOTHING_DONE,
   UsageError,
 } from "../cli/errors"
-import type { InstallEvent } from "../server/install/lines"
 import { AppTaken, checkApp, prepareDeploy, type Where } from "../ops/deploy"
 import { createTeam } from "../ops/init"
 import {
@@ -54,12 +55,6 @@ import {
 } from "../ops/link"
 import { listSecrets, prepareSecretSet, setSecret } from "../ops/secret"
 import {
-  addServer,
-  foundDetail,
-  prepareServerAdd,
-  runnerWarning,
-} from "../ops/server"
-import {
   findServer,
   isMemberName,
   NAME,
@@ -69,55 +64,36 @@ import {
 import { findProject } from "../project/file"
 import { withProject, type Details, type FromProject } from "../project/project"
 import { notSignedHere } from "../project/signed"
-import { RUNNER_RELEASE } from "../version/runner-release"
 import { sanitize } from "../server/sanitize"
 import { SETTINGS_FILE } from "../settings/file"
 import { chooseSource, readSource } from "../settings/source"
 import { SSH_DESTINATION } from "../server/transport"
-import { megabytes } from "../shared/sizes"
 import type { ListQuestion, Ui } from "../ui/types"
 import { whichApp, whichFile, whichServer, type How } from "./asking"
+import {
+  connectServer,
+  DESTINATION_RULE,
+  SERVER_NAME_RULE,
+  serverTaken,
+} from "./connect-server"
+import {
+  expectsValues,
+  KEPT_SO_FAR,
+  KEY_CREATED,
+  MEMBER_NAME_RULE,
+  NOTHING_MORE,
+  rememberFolder,
+  TEAM_CODE_ABOUT,
+} from "./first-deploy-words"
 
-/** F2: what the team code is for (mock-up 3, the app's words). */
-export const TEAM_CODE_ABOUT =
-  "Identifies your team. A server checks it before it agrees to obey your team."
-
-/** F3: what the server code is for (mock-up 3, the app's words). */
-export const SERVER_CODE_ABOUT =
-  "Identifies this server's key. Teammates compare it before they trust the server."
-
-/** Said once the key is in the keychain (mock-up 3). */
-export const KEY_CREATED = "Key created. It is in your system keychain."
-
-/** F5: whether to remember the folder (mock-up 3). */
-export const rememberFolder = (app: string, server: string): string =>
-  `Remember this folder? It writes zekno.json, so it always deploys ${app} to ${server}.`
-
-/** F6: how many values the Compose file expects that have no secret (mock-up 3). `file` as the deploy panel names it. */
-export const expectsValues = (file: string, count: number): string =>
-  `${file} expects ${count} ${count === 1 ? "value" : "values"} that ${count === 1 ? "has" : "have"} no secret yet.`
-
-/** F8: leaving a question once something was made in this run (research Q3). */
-export const NOTHING_MORE =
-  "Nothing more was done. What was set up so far is kept: run `zekno deploy` again to carry on."
-
-/** F9: after a failure's own sentence, once something was made in this run (research Q3). */
-export const KEPT_SO_FAR =
-  "What was set up so far is kept: run `zekno deploy` again to carry on."
-
-/** A6: why a name for the team list is refused. Needs approval (research Q4). */
-export const MEMBER_NAME_RULE =
-  "A name is 1 to 64 characters, with no control character and no space at either end."
-
-/** A7: why an SSH destination is refused, as `prepareServerAdd` says it. */
-export const DESTINATION_RULE =
-  "That SSH destination is not valid. Use the form user@host."
-
-/** A8: why a server's name is refused, as `prepareServerAdd` says it. */
-export const SERVER_NAME_RULE =
-  "Give the server a name of lowercase letters, digits and hyphens."
-export const serverTaken = (name: string): string =>
-  `A server named "${name}" is already connected.`
+// Moved beside this file, and re-exported so that what imports them from here is unchanged.
+export {
+  DESTINATION_RULE,
+  SERVER_CODE_ABOUT,
+  SERVER_NAME_RULE,
+  serverTaken,
+} from "./connect-server"
+export * from "./first-deploy-words"
 
 /** What `zekno deploy` was typed with, `--skip-dns-check` too (specs/015-domains-https, CL3). */
 export type DeployFlags = Where & { file?: string; skipDnsCheck?: boolean }
@@ -203,17 +179,6 @@ function projectFileFound(cwd: string): boolean {
     return findProject(cwd) !== undefined
   } catch {
     return true
-  }
-}
-
-/** Whether the profile now names a server `name`: an `addServer` that failed after it wrote the profile has made it. */
-function inProfile(home: string, name: string): boolean {
-  try {
-    return profileStore(home)
-      .load()
-      .servers.some((server) => server.name === name)
-  } catch {
-    return false
   }
 }
 
@@ -459,70 +424,6 @@ export async function deployAtTerminal(
     const undone = wrote === undefined || unlinkWritten(deps.home, wrote)
     throw keptSoFar(error, undone && kept)
   }
-}
-
-/**
- * Adds the server as `zekno server add --ssh` does (FR-012): the same plan,
- * the same installer and checks, inside a quiet step so SSH can ask for a
- * password or a host key on the terminal. The installer's steps are drawn as
- * they arrive, then the server code, where the server's identity rests, and a
- * runner of another version, as `server add` says them. `madeIt` is called
- * once the profile names the server, also when what follows then fails.
- */
-async function connectServer(
-  deps: Deps,
-  name: string,
-  destination: string,
-  madeIt: () => void
-): Promise<void> {
-  const { ui } = deps
-  const plan = await prepareServerAdd(deps, name, { ssh: destination })
-  const carried = (deps.release ?? RUNNER_RELEASE).version
-  let bytes: number | undefined
-  const installed = (event: InstallEvent) => {
-    if (event.kind === "connected") ui.success("Connected over SSH")
-    else if (event.kind === "docker") ui.success("Docker with Compose found")
-    else if (event.kind === "runner")
-      ui.success("Runner found", foundDetail(event.version, carried))
-    else if (event.kind === "download") bytes = event.bytes
-    else if (event.kind === "install")
-      ui.success(
-        "Runner installed",
-        `${bytes === undefined ? "" : `${megabytes(bytes)}, `}checksum verified`
-      )
-  }
-  let result
-  try {
-    result = await ui.step(
-      `Connecting ${plan.name}`,
-      () =>
-        addServer(remoteThroughUi(deps), plan, {
-          install: installed,
-          stage: (stage) => {
-            if (stage === "added")
-              ui.success(`Added ${plan.name} to the signed team list`)
-          },
-          resumed: () =>
-            ui.info(
-              "The runner was already set up for your team by an earlier attempt. Carrying on from there."
-            ),
-          detail: (line) => ui.remote(line),
-        }),
-      { quiet: true }
-    )
-  } catch (error) {
-    // Setup done and the team list written, then the runner did not take it (`sync`): the server is in the profile, as `server add` leaves it.
-    if (inProfile(deps.home, plan.name)) madeIt()
-    throw error
-  }
-  madeIt()
-  ui.code("Server code", result.code, SERVER_CODE_ABOUT)
-  ui.note(SSH_IDENTITY)
-  // A runner of another version than this zekno's is said once, as `server add` says it.
-  const warning =
-    result.relation &&
-    runnerWarning(result.name, result.runner?.version, result.relation, carried)
-  if (warning) ui.warn(warning)
 }
 
 /**

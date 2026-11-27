@@ -1,7 +1,7 @@
 /**
  * `zekno doctor`'s Proxy line (specs/015-domains-https, contracts/cli.md,
- * CL6; lines E3, E4; FR-038), kept out of ops/doctor.ts, which is past 500
- * lines. Doctor asks `status` with routes of a runner of protocol 4 on the
+ * CL6; lines E3, E4; FR-038), in a file of its own beside ops/doctor.ts.
+ * Doctor asks `status` with routes of a runner of protocol 4 on the
  * session it already opens (ops/status.ts `askStatus`), which reads the
  * runner's state and Docker and changes nothing; from that answer:
  *

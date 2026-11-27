@@ -2,10 +2,10 @@
  * The signed deploy's version 2: signing it, reading it back, and the
  * runner-side gate. The message is `message.ts`'s (contracts/message.md); the
  * gate runs the checks of contracts/runner-checks.md K4 to K14 in their order,
- * with K10b of specs/015-domains-https/contracts/core.md (K11 to K14, the
- * secrets, in `listed-secrets.ts`), and its result is the only thing
- * `openSecrets` opens (K16). K1 to K3, K15 and K17 are the runner's: they
- * read the request, the disk and Docker.
+ * with K10b of specs/015-domains-https/contracts/core.md (K4 to K10 in
+ * `gate.ts`; K11 to K14, the secrets, in `listed-secrets.ts`), and its result
+ * is the only thing `openSecrets` opens (K16). K1 to K3, K15 and K17 are the
+ * runner's: they read the request, the disk and Docker.
  */
 import { utf8 } from "../crypto/encoding"
 import {
@@ -36,14 +36,13 @@ import {
   type Member,
   type TeamTrust,
 } from "../team/roster"
-import { DEPLOY_ROLES } from "./deploy"
+import { gateDeployV2, isTime } from "./gate"
 import type { Build, Predeploy } from "./later-fields"
 import { checkListedSecrets } from "./listed-secrets"
 import {
   freezeDeep,
   readDeployV2Bytes,
   readDeployV2Format,
-  readDeployV2PayloadBytes,
   type DeployV2,
 } from "./message"
 import { registerVerified } from "./open"
@@ -103,9 +102,6 @@ function sortedOnce<T>(
     throw new CoreError("invalid_argument", repeated)
   return sorted
 }
-
-const isTime = (value: unknown): value is Date =>
-  value instanceof Date && Number.isFinite(value.getTime())
 
 /**
  * Builds and signs a version-2 deploy: made against `previous`, the app's last
@@ -322,76 +318,17 @@ export function verifyDeployV2(input: {
     )
   }
 
-  // K4, K5. The envelope's size, shape and kind; then the signer and the signature.
-  const opened = openEnvelope(
-    input.envelope,
-    PAYLOAD_TYPES.deployV2,
-    (keyId) => memberByKeyId(state.team.members, keyId)?.publicKey
-  )
-  if (!opened.ok) return opened
-  const signer = state.team.members.find(
-    (member) => member.publicKey === opened.value.signerKey
-  )!
-
-  // K6, K7. Only now is the payload read: its format in its one spelling, then a later field.
-  const read = readDeployV2PayloadBytes(opened.value.payload)
-  if (!read.ok) return read
-  const deploy = read.value
+  // K4 to K10, in `gate.ts`: the envelope, the signer and the signature, the
+  // payload, who signed it and for whom, the order, and the expiry.
+  const gated = gateDeployV2({
+    envelope: input.envelope,
+    state,
+    now: input.now,
+    via: input.via,
+  })
+  if (!gated.ok) return gated
+  const { deploy, signer } = gated.value
   const app = deploy.app
-
-  // K8. Who signed it, and for whom.
-  if (!DEPLOY_ROLES.includes(signer.role))
-    return refuse(
-      "role_not_allowed",
-      "The signer's role does not allow deploys."
-    )
-  if (deploy.teamId !== state.team.teamId)
-    return refuse("wrong_team", "This deploy belongs to another team.")
-  if (deploy.teamHash !== state.team.hash) {
-    return refuse(
-      "stale_team",
-      "The signer and this server are on different versions of the team list."
-    )
-  }
-  if (deploy.serverId !== state.serverId)
-    return refuse("wrong_server", "This deploy is addressed to another server.")
-  if (!serverKeyOf(state.team, state.serverId))
-    return refuse("unknown_server", "This server is not in the team list.")
-
-  // K9. The order: made against exactly the app's last number here.
-  const last = Object.hasOwn(state.lastSequence, app)
-    ? state.lastSequence[app]!
-    : 0
-  if (deploy.previous < last) {
-    return refuse(
-      "replayed",
-      "Another deploy of this app was accepted after the one this deploy was made against."
-    )
-  }
-  if (deploy.previous > last) {
-    return refuse(
-      "sequence_jump",
-      "This deploy was made after a deploy this server does not hold."
-    )
-  }
-
-  // K10. The expiry, by the runner's clock. The order above never depends on it.
-  if (deploy.expiresAt === null) {
-    if (input.via === "hosted service")
-      return refuse(
-        "expired",
-        "A deploy taken from the hosted service must carry an expiry."
-      )
-  } else {
-    const left = Date.parse(deploy.expiresAt) - input.now.getTime()
-    if (left <= 0)
-      return refuse("expired", "The time this deploy had to run has passed.")
-    if (left > LIMITS.expiryWindowMs)
-      return refuse(
-        "expired",
-        "This deploy's expiry is further ahead than the limit."
-      )
-  }
 
   // K10b. Who holds a domain (specs/015-domains-https, contracts/core.md):
   // a domain another app holds is not taken over. Nothing is written and no

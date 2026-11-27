@@ -13,9 +13,15 @@
  * `sanitize`, though nothing a setting holds should need it.
  */
 import { healthOf } from "../domains/routes"
-import { DOMAINS_LABEL, HEALTH_LABEL } from "../domains/words"
 import { sanitize } from "../server/sanitize"
-import { healthWords, secondsOf } from "./domains-health"
+import {
+  deployedOf,
+  markOf,
+  row,
+  type Comparable,
+  type Section,
+} from "./row-marks"
+import { domainRows, healthRow } from "./route-rows"
 import type {
   ServiceSettings,
   SettingPath,
@@ -26,64 +32,14 @@ import type {
 import { SETTINGS_FILE, splitStart } from "./values"
 import { NOT_SET, portShown, restartShown } from "./words"
 
-/** A value as compared: a start command's words, a processor limit's number, a list, or the value itself. */
-type Comparable = string | number | readonly (string | number | undefined)[]
-
-/** Whether two values compare equal. */
-function same(a: Comparable | undefined, b: Comparable | undefined): boolean {
-  if (Array.isArray(a) && Array.isArray(b))
-    return a.length === b.length && a.every((item, at) => item === b[at])
-  return a === b
-}
+// Moved to route-rows.ts, and re-exported so that what imports them from here is unchanged.
+export { domainRows, healthRow } from "./route-rows"
 
 /** A start command's words, or the text itself when it does not split. */
 const wordsOf = (start: string): Comparable => {
   const split = splitStart(start)
   return "words" in split ? split.words : start
 }
-
-/**
- * One row's mark: none when nothing deployed is known or the value is the
- * deployed one; else changed, with the old value when the deployed settings
- * had this setting of this service.
- */
-function markOf(
-  deployed: Settings | undefined,
-  service: string,
-  now: Comparable | undefined,
-  before: (deployed: ServiceSettings) => {
-    value: Comparable | undefined
-    shown?: string
-  }
-): Pick<SettingRow, "changed"> {
-  if (deployed === undefined) return {}
-  const old = deployed.services.find(([name]) => name === service)?.[1]
-  if (old === undefined) return { changed: {} }
-  const { value, shown } = before(old)
-  if (same(now, value)) return {}
-  return value === undefined || shown === undefined
-    ? { changed: {} }
-    : { changed: { was: sanitize(shown) } }
-}
-
-type Section = SettingRow["section"]
-
-/** A row of a setting, set or not. */
-const row = (
-  section: Section,
-  label: string,
-  path: SettingRow["path"],
-  shown: string | undefined,
-  notSet: string,
-  mark: Pick<SettingRow, "changed">
-): SettingRow => ({
-  section,
-  label,
-  path,
-  shown: sanitize(shown ?? notSet),
-  set: shown !== undefined,
-  ...mark,
-})
 
 /** The parts of a service a row reads, each with how it compares and how it reads. */
 const PARTS = {
@@ -140,13 +96,6 @@ function partRow(
   )
 }
 
-/** The settings the last deploy had for `service`, or undefined when not known or it had no such service. */
-const deployedOf = (
-  deployed: Settings | undefined,
-  service: string
-): ServiceSettings | undefined =>
-  deployed?.services.find(([name]) => name === service)?.[1]
-
 /**
  * One row for each plain variable, or each volume, the last deploy had for
  * this service and the file no longer has (security review S3), in the
@@ -201,97 +150,6 @@ function plainRows(
       })
     )
   )
-}
-
-/**
- * The `health` row (specs/015-domains-https, design/lines.md C5 and C6):
- * `GET /health, within 60s`, `stays up, within 60s`, or `not set`. It is
- * marked against what the last deploy signed: its path, and the deploy's one
- * limit, which `seconds` is for the file (`healthOf`, the largest of its
- * services'), so a service's own limit marks it only when the limit the next
- * deploy signs changes (research R14, R30).
- */
-export function healthRow(
-  service: readonly [string, ServiceSettings],
-  deployed: Settings | undefined,
-  seconds: number | undefined
-): SettingRow {
-  const [name, { health }] = service
-  return row(
-    "Deploy",
-    HEALTH_LABEL,
-    { service: name, key: "health" },
-    health === undefined ? undefined : healthWords(health),
-    NOT_SET.health,
-    markOf(
-      deployed,
-      name,
-      health === undefined ? undefined : [health.path, seconds],
-      (old) =>
-        old.health === undefined
-          ? { value: undefined }
-          : {
-              value: [old.health.path, secondsOf(old.health)],
-              shown: healthWords(old.health),
-            }
-    )
-  )
-}
-
-/**
- * The `domains` rows (design/lines.md, E1): one a domain, in the file's
- * order, labelled on the first only, each marked when the last deploy did
- * not route it; then one for each domain the last deploy routed and the file
- * no longer names, marked removed with it (security review S3's pattern for
- * plain variables). With neither, a `none` row when `none` is asked for (the
- * settings screen), else no row.
- */
-export function domainRows(
-  service: readonly [string, ServiceSettings],
-  deployed: Settings | undefined,
-  none: boolean
-): SettingRow[] {
-  const [name, settings] = service
-  const now = settings.domains ?? []
-  const path = { service: name, key: "domains" } as const
-  const rows = now.map((domain, at) =>
-    row(
-      "Networking",
-      at === 0 ? DOMAINS_LABEL : "",
-      path,
-      domain,
-      NOT_SET.domains,
-      markOf(deployed, name, domain, (old) => ({
-        value: old.domains?.includes(domain) ? domain : undefined,
-      }))
-    )
-  )
-  const gone = (deployedOf(deployed, name)?.domains ?? []).filter(
-    (domain) => !now.includes(domain)
-  )
-  rows.push(
-    ...gone.map((domain, at): SettingRow => ({
-      section: "Networking",
-      label: now.length === 0 && at === 0 ? DOMAINS_LABEL : "",
-      path,
-      shown: NOT_SET.domains,
-      set: false,
-      removed: { was: sanitize(domain) },
-    }))
-  )
-  // Marked, as every row of a service the last deploy did not have is; else it was `none` then too.
-  if (rows.length === 0 && none)
-    rows.push(
-      row(
-        "Networking",
-        DOMAINS_LABEL,
-        path,
-        undefined,
-        NOT_SET.domains,
-        markOf(deployed, name, 0, () => ({ value: 0 }))
-      )
-    )
-  return rows
 }
 
 /** One row per volume, its name as the label and its path as the value. */

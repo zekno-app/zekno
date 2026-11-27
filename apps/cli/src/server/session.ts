@@ -7,7 +7,7 @@
  * each result must match the message the caller expects, a refusal becomes
  * `RunnerRefused`, and the caller still checks which server answered and what
  * it says it did. Text in events comes from the server and is cleaned before
- * anyone sees it.
+ * anyone sees it (session-events.ts).
  *
  * A runner from before sessions (feature 003) exits with status 2 when asked
  * for one; something that answers in some other way does not speak sessions
@@ -27,7 +27,7 @@ import {
 import type { z } from "zod"
 
 import { CliError, RunnerRefused } from "../cli/errors"
-import { sanitize } from "./sanitize"
+import { clean, EVENTS } from "./session-events"
 import { ask, type RunnerProcess, type Transport } from "./transport"
 
 /** `session`: one runner process carries every request. `one-shot`: one process per request, for an older runner. */
@@ -100,17 +100,6 @@ export function namedUnreachable(error: unknown, server: string): unknown {
   return error instanceof SshUnreachable
     ? new CliError(sshUnreachable(server, error.destination))
     : error
-}
-
-/** The kinds of event each request may send before its result. */
-const EVENTS: Partial<
-  Record<SessionCommand, readonly SessionEvent["event"][]>
-> = {
-  apply: ["progress"],
-  // A version-2 deploy sends Docker's lines as `apply` does (specs/014-deploy-v2, contracts/protocol.md P9); `records` sends none.
-  // On protocol 4 it also says which service's health it waits for (specs/015-domains-https, contracts/core.md, "Event").
-  deploy: ["progress", "health"],
-  logs: ["log"],
 }
 
 /** How long a runner has to exit once its session is closed, before it is stopped. */
@@ -289,20 +278,6 @@ async function start(
   } finally {
     // A session that goes on listens for the signal itself (`live`).
     signal?.removeEventListener("abort", abort)
-  }
-}
-
-/** Removes terminal control sequences from the text of an event. Service names and times are held to patterns already. */
-function clean(event: SessionEvent): SessionEvent {
-  if (event.event === "progress")
-    return { event: "progress", line: sanitize(event.line) }
-  if (event.event === "health")
-    return { event: "health", service: sanitize(event.service) }
-  return {
-    event: "log",
-    service: sanitize(event.service),
-    time: event.time,
-    line: sanitize(event.line),
   }
 }
 
