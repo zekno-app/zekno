@@ -52,9 +52,10 @@ async function status() {
 }
 
 describe("the number and the commands", () => {
-  test("protocol 4 or later (5 since the start limit, start-limit.test.ts), and proxy is a command of a session", () => {
+  test("protocol 4 or later (6 since building from source, messages-v2.test.ts), and proxy is a command of a session", () => {
     expect(core.RUNNER_PROTOCOL).toBeGreaterThanOrEqual(4)
-    expect(SESSION_COMMANDS.at(-1)).toBe("proxy")
+    // Feature 016's `pack`, `builds` and `builder` come after it (CO12).
+    expect(SESSION_COMMANDS.at(-4)).toBe("proxy")
     expect(reads(SessionRequestSchema, { command: "proxy" })).toBe(true)
     expect(
       reads(SessionRequestSchema, {

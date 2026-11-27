@@ -203,17 +203,21 @@ export const BUILD_CASES: readonly BuildCase[] = [
   { key: "dot", context: ".", words: "context ." },
   {
     key: "git",
-    context: "https://zekno.invalid/repo.git",
-    words: "context https://zekno.invalid/repo.git",
+    context: "https://check.invalid/repo.git",
+    words: "context https://check.invalid/repo.git",
   },
   { key: "parent", context: "../..", words: "context ../.." },
 ]
 
 /** The app each case deploys. */
 export const appOf = (key: string): string => `check-released-${key}`
-/** The image each case's service names, so the build is named, and removed, exactly. */
+/**
+ * The image each case's service names, so the build is named, and removed,
+ * exactly. Never under `zekno.invalid/`: since step 1, core signs that name
+ * only for a build the deploy lists (CO2), and these deploys list none.
+ */
 export const imageOf = (key: string): string =>
-  `zekno.invalid/check-released-${key}:1`
+  `check.invalid/check-released-${key}:1`
 /** The Compose project runner 0.1.1 runs an app as, and the network Compose makes for it. */
 export const projectOf = (key: string): string => `zekno-${appOf(key)}`
 export const networkOf = (key: string): string => `${projectOf(key)}_default`

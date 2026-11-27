@@ -27,6 +27,16 @@ export function registerVerified(
 }
 
 /**
+ * Whether a verifier registered this object, for `openPiece`
+ * (specs/016-build-from-source, contracts/core.md CO5): it tells that and
+ * hands out nothing else, so the sealed secrets stay reachable only through
+ * `openSecrets`. Any other object, or a value that is not one, is not.
+ */
+export function isRegistered(deploy: object): boolean {
+  return typeof deploy === "object" && deploy !== null && verified.has(deploy)
+}
+
+/**
  * Decrypts the secrets of a verified deploy. Accepts only an object returned
  * by `verifyDeploy` or `verifyDeployV2`, so there is no path to plaintext that
  * skips the checks. Either every secret opens or none is returned.

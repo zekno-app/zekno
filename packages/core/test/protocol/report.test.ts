@@ -23,6 +23,8 @@ describe("the outcomes of protocol 4", () => {
       "refused",
       "routes_failed",
       "unhealthy",
+      // Protocol 6 (specs/016-build-from-source, CO10): report-builds.test.ts.
+      "build_failed",
     ])
     expect(ROUTE_FAILURES).toEqual([
       "port_taken",
@@ -135,7 +137,9 @@ describe("the outcomes of protocol 4", () => {
             ...(health === undefined ? {} : { health }),
           }
           const failure = routes?.failure as string | undefined
+          // `build_failed` always carries a `build` (CO10), which none of these has.
           const allowed =
+            outcome !== "build_failed" &&
             (routes !== undefined) === (outcome === "routes_failed") &&
             (health !== undefined) === (outcome === "unhealthy") &&
             (failure === undefined ||

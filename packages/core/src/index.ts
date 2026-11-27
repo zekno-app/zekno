@@ -81,10 +81,19 @@ export {
   readRunnerState,
   takesVersionOne,
   versionOneView,
+  type AppBuilds,
   type AppRoutes,
+  type Building,
   type RunnerState,
   type StoredRunnerState,
 } from "./deploy/state"
+export {
+  keepAfter,
+  withAppBuilds,
+  withBuilding,
+  withDropped,
+  withFresh,
+} from "./deploy/kept-builds"
 export {
   domainHolders,
   domainsAfter,
@@ -102,13 +111,67 @@ export {
 } from "./deploy/deploy-v2"
 export {
   readDeployV2Payload,
-  type Build,
   type DeployV2,
   type Health,
   type Predeploy,
   type Route,
 } from "./deploy/message"
-export { buildKey } from "./deploy/later-fields"
+export {
+  baseKey,
+  buildKey,
+  builtImageName,
+  ImageRefSchema,
+  isImageRef,
+  namesReservedRegistry,
+  type Build,
+  type BuildRecipe,
+  type ImageRef,
+  type ListedSecret,
+} from "./deploy/builds"
+export {
+  isCredentialName,
+  isNeverGivenArg,
+  isSyntaxLine,
+  SYNTAX_LINE,
+} from "./deploy/build-names"
+export {
+  CARRIED_OUT,
+  CARRIED_OUT_ROWS,
+  rowsAskedFor,
+  type CarriedOutRow,
+  type CarriedOutTable,
+} from "./deploy/carried-out"
+export { admitPiece, stillAllowed } from "./deploy/gate"
+export {
+  ARCHES,
+  BUILD_REASONS,
+  BuildRecordSchema,
+  DIGEST,
+  DOCKER_VERSION,
+  readBuildRecord,
+  type Arch,
+  type BuildReason,
+  type BuildRecord,
+} from "./deploy/build-record"
+export { hashStream } from "./crypto/hash"
+export {
+  compareNames,
+  createTarWriter,
+  header,
+  isPackName,
+  PACK_TIME,
+  paddingFor,
+  splitsAsUstar,
+  TAR_END,
+} from "./pack/tar"
+export { createPackChecker, type PackItem } from "./pack/check"
+export {
+  cutPieces,
+  openPiece,
+  pieceFingerprint,
+  pieceLength,
+  sealPiece,
+} from "./pack/pieces"
 export {
   domainFault,
   healthBytes,
@@ -167,6 +230,7 @@ export {
   RUNNER_PROTOCOL,
   RunnerAppStatesSchema,
   RunnerLogsRequestSchema,
+  RunnerPackSchema,
   RunnerProxySchema,
   RunnerRecordsRequestSchema,
   RunnerRecordsSchema,
@@ -186,6 +250,7 @@ export {
   type ProgressEvent,
   type RunnerAppStates,
   type RunnerLogsRequest,
+  type RunnerPack,
   type RunnerProxy,
   type RunnerRecords,
   type RunnerStatusRequest,
@@ -196,6 +261,26 @@ export {
   type SessionFrame,
   type SessionRequest,
 } from "./protocol/session"
+export {
+  AppBuildsAnswerSchema,
+  BuildErrorEventSchema,
+  BuildEventSchema,
+  BuildLineEventSchema,
+  RunnerBuilderRequestSchema,
+  RunnerBuilderSchema,
+  RunnerBuildsRequestSchema,
+  RunnerBuildsSchema,
+  RunnerPackRequestSchema,
+  type AppBuildsAnswer,
+  type BuildErrorEvent,
+  type BuildEvent,
+  type BuildLineEvent,
+  type RunnerBuilder,
+  type RunnerBuilderRequest,
+  type RunnerBuilds,
+  type RunnerBuildsRequest,
+  type RunnerPackRequest,
+} from "./protocol/build-messages"
 export { SERVICE_NAME } from "./protocol/service-name"
 export { LIMITS } from "./protocol/limits"
 export {

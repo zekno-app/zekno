@@ -20,6 +20,7 @@ import {
   signEnvelope,
   type Envelope,
 } from "../../src/crypto/envelope"
+import { builtImageName } from "../../src/deploy/builds"
 import { readDeployV2Format } from "../../src/deploy/message"
 import { setSecret } from "../support/helpers"
 import {
@@ -33,6 +34,9 @@ import {
 import { build, listed, partThreeTwo, payload } from "../support/payload-v2"
 
 const bytes = (text: string) => new TextEncoder().encode(text)
+
+/** What the runner's reader says of a Dockerfile build with no secret that keeps every rule: carried out at step 1 (CO7). */
+const BUILD_AT_RUNNER = "accepted"
 
 /** Signs `text` as a version-2 deploy by the founder, a current member. */
 const signed = (w: World, text: string) =>
@@ -92,6 +96,43 @@ describe("F41: another spelling of a signed payload is malformed", () => {
       JSON.stringify({ ...rest, v }),
     ])
       expect(readers(w, await signed(w, changed))).toEqual([
+        "malformed",
+        "malformed",
+      ])
+  })
+
+  test("a build with its keys in another order is malformed (specs/016-build-from-source, CO1)", async () => {
+    const w = await world()
+    const base = JSON.parse(await signedText(w)) as Record<string, unknown>
+    const made = build()
+    const compose = `services:\n  web:\n    image: ${builtImageName("web", made.key)}\n`
+    const textWith = (entry: unknown) =>
+      JSON.stringify({ ...base, compose, builds: [entry] })
+    // In its one spelling, the history's reader takes it, and the runner's
+    // reads it as this step does (CO7).
+    expect(readers(w, await signed(w, textWith(made)))).toEqual([
+      BUILD_AT_RUNNER,
+      "accepted",
+    ])
+    const { key, builder, ...rest } = made
+    for (const entry of [
+      { ...rest, key, builder },
+      { key, builder, ...rest },
+      { key, ...rest, builder },
+      {
+        ...made,
+        builder: { target: null, name: "dockerfile", dockerfile: "Dockerfile" },
+      },
+      {
+        ...made,
+        pack: {
+          size: made.pack.size,
+          hash: made.pack.hash,
+          chunks: made.pack.chunks,
+        },
+      },
+    ])
+      expect(readers(w, await signed(w, textWith(entry)))).toEqual([
         "malformed",
         "malformed",
       ])
@@ -175,8 +216,10 @@ describe("everything this library signs is in that spelling", () => {
         services: [{ service: "web", http: { port: 80, path: "/up" } }],
       },
       routes: [{ domain: "demo.example.com", service: "web", port: 80 }],
+      // Builds are an input of their own (CO8); with them, the helper's
+      // Compose text runs each build's image (CO2).
+      builds: [build()],
       later: {
-        builds: [build()],
         predeploy: { service: "web", command: ["bun", "x"], timeout: 60 },
       },
     })

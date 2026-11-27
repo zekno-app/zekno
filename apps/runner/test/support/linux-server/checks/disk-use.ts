@@ -24,14 +24,8 @@ import { q } from "../stand-in/shell"
 const GIB = 1024 ** 3
 const MIB = 1024 ** 2
 
-/**
- * The floor of FR-040: core's `LIMITS.diskFloorBytes` once T026 writes it,
- * else CO16's 2 GiB, which L7 is to confirm.
- */
-export const DISK_FLOOR_BYTES: number = (() => {
-  const value = (LIMITS as Readonly<Record<string, unknown>>).diskFloorBytes
-  return typeof value === "number" ? value : 2 * GIB
-})()
+/** The floor of FR-040: core's `LIMITS.diskFloorBytes` (CO16), which L7 is to confirm. */
+export const DISK_FLOOR_BYTES: number = LIMITS.diskFloorBytes
 
 /** The context: eight files of 64 MiB of random bytes, and the Dockerfile. */
 export const CONTEXT_FILES = 8

@@ -1,7 +1,9 @@
 /**
  * The version-2 payload's own fields and the order of its reading
- * (contracts/message.md, F4 to F19 and F7). The later fields' rules are in
- * later-fields.test.ts.
+ * (contracts/message.md, F4 to F19 and F7). The builds' rules are in
+ * builds.test.ts, builds-across.test.ts and build-key.test.ts; what this
+ * library carries out, row by row, in carried-out.test.ts
+ * (specs/016-build-from-source, contracts/core.md CO1 to CO7).
  */
 import { describe, expect, test } from "bun:test"
 
@@ -14,6 +16,7 @@ import {
   listed,
   partThreeTwo,
   payload,
+  railpackBuild,
 } from "../support/payload-v2"
 
 const code = (json: unknown) => {
@@ -259,16 +262,19 @@ describe("F18, F19 and F6: secrets and removals", () => {
 
 describe("F7: what this step does not carry out", () => {
   const secrets = listed(1)
+  // Refused by the carried-out table at step 1 (specs/016-build-from-source, contracts/core.md CO7).
   const later = {
-    builds: [build({}, secrets)],
+    builds: [railpackBuild({}, secrets)],
     predeploy: {
       service: "web",
       command: ["bun", "run", "migrate"],
       timeout: 600,
     },
   }
-  // Carried out since feature 015 (specs/015-domains-https, contracts/core.md, "Carried out").
+  // Carried out since feature 015 (specs/015-domains-https, contracts/core.md,
+  // "Carried out"), and a Dockerfile build with no secret since feature 016 (CO7).
   const carried = {
+    builds: [build({}, secrets)],
     health: { timeout: 120, services: [{ service: "web", http: null }] },
     routes: [{ domain: "demo.example.com", service: "web", port: 3000 }],
   }
@@ -301,7 +307,7 @@ describe("F7: what this step does not carry out", () => {
     })
   }
 
-  test("routes and a health check together read; with a later field they are unsupported_version", () => {
+  test("a Dockerfile build, routes and a health check together read; with a later field they are unsupported_version", () => {
     expect(code(payload({ secrets, ...carried }))).toBe("read")
     expect(
       code(payload({ secrets, ...carried, predeploy: later.predeploy }))
@@ -322,7 +328,8 @@ describe("F7: what this step does not carry out", () => {
     ).toBe("malformed")
   })
 
-  test("the design's part 3.2 example reads to unsupported_version", () => {
+  test("the design's part 3.2 example is still unsupported_version, by its pre-deploy command", () => {
     expect(code(wire(partThreeTwo()))).toBe("unsupported_version")
+    expect(code(wire({ ...partThreeTwo(), predeploy: null }))).toBe("read")
   })
 })

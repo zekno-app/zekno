@@ -209,7 +209,7 @@ describe("K10b: a domain another app holds", () => {
     const result = verify(w, envelope, { state })
     if (!result.ok) throw new Error(result.error.code)
     const next = result.value.nextState
-    expect(next.v).toBe(4)
+    expect(next.v).toBe(5)
     expect(next.routes).toEqual(state.routes)
     expect(next.released).toEqual(["new.example.com", "old.example.com"])
     expect(Object.isFrozen(next.released)).toBe(true)

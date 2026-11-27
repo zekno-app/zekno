@@ -215,6 +215,10 @@ Mac network, 2026-11-27: ubuntu:24.04 ubuntu@sha256:562111b88caa79c71391c0c4d3c2
 Mac network, 2026-11-27: busybox:1.36.1 busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662 (as pins.json)
 ```
 
+### Counts
+
+- Core at the end of phase 1 (T058, 2026-11-28): 869 tests in 61 files, all passing; every source module loads when imported first. The runner's and the CLI's own tests that pin protocol 5 or state mark 4 fail until phases 2 and 3 move them.
+
 ### Phase 0 on the Mac (T022, 2026-11-27)
 
 Every check written so far ran in the stand-in on the Mac: the floor and the newest on both stores, 29.4.3, Ubuntu's `docker.io` with and without its buildx, the floor without buildx, the floor held to 1 GB, and the released runner. Every record line, as printed, is in [results/phase-0-mac.md](results/phase-0-mac.md), each marked `Mac stand-in, ARM64, 2026-11-27`. QEMU is registered in Docker Desktop's VM (map-checks T11), and the Mac's records alone settle nothing: the items wait for GitHub's x86-64 run (T023, T024).

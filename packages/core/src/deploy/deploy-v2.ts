@@ -36,8 +36,9 @@ import {
   type Member,
   type TeamTrust,
 } from "../team/roster"
+import type { Build } from "./builds"
 import { gateDeployV2, isTime } from "./gate"
-import type { Build, Predeploy } from "./later-fields"
+import type { Predeploy } from "./later-fields"
 import { checkListedSecrets } from "./listed-secrets"
 import {
   freezeDeep,
@@ -65,6 +66,8 @@ export type VerifiedDeployV2 = {
   readonly nextState: StoredRunnerState
   /** The records supplied with the deploy, each listed and verified: write them before the state that names them. */
   readonly write: readonly SecretRecord[]
+  /** Every record K13 verified, supplied or held, in name order, for `stillAllowed` (specs/016-build-from-source, CO9). */
+  readonly used: readonly SecretRecord[]
   /** The hashes of every live secret of the app after the change: every other record file of the app goes. */
   readonly keep: readonly string[]
 }
@@ -90,7 +93,7 @@ function sortedOnce<T>(
   ) {
     throw new CoreError(
       "invalid_argument",
-      "Routes and a health check's services are each a list of objects."
+      "Routes, builds and a health check's services are each a list of objects."
     )
   }
   const sorted = [...(list as T[])].sort((a, b) => {
@@ -118,7 +121,14 @@ function sortedOnce<T>(
  * `routes` and `health` are inputs of their own (specs/015-domains-https,
  * contracts/core.md, "Carried out"): routes are sorted by domain and the
  * health check's services by service, and a domain or a service given twice
- * is refused. `later` holds builds and the pre-deploy command, which no
+ * is refused. `builds` is one too (specs/016-build-from-source, CO8;
+ * FR-063): sorted by key, a key given twice refused. A rollback passes the
+ * old builds as they were, and the read-back computes each key again against
+ * this deploy's listing, so a build secret set again or removed since is
+ * refused here, before signing (FR-064a). No F7 here: this library's table
+ * is the runner's it ships in, not the target runner's, so a Railpack build
+ * is signed, and zekno's protocol checks keep it from a runner that does not
+ * carry it out (CO7, CL7). `later` holds the pre-deploy command, which no
  * runner carries out yet: it is for tests only.
  */
 export async function createDeployV2(input: {
@@ -132,8 +142,8 @@ export async function createDeployV2(input: {
   expiresAt: Date | null
   routes?: readonly Route[]
   health?: Health | null
+  builds?: readonly Build[]
   later?: {
-    builds?: Build[]
     predeploy?: Predeploy | null
   }
   signer: Signer
@@ -209,6 +219,11 @@ export async function createDeployV2(input: {
     (route) => route.domain,
     "Each domain can appear only once in a deploy."
   )
+  const builds = sortedOnce<Build>(
+    input.builds ?? [],
+    (build) => build.key,
+    "Each build key can appear only once in a deploy."
+  )
   const health = input.health ?? null
   const checks =
     health === null
@@ -241,7 +256,7 @@ export async function createDeployV2(input: {
     compose: input.compose,
     secrets,
     removed,
-    builds: input.later?.builds ?? [],
+    builds,
     predeploy: input.later?.predeploy ?? null,
     health: checks,
     routes,
@@ -351,28 +366,24 @@ export function verifyDeployV2(input: {
     held: input.held,
   })
   if (!checked.ok) return checked
-  const { sealed, write, secrets, keep } = checked.value
+  const { sealed, write, used, secrets, keep } = checked.value
 
   // The next state: the number used, the versions kept, the app at format 2,
-  // and the routes in force and the released domains as they were (core.md, K10b).
-  const nextState: StoredRunnerState = Object.freeze({
-    v: 4 as const,
-    serverId: state.serverId,
-    team: state.team,
-    lastSequence: Object.freeze({
-      ...state.lastSequence,
-      [app]: deploy.sequence,
-    }),
+  // and every other part as it was, its mark among them: the routes in force
+  // and the released domains (core.md, K10b), and the builds kept and the
+  // build under way (specs/016-build-from-source, CO9, CO13).
+  const nextState: StoredRunnerState = freezeDeep({
+    ...state,
+    lastSequence: { ...state.lastSequence, [app]: deploy.sequence },
     secrets,
-    formats: Object.freeze({ ...state.formats, [app]: 2 as const }),
-    routes: freezeDeep(state.routes),
-    released: freezeDeep(state.released),
+    formats: { ...state.formats, [app]: 2 as const },
   })
   const result: VerifiedDeployV2 = Object.freeze({
     deploy,
     signer,
     nextState,
     write,
+    used,
     keep,
   })
   registerVerified(result, sealed)

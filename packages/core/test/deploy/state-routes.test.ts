@@ -1,6 +1,7 @@
 /**
- * The routes and health checks in force in the state marked 4
- * (specs/015-domains-https, contracts/core.md, "The state"): each strict
+ * The routes and health checks in force in the state, marked 5 since
+ * specs/016-build-from-source (contracts/core.md CO13), with the rules of
+ * specs/015-domains-https, contracts/core.md, "The state": each strict
  * rule, with a state that breaks only it. A state that breaks one is refused,
  * never read as having no routes.
  */
@@ -35,7 +36,7 @@ import {
 async function routedState(): Promise<StoredRunnerState> {
   const { server } = await setup()
   const base: StoredRunnerState = {
-    v: 4,
+    v: 5,
     ...initialRunnerState({
       serverId: server.serverId,
       team: server.state.team,
@@ -44,6 +45,8 @@ async function routedState(): Promise<StoredRunnerState> {
     formats: { a: 1, b: 2, c: 2 },
     routes: {},
     released: [],
+    builds: {},
+    building: null,
   }
   return holding(base, {
     b: {
@@ -140,22 +143,40 @@ describe("the health check in force", () => {
     const state = await routedState()
     const { health: _health, ...withoutHealth } = state.routes.b!
     refused({ ...state, routes: { ...state.routes, b: withoutHealth } })
-    // A state marked 4 with no entry at all reads as it did.
+    // A state marked 5 with no entry at all reads as it did.
     const bare = { ...state, routes: {} }
     expect(readRunnerState(JSON.parse(JSON.stringify(bare)))).toEqual(bare)
   })
 
   test("a state marked 2 is read forward with no routes, and so with no health check in force", async () => {
     const state = await routedState()
-    const { routes: _routes, released: _released, ...rest } = state
+    const {
+      routes: _routes,
+      released: _released,
+      builds: _builds,
+      building: _building,
+      ...rest
+    } = state
     const read = readRunnerState({ ...rest, v: 2 })
     expect(read.routes).toEqual({})
-    expect(read).toEqual({ ...rest, v: 4, routes: {}, released: [] })
+    expect(read).toEqual({
+      ...rest,
+      v: 5,
+      routes: {},
+      released: [],
+      builds: {},
+      building: null,
+    })
   })
 
   test("a state marked 3 is read forward with its routes and health checks in force, and an empty list", async () => {
     const state = await routedState()
-    const { released: _released, ...rest } = state
+    const {
+      released: _released,
+      builds: _builds,
+      building: _building,
+      ...rest
+    } = state
     const read = readRunnerState(JSON.parse(JSON.stringify({ ...rest, v: 3 })))
     expect(read).toEqual(state)
     // An entry without its health check is refused in mark 3 too.

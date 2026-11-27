@@ -31,6 +31,12 @@ export type ListedSecrets = {
   readonly sealed: readonly SealedSecret[]
   /** The supplied records, each listed and verified, in name order. */
   readonly write: readonly SecretRecord[]
+  /**
+   * Every record K13 verified, supplied or held, in name order: what
+   * `stillAllowed` verifies again against a later team list
+   * (specs/016-build-from-source, contracts/core.md CO9; FR-044).
+   */
+  readonly used: readonly SecretRecord[]
   /** Every secret entry of the state after the deploy. */
   readonly secrets: StoredRunnerState["secrets"]
   /** The hashes of every live secret of the app after the deploy, sorted. */
@@ -119,6 +125,7 @@ export function checkListedSecrets(input: {
     verifySecret({ record, trust: state.team, serverId: state.serverId, app })
   const sealed: SealedSecret[] = []
   const write: SecretRecord[] = []
+  const used: SecretRecord[] = []
   for (const listing of deploy.secrets) {
     const given = supplied.data.filter(
       (record) => record.sealed.name === listing.name
@@ -156,6 +163,7 @@ export function checkListedSecrets(input: {
       }
       sealed.push(checked.value.sealed)
       write.push(given[0]!)
+      used.push(given[0]!)
       continue
     }
     // Held: every field of its statement equal to the listing, then verified again now.
@@ -191,6 +199,7 @@ export function checkListedSecrets(input: {
       )
     }
     sealed.push(checked.value.sealed)
+    used.push(record.data)
   }
 
   // K14. What is supplied is exactly what is needed: each record names a listed secret, once.
@@ -220,6 +229,7 @@ export function checkListedSecrets(input: {
   return ok({
     sealed: Object.freeze(sealed),
     write: Object.freeze(write),
+    used: Object.freeze(used),
     secrets: Object.freeze(secrets),
     keep: Object.freeze([...keep].sort()),
   })

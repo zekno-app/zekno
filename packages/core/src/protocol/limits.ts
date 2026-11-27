@@ -101,6 +101,47 @@ export const LIMITS = {
   statementPayloadLength: 4096,
   /** How far after the runner's clock a deploy's expiry may be, in milliseconds. */
   expiryWindowMs: 7 * 24 * 60 * 60 * 1000,
+
+  // Building from source (specs/016-build-from-source, contracts/core.md
+  // CO16), all in one place so later tasks use them and add none. A path in
+  // a pack has no limit of its own here: `splitsAsUstar` (CO5) decides it.
+  // The summary's warning size (100 MB), the last 40 lines and the saved
+  // output's 32 MiB are zekno's own, not core's.
+
+  /** Entries (files and folders) in one build's pack (FR-016; FR-018 refuses more before signing). */
+  packEntries: 50_000,
+  /** One sealed piece as sent: a chunk, compressed and sealed, with room to spare (FR-029a). */
+  sealedPieceBytes: 8 * 1024 * 1024 + 64 * 1024,
+  /** A Railpack build's plan, as bytes (CO1, `builder.plan.size`). */
+  planBytes: 256 * 1024,
+  /** Images a Railpack build's plan may name (CO1, `builder.images`). */
+  railpackImages: 8,
+  /** Pieces one `pack_missing` refusal names: every chunk of a deploy and one plan per build (CO10). */
+  missingPieces: 72,
+  /** Pieces the runner keeps staged, across its apps, before a deploy uses them (FR-028). */
+  stagingBytes: 2 * 1024 * 1024 * 1024,
+  /** Seconds the runner keeps a staged piece (FR-028). */
+  stagingSeconds: 86_400,
+  /** Deploys of one app whose images the runner keeps (CO13, `deploys`). */
+  keptDeploysPerApp: 3,
+  /** Images the runner keeps of one app, and images waiting for removal (CO13, `images` and `drop`). */
+  keptImagesPerApp: 24,
+  /** Bases of one app the runner remembers a fresh build of (CO13, `fresh`). */
+  freshPerApp: 24,
+  /** Base images by digest in one build record (CO14, `bases`). */
+  baseDigestsPerBuild: 16,
+  /** The builder's cache the runner brings it within after each deploy (FR-068). */
+  buildCacheBytes: 10 * 1024 * 1024 * 1024,
+  /** Free disk below which no build starts or goes on; the value check L7 confirms (FR-040). */
+  diskFloorBytes: 2 * 1024 * 1024 * 1024,
+  /** Seconds a build may take when its settings name no time limit (FR-010). */
+  buildDefaultSeconds: 1800,
+  /** Characters of one `build_line` event; the runner cuts a longer line (CO11). */
+  buildLineCharacters: 4096,
+  /** Characters of a `build_error` event's `step`; the runner cuts a longer one (CO11). */
+  buildStepCharacters: 1024,
+  /** Apps one `builds` request may ask about (CO12). */
+  buildsAppsPerRequest: 8,
 } as const
 
 /** Longest base64url text that can encode `bytes` bytes. */

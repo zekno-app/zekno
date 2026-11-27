@@ -70,8 +70,8 @@ function fakeStandIn(
         JSON.stringify(payloadOf(request.input.envelope))
       )![1]!
       if (key !== "git") {
-        images += `zekno.invalid/check-released-${key}:1\n`
-        containers += `zekno-check-released-${key}-web-1 (zekno.invalid/check-released-${key}:1, created)\n`
+        images += `check.invalid/check-released-${key}:1\n`
+        containers += `zekno-check-released-${key}-web-1 (check.invalid/check-released-${key}:1, created)\n`
       }
       return ok(
         [
@@ -80,7 +80,7 @@ function fakeStandIn(
             event: "progress",
             line:
               key === "git"
-                ? "failed to solve: zekno.invalid: no such host"
+                ? "failed to solve: check.invalid: no such host"
                 : "Error response from daemon: no command specified",
           }),
           JSON.stringify({
@@ -143,16 +143,16 @@ describe("observeReleased", () => {
       return payloadOf(request.input.envelope).compose as string
     })
     expect(composes.map((text) => /context: "([^"]+)"/.exec(text)![1])).toEqual(
-      [".", "https://zekno.invalid/repo.git", "../.."]
+      [".", "https://check.invalid/repo.git", "../.."]
     )
     for (const call of calls.filter((item) => item.args.includes(RUNNER)))
       expect(call.args.slice(0, 2)).toEqual(["env", "-i"])
     expect(seen.split("; ")).toEqual([
       `runner 0.1.1 for linux-x64, SHA-256 as ee40f7d recorded, at ${RUNNER}, version {"version":"0.1.1","protocol":3}`,
       "set up for a team made in the run",
-      'context .: start_failed, Compose built the image, Compose\'s last line "Error response from daemon: no command specified", images after: zekno.invalid/check-released-dot:1, containers after: zekno-check-released-dot-web-1 (zekno.invalid/check-released-dot:1, created), state: number 1 used',
-      'context https://zekno.invalid/repo.git: start_failed, no image built, Compose\'s last line "failed to solve: zekno.invalid: no such host", images after: none new, containers after: none new, state: no number used',
-      'context ../..: start_failed, Compose built the image, Compose\'s last line "Error response from daemon: no command specified", images after: zekno.invalid/check-released-parent:1, containers after: zekno-check-released-parent-web-1 (zekno.invalid/check-released-parent:1, created), state: number 1 used',
+      'context .: start_failed, Compose built the image, Compose\'s last line "Error response from daemon: no command specified", images after: check.invalid/check-released-dot:1, containers after: zekno-check-released-dot-web-1 (check.invalid/check-released-dot:1, created), state: number 1 used',
+      'context https://check.invalid/repo.git: start_failed, no image built, Compose\'s last line "failed to solve: check.invalid: no such host", images after: none new, containers after: none new, state: no number used',
+      'context ../..: start_failed, Compose built the image, Compose\'s last line "Error response from daemon: no command specified", images after: check.invalid/check-released-parent:1, containers after: zekno-check-released-parent-web-1 (check.invalid/check-released-parent:1, created), state: number 1 used',
     ])
   })
 
@@ -252,8 +252,8 @@ describe("cleanUpReleased", () => {
       ["docker", "rm", "--force", "zekno-check-released-dot-web-1"],
       ["docker", "network", "rm", "zekno-check-released-dot_default"],
       ["docker", "network", "rm", "zekno-check-released-git_default"],
-      ["docker", "image", "rm", "zekno.invalid/check-released-dot:1"],
-      ["docker", "image", "rm", "zekno.invalid/check-released-git:1"],
+      ["docker", "image", "rm", "check.invalid/check-released-dot:1"],
+      ["docker", "image", "rm", "check.invalid/check-released-git:1"],
       ["rm", "-rf", ROOT],
     ])
     expect(calls.find((call) => call.args.includes("history"))!.args).toContain(

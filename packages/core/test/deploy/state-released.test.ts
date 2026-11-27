@@ -1,6 +1,7 @@
 /**
  * The released domains whose certificate is still to delete, in the state
- * marked 4 (specs/015-domains-https, contracts/core.md, "The state"; runner.md,
+ * marked 4 and since specs/016-build-from-source (contracts/core.md CO13)
+ * marked 5 (specs/015-domains-https, contracts/core.md, "The state"; runner.md,
  * RN10): the schema's rules, each with a state that breaks only it; the
  * list kept right by `withAppRoutes` in the same write that releases or
  * routes a domain; `withoutReleased` once a deletion worked; and K15's count,
@@ -28,7 +29,7 @@ import { appRoutes, holding, route } from "../support/routes"
 async function listed(): Promise<StoredRunnerState> {
   const { server } = await setup()
   const base: StoredRunnerState = {
-    v: 4,
+    v: 5,
     ...initialRunnerState({
       serverId: server.serverId,
       team: server.state.team,
@@ -37,6 +38,8 @@ async function listed(): Promise<StoredRunnerState> {
     formats: {},
     routes: {},
     released: ["old.example.com", "x.example.com"],
+    builds: {},
+    building: null,
   }
   return deepFreeze(
     holding(base, {
@@ -58,7 +61,7 @@ describe('the list in the state (core.md, "The state")', () => {
     expect(readRunnerState(empty)).toEqual(empty)
   })
 
-  test("mark 4 has the list: without it, or with anything but a list, the state is refused", async () => {
+  test("mark 5 has the list, as mark 4 did: without it, or with anything but a list, the state is refused", async () => {
     const state = await listed()
     const { released: _released, ...without } = state
     refused(without)

@@ -13,6 +13,7 @@ import {
 import type { Signer } from "../../src/crypto/keys"
 import type { SecretRecord } from "../../src/secrets/secret-record"
 import { COMPOSE, setSecret, setup } from "./helpers"
+import { composeFor } from "./payload-v2"
 
 /** The runner's clock in every test that does not set its own. */
 export const NOW = new Date("2026-11-20T10:00:00.000Z")
@@ -55,7 +56,9 @@ export const signV2 = (payload: unknown, signer: Signer) =>
 /**
  * Sets `values` for the app (each at `version`) and signs a deploy made
  * against `previous` that lists them, with `statements` and `removals` too,
- * and the `routes`, `health` and `later` fields given.
+ * and the `routes`, `health`, `builds` and `later` fields given. With builds,
+ * the Compose text runs each build's image, as zekno writes it (CO2), unless
+ * `compose` is given.
  */
 export async function deployV2(
   w: World,
@@ -67,8 +70,10 @@ export async function deployV2(
     statements?: readonly Envelope[]
     removals?: readonly Envelope[]
     expiresAt?: Date | null
+    compose?: string
     routes?: Parameters<typeof createDeployV2>[0]["routes"]
     health?: Parameters<typeof createDeployV2>[0]["health"]
+    builds?: Parameters<typeof createDeployV2>[0]["builds"]
     later?: Parameters<typeof createDeployV2>[0]["later"]
   } = {}
 ): Promise<{ envelope: Envelope; records: SecretRecord[] }> {
@@ -92,7 +97,9 @@ export async function deployV2(
     serverId: w.server.serverId,
     app,
     previous: input.previous ?? 0,
-    compose: COMPOSE,
+    compose:
+      input.compose ??
+      (input.builds?.length ? composeFor(app, input.builds) : COMPOSE),
     statements: [
       ...records.map((record) => record.envelope),
       ...(input.statements ?? []),
@@ -101,6 +108,7 @@ export async function deployV2(
     expiresAt: input.expiresAt ?? null,
     routes: input.routes,
     health: input.health,
+    builds: input.builds,
     later: input.later,
     signer: w.founder.signer,
     now: NOW,

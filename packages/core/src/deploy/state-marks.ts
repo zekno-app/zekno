@@ -1,6 +1,6 @@
 /**
  * The state of version 1 and the strict rules of the older marks, which
- * `state.ts` reads forward to mark 4. It imports nothing from `state.ts`.
+ * `state.ts` reads forward to mark 5. It imports nothing from `state.ts`.
  */
 import { z } from "zod"
 
@@ -13,6 +13,7 @@ import { TeamTrustSchema, type TeamTrust } from "../team/roster"
 import {
   healthBytes,
   HealthInForceSchema,
+  isRoutableDomain,
   RouteSchema,
   type Health,
   type Route,
@@ -97,11 +98,13 @@ export function readVersionOneState(state: RunnerState): RunnerState {
  * state.md, as specs/015-domains-https/contracts/core.md changes it). It is
  * today's state with a mark, each app's message format and, since feature
  * 015, the routes and the health check in force: mark 3, as runner
- * 0.1.1-dev.1 writes it; and the released domains whose certificate is not
- * yet known to be deleted: mark 4. Any field runner 0.1.0 does not know makes
- * its strict read fail, so an older runner put back after this one has
- * written refuses everything; a runner of feature 014 refuses mark 3 too, and
- * runner 0.1.1-dev.1 refuses mark 4. No released runner wrote mark 3 before
+ * 0.1.1-dev.1 writes it; the released domains whose certificate is not yet
+ * known to be deleted: mark 4, as runner 0.1.1 writes it; and, since feature
+ * 016, the builds kept and the build in progress: mark 5 (`state.ts`). Any
+ * field runner 0.1.0 does not know makes its strict read fail, so an older
+ * runner put back after this one has written refuses everything; a runner of
+ * feature 014 refuses mark 3 too, runner 0.1.1-dev.1 refuses mark 4, and
+ * runner 0.1.1 refuses mark 5 (FR-085). No released runner wrote mark 3 before
  * an app's entry held its health check, so a mark-3 entry without one is
  * refused like any other field missing.
  */
@@ -250,6 +253,25 @@ export function releasedHold(state: {
     inForce.size + state.released.length <= LIMITS.domainsPerServer
   )
 }
+
+/** The fields of mark 4: mark 3's, and the released domains whose certificate is still to delete. */
+export const markFour = {
+  ...markThree,
+  released: z
+    .array(z.string().refine(isRoutableDomain))
+    .max(LIMITS.domainsPerServer),
+}
+
+/**
+ * The state of runner 0.1.1, marked 4: read by its strict rules, then given
+ * no builds and no build in progress (specs/016-build-from-source,
+ * contracts/core.md CO13).
+ */
+export const MarkFourSchema = z
+  .strictObject({ v: z.literal(4), ...markFour })
+  .refine((state) => sameKeys(state.formats, state.lastSequence))
+  .refine(routesHold)
+  .refine(releasedHold)
 
 /** `value` read by an older mark's strict schema, or `CoreError`. */
 export function readOlderMark<T>(schema: z.ZodType<T>, value: unknown): T {

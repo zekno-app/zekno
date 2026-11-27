@@ -13,6 +13,11 @@ import {
   RouteSchema,
 } from "../deploy/routes-and-checks"
 import { APP_NAME } from "../secrets/secrets"
+import {
+  BuildErrorEventSchema,
+  BuildEventSchema,
+  BuildLineEventSchema,
+} from "./build-messages"
 import { LIMITS } from "./limits"
 import {
   atMost,
@@ -25,7 +30,15 @@ import { RUNNER_VERSION_PATTERN } from "./version"
 
 /**
  * The protocol this version of the messages belongs to. A runner reports it
- * with its version. 5 (specs/015-domains-https, contracts/core.md, "The
+ * with its version. 6 (specs/016-build-from-source, contracts/core.md CO17;
+ * FR-081, FR-084): the runner builds with a Dockerfile, answers `pack`,
+ * `builds` and `builder`, and may answer `build_failed` and CO10's refusals
+ * (`pack_missing`, `pack_mismatch`, `low_disk`, `docker_too_old`,
+ * `no_build_plugin`) to a `deploy`, which also sends the events `build`,
+ * `build_line` and `build_error`. The `version` answer stays the strict
+ * `{ version, protocol }`, so every released zekno still reads it; zekno's
+ * thresholds (`BUILD_PROTOCOL` and the others) are the CLI's, not core's.
+ * 5 (specs/015-domains-https, contracts/core.md, "The
  * protocol"; security review, lead A10): the runner stops waiting for
  * `docker compose up` at a time limit, and its report of a version-2
  * `deploy` may carry `startLimit` with `start_failed`; nothing else changes.
@@ -36,7 +49,7 @@ import { RUNNER_VERSION_PATTERN } from "./version"
  * `previous`, `expiresAt` and secrets by version, and answers `deploy` and
  * `records`. Runner 0.1.0 speaks 2.
  */
-export const RUNNER_PROTOCOL = 5
+export const RUNNER_PROTOCOL = 6
 
 /** Runner to CLI: which runner this is. */
 export const RunnerVersionSchema = z.strictObject({
@@ -58,6 +71,13 @@ export const SESSION_COMMANDS = [
   "records",
   // Feature 015: makes the proxy match the routes in force. Only inside a session too.
   "proxy",
+  // Feature 016 (contracts/core.md CO12): stages one sealed piece of a deploy;
+  // says what the runner keeps of each app's builds; says what the server can
+  // build with. Only inside a session too; a runner below protocol 6 answers
+  // each `invalid_request`.
+  "pack",
+  "builds",
+  "builder",
 ] as const
 export type SessionCommand = (typeof SESSION_COMMANDS)[number]
 
@@ -99,10 +119,18 @@ export const HealthEventSchema = z.strictObject({
 })
 export type HealthEvent = z.infer<typeof HealthEventSchema>
 
+/**
+ * Runner to CLI: one event. `build`, `build_line` and `build_error` (protocol
+ * 6, CO11) come during `deploy`, beside `progress` and `health`; their
+ * schemas are in `build-messages.ts`.
+ */
 export const SessionEventSchema = z.discriminatedUnion("event", [
   ProgressEventSchema,
   LogEventSchema,
   HealthEventSchema,
+  BuildEventSchema,
+  BuildLineEventSchema,
+  BuildErrorEventSchema,
 ])
 export type SessionEvent = z.infer<typeof SessionEventSchema>
 
@@ -140,13 +168,24 @@ export const SESSION_FRAME_BYTES: Readonly<Record<SessionCommand, number>> = {
   // domains and 256 KiB of health checks more: about 2.6 MiB.
   status: 4 * MiB,
   // As apply: a progress event, at most about 24 KiB written out, a health
-  // event, or a report.
+  // event, or a report. Protocol 6 (CO11): a build event, a build_line (as a
+  // progress event), or a build_error, a step of 1,024 characters and an
+  // error of 4,096, at most about 30 KiB written out. It stays equal to
+  // apply's.
   deploy: 64 * KiB,
   // At most 256 secret statements of about 0.8 KiB each: about 0.2 MiB. The
   // design allows 8 MiB; every bound here stays within an eighth of a message.
   records: 4 * MiB,
   // The proxy's state, or a report: well under 1 KiB.
   proxy: 4 * KiB,
+  // Protocol 6 (CO12, CO19). The fingerprint staged, or a refusal: well under
+  // 1 KiB.
+  pack: 4 * KiB,
+  // At most 8 apps of about 42 KB each: about 0.34 MB; with no input, at
+  // most 1,024 app names: about 67 KB.
+  builds: 1 * MiB,
+  // Versions and numbers only: well under 1 KiB.
+  builder: 16 * KiB,
 }
 
 export const SERVICE_STATES = [
@@ -300,3 +339,24 @@ export const RunnerProxySchema = z.union([
   ),
 ])
 export type RunnerProxy = z.infer<typeof RunnerProxySchema>
+
+/**
+ * Runner to CLI: the answer to `pack` (specs/016-build-from-source,
+ * contracts/core.md CO12; FR-028, FR-029a): the fingerprint of the piece it
+ * staged, or a report with outcome `refused`, as for every command: a reason
+ * of the gate (K4 to K10), `pack_mismatch` (a piece not listed or over its
+ * bound), `too_large` (staging past `LIMITS.stagingBytes`), `low_disk` (the
+ * piece would bring free disk below the floor) or `busy`. Never `missing` or
+ * `building`, which only a `deploy` answer carries (CO10), so the longest
+ * answer stays well within its 4 KiB frame.
+ */
+export const RunnerPackSchema = z.union([
+  z.strictObject({ staged: z.string().regex(/^[0-9a-f]{64}$/) }),
+  RunnerReportSchema.refine(
+    (report) =>
+      report.outcome === "refused" &&
+      report.missing === undefined &&
+      report.building === undefined
+  ),
+])
+export type RunnerPack = z.infer<typeof RunnerPackSchema>

@@ -52,6 +52,18 @@ export const DEPLOY_V2_REFUSALS = [
   "expired",
   /** The deploy names a domain another app on this server holds (specs/015-domains-https, contracts/core.md, K10b). */
   "domain_taken",
+  /**
+   * A build not kept has a piece or a plan piece the runner has not staged;
+   * the report's `missing` names them (specs/016-build-from-source,
+   * contracts/core.md CO10).
+   */
+  "pack_missing",
+  /**
+   * A piece or a pack is not what the deploy signed: not listed, over its
+   * bound, does not open, opens to another length, not in the one form, or
+   * its fingerprint differs (CO10, FR-049a).
+   */
+  "pack_mismatch",
 ] as const
 export type DeployV2Refusal =
   DeployRefusal | (typeof DEPLOY_V2_REFUSALS)[number]

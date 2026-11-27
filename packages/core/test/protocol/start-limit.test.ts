@@ -14,8 +14,8 @@ const { parseMessage, RUNNER_OUTCOMES, RunnerReportSchema } = core
 const reads = (report: unknown) => parseMessage(RunnerReportSchema, report).ok
 
 describe("startLimit (protocol 5)", () => {
-  test("this library speaks protocol 5", () => {
-    expect(core.RUNNER_PROTOCOL).toBe(5)
+  test("this library speaks protocol 5 or later (6 since building from source, messages-v2.test.ts)", () => {
+    expect(core.RUNNER_PROTOCOL).toBeGreaterThanOrEqual(5)
   })
 
   test("start_failed reads with a limit, and without one as before", () => {
@@ -42,6 +42,10 @@ describe("startLimit (protocol 5)", () => {
           : {}),
         ...(outcome === "unhealthy"
           ? { health: { service: "web", http: true } }
+          : {}),
+        // Protocol 6 (specs/016-build-from-source, CO10): `build` comes exactly with `build_failed`.
+        ...(outcome === "build_failed"
+          ? { build: { key: "a".repeat(64), reason: "step_failed" } }
           : {}),
       }
       expect([report, reads(report)]).toEqual([report, false])

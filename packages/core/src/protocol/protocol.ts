@@ -3,6 +3,7 @@ import { z } from "zod"
 import { fromUtf8, utf8 } from "../crypto/encoding"
 import { EnvelopeSchema } from "../crypto/envelope"
 import { isKey, serverIdOf, type ServerPublicKey } from "../crypto/keys"
+import { buildFieldsFit, reportBuildFields } from "./build-messages"
 import { LIMITS } from "./limits"
 import {
   DEPLOY_REFUSALS,
@@ -175,6 +176,12 @@ export const RUNNER_REFUSALS = [
   "not_set_up",
   "already_set_up",
   "busy",
+  // Protocol 6 (specs/016-build-from-source, contracts/core.md CO10): free
+  // disk below the floor (`disk`); Docker Engine or buildx below the floor
+  // (`docker`); no buildx, or a builder whose driver is not `docker`.
+  "low_disk",
+  "docker_too_old",
+  "no_build_plugin",
 ] as const
 
 export const RUNNER_OUTCOMES = [
@@ -187,6 +194,9 @@ export const RUNNER_OUTCOMES = [
   // service was not healthy in time.
   "routes_failed",
   "unhealthy",
+  // Protocol 6 (specs/016-build-from-source, contracts/core.md CO10): a build
+  // failed or was stopped after the number was used (`build`).
+  "build_failed",
 ] as const
 
 /**
@@ -236,7 +246,9 @@ const START_LIMIT_SECONDS = 86_400
  * 5) is present exactly when the runner stopped waiting for the app's start
  * at its time limit, which it gives in whole seconds, and only with
  * `start_failed`; a `start_failed` without it failed for another reason.
- * There is no free-text field.
+ * The fields of building from source (protocol 6) come each only with its
+ * reason or outcome (`buildFieldsFit`, CO10); only a `deploy` answer carries
+ * them. There is no free-text field.
  */
 export const RunnerReportSchema = z
   .strictObject({
@@ -254,13 +266,15 @@ export const RunnerReportSchema = z
     routes: RoutesFailureSchema.optional(),
     health: HealthFailureSchema.optional(),
     startLimit: z.number().int().min(1).max(START_LIMIT_SECONDS).optional(),
+    ...reportBuildFields,
   })
   .refine(
     (report) =>
       (report.outcome === "refused") === (report.reason !== undefined) &&
       (report.outcome === "routes_failed") === (report.routes !== undefined) &&
       (report.outcome === "unhealthy") === (report.health !== undefined) &&
-      (report.startLimit === undefined || report.outcome === "start_failed")
+      (report.startLimit === undefined || report.outcome === "start_failed") &&
+      buildFieldsFit(report)
   )
 export type RunnerReport = z.infer<typeof RunnerReportSchema>
 

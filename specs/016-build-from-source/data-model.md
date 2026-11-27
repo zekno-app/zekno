@@ -225,7 +225,7 @@ After a fresh build succeeds, `fresh` records its base key with the deploy's num
 | `reader` | Docker's built-in Dockerfile reader with its version, or the Railpack frontend's digest |
 | `cache` | whether a cached step other than `FROM` was used |
 | `bases` | at most 16 base images, each a reference with a digest, held to a pattern |
-| `arch` | `amd64` or `arm64` |
+| `arch` | `amd64`, `arm64` or `other` (CO10's `Arch`) |
 | `built` | the time |
 
 ### The bounded reasons (FR-031a)

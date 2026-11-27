@@ -262,14 +262,14 @@ describe("the deploys", () => {
   test("ask Compose for a build of ., a git address that cannot resolve, and ../.., each with its own name", () => {
     expect(BUILD_CASES.map((item) => item.context)).toEqual([
       ".",
-      "https://zekno.invalid/repo.git",
+      "https://check.invalid/repo.git",
       "../..",
     ])
     expect(composeText(BUILD_CASES[0]!)).toBe(
       [
         "services:",
         "  web:",
-        '    image: "zekno.invalid/check-released-dot:1"',
+        '    image: "check.invalid/check-released-dot:1"',
         "    pull_policy: never",
         "    build:",
         '      context: "."',
@@ -279,7 +279,7 @@ describe("the deploys", () => {
     )
     expect(INLINE_DOCKERFILE).not.toMatch(/COPY|ADD|RUN/)
     expect(composeText(BUILD_CASES[1]!)).toContain(
-      'context: "https://zekno.invalid/repo.git"'
+      'context: "https://check.invalid/repo.git"'
     )
     expect([
       appOf("dot"),
@@ -288,7 +288,7 @@ describe("the deploys", () => {
       networkOf("dot"),
     ]).toEqual([
       "check-released-dot",
-      "zekno.invalid/check-released-dot:1",
+      "check.invalid/check-released-dot:1",
       "zekno-check-released-dot",
       "zekno-check-released-dot_default",
     ])
@@ -356,12 +356,12 @@ describe("reading the answers", () => {
         code: 0,
         lines: ["Error response from daemon: no command specified"],
         built: true,
-        images: ["zekno.invalid/check-released-dot:1"],
+        images: ["check.invalid/check-released-dot:1"],
         containers: [],
         sequence: "number 1 used",
       })
     ).toBe(
-      'context .: start_failed, Compose built the image, Compose\'s last line "Error response from daemon: no command specified", images after: zekno.invalid/check-released-dot:1, containers after: none new, state: number 1 used'
+      'context .: start_failed, Compose built the image, Compose\'s last line "Error response from daemon: no command specified", images after: check.invalid/check-released-dot:1, containers after: none new, state: number 1 used'
     )
     expect(
       caseWords({

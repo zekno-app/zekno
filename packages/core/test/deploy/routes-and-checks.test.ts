@@ -1,11 +1,12 @@
 /**
  * The pre-deploy command, the health check and routes (contracts/message.md,
  * F31 to F40), with the path and domain rules, read through
- * `readDeployV2Payload`. The pre-deploy command is still a later field: as in
- * later-fields.test.ts, it "passes" when it keeps every rule and this step
- * refuses it, `unsupported_version`. The health check and routes are carried
- * out since feature 015 (specs/015-domains-https, contracts/core.md): they
- * pass when the deploy reads.
+ * `readDeployV2Payload`. The pre-deploy command is still a later field: it
+ * "passes" when it keeps every rule and the carried-out table refuses it,
+ * `unsupported_version` (specs/016-build-from-source, contracts/core.md CO7;
+ * carried-out.test.ts). The health check and routes are carried out since
+ * feature 015 (specs/015-domains-https, contracts/core.md): they pass when
+ * the deploy reads.
  */
 import { describe, expect, test } from "bun:test"
 
@@ -20,7 +21,7 @@ import {
 import { LIMITS } from "../../src/protocol/limits"
 import { KiB, payload } from "../support/payload-v2"
 
-/** A later field that keeps its rules: refused by F7 only. */
+/** A later field that keeps its rules: refused by F7 only, as CO7's `predeploy` row. */
 const LATER = "unsupported_version"
 /** A field this library carries out, keeping its rules: the deploy reads. */
 const PASSES = "read"

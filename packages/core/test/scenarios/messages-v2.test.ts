@@ -132,12 +132,16 @@ describe("P5, P6: the records request and its answer", () => {
 
 describe("P2: the session's commands and the bound of each answer", () => {
   test("deploy and records come after version, and a session request names them", () => {
-    // Feature 015 adds `proxy` after them (specs/015-domains-https, contracts/core.md).
-    expect(SESSION_COMMANDS.slice(-4)).toEqual([
+    // Feature 015 adds `proxy` after them (specs/015-domains-https, contracts/core.md),
+    // and feature 016 `pack`, `builds` and `builder` (specs/016-build-from-source, CO12).
+    expect(SESSION_COMMANDS.slice(-7)).toEqual([
       "version",
       "deploy",
       "records",
       "proxy",
+      "pack",
+      "builds",
+      "builder",
     ])
     for (const command of ["deploy", "records"])
       expect(parseMessage(core.SessionRequestSchema, { command }).ok).toBe(true)
@@ -163,6 +167,55 @@ describe("P2: the session's commands and the bound of each answer", () => {
     }
     expect(parseMessage(core.RunnerRecordsSchema, records.result).ok).toBe(true)
     const wide = "\u0001".repeat(4096)
+    const key = "f".repeat(64)
+    // Protocol 6 (specs/016-build-from-source, CO11, CO19): the events of a
+    // build, the longest of them a `build_error` with a step of 1,024 and an
+    // error of 4,096 control characters, and the longest report of a build.
+    const buildFrames = [
+      { event: "build", key, state: "building" },
+      { event: "build_line", key, line: wide },
+      {
+        event: "build_error",
+        key,
+        step: wide.slice(0, LIMITS.buildStepCharacters),
+        error: wide,
+      },
+      {
+        result: {
+          outcome: "refused",
+          reason: "pack_missing",
+          app: "a".repeat(63),
+          missing: {
+            pieces: Array.from({ length: LIMITS.missingPieces }, (_, n) =>
+              n.toString(16).padStart(64, "0")
+            ),
+            images: Array.from({ length: LIMITS.buildsPerDeploy }, (_, n) => ({
+              key: n.toString(16).padStart(64, "0"),
+              state: "changed",
+            })),
+          },
+        },
+      },
+      {
+        result: {
+          outcome: "build_failed",
+          app: "a".repeat(63),
+          sequence: Number.MAX_SAFE_INTEGER,
+          build: {
+            key,
+            reason: "team_changed",
+            team: { version: 2 ** 53 - 1 },
+          },
+        },
+      },
+    ]
+    for (const frame of buildFrames)
+      expect([frame, parseMessage(core.SessionFrameSchema, frame).ok]).toEqual([
+        frame,
+        true,
+      ])
+    for (const frame of buildFrames.slice(3))
+      expect(parseMessage(RunnerReportSchema, frame.result).ok).toBe(true)
     const deploy = Math.max(
       written({ event: "progress", line: wide }),
       written({
@@ -172,8 +225,10 @@ describe("P2: the session's commands and the bound of each answer", () => {
           app: "a".repeat(63),
           sequence: Number.MAX_SAFE_INTEGER,
         },
-      })
+      }),
+      ...buildFrames.map(written)
     )
+    expect(deploy).toBe(written(buildFrames[2]))
     expect(deploy * 1.5).toBeLessThan(SESSION_FRAME_BYTES.deploy)
     expect(written(records) * 1.5).toBeLessThan(SESSION_FRAME_BYTES.records)
     expect(SESSION_FRAME_BYTES.deploy).toBe(SESSION_FRAME_BYTES.apply)
@@ -181,16 +236,51 @@ describe("P2: the session's commands and the bound of each answer", () => {
       expect(limit).toBeLessThanOrEqual(LIMITS.messageBytes / 8)
   })
 
-  test("P1: this library speaks protocol 5 since the start limit (it was 4 with feature 015, 3 before)", () => {
-    expect(core.RUNNER_PROTOCOL).toBe(5)
+  test("P1: this library speaks protocol 6 since building from source (5 since the start limit, 4 with feature 015, 3 before)", () => {
+    // CO17: the runner builds with a Dockerfile, answers `pack`, `builds`
+    // and `builder`, and may answer `build_failed` and CO10's refusals.
+    expect(core.RUNNER_PROTOCOL).toBe(6)
+  })
+
+  test("P1: the version answer stays the strict { version, protocol }, which every released zekno reads", () => {
+    const answer = { version: "0.1.2-dev.1", protocol: core.RUNNER_PROTOCOL }
+    expect(parseMessage(core.RunnerVersionSchema, answer).ok).toBe(true)
+    for (const message of [
+      { ...answer, builders: [] },
+      { ...answer, builders: ["dockerfile"] },
+      { ...answer, docker: "27.3.1" },
+    ])
+      expect(code(parseMessage(core.RunnerVersionSchema, message))).toBe(
+        "malformed"
+      )
+  })
+
+  test("every frame bound, the three new commands' among them, is at most an eighth of a message", () => {
+    expect(Object.keys(SESSION_FRAME_BYTES).sort()).toEqual(
+      [...SESSION_COMMANDS].sort()
+    )
+    for (const [command, limit] of Object.entries(SESSION_FRAME_BYTES))
+      expect([command, limit <= LIMITS.messageBytes / 8]).toEqual([
+        command,
+        true,
+      ])
   })
 })
 
 describe("P8: the reasons only version 2 has", () => {
   test("a runner's report takes them, and only with refused", () => {
     for (const reason of DEPLOY_V2_REFUSALS) {
+      // Feature 016, CO10: `pack_missing` always carries `missing`.
+      const fields =
+        reason === "pack_missing"
+          ? { missing: { pieces: ["a".repeat(64)], images: [] } }
+          : {}
       expect(
-        parseMessage(RunnerReportSchema, { outcome: "refused", reason }).ok
+        parseMessage(RunnerReportSchema, {
+          outcome: "refused",
+          reason,
+          ...fields,
+        }).ok
       ).toBe(true)
       expect(
         code(
@@ -209,6 +299,9 @@ describe("P8: the reasons only version 2 has", () => {
       "expired",
       // Feature 015, K10b (specs/015-domains-https, contracts/core.md).
       "domain_taken",
+      // Feature 016, CO10 (specs/016-build-from-source, contracts/core.md).
+      "pack_missing",
+      "pack_mismatch",
     ])
     // None of them is a version-1 reason.
     for (const reason of DEPLOY_V2_REFUSALS)
