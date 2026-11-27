@@ -8,6 +8,7 @@
  * session, chooses the format and reads `status` first.
  */
 import {
+  type Build,
   CoreError,
   createDeploy,
   createDeployV2,
@@ -31,7 +32,14 @@ import { C6 } from "../shared/deploy-words"
 import { sameEnvelope } from "../shared/history"
 import type { DeployCallbacks, DeployPlan, DeployResult } from "./deploy"
 import { deployAnswer } from "./deploy-answer"
+import type { SessionBuilds } from "./deploy-build-session"
 import type { Domained } from "./deploy-domains"
+import {
+  type BuildCallbacks,
+  buildRefusal,
+  shownBuilds,
+  watchBuilds,
+} from "./deploy-send-build"
 import { listForDeploy, type Listing } from "./deploy-secrets"
 
 /**
@@ -49,6 +57,13 @@ export type Going = {
   callbacks: DeployCallbacks
   /** What the checks before signing found of the deploy's domains (ops/deploy-domains.ts); the plan carries what is signed. */
   domained?: Pick<Domained, "newDomains" | "overDomains">
+  /**
+   * A deploy that builds (specs/016-build-from-source, contracts/cli.md CL7
+   * steps 8 to 10; ops/deploy-build-session.ts): its builds and the Compose
+   * text that runs their images, made once the listing is. Left out, a
+   * deploy signs what it always signed.
+   */
+  building?: Pick<SessionBuilds, "sign">
 }
 
 /**
@@ -60,14 +75,17 @@ export type Going = {
  */
 const MAX_AHEAD = 1000
 
+/** A deploy the core library would not sign, as today's one sentence says it (CL7), by the library's code. */
+export const notSigned = (code: string): CliError =>
+  new CliError(`The deploy could not be signed (${code}).`)
+
 /** Signs with the member's key. A refusal of the core library is said as one sentence (CL7). */
 function sign<T>(
   plan: DeployPlan,
   work: (signer: Signer) => Promise<T>
 ): Promise<T> {
   return plan.team.withSigner(work).catch((error: unknown) => {
-    if (error instanceof CoreError)
-      throw new CliError(`The deploy could not be signed (${error.code}).`)
+    if (error instanceof CoreError) throw notSigned(error.code)
     throw error
   })
 }
@@ -124,6 +142,12 @@ function answered(going: Going, entry: History[number]): History {
  * stage, and reads the answer through `wait`, which says what a refusal
  * means for the format. Only an answer for this app and this number counts;
  * it is recorded in the history in place of the `sent` entry.
+ *
+ * A deploy that builds (`signed`, its builds; specs/016-build-from-source,
+ * CL7 step 13 and "The answer") hands its build events to
+ * `deploy-send-build.ts`: the build stage, the builder's lines and a failed
+ * build. `build_failed` is recorded as itself, its stage `build_failed`, and
+ * the result carries the failure in `build`.
  */
 async function deliver(
   going: Going,
@@ -134,6 +158,7 @@ async function deliver(
     envelope: Envelope
     at: string
     wait: (answer: Promise<RunnerReport>) => Promise<RunnerReport>
+    signed?: readonly Build[]
   }
 ): Promise<DeployResult> {
   const { session, plan, callbacks } = going
@@ -143,9 +168,21 @@ async function deliver(
     starting = true
     callbacks.stage?.("starting", info)
   }
+  const watch =
+    sending.signed === undefined || plan.build === undefined
+      ? undefined
+      : watchBuilds({
+          plan,
+          info,
+          signed: sending.signed,
+          at: sending.at,
+          // `savedOutput` is the build's own callback (deploy-send-build.ts), carried with the deploy's.
+          callbacks: callbacks as DeployCallbacks & BuildCallbacks,
+        })
   const answer = session.request(sending.command, RunnerReportSchema, {
     input: sending.input,
     onEvent: (event) => {
+      if (watch?.event(event) === true) return
       // The wait for a service's health begins after `up` (specs/015-domains-https, contracts/core.md, "Event"): C2.
       if (event.event === "health") {
         start()
@@ -157,26 +194,47 @@ async function deliver(
     },
   })
   callbacks.stage?.("sent", info)
-  const report = await sending.wait(answer)
+  const report = await sending.wait(answer).catch((error: unknown) => {
+    watch?.discard()
+    throw error
+  })
 
   const outcome = report.outcome
   if (
     !ANSWERED.has(outcome) ||
     report.app !== plan.app ||
-    report.sequence !== info.sequence
+    report.sequence !== info.sequence ||
+    // A build that failed is one this deploy signed; a deploy that builds nothing never answers it.
+    (outcome === "build_failed" &&
+      (watch === undefined || !watch.signs(report.build!.key)))
   ) {
+    watch?.discard()
     throw new CliError(
       "The runner did not answer as expected, so it is not known whether the deploy was accepted."
     )
   }
   const ran = outcome as DeployResult["outcome"]
-  start()
+  // A build that failed never started the app: the stage row ends at the build (CL7, "The answer").
+  if (ran !== "build_failed") start()
   const entry = { envelope: sending.envelope, at: sending.at, outcome: ran }
   plan.team.store.saveHistory(
     plan.server.serverId,
     plan.app,
     answered(going, entry)
   )
+  watch?.answered()
+  if (ran === "build_failed") {
+    const failure = await watch!.failure(report, session)
+    callbacks.stage?.("build_failed", info)
+    return {
+      ...info,
+      build: { builds: info.build?.builds ?? [], failure },
+      outcome: ran,
+      report,
+      mode: session.mode,
+      newDomains: going.domained?.newDomains ?? [],
+    }
+  }
   // `routes_failed` and `unhealthy`: the app started (specs/015-domains-https, CL3), and the stage row says so; their
   // sentence (B16 to B19, C3, C4) is the result's.
   callbacks.stage?.(ran === "start_failed" ? "failed" : "started", info)
@@ -206,6 +264,8 @@ const ANSWERED: ReadonlySet<string> = new Set<DeployResult["outcome"]>([
   "start_failed",
   "routes_failed",
   "unhealthy",
+  // Protocol 6 (specs/016-build-from-source, CL7, "The answer"): the number is used, and the app is as it was.
+  "build_failed",
 ])
 
 /**
@@ -370,7 +430,14 @@ export async function deployVersionTwo(going: Going): Promise<DeployResult> {
   // CL5. Made after the runner's number, read on this connection; no bound (FR-010).
   const previous = accepted
   const sequence = previous + 1
-  const info = infoOf(going, sequence, listed, 2)
+  // specs/016-build-from-source, CL7 step 10: each build's key from the listing, and the text that runs their images.
+  const built = going.building?.sign(listed.statements, sequence)
+  const info: DeployInfo = {
+    ...infoOf(going, sequence, listed, 2),
+    ...(built === undefined || plan.build === undefined
+      ? {}
+      : { build: { builds: shownBuilds(plan.build, built.builds) } }),
+  }
   callbacks.stage?.("checked", info)
 
   const envelope = await sign(plan, (signer) =>
@@ -379,12 +446,13 @@ export async function deployVersionTwo(going: Going): Promise<DeployResult> {
       serverId: server.serverId,
       app,
       previous,
-      compose,
+      compose: built?.compose ?? compose,
       statements: listed.statements,
       removals: listed.removals,
       expiresAt: null,
       routes: plan.routes ?? [],
       health: plan.health ?? null,
+      ...(built === undefined ? {} : { builds: built.builds }),
       signer,
     })
   )
@@ -410,6 +478,12 @@ export async function deployVersionTwo(going: Going): Promise<DeployResult> {
         envelope,
         rollback: plan.rollback === true,
         overDomains: going.domained?.overDomains === true,
+      }).catch((error: unknown) => {
+        // A deploy that builds: F11 from a runner that cannot read it (deploy-send-build.ts).
+        throw built === undefined
+          ? error
+          : buildRefusal(error, session.runner, server.name)
       }),
+    ...(built === undefined ? {} : { signed: built.builds }),
   })
 }

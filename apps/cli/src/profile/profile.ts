@@ -95,7 +95,10 @@ export type SecretStore = z.infer<typeof SecretStoreSchema>
  * of those are stored beside it. `sent` means no answer was recorded.
  * `routes_failed` and `unhealthy` are protocol 4's outcomes, recorded as
  * themselves (specs/015-domains-https, contracts/cli.md, CL3): a deploy that
- * was accepted, and is the app's current one.
+ * was accepted, and is the app's current one. `build_failed` is protocol 6's
+ * (specs/016-build-from-source, contracts/cli.md CL7, "The answer"; FR-065):
+ * recorded as itself, and read as a deploy that did not start. A zekno from
+ * before it calls a history holding it damaged (CL13).
  */
 const HistorySchema = z.array(
   z.strictObject({
@@ -107,6 +110,7 @@ const HistorySchema = z.array(
       "start_failed",
       "routes_failed",
       "unhealthy",
+      "build_failed",
     ]),
   })
 )

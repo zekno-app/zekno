@@ -25,6 +25,8 @@ import {
 import { listsExactly } from "../project/file"
 import { shownFile, shownPath } from "../project/shown"
 import { sanitize } from "../server/sanitize"
+import { buildStop } from "./build-faults"
+import { checkReach } from "./build-reach"
 import { checkSettings, isSettings } from "./schema"
 import type { SettingsFault, SettingsRead } from "./types"
 import { SETTINGS_BYTES, SETTINGS_FILE } from "./values"
@@ -45,9 +47,15 @@ export { SETTINGS_BYTES, SETTINGS_FILE } from "./values"
 export const isSettingsFile = (path: string): boolean =>
   path.split("/").at(-1) === SETTINGS_FILE
 
-/** A fault of a settings file as the sentence a person reads: SR's, `notSettings`, or SL's two. */
+/**
+ * A fault of a settings file as the sentence a person reads: SR's,
+ * `notSettings`, or SL's two; a fault of a build, its line's id until the
+ * words tasks (specs/016-build-from-source, FR-092).
+ */
 export function faultSentence(fault: SettingsFault, file: string): string {
   switch (fault.kind) {
+    case "build":
+      return buildStop(fault.fault, file).message
     case "read":
       return fault.sentence
     case "form":
@@ -179,7 +187,13 @@ export function readSettingsFile(
       throw new CliError(SR4(shown))
     }
     const checked = checkSettings(text, shown)
-    if (!isSettings(checked)) throw new CliError(faultSentence(checked, shown))
+    if (!isSettings(checked))
+      throw checked.kind === "build"
+        ? buildStop(checked.fault, shown)
+        : new CliError(faultSentence(checked, shown))
+    // specs/016-build-from-source, CL1, "Reading": the reach of each root needs the disk, so it comes right after the schema (C22, C23).
+    const beyond = checkReach(read.path, checked)
+    if (beyond !== undefined) throw buildStop(beyond, shown)
     return {
       path: read.path,
       shown,

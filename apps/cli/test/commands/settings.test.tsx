@@ -24,9 +24,7 @@ import {
   CS10,
   CS13,
   CS14,
-  CS15,
   CS2,
-  CS5,
   CS6,
   IN1_RULE,
   IN4,
@@ -653,10 +651,11 @@ describe("zekno settings set and unset (T051)", () => {
       out: [],
       err: [`Unexpected "extra" after \`zekno settings set\`.${HELP_LINE}`],
     })
+    // specs/016-build-from-source, CL1: no such setting is G18, by its id until the words tasks (CS5 changed, plan item 21 (a)).
     expect(await piped(m, "settings", "set", "web.memroy", "1g")).toEqual({
       code: 2,
       out: [],
-      err: [CS5],
+      err: ["G18"],
     })
     // Domains are a setting since specs/015-domains-https (CL1); replicas are still a later one.
     expect(await piped(m, "settings", "set", "web.replicas", "2")).toEqual({
@@ -682,10 +681,11 @@ describe("zekno settings set and unset (T051)", () => {
       out: ["web · memory limit is 1g already. Nothing was written."],
       err: [],
     })
+    // specs/016-build-from-source, CL1: CS15 became G16, by its id until the words tasks.
     expect(await piped(m, "settings", "unset", "web.image")).toEqual({
       code: 2,
       out: [],
-      err: [CS15],
+      err: ["G16"],
     })
     expect(await piped(m, "settings", "unset", "worker.memory")).toEqual({
       code: 0,

@@ -3,10 +3,12 @@ import {
   prepareDeploy,
   prepareRollback,
   sendDeploy,
+  type DeployCallbacks,
   type DeployPlan,
   type Where,
 } from "../ops/deploy"
 import { httpsAfter } from "../ops/deploy-https"
+import type { BuildCallbacks } from "../ops/deploy-send-build"
 import { shownFile } from "../project/shown"
 import { sanitize } from "../server/sanitize"
 import { DP3 } from "../settings/words"
@@ -67,7 +69,12 @@ export async function send(
       // Only a deploy with a domain or a health check calls these (CL7): a view without them is every other deploy's.
       pointed: (domain, address) => view.pointed?.(domain, address),
       health: (service) => view.health?.(service),
-    })
+      // specs/016-build-from-source, CL7 step 13: at a terminal the builder's lines are kept for `zekno logs --build`
+      // (CL9); with no terminal, and with `--json`, each goes to standard error as it comes (D17) and nothing is saved.
+      ...(deps.ui.asks && options.json !== true
+        ? { savedOutput: { home: deps.home } }
+        : {}),
+    } satisfies DeployCallbacks & BuildCallbacks)
   } catch (error) {
     // The stage it stopped at stays on the screen, and the reason is said below it.
     await view.end({ outcome: "error" })
@@ -115,13 +122,19 @@ export function fromRow(
   }
 }
 
+/**
+ * `fresh`: `--fresh`, a fresh build of every built service
+ * (specs/016-build-from-source, contracts/cli.md CL7 and CL12), handed to
+ * the deploy's plan for the operation to sign (tasks T126, T129).
+ */
 export async function deploy(
   deps: Deps,
-  options: Options & { file?: string; skipDnsCheck?: boolean }
+  options: Options & { file?: string; skipDnsCheck?: boolean; fresh?: boolean }
 ): Promise<number> {
   const plan = {
     ...(await prepareDeploy(deps, options)),
     skipDnsCheck: options.skipDnsCheck === true,
+    fresh: options.fresh === true,
   }
   const start: DeployStart = {
     app: plan.app,

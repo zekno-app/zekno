@@ -57,11 +57,13 @@ function stepLabel(home: string, server: string | undefined): string {
  * `zekno doctor` (mock-up 5): every check of this machine and of each server,
  * or of `--server` only, then the report, or one JSON object with `--json`.
  * It never asks anything and changes nothing. Exit status 0 when no check is
- * a problem, 1 otherwise: a warning does not fail it.
+ * a problem, 1 otherwise: a warning does not fail it. `builds`: `--builds`,
+ * the build checks of every server (specs/016-build-from-source, CL9),
+ * taken here and read once those checks exist (tasks T136).
  */
 export async function doctor(
   deps: Deps,
-  options: { server?: string; json?: boolean }
+  options: { server?: string; json?: boolean; builds?: boolean }
 ): Promise<number> {
   const report = await deps.ui.step(stepLabel(deps.home, options.server), () =>
     runDoctor(deps, { server: options.server })

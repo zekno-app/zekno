@@ -2,15 +2,11 @@
  * One change to an app's settings (specs/010-app-settings, data-model.md, "A
  * change"; contracts/commands.md, `set` and `unset`; tasks T018): which
  * setting a name is, the settings with one setting changed, the refusals
- * with their statuses, and how values read.
+ * with their statuses. How values read is change-shown.test.ts's.
  */
 import { describe, expect, test } from "bun:test"
 
-import {
-  applyChange,
-  parseSettingPath,
-  shownValue,
-} from "../../src/settings/change"
+import { applyChange, parseSettingPath } from "../../src/settings/change"
 import { settingsText } from "../../src/settings/text"
 import type {
   Change,
@@ -18,6 +14,7 @@ import type {
   SettingPath,
   Settings,
 } from "../../src/settings/types"
+import { BuildValueRefused } from "../../src/shared/build-lines"
 import { DESIGN_FILE, DESIGN_SETTINGS } from "../support/settings-files"
 
 /** The change, or the test fails with the refusal. */
@@ -40,6 +37,17 @@ function refusal(settings: Settings, path: string, value: string | undefined) {
   const got = applyChange(settings, parsed, value)
   if (!("refused" in got)) throw new Error("expected a refusal")
   return got
+}
+
+/** The id of the line a refused setting holds, or the test fails. */
+function refusedId(work: () => unknown): string {
+  try {
+    work()
+  } catch (error) {
+    if (error instanceof BuildValueRefused) return error.line.id
+    throw error
+  }
+  throw new Error("nothing was refused")
 }
 
 const web = (settings: Settings): ServiceSettings =>
@@ -87,8 +95,7 @@ describe("parseSettingPath (contracts/commands.md's table)", () => {
 
   test("a later setting gives its kind, with or without its section", () => {
     // Domains and the health check are settings since specs/015-domains-https (CL1): see change-routes.test.ts.
-    expect(parseSettingPath("web.build")).toEqual({ later: "build" })
-    expect(parseSettingPath("web.source.build")).toEqual({ later: "build" })
+    // A build is no later setting since specs/016-build-from-source: `web.build` is G19 (build-change.test.ts).
     expect(parseSettingPath("web.predeploy")).toEqual({ later: "predeploy" })
     expect(parseSettingPath("web.replicas")).toEqual({ later: "replicas" })
     expect(parseSettingPath("web.deploy.replicas")).toEqual({
@@ -96,6 +103,7 @@ describe("parseSettingPath (contracts/commands.md's table)", () => {
     })
   })
 
+  // specs/016-build-from-source, CL1: no such setting is G18, thrown with its line, exit status 2 (plan item 21 (a)).
   test("anything else is no such setting", () => {
     for (const text of [
       "web.memroy",
@@ -119,7 +127,10 @@ describe("parseSettingPath (contracts/commands.md's table)", () => {
       "",
       "...",
     ])
-      expect([text, parseSettingPath(text)]).toEqual([text, { unknown: true }])
+      expect([text, refusedId(() => parseSettingPath(text))]).toEqual([
+        text,
+        "G18",
+      ])
   })
 
   test("a service name is kept as typed; it is said only once it passes its rule (CS4)", () => {
@@ -258,10 +269,12 @@ describe("applyChange on design.md's settings", () => {
     expect(settingsText(noVolumes)).not.toContain("volumes")
   })
 
-  test("CS15: the image cannot be unset", () => {
+  // specs/016-build-from-source, CL1: CS15 became G16, said by its id until the words tasks (FR-092), for apps that do not build too.
+  test("G16: the image of a service with no build cannot be unset", () => {
     expect(refusal(DESIGN_SETTINGS, "web.image", undefined)).toEqual({
-      refused: "A service needs an image, so source.image cannot be unset.",
+      refused: "G16",
       status: 2,
+      line: { id: "G16", service: "web" },
     })
   })
 
@@ -419,76 +432,6 @@ describe("applyChange on design.md's settings", () => {
     expect(refused).toEqual({
       refused:
         "That change cannot be written. zekno.app.json is larger than the 64 KiB a settings file may be.",
-      status: 2,
-    })
-  })
-})
-
-describe("how a value reads (contracts/commands.md and contracts/app-screen.md, Words)", () => {
-  test("set values, and the words of a setting left out", () => {
-    const read = (path: SettingPath) => shownValue(path, DESIGN_SETTINGS)
-    expect(read({ service: "web", key: "memory" })).toBe("1g")
-    expect(read({ service: "web", key: "restart" })).toBe("on failure")
-    expect(read({ service: "worker", key: "restart" })).toBe("always")
-    expect(read({ service: "worker", key: "memory" })).toBe("no limit")
-    expect(read({ service: "worker", key: "cpus" })).toBe("no limit")
-    expect(read({ service: "worker", key: "port" })).toBe("none")
-    expect(read({ service: "web", key: "publish" })).toBe("not published")
-    expect(read({ service: "web", key: "secrets" })).toBe(
-      "DATABASE_URL, SESSION_KEY"
-    )
-    expect(read({ service: "web", key: "plain", name: "NODE_ENV" })).toBe(
-      "production"
-    )
-    expect(read({ service: "web", key: "plain", name: "NOPE" })).toBe("none")
-    expect(read({ service: "web", key: "volume", name: "uploads" })).toBe(
-      "/data/uploads"
-    )
-    expect(read({ service: "web", key: "volume", name: "nope" })).toBe("none")
-    expect(read({ service: "nope", key: "start" })).toBe("the image's own")
-  })
-
-  test("the labels and values of a change: 512m to 1g, 1g to no limit, on-failure reads on failure", () => {
-    const at512 = change(DESIGN_SETTINGS, "web.memory", "512m")
-    const to1g = change(at512.settings, "web.memory", "1g")
-    expect([to1g.label, to1g.now, to1g.next]).toEqual([
-      "memory limit",
-      "512m",
-      "1g",
-    ])
-    const unset = change(DESIGN_SETTINGS, "web.memory", undefined)
-    expect([unset.label, unset.now, unset.next]).toEqual([
-      "memory limit",
-      "1g",
-      "no limit",
-    ])
-    const restart = change(DESIGN_SETTINGS, "worker.restart", "on-failure")
-    expect([restart.label, restart.now, restart.next]).toEqual([
-      "restart rule",
-      "always",
-      "on failure",
-    ])
-    expect(change(DESIGN_SETTINGS, "web.plain.NODE_ENV", "").next).toBe('""')
-    expect(change(DESIGN_SETTINGS, "web.volumes.uploads", "/x").label).toBe(
-      "volume uploads"
-    )
-    expect(change(DESIGN_SETTINGS, "web.plain.NODE_ENV", "x").label).toBe(
-      "NODE_ENV"
-    )
-  })
-
-  test("a value is cleaned before it is shown", () => {
-    // No file or change can hold U+202E any more (security review S2); settings made in memory still never draw it.
-    const settings: Settings = {
-      version: 1,
-      services: [["web", { image: "nginx:1.27", plain: [["X", "a\u202eb"]] }]],
-    }
-    expect(
-      shownValue({ service: "web", key: "plain", name: "X" }, settings)
-    ).toBe("ab")
-    expect(refusal(DESIGN_SETTINGS, "web.plain.X", "a\u202eb")).toEqual({
-      refused:
-        "That is not a value zekno can write. Use no invisible character, such as a zero-width space or a right-to-left mark.",
       status: 2,
     })
   })

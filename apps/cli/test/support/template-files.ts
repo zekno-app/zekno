@@ -9,8 +9,7 @@
  *
  * The expected sentences are copied from the contract, not from the code.
  */
-import type { ServiceSettings } from "../../src/settings/types"
-import type { Template } from "../../src/templates/types"
+import type { Template, TemplateService } from "../../src/templates/types"
 import { lineOf } from "./settings-files"
 import { FIRST_SET, FIRST_TEMPLATES } from "./template-first-set"
 
@@ -33,7 +32,7 @@ const DB_SERVICE = {
   variables: { secrets: ["DB_PASSWORD"], plain: { DB_USER: "app" } },
   volumes: { data: "/var/lib/db" },
 }
-const DB_SETTINGS: ServiceSettings = {
+const DB_SETTINGS: TemplateService = {
   image: IMAGE,
   restart: "always",
   port: 5432,

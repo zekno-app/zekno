@@ -8,8 +8,20 @@
  * change by the reader itself (`checkSettings` of `settingsText`), so a
  * change can never write a file zekno would refuse to read. A name typed by
  * the person is put into a sentence only once it passed its rule.
+ *
+ * The Build section's keys, and an image whose change concerns a build, are
+ * build-values.ts's (specs/016-build-from-source, CL1; tasks T112).
  */
 import { sanitize } from "../server/sanitize"
+import { BuildValueRefused } from "../shared/build-lines"
+import {
+  buildChange,
+  buildShown,
+  imageChange,
+  isBuildPath,
+  type BuildPath,
+  type Refusal,
+} from "./build-values"
 import {
   routeChanged,
   routeIsNow,
@@ -35,7 +47,6 @@ import {
   splitStart,
 } from "./values"
 import {
-  CS15,
   CS16,
   CS17,
   CS4,
@@ -46,6 +57,9 @@ import {
   restartShown,
   settingWords,
 } from "./words"
+
+/** A setting's path, but one of the Build section's. */
+type ValuePath = Exclude<SettingPath, BuildPath>
 
 /** The settings a single name gives, with and without its section. Maps, so no name reaches a prototype. */
 const SINGLE = new Map<string, Exclude<SettingPath["key"], "plain" | "volume">>(
@@ -74,13 +88,29 @@ const SINGLE = new Map<string, Exclude<SettingPath["key"], "plain" | "volume">>(
     ["deploy.healthcheck", "health"],
     ["health-timeout", "health-timeout"],
     ["deploy.healthcheck.timeout", "health-timeout"],
+    // specs/016-build-from-source, CL1, "Keys": the Build section and the Source fields a build adds.
+    ["root", "root"],
+    ["source.root", "root"],
+    ["include", "include"],
+    ["source.include", "include"],
+    ["builder", "builder"],
+    ["build.builder", "builder"],
+    ["dockerfile", "dockerfile"],
+    ["build.dockerfile", "dockerfile"],
+    ["stage", "stage"],
+    ["build.stage", "stage"],
+    ["build-timeout", "build-timeout"],
+    ["build.timeout", "build-timeout"],
+    ["build-network", "build-network"],
+    ["build.network", "build-network"],
   ]
 )
 
-/** The later settings, with and without their section (CS6). */
+/** The names of today's later setting of a build, said G19 (specs/016-build-from-source; CS6 for it went). */
+const BUILD = new Set(["build", "source.build"])
+
+/** The later settings, with and without their section (CS6). A build is no later setting since specs/016-build-from-source. */
 const LATER = new Map<string, Exclude<LaterSetting, "version">>([
-  ["build", "build"],
-  ["source.build", "build"],
   ["predeploy", "predeploy"],
   ["deploy.predeploy", "predeploy"],
   ["replicas", "replicas"],
@@ -91,24 +121,31 @@ const LATER = new Map<string, Exclude<LaterSetting, "version">>([
 const isRoute = (key: SettingPath["key"]): key is RouteKey =>
   key === "domains" || key === "health" || key === "health-timeout"
 
+/** G18: no such setting, exit status 2 (specs/016-build-from-source, CL1; CS5 changed, plan item 21 (a)). */
+const notKnown = (): BuildValueRefused => new BuildValueRefused({ id: "G18" })
+
 /**
  * The setting `<service>.<setting>` names (contracts/commands.md's table,
  * research R9 item 17): `web.memory` and `web.deploy.memory`,
  * `web.plain.NAME` and `web.variables.plain.NAME`, `web.volumes.name`; a
- * later setting is its own answer (CS6), anything else is unknown (CS5). The
- * service is kept as typed: whether the file has it, and whether it may be
- * named in a sentence, is for `applyChange` (CS4).
+ * later setting is its own answer (CS6). The service is kept as typed:
+ * whether the file has it, and whether it may be named in a sentence, is for
+ * `applyChange` (CS4).
+ *
+ * Anything else is no such setting, and since specs/016-build-from-source
+ * (CL1) it is refused here with its line, G18, a `WrongInput` (exit status
+ * 2), for apps that do not build too (plan item 21 (a)); `web.build`, today a
+ * later setting, says the same sentence as G19. Neither is `{ unknown }` any
+ * more.
  */
 export function parseSettingPath(
   text: string
-):
-  | SettingPath
-  | { later: Exclude<LaterSetting, "version"> }
-  | { unknown: true } {
+): SettingPath | { later: Exclude<LaterSetting, "version"> } {
   const dot = text.indexOf(".")
-  if (dot <= 0) return { unknown: true }
+  if (dot <= 0) throw notKnown()
   const service = text.slice(0, dot)
   const setting = text.slice(dot + 1)
+  if (BUILD.has(setting)) throw new BuildValueRefused({ id: "G19" })
   const later = LATER.get(setting)
   if (later !== undefined) return { later }
   const key = SINGLE.get(setting)
@@ -124,11 +161,11 @@ export function parseSettingPath(
     if (checkVolumeName(name) === undefined)
       return { service, key: "volume", name }
   }
-  return { unknown: true }
+  throw notKnown()
 }
 
 /** The words of a path: its label, question, `That is not ...` and rule. */
-const wordsOf = (path: SettingPath) =>
+const wordsOf = (path: ValuePath) =>
   settingWords(
     path.key,
     path.key === "plain" || path.key === "volume" ? path.name : ""
@@ -140,6 +177,7 @@ const plainShown = (value: string): string => (value === "" ? '""' : value)
 /** How the value of `path` reads in `settings`, cleaned: the words of a setting left out when it is not set. */
 export function shownValue(path: SettingPath, settings: Settings): string {
   const service = settings.services.find(([name]) => name === path.service)?.[1]
+  if (isBuildPath(path)) return buildShown(service, path.key)
   const shown = (): string | undefined => {
     if (service === undefined) return undefined
     switch (path.key) {
@@ -189,7 +227,7 @@ function sameStart(a: string, b: string): boolean {
 /** Whether `value` is what `path` holds now. */
 function isNow(
   service: ServiceSettings,
-  path: SettingPath,
+  path: ValuePath,
   value: string | number | readonly string[]
 ): boolean {
   if (isRoute(path.key)) return routeIsNow(service, path.key, value)
@@ -222,7 +260,7 @@ function isNow(
 }
 
 /** Whether `path` is set in a service. */
-function isSet(service: ServiceSettings, path: SettingPath): boolean {
+function isSet(service: ServiceSettings, path: ValuePath): boolean {
   if (isRoute(path.key)) return routeIsSet(service, path.key)
   if (path.key === "plain")
     return service.plain?.some(([name]) => name === path.name) ?? false
@@ -247,7 +285,7 @@ function withPair(
 /** A service with `path` set to `value`, or left out when `value` is undefined. A list left empty is left out. */
 function changed(
   service: ServiceSettings,
-  path: SettingPath,
+  path: ValuePath,
   value: string | number | readonly string[] | undefined
 ): ServiceSettings {
   if (isRoute(path.key)) return routeChanged(service, path.key, value)
@@ -269,16 +307,23 @@ function changed(
  * The settings with one setting changed (`value` given) or removed
  * (`value` undefined), checked whole, or why not, with the exit status
  * contracts/commands.md gives it: CS4 (no such service), CS7 (a value its
- * rule refuses), CS15 (the image unset) and CS17 (a rule across settings)
- * with 2; CS8 (the same value) and CS16 (unset of a setting not set) with 0.
- * `file` is the file as CS4 names it.
+ * rule refuses) and CS17 (a rule across settings) with 2; CS8 (the same
+ * value) and CS16 (unset of a setting not set) with 0. `file` is the file as
+ * CS4 names it.
+ *
+ * specs/016-build-from-source (CL1; tasks T112): the Build section's keys,
+ * and an image under `zekno.invalid`, set on a built service or unset on one
+ * with no build (G16, which CS15 became), are build-values.ts's; a refusal
+ * of theirs holds its line. `settingsFile`: the path the settings file was
+ * read from, so that a root set is held to its reach (build-reach.ts).
  */
 export function applyChange(
   settings: Settings,
   path: SettingPath,
   value: string | undefined,
-  file = SETTINGS_FILE
-): Change | { refused: string; status: 0 | 2 } {
+  file = SETTINGS_FILE,
+  settingsFile?: string
+): Change | Refusal {
   const index = settings.services.findIndex(([name]) => name === path.service)
   if (index === -1)
     return {
@@ -289,6 +334,18 @@ export function applyChange(
       ),
       status: 2,
     }
+  if (isBuildPath(path))
+    return buildChange(settings, index, path, value, file, settingsFile)
+  if (path.key === "image") {
+    const image = imageChange(
+      settings,
+      index,
+      { ...path, key: "image" },
+      value,
+      file
+    )
+    if (image !== undefined) return image
+  }
   const [svc, service] = settings.services[index]!
   const words = wordsOf(path)
   const now = shownValue(path, settings)
@@ -300,7 +357,6 @@ export function applyChange(
     }
   let typed: string | number | readonly string[] | undefined
   if (value === undefined) {
-    if (path.key === "image") return { refused: CS15, status: 2 }
     // A limit left out is 60 seconds already: unset of it changes nothing.
     if (path.key === "health-timeout" && !isSet(service, path))
       return { refused: CS8(svc, words.label, now), status: 0 }
@@ -331,12 +387,16 @@ export function applyChange(
     const refused =
       checked.kind === "form"
         ? CS17(checked.place, checked.rule)
-        : CS17(
-            "",
-            checked.kind === "read"
-              ? checked.sentence
-              : laterSentences(file, checked.setting, checked.service).join(" ")
-          )
+        : checked.kind === "build"
+          ? checked.fault.id
+          : CS17(
+              "",
+              checked.kind === "read"
+                ? checked.sentence
+                : laterSentences(file, checked.setting, checked.service).join(
+                    " "
+                  )
+            )
     return { refused, status: 2 }
   }
   return {

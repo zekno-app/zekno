@@ -163,13 +163,10 @@ describe("hostile files", () => {
     expect(
       sentence(json({ zekno: 1, services: { web: { source: "x" } } }))
     ).toBe(form("web, source: use an object."))
+    // specs/016-build-from-source, CL1: neither an image nor a build is C26, by its id until the words tasks (FR-092).
     expect(
       sentence(json({ zekno: 1, services: { web: { source: {} } } }))
-    ).toBe(
-      form(
-        "web, source.image: a service needs an image, such as ghcr.io/acme/web:1.4.2."
-      )
-    )
+    ).toBe("C26")
   })
 
   test("a value never comes back into a sentence, even one that looks like a sentence", () => {

@@ -271,7 +271,11 @@ export const SV33: PlaceRule = at(
 /**
  * What each later setting is called in SL's first sentence, and SL's second
  * sentence (CS6 too). Domains and health checks left this list with feature
- * 015 (specs/015-domains-https, CL1): their two sentences went.
+ * 015 (specs/015-domains-https, CL1): their two sentences went. A build is
+ * no later setting since feature 016 (specs/016-build-from-source, CL1): no
+ * reader or `set` says these words (C30 went). They stay only while
+ * app/effects/settings.ts and templates/file-words.ts still name them, and
+ * go with them.
  */
 export const LATER: Record<
   Exclude<LaterSetting, "version">,

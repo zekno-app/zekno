@@ -4,11 +4,16 @@
  * ops/settings.ts; their words in settings/words.ts. None contacts a server,
  * deploys or signs anything.
  */
+import {
+  askFirstBuild,
+  firstBuildHere,
+  writeFirstBuild,
+} from "../asking/first-build"
 import type { Deps } from "../cli/context"
 import { CliError, Left } from "../cli/errors"
 import {
+  composeForFolder,
   createFromAnswers,
-  folderCompose,
   prepareInit,
   prepareSettingChange,
   settingsData,
@@ -18,6 +23,7 @@ import {
 import { sanitize } from "../server/sanitize"
 import { SETTINGS_FILE } from "../settings/file"
 import { checkImage, checkServiceName } from "../settings/values"
+import { lineText } from "../shared/build-lines"
 import {
   CS10,
   CS11,
@@ -116,6 +122,16 @@ export async function settingsUnset(
   )
 }
 
+/** IN2, the service's name, `web` filled in, held to its rule where it is typed. */
+const askService = (deps: Deps): Promise<string> =>
+  deps.ui.ask({
+    question: IN2,
+    fill: "web",
+    check: (answer) =>
+      checkServiceName(answer) === undefined ? undefined : IN2_RULE,
+    missing: new CliError(IN5),
+  })
+
 /**
  * `zekno settings init` (contracts/commands.md, `init`; research R8): IN4
  * before any question when `zekno.app.json` is here; with no terminal, IN5.
@@ -124,25 +140,33 @@ export async function settingsUnset(
  * another (IN3), in this folder, with SH3 as a warning when the zekno.json in
  * use here names another file, else IN6, a warning, when compose.yaml is here too. Esc
  * or Ctrl-C at a question: `Nothing was done.`, status 1, nothing written.
+ *
+ * In a folder with a Dockerfile and no Compose file (specs/016-build-from-source,
+ * contracts/cli.md CL6; A18, G25), the first deploy's question comes first,
+ * with `Run an image instead` last, which goes on to IN1; a build is asked
+ * today's service name, and its files are written with IN3, or G25 when a
+ * `.dockerignore` is written too.
  */
 export async function settingsInit(deps: Deps): Promise<number> {
   const { compose, linked } = prepareInit(deps)
   if (!deps.ui.asks) throw new CliError(IN5)
-  const image = await deps.ui.ask({
-    question: IN1,
-    check: (answer) =>
-      checkImage(answer) === undefined ? undefined : IN1_RULE,
-    missing: new CliError(IN5),
-  })
-  const service = await deps.ui.ask({
-    question: IN2,
-    fill: "web",
-    check: (answer) =>
-      checkServiceName(answer) === undefined ? undefined : IN2_RULE,
-    missing: new CliError(IN5),
-  })
-  createFromAnswers(deps, image, service)
-  deps.ui.success(IN3.text, IN3.detail)
+  const building = firstBuildHere(deps.cwd)
+    ? await askFirstBuild(deps.ui, deps, "init")
+    : undefined
+  if (building?.kind === "build") {
+    writeFirstBuild(deps.cwd, building, await askService(deps))
+    if (building.proposal === undefined) deps.ui.success(IN3.text, IN3.detail)
+    else deps.ui.success(lineText({ id: "G25", ignore: true }))
+  } else {
+    const image = await deps.ui.ask({
+      question: IN1,
+      check: (answer) =>
+        checkImage(answer) === undefined ? undefined : IN1_RULE,
+      missing: new CliError(IN5),
+    })
+    createFromAnswers(deps, image, await askService(deps))
+    deps.ui.success(IN3.text, IN3.detail)
+  }
   if (linked !== undefined) deps.ui.warn(linked)
   else if (compose) deps.ui.warn(IN6)
   return 0
@@ -155,14 +179,17 @@ export async function settingsInit(deps: Deps): Promise<number> {
  * feed; at a terminal the same lines, dim (board `CmdSettings`), cleaned as
  * every line drawn from the file is. IN6, when compose.yaml is beside the
  * file with nothing that decides, goes after the text, on standard error
- * when piped.
+ * when piped. A built service's G22 goes after the text too, on standard
+ * error, said by its id until the words tasks (specs/016-build-from-source,
+ * CL1; FR-092).
  */
-export function settingsCompose(deps: Deps): void {
-  const { text, note } = folderCompose(deps)
+export async function settingsCompose(deps: Deps): Promise<void> {
+  const { text, note, lines: said } = await composeForFolder(deps)
   const lines = text.split("\n")
   // The text ends with a line feed: the last part is empty, and is not a line.
   lines.pop()
   for (const line of lines) deps.ui.line(line, [quiet(sanitize(line))])
+  for (const line of said) deps.ui.warn(lineText(line))
   // At a terminal an empty line sets it apart from the text, as after the settings; piped it is on standard error alone.
   if (note !== undefined) {
     deps.ui.gap()

@@ -7,6 +7,7 @@
 import type { TeamTrust } from "@workspace/core"
 
 import type { DomainState } from "../../domains/words"
+import type { LineOf } from "../../shared/build-lines"
 import type { DeployProgress } from "../../shared/deploy"
 import type { Notice } from "../../shared/notice"
 import type { AppRow, DeployRow, SecretRow } from "../../shared/views"
@@ -308,6 +309,17 @@ export type Question =
   | { kind: "remove-secret"; server: string; app: string; name: string }
   | { kind: "update-runner"; server: string }
   | { kind: "remember-folder"; server: string; app: string; compose: string }
+  /**
+   * A deploy that builds needs a first-time yes (specs/016-build-from-source,
+   * CL5; J12): B24 or B26, by its line, asked in the panel of "Remember this
+   * folder?". Only a yes writes agreed.json and goes on.
+   */
+  | {
+      kind: "build-yes"
+      server: string
+      app: string
+      line: LineOf<"B24" | "B26">
+    }
   /** Esc on the list before a deploy: go ahead without the values in `names`, which are not set? */
   | {
       kind: "skip-values"

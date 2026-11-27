@@ -5,8 +5,7 @@ import { isRouted } from "../domains/routes"
 import { findServer, NAME, type History, type Server } from "../profile/profile"
 import type { ProjectLink } from "../project/file"
 import { sanitize } from "../server/sanitize"
-import { chooseSource, readSource } from "../settings/source"
-import type { DeployText } from "../settings/types"
+import { chooseSource } from "../settings/source"
 import { DP2 } from "../settings/words"
 import {
   namedUnreachable,
@@ -14,9 +13,18 @@ import {
   type SessionMode,
 } from "../server/session"
 import { appTaken } from "../shared/app-names"
+import { BuildStop, lineText, type BuildLine } from "../shared/build-lines"
 import type { DeployInfo, DeployOutcome, DeployStage } from "../shared/deploy"
 import { readDeployEntry } from "../shared/history"
 import { RUNNER_RELEASE } from "../version/runner-release"
+import {
+  checkAgreed,
+  prepareBuild,
+  readDeploySource,
+  type BuildPlan,
+  type SourceRead,
+} from "./deploy-build"
+import { buildsInSession } from "./deploy-build-session"
 import { checkDomains, rollbackAsksRoutes } from "./deploy-domains"
 import { chooseFormat } from "./deploy-format"
 import { deployVersionOne, deployVersionTwo } from "./deploy-send"
@@ -42,11 +50,16 @@ export type DeployCallbacks = {
   pointed?: (domain: string, address: string) => void
   /** The runner began to wait for `service` to be healthy (C2). Only a deploy with a health check is told. */
   health?: (service: string) => void
+  /**
+   * A line of specs/016-build-from-source said while the deploy goes on, by
+   * its row (B30). Without it, the line goes to `warning` as its text.
+   */
+  line?: (line: BuildLine) => void
 }
 
 /**
  * A deploy that has passed every check made on this machine, and has not been
- * signed or sent. `fresh`: the app's name was typed at a terminal as a new
+ * signed or sent. `newApp`: the app's name was typed at a terminal as a new
  * one (asking/first-deploy.ts), so the deploy stops before anything is signed
  * when the runner says it holds that app already (`AppTaken`). `rollback`:
  * made by `prepareRollback`, so what it says names `zekno rollback` (C1).
@@ -66,7 +79,15 @@ export type DeployPlan = {
    */
   routes?: readonly Route[]
   health?: Health | null
+  newApp?: boolean
+  /** `zekno deploy --fresh` (specs/016-build-from-source, CL7): each build signs `fresh` equal to the deploy's own number. */
   fresh?: boolean
+  /**
+   * A deploy that builds (specs/016-build-from-source, CL7 steps 1 to 4;
+   * ops/deploy-build.ts): what was prepared before the session. `compose` is
+   * then not signed: the session makes the text from the build keys.
+   */
+  build?: BuildPlan
   rollback?: true
   /** A rollback's: the deploy whose service definition it deploys again, as B12 names it. */
   rollbackOf?: number
@@ -184,7 +205,9 @@ function sentDeploys(
 export type DeployInput = Where & {
   file?: string
   project?: ProjectLink
-  read?: DeployText
+  read?: SourceRead
+  /** `--fresh` (specs/016-build-from-source, CL7 step 2). */
+  fresh?: boolean
 }
 
 /**
@@ -198,6 +221,11 @@ export type DeployInput = Where & {
  * `services`: a settings file's services, for the summary's `from` row. A
  * settings file's routes and health check are carried as read with its text
  * (specs/015-domains-https, contracts/cli.md, CL3).
+ *
+ * A settings file with a built service (specs/016-build-from-source, CL7
+ * steps 1 to 4) is read whole and prepared before the session
+ * (`prepareBuild`): every stop with nothing signed, then its packs sealed.
+ * `--fresh` on a deploy that builds nothing is C21.
  */
 export async function prepareDeploy(
   deps: OpDeps,
@@ -211,11 +239,18 @@ export async function prepareDeploy(
       project: input.project,
     })
     if (source.kind === "both") throw new WrongInput(DP2)
-    read = readSource(source, deps.cwd)
+    read = readDeploySource(source, deps.cwd)
   }
+  const fresh = input.fresh === true
+  if (fresh && read.built === undefined)
+    throw new BuildStop({ id: "C21", app: where.app })
   // A folder's name can hold anything, escape sequences included, so a path is cleaned before it is shown.
   if (read.text.trim() === "")
     throw new CliError(`The Compose file at ${sanitize(read.path)} is empty.`)
+  const build =
+    read.built === undefined
+      ? undefined
+      : await prepareBuild(deps, { ...where, read: read.built, fresh })
   return {
     ...where,
     compose: read.text,
@@ -227,6 +262,8 @@ export async function prepareDeploy(
           routes: read.settings.routes,
           health: read.settings.health,
         }),
+    ...(build === undefined ? {} : { build }),
+    ...(fresh ? { fresh } : {}),
   }
 }
 
@@ -305,14 +342,31 @@ export async function prepareRollback(
  * anything is signed (specs/015-domains-https, contracts/cli.md, CL3;
  * ops/deploy-domains.ts). Any other deploy asks it as before, and checks
  * nothing more (CL7).
+ *
+ * A deploy that builds (specs/016-build-from-source, CL7 steps 6 to 11) is
+ * signed only for a runner of protocol 6 (F1), asks `builder` and `builds`
+ * once the domains are checked (ops/deploy-build-session.ts), and signs its
+ * builds. With no terminal, a secret-looking file no one agreed to stops it
+ * before the session opens (C19). This run's folder of sealed pieces goes
+ * when the deploy ends. Any other deploy makes exactly the requests it made.
  */
 export async function sendDeploy(
   deps: OpDeps,
   plan: DeployPlan,
   callbacks: DeployCallbacks = {}
 ): Promise<DeployResult> {
-  const { team, server, app } = plan
+  const { team, server, app, build } = plan
   const carried = (deps.release ?? RUNNER_RELEASE).version
+  if (build !== undefined) {
+    try {
+      checkAgreed(build)
+    } catch (error) {
+      build.run.remove()
+      throw error
+    }
+  }
+  const say =
+    callbacks.line ?? ((line: BuildLine) => callbacks.warning?.(lineText(line)))
 
   return withSession(reach(deps, server.target), async (session) => {
     // CL1. Nothing is signed in a format the runner does not carry out, and nothing is downgraded unsaid. A route or a
@@ -324,6 +378,7 @@ export async function sendDeploy(
       runner: session.runner,
       carried,
       routed,
+      builds: build !== undefined,
     })
 
     // CL2. Who answers, and the number it holds for the app; with the routes in force when they matter (CL3 step 2).
@@ -345,7 +400,7 @@ export async function sendDeploy(
     const sent = sentDeploys(team, server, app, history, callbacks.warning)
     const accepted = numberOf()
     // Read on this connection, which the person's answers already made: a name typed as new is never one the runner holds.
-    if (plan.fresh === true && accepted >= 1)
+    if (plan.newApp === true && accepted >= 1)
       throw new AppTaken(server.name, app)
 
     // CL3, steps 2 to 6: B9, B11, a rollback's routes and B12, the DNS check. What is signed of the domains comes from here.
@@ -362,14 +417,29 @@ export async function sendDeploy(
       routes: domained.routes,
       health: domained.health,
     }
+    // specs/016-build-from-source, CL7 steps 8 and 9: asked only by a deploy that builds.
+    const building =
+      build === undefined
+        ? undefined
+        : await buildsInSession({
+            session,
+            team,
+            server,
+            app,
+            build,
+            fresh: plan.fresh === true,
+          })
+    for (const line of building?.older ?? []) say(line)
     const going = {
       session,
       plan: signing,
       status,
       accepted,
       history,
-      callbacks,
+      // The build's lines (D4 to D6, D17) reach `warning` too when the caller takes no `line` (deploy-send-build.ts).
+      callbacks: { ...callbacks, line: say },
       domained,
+      ...(building === undefined ? {} : { building }),
     }
     if (chosen.format === 2) return deployVersionTwo(going)
     return deployVersionOne({
@@ -378,7 +448,9 @@ export async function sendDeploy(
       ...(chosen.older === undefined ? {} : { older: chosen.older }),
       carried,
     })
-  }).catch((error: unknown) => {
-    throw namedUnreachable(error, server.name)
   })
+    .catch((error: unknown) => {
+      throw namedUnreachable(error, server.name)
+    })
+    .finally(() => build?.run.remove())
 }

@@ -8,10 +8,38 @@
 import type { Health as SignedHealth, Route } from "@workspace/core"
 
 import type { ComposeSource, ComposeText } from "../project/compose-read"
+import type { LineOf } from "../shared/build-lines"
+import type { BuildFault, BuildSettingName } from "./build-faults"
 
-/** One service's settings, as the file holds them. Absent: not set. */
+/**
+ * A service's Build section (specs/016-build-from-source, data-model.md,
+ * "The settings' Build section"; CL1). Absent: not set, so the default.
+ */
+export type BuildSettings = {
+  /** `dockerfile` in step 1; a file naming `railpack` is F5 (FR-008). */
+  builder: "dockerfile"
+  /** Relative to the folder sent; `Dockerfile` when left out. */
+  dockerfile?: string
+  /** The stage built; the last one when left out. */
+  stage?: string
+  /** In seconds, 1 to 7,200; 1,800 when left out (FR-010). */
+  timeout?: number
+  /** `internet` when left out. */
+  network?: "internet" | "none"
+}
+
+/**
+ * One service's settings, as the file holds them. Absent: not set. A service
+ * has an image or a build, never both and never neither (FR-006); `root`
+ * and `include` only with a build (specs/016-build-from-source, CL1).
+ */
 export type ServiceSettings = {
-  image: string
+  image?: string
+  /** The folder sent, from the settings file's folder, `/` between its parts; `.` when left out. */
+  root?: string
+  /** Secret-looking files to send all the same, relative to the root, in the file's order; never empty (FR-015). */
+  include?: readonly string[]
+  build?: BuildSettings
   start?: string
   restart?: "no" | "on-failure" | "always"
   memory?: string
@@ -61,7 +89,9 @@ export type SettingsRead = {
 /**
  * A setting a later version of zekno brings: refused by its presence (SL0 to
  * SL4). `version` is the file's own `zekno`. Domains and the health check
- * were later settings until feature 015 (specs/015-domains-https, CL1).
+ * were later settings until feature 015 (specs/015-domains-https, CL1), a
+ * build until feature 016 (specs/016-build-from-source, CL1): no reader
+ * gives `build` any more; it stays while fault-words.ts keeps its words.
  */
 export type LaterSetting = "version" | "build" | "predeploy" | "replicas"
 
@@ -73,6 +103,8 @@ export type SettingsFault =
   | { kind: "form"; place: string; rule: string; line?: number }
   /** A setting a later version brings (SL0 to SL5): what it sets, for which service. */
   | { kind: "later"; setting: LaterSetting; service?: string }
+  /** A fault of a service's build settings, said by its line's id (specs/016-build-from-source, CL1; build-faults.ts). */
+  | { kind: "build"; fault: BuildFault }
 
 /** One setting of one service, as `zekno settings set` and the screen name it. */
 export type SettingPath =
@@ -92,6 +124,8 @@ export type SettingPath =
         | "health"
         | "health-timeout"
     }
+  /** specs/016-build-from-source, CL1: the Build section and the fields of Source a build adds. */
+  | { service: string; key: BuildSettingName }
   | { service: string; key: "plain"; name: string }
   | { service: string; key: "volume"; name: string }
 
@@ -106,11 +140,28 @@ export type Change = {
   value?: string | number | readonly string[]
   /** The settings with the change made, read back as a check (research R5). */
   settings: Settings
+  /**
+   * An image replaced by a build, or a build by an image, in one change
+   * (specs/016-build-from-source, FR-011): the line said for it, G12 or G13.
+   * Until the words tasks the label is the line's id (FR-092).
+   */
+  line?: LineOf<"G12" | "G13">
 }
+
+/**
+ * A Build row's value as G10 reads it (specs/016-build-from-source): the
+ * builder, or a time limit in whole minutes, else in seconds.
+ */
+export type BuildRowValue =
+  | { builder: BuildSettings["builder"] }
+  | { minutes: number }
+  | { seconds: number }
 
 /** One row of a service's settings, for `zekno settings` and the screen. */
 export type SettingRow = {
-  section: "Source" | "Deploy" | "Networking" | "Variables" | "Volumes"
+  /** `Build` between Source and Deploy (specs/016-build-from-source, G9, J16). */
+  section:
+    "Source" | "Build" | "Deploy" | "Networking" | "Variables" | "Volumes"
   /** The row's label: "image", "memory", "published", "plain", a volume's name. Empty on a second plain row. */
   label: string
   /** The setting the row changes; a `none` row of plain or volumes adds one. */
@@ -118,8 +169,14 @@ export type SettingRow = {
   /** What a person reads, cleaned; `set` false when it is the words of a setting left out. */
   shown: string
   set: boolean
-  /** Changed since this machine's last deploy, with the old value when there was one. */
-  changed?: { was?: string }
+  /**
+   * A Build row's value as G10 reads it, for the words tasks to draw
+   * (specs/016-build-from-source, CL1, "Rows"; FR-092): `shown` is then G10's
+   * id until those words are written.
+   */
+  value?: BuildRowValue
+  /** Changed since this machine's last deploy, with the old value when there was one, and as G10 reads it for a Build row. */
+  changed?: { was?: string; wasValue?: BuildRowValue }
   /**
    * A plain variable or a volume the last deploy had and the file no longer
    * has, with what it was (security review S3): the next deploy drops it. Its

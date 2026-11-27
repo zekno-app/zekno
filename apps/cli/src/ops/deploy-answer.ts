@@ -133,6 +133,10 @@ export async function deployAnswer(
     // `too_large` is one fixed word for every limit; it is said as R10 when the domains are what is over.
     if (error.reason === "too_large" && answering.overDomains === true)
       throw new RunnerRefused(error.reason, R10)
-    throw new RunnerRefused(error.reason, explainDeploy(error.reason, 2))
+    throw new RunnerRefused(
+      error.reason,
+      explainDeploy(error.reason, 2),
+      error.disk
+    )
   }
 }

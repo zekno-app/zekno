@@ -14,7 +14,15 @@ import { isHealthPath } from "@workspace/core"
 import { z } from "zod"
 
 import { fileFault } from "../domains/rule"
+import {
+  BuildSchema,
+  IncludeSchema,
+  notReservedImage,
+  RootSchema,
+  serviceRules,
+} from "./build-shape"
 import { checkHealthTimeout, MAX_DOMAINS } from "./domains-health"
+import { JsonNumber } from "./json-number"
 import type { LaterSetting } from "./types"
 import {
   checkCpus,
@@ -35,13 +43,8 @@ import {
   startProblem,
 } from "./values"
 
-/** A JSON number as the file wrote it: its text (for `cpus`, and to tell `1` from `1.0`) and its value. */
-export class JsonNumber {
-  constructor(
-    readonly text: string,
-    readonly value: number
-  ) {}
-}
+// A JSON number as the file wrote it, now in json-number.ts, given from here as before.
+export { JsonNumber } from "./json-number"
 
 /**
  * Each zod issue carries the id of its sentence as its message, so a fault
@@ -131,12 +134,21 @@ const DomainsSchema = z
     }
   })
 
+/**
+ * A service's source (specs/016-build-from-source, CL1): an image, never
+ * under `zekno.invalid` (C29), or, with a build, the folder sent and the
+ * secret-looking files sent all the same. Whether it has an image or a build
+ * is `serviceRules`'s (C25, C26).
+ */
 const SourceSchema = z.strictObject(
   {
-    image: checkedString("SV8", isImage, "SV7"),
-    build: later,
+    image: checkedString("SV8", isImage)
+      .refine(notReservedImage, fails("C29"))
+      .optional(),
+    root: RootSchema.optional(),
+    include: IncludeSchema.optional(),
   },
-  { error: (issue) => (issue.input === undefined ? "SV7" : "SV5") }
+  fails("SV5")
 )
 
 const DeploySchema = z.strictObject(
@@ -226,16 +238,20 @@ const VolumesSchema = z
   )
   .refine((volumes) => volumes.size <= MAX_VOLUMES, counted("SV31", isMap))
 
-export const ServiceSchema = z.strictObject(
-  {
-    source: SourceSchema,
-    deploy: DeploySchema.optional(),
-    networking: NetworkingSchema.optional(),
-    variables: VariablesSchema.optional(),
-    volumes: VolumesSchema.optional(),
-  },
-  fails("SV5")
-)
+export const ServiceSchema = z
+  .strictObject(
+    {
+      source: SourceSchema.optional(),
+      // specs/016-build-from-source, CL1: the Build section, between Source and Deploy.
+      build: BuildSchema.optional(),
+      deploy: DeploySchema.optional(),
+      networking: NetworkingSchema.optional(),
+      variables: VariablesSchema.optional(),
+      volumes: VolumesSchema.optional(),
+    },
+    fails("SV5")
+  )
+  .superRefine(serviceRules.check, { when: serviceRules.when })
 
 const ServicesSchema = z
   .map(
@@ -259,6 +275,7 @@ export const SettingsSchema = z.strictObject({
  */
 export const SECTIONS: ReadonlyMap<string, object> = new Map<string, object>([
   ["source", SourceSchema.shape],
+  ["build", BuildSchema.shape],
   ["deploy", DeploySchema.shape],
   ["networking", NetworkingSchema.shape],
   ["variables", VariablesSchema.shape],
@@ -267,13 +284,14 @@ export const SECTIONS: ReadonlyMap<string, object> = new Map<string, object>([
 /**
  * The later settings, by section: the only places they may come (design.md,
  * "The file"). `deploy.healthcheck` and `networking.domains` are settings of
- * their own since specs/015-domains-https.
+ * their own since specs/015-domains-https; a build, a section of its own,
+ * since specs/016-build-from-source (CL1), so `source.build` is a key this
+ * zekno does not know.
  */
 export const LATER: ReadonlyMap<
   string,
   ReadonlyMap<string, LaterSetting>
 > = new Map([
-  ["source", new Map([["build", "build"]])],
   [
     "deploy",
     new Map<string, LaterSetting>([

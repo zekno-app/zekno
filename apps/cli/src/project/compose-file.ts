@@ -104,7 +104,11 @@ function quotedList(line: string, at: number): boolean {
   }
 }
 
-/** The lines zekno writes from settings (contracts/compose-text.md), by what each starts with. */
+/**
+ * The lines zekno writes from settings (contracts/compose-text.md), by what
+ * each starts with; a built service's `pull_policy: "never"` among them
+ * (specs/016-build-from-source, CL1, "The Compose text").
+ */
 const SETTINGS_LINES: readonly ((line: string) => boolean)[] = [
   (line) =>
     [
@@ -113,6 +117,7 @@ const SETTINGS_LINES: readonly ((line: string) => boolean)[] = [
       "    environment:",
       "    volumes:",
       '      - type: "volume"',
+      '    pull_policy: "never"',
     ].includes(line),
   (line) => line.startsWith("  ") && quotedThen(line, 2, ":"),
   (line) => line.startsWith("  ") && quotedThen(line, 2, ": {}"),

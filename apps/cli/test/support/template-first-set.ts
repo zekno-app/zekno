@@ -5,8 +5,7 @@
  * template as read"). test/support/template-files.ts passes both on with the
  * rest of the test set.
  */
-import type { ServiceSettings } from "../../src/settings/types"
-import type { Template } from "../../src/templates/types"
+import type { Template, TemplateService } from "../../src/templates/types"
 
 /** The four files of contracts/template-file.md, "The first set", each with its final line feed. */
 export const FIRST_SET: Readonly<Record<string, string>> = {
@@ -139,7 +138,7 @@ const firstOf = (
   name: string,
   fields: Pick<Template, "title" | "about" | "software"> & {
     also?: string[]
-    service: ServiceSettings
+    service: TemplateService
     makes: string[]
     offer: [string, string]
     notes?: string[]

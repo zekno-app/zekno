@@ -77,7 +77,9 @@ import {
   SH4,
 } from "../settings/words"
 import { createSettings, writeSettings } from "../settings/write"
+import type { LineOf } from "../shared/build-lines"
 import { lastDeployedSettings } from "../shared/views"
+import { builtCompose } from "./settings-build"
 
 /**
  * The zekno.json that applies here, in this folder or the nearest above:
@@ -332,11 +334,13 @@ export function prepareSettingChange(
   if ("later" in parsed) throw new WrongInput(CS6(parsed.later))
   if ("unknown" in parsed) throw new WrongInput(CS5)
   const { place, read } = readPlaced(deps)
+  // The file read gives a root its reach (specs/016-build-from-source, CL1: G20's root form, build-reach.ts).
   const change = applyChange(
     read.settings,
     parsed,
     unset ? undefined : value,
-    read.shown
+    read.shown,
+    read.path
   )
   if ("refused" in change) {
     if (change.status === 2) throw new WrongInput(change.refused)
@@ -414,13 +418,26 @@ export function createFromAnswers(
  * file a deploy here would sign turns into, made by `composeText`, the one
  * function that deploy signs the text of (settings/source.ts, `readSource`),
  * so what is printed is what is signed, byte for byte. With no such file,
- * SH1, SH2 or SH3, as for `zekno settings`. No keychain, no server. `note`:
- * IN6, said apart from the text.
+ * SH1, SH2 or SH3, as for `zekno settings`. No keychain, no server for
+ * settings with no built service, and no line. `note`: IN6, said apart from
+ * the text.
+ *
+ * With a built service (specs/016-build-from-source, contracts/cli.md CL1;
+ * plan item 18 (a); FR-011's exception; tasks T124): the text a deploy
+ * signs, each built image named as `ops/settings-build.ts` says, and G22 for
+ * each built service, said on standard error. Asynchronous, since it packs
+ * the folder and may open the team to read this machine's history.
  */
-export function folderCompose(deps: Pick<OpDeps, "cwd" | "home">): {
-  text: string
-  note?: string
-} {
+export async function composeForFolder(
+  deps: Pick<OpDeps, "cwd" | "home" | "keyStore" | "team">
+): Promise<{ text: string; note?: string; lines: LineOf<"G22">[] }> {
   const { place, read } = readPlaced(deps)
-  return { text: composeText(read.settings), ...bothNote(place) }
+  const builds = read.settings.services.some(
+    ([, service]) => service.build !== undefined
+  )
+  if (!builds)
+    return { text: composeText(read.settings), ...bothNote(place), lines: [] }
+  const { source } = place
+  const link = source.kind === "project" ? source.link : undefined
+  return { ...(await builtCompose(deps, read, link)), ...bothNote(place) }
 }

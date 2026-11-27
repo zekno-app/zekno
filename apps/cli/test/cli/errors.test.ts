@@ -3,7 +3,11 @@
  * contracts/cli.md, "Every line", R1 to R8; research R15; tasks T028): every
  * reason a `deploy` or `apply` check can give has a sentence of its own, the
  * version-2 sentences only for a deploy signed as version 2, and today's
- * sentences for everything else, word for word as at e7b0146.
+ * sentences for everything else, word for word as at e7b0146. Protocol 6's
+ * five refusals (specs/016-build-from-source, contracts/core.md CO10;
+ * contracts/cli.md CL7, "The answer") say, until the words tasks, the id of
+ * their row of that feature's design/lines.md: no sentence is written in a
+ * logic task (FR-092; tasks T104).
  */
 import { describe, expect, test } from "bun:test"
 import {
@@ -69,8 +73,28 @@ const R8 =
 const R9 =
   "A domain of this deploy belongs to another app on that server. Nothing of it ran. Run zekno domain to see which."
 
-/** Every reason a `deploy` check can give (research R15): the 15 of version 1, the 3 new, protocol 4's `domain_taken` and the 5 of every request. */
+/**
+ * Every reason a `deploy` check can give (research R15): the 15 of version
+ * 1, the 3 new, protocol 4's `domain_taken`, protocol 6's `pack_missing` and
+ * `pack_mismatch`, and the 8 of every request, protocol 6's `low_disk`,
+ * `docker_too_old` and `no_build_plugin` among them.
+ */
 const EVERY = [...DEPLOY_REFUSALS, ...DEPLOY_V2_REFUSALS, ...RUNNER_REFUSALS]
+
+/**
+ * Protocol 6's refusals and the row of specs/016-build-from-source/design/
+ * lines.md each says (contracts/cli.md CL7, "The answer"): R11 to R14, and
+ * for `pack_missing` D20, the line of pieces still missing once the rounds
+ * of CL7 step 12 are spent (a rollback says G43 or G44, tasks T134). Until
+ * the words tasks, the id is the text said.
+ */
+const BUILDING: Record<string, string> = {
+  pack_mismatch: "R11",
+  docker_too_old: "R12",
+  no_build_plugin: "R13",
+  low_disk: "R14",
+  pack_missing: "D20",
+}
 
 /** What a refusal of a version-2 deploy says, reason by reason. */
 const VERSION_TWO: Record<string, string> = {
@@ -85,6 +109,7 @@ const VERSION_TWO: Record<string, string> = {
   malformed: R8,
   wrong_payload_type: R8,
   domain_taken: R9,
+  ...BUILDING,
 }
 
 /** What a refusal of a version-1 deploy says: today's, with the reasons today said only by their word. */
@@ -97,12 +122,13 @@ const VERSION_ONE: Record<string, string> = {
   malformed: R8,
   wrong_payload_type: R8,
   domain_taken: R9,
+  ...BUILDING,
 }
 
 describe("explainDeploy (SC-011)", () => {
-  test("24 reasons, each named once", () => {
-    expect(EVERY).toHaveLength(24)
-    expect(new Set(EVERY).size).toBe(24)
+  test("29 reasons, each named once", () => {
+    expect(EVERY).toHaveLength(29)
+    expect(new Set(EVERY).size).toBe(29)
   })
 
   test("version 2: every reason has its own sentence, R1 to R8 where they apply, never the general one", () => {
@@ -157,6 +183,12 @@ describe("explain and RunnerRefused, as before", () => {
     expect(explain("secret_missing")).toBe(R4)
     expect(explain("untrusted_secret")).toBe(R5)
     expect(explain("expired")).toBe(R6)
+  })
+
+  test("explain gives protocol 6's five refusals their row's id, to any request: `pack` is refused low_disk or pack_mismatch too (CO10)", () => {
+    for (const [reason, id] of Object.entries(BUILDING))
+      expect({ reason, said: explain(reason) }).toEqual({ reason, said: id })
+    expect(new RunnerRefused("low_disk").message).toBe("R14")
   })
 
   test("RunnerRefused keeps its reason; its sentence is explain's unless one is given", () => {

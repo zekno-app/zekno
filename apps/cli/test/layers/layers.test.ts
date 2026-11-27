@@ -5,8 +5,10 @@
  * plan.md, "Which way imports point", rules 1 to 4 and 6 (FR-007), with the
  * folder settings/ placed among them by specs/010-app-settings/plan.md,
  * "Which way imports point", the folder templates/ by
- * specs/012-templates/plan.md, "Which way imports point", and the folder
- * domains/ by specs/015-domains-https/plan.md, "Structure Decision". Rule 5,
+ * specs/012-templates/plan.md, "Which way imports point", the folder
+ * domains/ by specs/015-domains-https/plan.md, "Structure Decision", and the
+ * folders git/, pack/ and dockerfile/ by specs/016-build-from-source,
+ * contracts/cli.md CL14. Rule 5,
  * nothing cli/cli.ts imports statically loads Ink or React, is the walk of
  * main.ts's static imports in test/asking/asking.test.ts.
  *
@@ -60,8 +62,11 @@ const LAYOUT = [
   "asking",
   "cli",
   "commands",
+  "dockerfile",
   "domains",
+  "git",
   "ops",
+  "pack",
   "profile",
   "project",
   "secrets",
@@ -290,6 +295,10 @@ const BASE = [
   "version",
   // specs/015-domains-https: its rules, words and routes load no screen.
   "domains",
+  // specs/016-build-from-source (contracts/cli.md CL14): readers of files, with no screen.
+  "git",
+  "pack",
+  "dockerfile",
 ]
 
 /**
@@ -339,7 +348,7 @@ const RULES: { rule: string; breaks(edge: Edge): boolean }[] = [
       ["ui", "app", "asking", "commands"].includes(folderOf(edge.to)),
   },
   {
-    rule: "3. shared/, server/, project/, profile/, secrets/, settings/, templates/, version/ and domains/ import nothing from app/, commands/, asking/ or ops/, and from ui/ only ui/types.ts.",
+    rule: "3. shared/, server/, project/, profile/, secrets/, settings/, templates/, version/, domains/, git/, pack/ and dockerfile/ import nothing from app/, commands/, asking/ or ops/, and from ui/ only ui/types.ts.",
     breaks: (edge) =>
       BASE.includes(folderOf(edge.from)) &&
       (["app", "commands", "asking", "ops"].includes(folderOf(edge.to)) ||

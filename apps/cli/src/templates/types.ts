@@ -24,6 +24,13 @@ export type Offer = {
   text: string
 }
 
+/**
+ * A template's service: one that runs an image, never a build. A settings
+ * file's service may build instead since specs/016-build-from-source (CL1);
+ * the reader refuses a template's service with no image (TF21).
+ */
+export type TemplateService = ServiceSettings & { image: string }
+
 /** One template file, read and checked whole. Lists keep the file's order. */
 export type Template = {
   name: string
@@ -32,8 +39,8 @@ export type Template = {
   software: string
   author: string
   also: readonly string[]
-  /** The services as feature 010's reader gives them: `Settings["services"]`. */
-  services: Settings["services"]
+  /** The services as feature 010's reader gives them (`Settings["services"]`), each with its image. */
+  services: readonly (readonly [name: string, service: TemplateService])[]
   makes: readonly MadeSecret[]
   offers: readonly Offer[]
   notes: readonly string[]
@@ -55,7 +62,7 @@ export type Addition = {
   /** The name the template's first service gets in the app: its own, or `--name`. */
   service: string
   /** The template's services as they go into the file: the first renamed, each volume `<service>-<vol>`. */
-  services: readonly (readonly [name: string, service: ServiceSettings])[]
+  services: readonly (readonly [name: string, service: TemplateService])[]
   /** For each connection secret, the services of the file that read it, in the file's order. */
   readers: readonly { offer: string; services: readonly string[] }[]
   /** The file's settings with the services added last and each reader's `secrets` gaining its connection secret. */

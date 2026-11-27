@@ -11,9 +11,13 @@
  * processor limit as a number. Nothing is marked when the deployed settings
  * are not known. Every value shown, an old one too, is cleaned with
  * `sanitize`, though nothing a setting holds should need it.
+ *
+ * A built service shows build-rows.ts's rows in the place of the image row
+ * (specs/016-build-from-source, CL1, "Rows"; tasks T115).
  */
 import { healthOf } from "../domains/routes"
 import { sanitize } from "../server/sanitize"
+import { buildRows } from "./build-rows"
 import {
   deployedOf,
   markOf,
@@ -189,9 +193,11 @@ function reportRows(
   // A setting no longer set keeps its row when the last deploy had it: the next deploy drops it (security review S3).
   const shows = (key: keyof ServiceSettings): boolean =>
     settings[key] !== undefined || old?.[key] !== undefined
-  const rows: SettingRow[] = [
-    partRow(service, deployed, "Source", "image", "image"),
-  ]
+  // specs/016-build-from-source, G9: a built service's Source and Build rows in the place of the image row.
+  const rows: SettingRow[] =
+    settings.build === undefined
+      ? [partRow(service, deployed, "Source", "image", "image")]
+      : buildRows(service, deployed, false)
   for (const [key, section] of [
     ["start", "Deploy"],
     ["restart", "Deploy"],
@@ -247,7 +253,8 @@ export function removedServices(
     .filter(([name]) => !now.has(name))
     .map(([name, service]) => ({
       name: sanitize(name),
-      was: sanitize(service.image),
+      // A built service by its builder as G10 reads it, by its id until the words tasks (specs/016-build-from-source, FR-092).
+      was: sanitize(service.image ?? "G10"),
     }))
 }
 
@@ -321,7 +328,10 @@ export function screenRows(
   ]
   // specs/015-domains-https, E6 (board `DomainsApp`): `health` after `cpus`, the domains after `published`, one a row.
   return [
-    partRow(service, deployed, "Source", "image", "image"),
+    // specs/016-build-from-source, J15 and J16: a built service's Source and Build rows in the place of the image row.
+    ...(service[1].build === undefined
+      ? [partRow(service, deployed, "Source", "image", "image")]
+      : buildRows(service, deployed, true)),
     partRow(service, deployed, "Deploy", "start", "start"),
     partRow(service, deployed, "Deploy", "restart", "restart"),
     partRow(service, deployed, "Deploy", "memory", "memory"),

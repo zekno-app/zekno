@@ -24,6 +24,7 @@ import {
   startRule,
   type StartProblem,
 } from "./words"
+import type { BuildSettingName } from "./build-faults"
 import type { SettingPath } from "./types"
 
 /** The settings file's name: a file of exactly this name is read as settings, any other as a Compose file. */
@@ -355,9 +356,10 @@ export function checkMountPath(path: string): string | undefined {
  * (spaces around each dropped), a plain value exactly as typed; domains and
  * a health check as settings/domains-health.ts reads them. Refused: the
  * rule, as a sentence; for domains, the whole sentence to say (A10, A11).
+ * The Build section's are build-values.ts's (specs/016-build-from-source).
  */
 export function readTyped(
-  path: SettingPath,
+  path: Exclude<SettingPath, { key: BuildSettingName }>,
   text: string
 ): { value: string | number | readonly string[] } | { refused: string } {
   const checked = (refused: string | undefined, value: string | number) =>

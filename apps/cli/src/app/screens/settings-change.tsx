@@ -14,6 +14,7 @@
 import { Box, Text } from "ink"
 
 import { sanitize } from "../../server/sanitize"
+import { buildRowId, isBuildPath } from "../../settings/build-values"
 import { SETTINGS_FILE } from "../../settings/file"
 import type { SettingPath, SettingRow } from "../../settings/types"
 import { AS4, AS5, CS9, restartShown, settingWords } from "../../settings/words"
@@ -53,12 +54,18 @@ export function changeHints(change: ScreenChange): readonly KeyHint[] {
   )
 }
 
-/** The words of the setting being changed: its label after `<svc> · ` and its question. */
-const wordsOf = (path: SettingPath) =>
-  settingWords(
-    path.key,
-    path.key === "plain" || path.key === "volume" ? path.name : ""
-  )
+/**
+ * The words of the setting being changed: its label after `<svc> · ` and its
+ * question. A Build row's are its row's id until the words tasks
+ * (specs/016-build-from-source, J18; FR-092).
+ */
+const wordsOf = (path: SettingPath): { label: string; question: string } =>
+  isBuildPath(path)
+    ? { label: buildRowId(path.key), question: buildRowId(path.key) }
+    : settingWords(
+        path.key,
+        path.key === "plain" || path.key === "volume" ? path.name : ""
+      )
 
 /** How many characters before the first difference stay in view when a value is cut around it. */
 const BEFORE_CHANGE = 16

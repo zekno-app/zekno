@@ -60,7 +60,8 @@ describe("a thousand seeded settings within the rules", () => {
       const text = composeText(settings)
       for (const [name, s] of settings.services) {
         expect(text).toContain(`  ${quote(name)}:\n`)
-        expect(text).toContain(`image: ${quote(s.image)}\n`)
+        // The services made here run images (specs/016-build-from-source: `image` is optional).
+        expect(text).toContain(`image: ${quote(s.image!)}\n`)
         for (const [variable, value] of s.plain ?? [])
           expect(text).toContain(`      ${quote(variable)}: ${quote(value)}\n`)
       }
@@ -141,7 +142,7 @@ test.skipIf(!compose)(
       )
       for (const [name, s] of settings.services) {
         const service = read.services[name]!
-        expect(service.image).toBe(s.image)
+        expect(service.image).toBe(s.image!)
         if (s.start !== undefined) {
           const split = splitStart(s.start)
           // Compose prints a literal `$` as its own escape, `$$`.

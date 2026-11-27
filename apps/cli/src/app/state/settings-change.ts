@@ -12,6 +12,7 @@
  * the SHA-256 of the file the change was opened on, and the effect refuses
  * the write when the file is no longer those bytes.
  */
+import { buildRaw, isBuildPath } from "../../settings/build-values"
 import { applyChange, shownValue } from "../../settings/change"
 import type { ServiceSettings, SettingPath } from "../../settings/types"
 import { MAX_SECRETS, MAX_TEXT, readTyped } from "../../settings/values"
@@ -100,6 +101,8 @@ const limitOf = (path: SettingPath): number =>
 /** A setting's value as it is written in the file, to be filled in: empty when it is not set. */
 function rawValue(service: ServiceSettings | undefined, path: SettingPath) {
   if (service === undefined) return ""
+  // specs/016-build-from-source, J18: a Build row's value as `zekno settings set` takes it.
+  if (isBuildPath(path)) return buildRaw(service, path.key)
   switch (path.key) {
     case "plain":
       return service.plain?.find(([name]) => name === path.name)?.[1] ?? ""
@@ -175,7 +178,8 @@ function checked(
     stay(withChange(state, screen, { ...change, typed, reason }))
   const { path } = change
   if (typed === "" && path.key === "image") return refuse(IMAGE_NEEDED)
-  if (typed !== "") {
+  // A Build row's value is held to its rules by `applyChange`, as `zekno settings set` holds it (build-values.ts).
+  if (typed !== "" && !isBuildPath(path)) {
     const value = readTyped(path, typed)
     if ("refused" in value) return refuse(value.refused)
   }

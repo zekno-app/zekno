@@ -9,6 +9,7 @@ import { isText } from "./input"
 import { go, keep, push, replaceTop, stay } from "./steps"
 import { withAppRows } from "./team"
 import type { DeployProgress } from "../../shared/deploy"
+import { withBuildLine } from "../../shared/deploy-build"
 import { DEPLOY_LINES, type Screen, type State } from "./types"
 
 /** The deploy screen's one key of its own: `o` shows or hides Docker's output. */
@@ -122,18 +123,44 @@ export function deployProgress(
   })
 }
 
+/**
+ * The lines of a deploy that builds (specs/016-build-from-source, CL7 step
+ * 13; J2, J3): the live line and the service building (D4, D5), and each
+ * build reused (D6). The builder's text comes with Docker's lines, in the
+ * order printed (`deploy-progress`; J5).
+ */
+export function deployBuild(
+  state: State,
+  event: EventOf<"deploy-build">
+): Step {
+  if (!state.deploy) return stay(state)
+  let build = state.deploy.build
+  for (const line of event.lines)
+    build = withBuildLine(build, line, event.services)
+  return stay({
+    ...state,
+    deploy: { ...state.deploy, ...(build === undefined ? {} : { build }) },
+  })
+}
+
 export function deployEnded(
   state: State,
   event: EventOf<"deploy-ended">
 ): Step {
   if (!state.deploy) return stay(state)
   const { server, app, sequence } = state.deploy
+  // A build that failed (J6, J7): its failure, for the panel "Docker said".
+  const build =
+    event.failure === undefined
+      ? state.deploy.build
+      : { reused: [], ...state.deploy.build, failure: event.failure }
   const deploy = {
     ...state.deploy,
     running: false,
     outcome: event.outcome,
     endedAt: event.at,
     result: event.notice,
+    ...(build === undefined ? {} : { build }),
   }
   // The runner just said it accepted this deploy, whether or not the app started, its routes are in force or it was healthy.
   const accepted =

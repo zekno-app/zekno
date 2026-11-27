@@ -240,12 +240,8 @@ describe("which file, piped (US1, scenario 4; FR-011)", () => {
 })
 
 describe("a file that cannot be used stops everything (US1, scenarios 5 and 6)", () => {
-  // A health check and domains are settings since specs/015-domains-https (CL1), no longer later ones.
+  // A health check and domains are settings since specs/015-domains-https (CL1), no longer later ones; a build since specs/016-build-from-source (C30 went).
   const LATER: [string, string][] = [
-    [
-      '"build": {}',
-      "zekno.app.json sets a build for web. Building from source is not in this version of zekno yet.",
-    ],
     [
       '"predeploy": "bun run migrate"',
       "zekno.app.json sets a pre-deploy command for web. A pre-deploy command is not in this version of zekno yet.",
@@ -256,7 +252,6 @@ describe("a file that cannot be used stops everything (US1, scenarios 5 and 6)",
     ],
   ]
   const PLACE: Record<string, string> = {
-    build: "source",
     predeploy: "deploy",
     replicas: "deploy",
   }
@@ -268,18 +263,22 @@ describe("a file that cannot be used stops everything (US1, scenarios 5 and 6)",
       const key = /"([a-z]+)"/.exec(setting)![1]!
       const section = PLACE[key]!
       const text = DESIGN_FILE.replace(
-        section === "source"
-          ? '"source": { "image": "ghcr.io/acme/demo-web:1.4.2" }'
-          : `"${section}": {`,
-        section === "source"
-          ? `"source": { "image": "ghcr.io/acme/demo-web:1.4.2", ${setting} }`
-          : `"${section}": { ${setting},`
+        `"${section}": {`,
+        `"${section}": { ${setting},`
       )
       return [text, sentence]
     })
     cases.push([
       DESIGN_FILE.replace('"1g"', `"${SENTINEL}"`),
       "zekno.app.json could not be read as settings. web, deploy.memory: use a size such as 512m or 1g.",
+    ])
+    // specs/016-build-from-source, CL1: an image and a build is C25, said by its id until the words tasks (FR-092).
+    cases.push([
+      DESIGN_FILE.replace(
+        '"source": { "image": "ghcr.io/acme/demo-web:1.4.2" },',
+        '"source": { "image": "ghcr.io/acme/demo-web:1.4.2" },\n      "build": { "builder": "dockerfile" },'
+      ),
+      "C25",
     ])
     for (const [text, sentence] of cases) {
       writeFileSync(join(m.project, "zekno.app.json"), text)

@@ -246,7 +246,7 @@ describe("US1: each deploy is made after the runner's number", () => {
     const state = stateBytes(m)
     const ups = m.docker.calls().length
     let thrown: unknown
-    await sendDeploy(m.deps, { ...plan, fresh: true }).catch(
+    await sendDeploy(m.deps, { ...plan, newApp: true }).catch(
       (error: unknown) => (thrown = error)
     )
     expect(thrown).toBeInstanceOf(AppTaken)

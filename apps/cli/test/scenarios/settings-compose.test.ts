@@ -7,14 +7,36 @@
  * reads it from this machine's history; and a second run prints the same.
  */
 import { describe, expect, test } from "bun:test"
-import { readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { join } from "node:path"
 
+import { buildKey, builtImageName, type Envelope } from "@workspace/core"
+
 import { openTeam } from "../../src/cli/context"
+import { prepareDeploy, sendDeploy } from "../../src/ops/deploy"
+import { composeForFolder } from "../../src/ops/settings"
+import { MADE_AT_DEPLOY } from "../../src/ops/settings-build"
+import { packFolder } from "../../src/pack/chunks"
+import { readIgnoreFile } from "../../src/pack/ignore"
+import { walkFolder } from "../../src/pack/walk"
 import { composeText } from "../../src/settings/compose"
+import { readSettingsFile } from "../../src/settings/file"
 import { SH1, SH3 } from "../../src/settings/words"
 import { readDeployEntry } from "../../src/shared/history"
 import type { Cell } from "../../src/ui/types"
+import {
+  builderAnswer,
+  buildsAnswer,
+  payloadOf,
+  standInSessions,
+  started,
+} from "../support/build-session"
 import { COMPOSE_V1, machine, ready } from "../support/helpers"
 import {
   DESIGN_COMPOSE,
@@ -230,4 +252,214 @@ describe("zekno settings compose prints what zekno deploy signs (FR-027, SC-002)
     expect(t.raw()).not.toContain("\u202E")
     expect(t.lines()).not.toContain('      "NODE_ENV": "production"')
   })
+})
+
+/**
+ * A built service (specs/016-build-from-source, contracts/cli.md CL1, "zekno
+ * settings compose"; plan item 18 (a); FR-011's exception; tasks T124). The
+ * key is computed here from the same folder, by pass 1 and pass 2 with no
+ * sealing; the byte-for-byte check against a payload a deploy signs is
+ * T129's. Lines are checked by their row id, never their words (FR-092).
+ */
+describe("zekno settings compose for a built service (T124)", () => {
+  const DOCKERFILE = "FROM alpine:3.20\nEXPOSE 3000\nCOPY . /app\n"
+
+  /** A ready machine whose folder holds `files` and the settings of `services`, linked to shop on dev. */
+  async function builtFolder(
+    services: Record<string, unknown>,
+    files: Record<string, string> = { Dockerfile: DOCKERFILE }
+  ) {
+    const m = await ready()
+    rmSync(join(m.project, "compose.yaml"))
+    for (const [name, text] of Object.entries(files))
+      writeFileSync(join(m.project, name), text)
+    writeFileSync(
+      join(m.project, "zekno.app.json"),
+      `${JSON.stringify({ zekno: 1, services }, null, 2)}\n`
+    )
+    if ((await m.zekno("link", "--app", "shop", "--server", "dev")) !== 0)
+      throw new Error(m.lastErr())
+    return m
+  }
+
+  const built = { build: { builder: "dockerfile" }, networking: { port: 3000 } }
+
+  /** The key of the folder's one Dockerfile build with no plain variable it reads, made as a deploy makes it with `fresh` null. */
+  async function keyOf(folder: string, home: string): Promise<string> {
+    const root = realpathSync(folder)
+    const walk = walkFolder(root, {
+      dockerfile: "Dockerfile",
+      ignore: readIgnoreFile(root, {
+        builder: "dockerfile",
+        dockerfile: "Dockerfile",
+      }),
+      include: [],
+      agreed: () => false,
+      zeknoHome: home,
+    })
+    const pack = await packFolder(walk, { seal: null })
+    return buildKey(
+      {
+        pack: { hash: pack.hash },
+        builder: { name: "dockerfile", dockerfile: "Dockerfile", target: null },
+        args: [],
+        secrets: [],
+        network: "default",
+        fresh: null,
+      },
+      []
+    )
+  }
+
+  /** The settings of the folder, as the reader reads them. */
+  const settingsOf = (m: Machine) =>
+    readSettingsFile({ kind: "default", folder: m.project }, m.project).settings
+
+  test("packed with no sealing, no server and nothing written: the text with the key made with fresh null, and G22 from the code", async () => {
+    const m = await builtFolder({ web: built })
+    let connections = 0
+    const connect = m.deps.connect
+    m.deps.connect = (...args) => {
+      connections++
+      return connect(...args)
+    }
+    const printed = await composeForFolder(m.deps)
+    const key = await keyOf(m.project, m.home)
+    expect(printed).toEqual({
+      text: composeText(
+        settingsOf(m),
+        new Map([["web", builtImageName("shop", key)]])
+      ),
+      lines: [{ id: "G22", service: "web", server: "dev", made: "from_code" }],
+    })
+    expect(printed.text).toContain(`    pull_policy: "never"\n`)
+    expect(printed.text).toContain(`      "PORT": "3000"\n`)
+    expect(connections).toBe(0)
+    expect(existsSync(join(m.home, "tmp"))).toBe(false)
+    // A second run packs the same folder to the same key.
+    expect((await composeForFolder(m.deps)).text).toBe(printed.text)
+  }, 60_000)
+
+  test("the command prints that text on standard output, byte for byte, and G22 by its id on standard error", async () => {
+    const m = await builtFolder({ web: built })
+    const printed = await composeForFolder(m.deps)
+    const before = { out: m.out.length, err: m.err.length }
+    expect(await m.zekno("settings", "compose")).toBe(0)
+    expect(`${m.out.slice(before.out).join("\n")}\n`).toBe(printed.text)
+    expect(m.err.slice(before.err)).toEqual(["G22"])
+  }, 60_000)
+
+  test("two services of one folder and one recipe share one key; an image service beside them prints as today", async () => {
+    const m = await builtFolder({
+      web: built,
+      worker: { build: { builder: "dockerfile" } },
+      cache: { source: { image: "redis:7" } },
+    })
+    const key = builtImageName("shop", await keyOf(m.project, m.home))
+    const printed = await composeForFolder(m.deps)
+    expect(printed.text).toBe(
+      composeText(
+        settingsOf(m),
+        new Map([
+          ["web", key],
+          ["worker", key],
+        ])
+      )
+    )
+    expect(printed.text).toContain(`  "cache":\n    image: "redis:7"\n`)
+    expect(printed.lines.map((line) => [line.id, line.service])).toEqual([
+      ["G22", "web"],
+      ["G22", "worker"],
+    ])
+  }, 60_000)
+
+  test("a build whose base key this machine's history shows with a fresh generation: the placeholder, and G22's fresh form", async () => {
+    const m = await builtFolder({ web: built })
+    const stand = standInSessions(m.deps, {
+      answer: {
+        builder: () => builderAnswer(),
+        builds: () => buildsAnswer("shop"),
+        deploy: started,
+      },
+    })
+    const plan = await prepareDeploy(m.deps, {
+      app: "shop",
+      server: "dev",
+      fresh: true,
+    })
+    await sendDeploy(m.deps, { ...plan, fresh: true })
+    stand.restore()
+    const printed = await composeForFolder(m.deps)
+    expect(printed).toEqual({
+      text: composeText(
+        settingsOf(m),
+        new Map([["web", `zekno.invalid/shop:${MADE_AT_DEPLOY}`]])
+      ),
+      lines: [{ id: "G22", service: "web", server: "dev", made: "fresh" }],
+    })
+    expect(MADE_AT_DEPLOY).toBe("<made at deploy>")
+  }, 60_000)
+
+  test("a deploy that was not fresh leaves the key printed from the code, the very text that deploy signed", async () => {
+    const m = await builtFolder({ web: built })
+    const stand = standInSessions(m.deps, {
+      answer: {
+        builder: () => builderAnswer(),
+        builds: () => buildsAnswer("shop"),
+        deploy: started,
+      },
+    })
+    expect(await m.zekno("deploy")).toBe(0)
+    stand.restore()
+    const printed = await composeForFolder(m.deps)
+    expect(printed.lines).toEqual([
+      { id: "G22", service: "web", server: "dev", made: "from_code" },
+    ])
+    expect(printed.text).toContain(
+      builtImageName("shop", await keyOf(m.project, m.home))
+    )
+    const signed = stand.inputs("deploy").at(-1) as { envelope: Envelope }
+    expect(payloadOf(signed.envelope).compose).toBe(printed.text)
+  }, 60_000)
+
+  test("an image service prints as today, with no line", async () => {
+    const m = await ready()
+    rmSync(join(m.project, "compose.yaml"))
+    writeFileSync(join(m.project, "zekno.app.json"), DESIGN_FILE)
+    expect(await composeForFolder(m.deps)).toEqual({
+      text: DESIGN_COMPOSE,
+      lines: [],
+    })
+  })
+
+  test("the stops of a deploy apply: a Dockerfile not there (C20), an image under zekno.invalid (C10), the app's name ending with a hyphen (C21c)", async () => {
+    const missing = await builtFolder({
+      web: { build: { builder: "dockerfile", dockerfile: "Dockerfile.web" } },
+    })
+    await expect(composeForFolder(missing.deps)).rejects.toMatchObject({
+      line: { id: "C20", service: "web" },
+    })
+
+    const reserved = await builtFolder(
+      { web: built },
+      { Dockerfile: "FROM zekno.invalid/other:1\n" }
+    )
+    await expect(composeForFolder(reserved.deps)).rejects.toMatchObject({
+      line: { id: "C10", service: "web" },
+    })
+
+    const hyphen = await ready()
+    rmSync(join(hyphen.project, "compose.yaml"))
+    writeFileSync(join(hyphen.project, "Dockerfile"), DOCKERFILE)
+    writeFileSync(
+      join(hyphen.project, "zekno.app.json"),
+      `${JSON.stringify({ zekno: 1, services: { web: built } }, null, 2)}\n`
+    )
+    expect(
+      await hyphen.zekno("link", "--app", "shop-", "--server", "dev")
+    ).toBe(0)
+    await expect(composeForFolder(hyphen.deps)).rejects.toMatchObject({
+      line: { id: "C21c", app: "shop-" },
+    })
+  }, 60_000)
 })

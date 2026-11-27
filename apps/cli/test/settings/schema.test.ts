@@ -65,7 +65,8 @@ describe("the test set", () => {
       "use an object of sections.",
       "deploy: use an object.",
       "a setting this zekno does not know",
-      "a service needs an image",
+      // specs/016-build-from-source, CL1: SV7 became C26, said by its id until the words tasks (FR-092).
+      "C26",
       "use an image reference",
       "use a command, or leave start out",
       "a quote does not close.",
@@ -96,7 +97,7 @@ describe("the test set", () => {
       "two volumes are mounted at the same path.",
       "at most 16 volumes.",
       "they read more than 256 secrets",
-      "sets a build for",
+      // A build's refusal went with specs/016-build-from-source (C30): its file is now a key not known.
       "sets a pre-deploy command for",
       "sets replicas for",
       // Settings since specs/015-domains-https (CL1); every rule of theirs is in test/settings/domains-health.test.ts.
@@ -248,10 +249,11 @@ describe("the order of checks (contracts/settings-file.md)", () => {
   })
 
   test("4: a later setting in its own place only; elsewhere it is a key not known", () => {
-    const text = web({ build: "." })
+    // specs/016-build-from-source, CL1: a build is a section of its own, so `source.build` is not known.
+    const text = web({ networking: { predeploy: "." } })
     expect(sentence(text)).toBe(
       form(
-        `web: a setting this zekno does not know (line ${lineOf(text, '"build"')}).`
+        `web, networking: a setting this zekno does not know (line ${lineOf(text, '"predeploy"')}).`
       )
     )
     const domains = web({ deploy: { domains: ["x"] } })
@@ -323,6 +325,7 @@ describe("the order of checks (contracts/settings-file.md)", () => {
     ).toBe(form("web, deploy.memory: use a size such as 512m or 1g."))
   })
 
+  // specs/016-build-from-source, CL1: neither an image nor a build is C26, said by its id until the words tasks (FR-092).
   test("5: a missing image is noticed where its service ends", () => {
     expect(
       sentence(
@@ -339,11 +342,7 @@ describe("the order of checks (contracts/settings-file.md)", () => {
           services: { web: { deploy: {} }, api: { source: 5 } },
         })
       )
-    ).toBe(
-      form(
-        "web, source.image: a service needs an image, such as ghcr.io/acme/web:1.4.2."
-      )
-    )
+    ).toBe("C26")
   })
 
   test("5: a name before its value", () => {

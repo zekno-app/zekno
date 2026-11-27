@@ -62,7 +62,8 @@ describe("the keys (CL1)", () => {
       ["web.deploy.healthcheck.timeout", "health-timeout"],
     ] as const)
       expect(parseSettingPath(typed)).toEqual({ service: "web", key })
-    expect(parseSettingPath("web.health.path")).toEqual({ unknown: true })
+    // specs/016-build-from-source, CL1: no such setting is G18, thrown with its line (plan item 21 (a)).
+    expect(() => parseSettingPath("web.health.path")).toThrow("G18")
     expect(CS5).toContain("health, health-timeout")
     expect(CS5).toContain("domains")
   })

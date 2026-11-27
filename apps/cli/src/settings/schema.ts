@@ -19,6 +19,7 @@
  */
 import { LIMITS } from "@workspace/core"
 
+import { buildFaultOf, buildPartsOf, longestImages } from "./build-shape"
 import { composeText } from "./compose"
 import { acrossRoutes, routeFault } from "./domains-health"
 import { pathKey, readJson, type JsonValue } from "./json"
@@ -184,6 +185,9 @@ function faultOf(
   const section = path[2]
   const name = path[4]
   const volume = path[3]
+  // The ids of a build (specs/016-build-from-source, CL1): said by its line's id.
+  const built = buildFaultOf(id, svc)
+  if (built !== undefined) return { kind: "build", fault: built }
   // The ids of domains and the health check (specs/015-domains-https, CL1).
   const routed = routeFault(id, svc, path, lineOf)
   if (routed !== undefined) return form(routed.said, routed.line)
@@ -268,7 +272,7 @@ function serviceOf(service: ParsedService): ServiceSettings {
   const mounts = [...(volumes ?? [])]
   const health = deploy?.healthcheck
   return {
-    image: service.source.image,
+    ...buildPartsOf(service),
     ...(deploy?.start === undefined ? {} : { start: deploy.start }),
     ...(deploy?.restart === undefined
       ? {}
@@ -330,7 +334,8 @@ export function acrossSettings(settings: Settings): PlaceRule | undefined {
   if (routed !== undefined) return routed
   const secrets = new Set(services.flatMap(([, s]) => s.secrets ?? []))
   if (secrets.size > LIMITS.secretsPerDeploy) return words.SV32
-  if (Buffer.byteLength(composeText(settings)) > LIMITS.composeBytes)
+  const images = longestImages(settings)
+  if (Buffer.byteLength(composeText(settings, images)) > LIMITS.composeBytes)
     return words.SV33
   return undefined
 }

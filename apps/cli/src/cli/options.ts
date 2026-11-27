@@ -79,30 +79,59 @@ const DOMAIN_ONLY = {
   service: { type: "string" },
 } as const
 
-/** The option only `zekno deploy` reads (specs/015-domains-https, CL3): on another command it is an unknown option. */
+/**
+ * The options only `zekno deploy` reads: `--skip-dns-check`
+ * (specs/015-domains-https, CL3) and `--fresh`, a fresh build of every built
+ * service (specs/016-build-from-source, CL7 and CL12). On another command
+ * each is an unknown option.
+ */
 const DEPLOY_ONLY = {
   "skip-dns-check": { type: "boolean" },
+  fresh: { type: "boolean" },
 } as const
+
+/** The option only `zekno logs` reads: `--build`, the saved output of an app's last build (specs/016-build-from-source, CL9, CL12). */
+const LOGS_ONLY = {
+  build: { type: "boolean" },
+} as const
+
+/** The option only `zekno doctor` reads: `--builds`, the build checks of every server (specs/016-build-from-source, CL9, CL12). */
+const DOCTOR_ONLY = {
+  builds: { type: "boolean" },
+} as const
+
+/** The options of the commands that have some of their own, by the command's first word. */
+const OWN_TABLES: Record<string, object> = {
+  add: ADD_ONLY,
+  domain: DOMAIN_ONLY,
+  deploy: DEPLOY_ONLY,
+  logs: LOGS_ONLY,
+  doctor: DOCTOR_ONLY,
+}
 
 /**
  * The words and options of a run. Every command is parsed first with the
- * option table it had before the options of `zekno add`, of `zekno domain`
- * and of `zekno deploy --skip-dns-check` came, plus its own, so an option
- * another command reads, or anything else wrong, fails exactly as it did:
- * the same sentence, status 2.
+ * option table it had before the options of `zekno add`, of `zekno domain`,
+ * of `zekno deploy --skip-dns-check` and of feature 016 (`--fresh`,
+ * `--build`, `--builds`) came, plus its own, so an option another command
+ * reads, or anything else wrong, fails exactly as it did: the same
+ * sentence, status 2.
  */
 export function parsed(args: string[]) {
-  const options = { ...OPTIONS, ...ADD_ONLY, ...DOMAIN_ONLY, ...DEPLOY_ONLY }
+  const options = {
+    ...OPTIONS,
+    ...ADD_ONLY,
+    ...DOMAIN_ONLY,
+    ...DEPLOY_ONLY,
+    ...LOGS_ONLY,
+    ...DOCTOR_ONLY,
+  }
   const at = { args, allowPositionals: true } as const
   const first = parseArgs({ ...at, strict: false, options }).positionals[0]
   const own =
-    first === "add"
-      ? { ...OPTIONS, ...ADD_ONLY }
-      : first === "domain"
-        ? { ...OPTIONS, ...DOMAIN_ONLY }
-        : first === "deploy"
-          ? { ...OPTIONS, ...DEPLOY_ONLY }
-          : OPTIONS
+    first !== undefined && Object.hasOwn(OWN_TABLES, first)
+      ? { ...OPTIONS, ...OWN_TABLES[first] }
+      : OPTIONS
   parseArgs({ ...at, strict: true, options: own })
   return parseArgs({ ...at, strict: true, options })
 }

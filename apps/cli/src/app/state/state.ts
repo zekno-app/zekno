@@ -30,6 +30,7 @@ import {
 } from "./add-server"
 import { onApp } from "./app"
 import {
+  deployBuild,
   deployEnded,
   deployHealth,
   deployHttps,
@@ -43,7 +44,7 @@ import type { AppEvent, Step } from "./events"
 import { onHome } from "./home"
 import { inputOf, isText } from "./input"
 import { onLogs, typeFilter, withLogLines } from "./logs"
-import { askDeployElsewhere, onQuestion } from "./questions"
+import { askBuildYes, askDeployElsewhere, onQuestion } from "./questions"
 import {
   hiddenPromptOpen,
   refreshAllowed,
@@ -326,6 +327,8 @@ export function update(state: State, event: AppEvent): Step {
       return deployStage(state, event)
     case "deploy-progress":
       return deployProgress(state, event)
+    case "deploy-build":
+      return deployBuild(state, event)
     case "deploy-health":
       return deployHealth(state, event)
     case "deploy-https":
@@ -354,6 +357,8 @@ export function update(state: State, event: AppEvent): Step {
       })
     case "ask-deploy-elsewhere":
       return askDeployElsewhere(state, event)
+    case "ask-build-yes":
+      return askBuildYes(state, event)
     case "linked":
       return stay({ ...state, linked: event.linked })
     case "link-used": {

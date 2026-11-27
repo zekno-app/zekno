@@ -328,8 +328,10 @@ function live(
           continue
         }
         const report = parseMessage(RunnerReportSchema, value.result)
-        if (report.ok && report.value.outcome === "refused")
-          throw new RunnerRefused(report.value.reason!)
+        if (report.ok && report.value.outcome === "refused") {
+          const { reason, disk } = report.value
+          throw new RunnerRefused(reason!, undefined, disk)
+        }
         const parsed = parseMessage(schema, value.result)
         if (!parsed.ok) throw new CliError(UNEXPECTED)
         return parsed.value as z.infer<Schema>

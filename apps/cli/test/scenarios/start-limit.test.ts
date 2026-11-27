@@ -12,7 +12,7 @@ import { RUNNER_PROTOCOL } from "@workspace/core"
 import { rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { chooseFormat } from "../../src/ops/deploy-format"
+import { chooseFormat, ROUTES_PROTOCOL } from "../../src/ops/deploy-format"
 import { runnerRelation, runnerWarning } from "../../src/ops/server"
 import { C7 } from "../../src/shared/deploy-words"
 import { stoppedWaitingPlain } from "../../src/shared/start-limit"
@@ -73,9 +73,14 @@ describe("zekno deploy when the runner stopped waiting for the start (B20)", () 
   }, 60_000)
 })
 
+/** The protocol of a runner released before the start limit (specs/015-domains-https): routes and health, no limit. */
+const BEFORE_THE_LIMIT = 4
+
 describe("this zekno and a runner of protocol 4 (released before the limit)", () => {
   test("deploys with a domain and without, saying nothing of the protocol; it is only said to be older", async () => {
-    expect(RUNNER_PROTOCOL).toBe(5)
+    // Protocol 6 (specs/016-build-from-source, contracts/core.md CO17): the runner of this repository is two above it.
+    expect(RUNNER_PROTOCOL).toBe(6)
+    expect(BEFORE_THE_LIMIT).toBe(ROUTES_PROTOCOL)
     const m = await ready()
     rmSync(join(m.project, "compose.yaml"))
     writeFileSync(
@@ -98,7 +103,7 @@ describe("this zekno and a runner of protocol 4 (released before the limit)", ()
       version: "0.1.1",
       files: { "linux-x64": { sha256: null }, "linux-arm64": { sha256: null } },
     }
-    const back = reportingAs(m, "0.1.0", RUNNER_PROTOCOL - 1)
+    const back = reportingAs(m, "0.1.0", BEFORE_THE_LIMIT)
 
     m.err.length = 0
     expect(await m.zekno("deploy")).toBe(0)
@@ -120,7 +125,7 @@ describe("this zekno and a runner of protocol 4 (released before the limit)", ()
     // What `server add`, `status` and the app say of such a runner on a server reached over SSH: W3, older.
     const relation = runnerRelation(
       "session",
-      { version: "0.1.0", protocol: RUNNER_PROTOCOL - 1 },
+      { version: "0.1.0", protocol: BEFORE_THE_LIMIT },
       "0.1.1"
     )
     expect(relation).toEqual({
@@ -133,8 +138,8 @@ describe("this zekno and a runner of protocol 4 (released before the limit)", ()
     )
   }, 60_000)
 
-  test("the other way round: a zekno of protocol 4 is told to update by this runner, before anything is signed (C7)", () => {
-    // A zekno sees a runner one protocol above its own exactly as a zekno of 4 sees this runner of 5.
+  test("the other way round: a zekno of protocol 5 is told to update by this runner, before anything is signed (C7)", () => {
+    // A zekno sees a runner one protocol above its own exactly as a zekno of 5 sees this runner of 6.
     const relation = runnerRelation(
       "session",
       { version: "0.1.2", protocol: RUNNER_PROTOCOL + 1 },

@@ -19,11 +19,7 @@
  */
 import { checkSettings, isSettings } from "../settings/schema"
 import { settingsText } from "../settings/text"
-import type {
-  ServiceSettings,
-  Settings,
-  SettingsFault,
-} from "../settings/types"
+import type { Settings, SettingsFault } from "../settings/types"
 import { checkServiceName, SETTINGS_BYTES } from "../settings/values"
 import { laterSentences } from "../settings/words"
 import * as words from "./add-words"
@@ -32,6 +28,7 @@ import type {
   AdditionRefused,
   ReadersQuestion,
   Template,
+  TemplateService,
 } from "./types"
 
 /** What an addition is planned from. */
@@ -65,7 +62,7 @@ const refuse = (
 export function servicesInApp(
   template: Template,
   name: string | undefined
-): (readonly [string, ServiceSettings])[] {
+): (readonly [string, TemplateService])[] {
   return template.services.map(([own, service], index) => {
     const named = index === 0 ? (name ?? own) : own
     const volumes = service.volumes?.map(
@@ -90,6 +87,9 @@ function broken(
       }
     case "read":
       return { place: "", rule: fault.sentence }
+    case "build":
+      // specs/016-build-from-source, CL1: a fault of a service's build settings, at the service, said by its line's id until the words tasks (FR-092).
+      return { place: fault.fault.service, rule: fault.fault.id }
   }
 }
 

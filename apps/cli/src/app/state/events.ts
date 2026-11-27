@@ -9,6 +9,8 @@ import type {
   DeployStage,
   HttpsShown,
 } from "../../shared/deploy"
+import type { BuildLine, LineOf } from "../../shared/build-lines"
+import type { BuildFailure } from "../../shared/deploy-build"
 import type { AppRow, DeployRow, RunState, SecretRow } from "../../shared/views"
 import type { SettingPath } from "../../settings/types"
 import type { AppKey } from "../keys"
@@ -53,6 +55,8 @@ export type Effect =
         | "values-set"
         | "skip-values"
         | "deploy-elsewhere"
+        // specs/016-build-from-source (J12): a yes to B24 or B26, kept in agreed.json before the deploy goes on.
+        | "build-yes"
     }
   /** `to` undefined: the deploy before the latest. */
   | { kind: "rollback"; server: string; app: string; to?: number }
@@ -185,11 +189,25 @@ export type AppEvent =
   | { type: "deploy-pointed"; domain: string; address: string }
   /** Docker's lines during the deploy, cleaned, in the order it printed them. */
   | { type: "deploy-progress"; lines: readonly string[] }
+  /**
+   * A deploy that builds (specs/016-build-from-source, CL7 step 13; J2, J3):
+   * the lines said while it runs, in order (D4, D5, D6, D17), the builder's
+   * text among them already cleaned; that text comes with Docker's lines
+   * too (`deploy-progress`). Only a deploy that builds.
+   * `services`: those of its one build, which D4 is said for.
+   */
+  | {
+      type: "deploy-build"
+      lines: readonly BuildLine[]
+      services?: readonly string[]
+    }
+  /** `failure`: a build that failed (J6, J7), only with `build_failed`. */
   | {
       type: "deploy-ended"
       outcome: DeployOutcome | "error"
       notice: Notice
       at?: number
+      failure?: BuildFailure
     }
   /** Before a deploy: names the Compose file `file` expects that have no secret. */
   | {
@@ -205,6 +223,13 @@ export type AppEvent =
       server: string
       app: string
       compose: string
+    }
+  /** A deploy that builds needs a first-time yes (specs/016-build-from-source, CL5; J12): B24 or B26, in the panel of "Remember this folder?". */
+  | {
+      type: "ask-build-yes"
+      server: string
+      app: string
+      line: LineOf<"B24" | "B26">
     }
   /** `d` in a linked folder with another app selected than the folder's own (`linked`). */
   | {

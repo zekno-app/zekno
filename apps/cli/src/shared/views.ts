@@ -138,10 +138,16 @@ const accepted = (entries: readonly Verified[]) =>
  * `unhealthy` (specs/015-domains-https, CL3) are deploys that were accepted,
  * whose app started, and the app's current one: shown as started until the
  * screens' phase gives them words of their own. Only what is shown; the
- * history keeps them as themselves.
+ * history keeps them as themselves. `build_failed` is shown as a deploy that
+ * did not start (specs/016-build-from-source, contracts/cli.md CL7, "The
+ * answer").
  */
 const shownOutcome = (outcome: Verified["outcome"]): DeployRow["outcome"] =>
-  outcome === "routes_failed" || outcome === "unhealthy" ? "started" : outcome
+  outcome === "routes_failed" || outcome === "unhealthy"
+    ? "started"
+    : outcome === "build_failed"
+      ? "start_failed"
+      : outcome
 
 /**
  * The apps this machine has a history for on one server, by the name of each
@@ -373,8 +379,15 @@ export function lastDeployedSettings(
   const latest = accepted(verifiedDeploys({ store, trust }, server, app)).at(
     -1
   )?.deploy
+  // A built service is read back with the builds the deploy signed (specs/016-build-from-source, CL1): without them its
+  // image names a key and no settings, and nothing of the app would be marked.
   const settings =
-    latest === undefined ? undefined : deployedSettings(latest.compose)
+    latest === undefined
+      ? undefined
+      : deployedSettings(
+          latest.compose,
+          (latest.builds ?? []).map(({ build }) => build)
+        )
   return settings === undefined
     ? undefined
     : withRoutes(settings, latest!.routes ?? [], latest!.health ?? null)

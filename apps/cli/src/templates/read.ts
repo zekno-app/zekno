@@ -38,7 +38,7 @@ import {
   TEMPLATE_NAME,
   type ParsedFields,
 } from "./shape"
-import type { Offer, Template, TemplateFault } from "./types"
+import type { Offer, Template, TemplateFault, TemplateService } from "./types"
 
 type Path = readonly (string | number)[]
 
@@ -254,6 +254,12 @@ function servicesFault(fault: SettingsFault): Stop {
       throw new Error("A later version of the settings was not given.")
     case "read":
       throw new Error("The settings rules read no file here.")
+    case "build":
+      // specs/016-build-from-source, CL1: a fault of a service's build settings, at the service's place, said by its line's id until the words tasks (FR-092).
+      return stop({
+        place: words.templatePlace(fault.fault.service),
+        rule: fault.fault.id,
+      })
   }
 }
 
@@ -282,20 +288,28 @@ function pointsAtService(text: string): boolean {
   )
 }
 
-/** Step 8: the template's own rules, in the contract's order. */
+/**
+ * Step 8: the template's own rules, in the contract's order; the services,
+ * each with its image. A template's service runs an image, never a build:
+ * since a settings file's service may build (specs/016-build-from-source,
+ * CL1), one with no image is refused as one whose image is not pinned (TF21).
+ */
 function ownRules(
   settings: Settings,
   fields: ParsedFields,
   software: string,
   notes: readonly string[]
-): void {
+): Template["services"] {
   const services = settings.services
   const made = [...fields.makes.keys()]
   const offers = [...(fields.offers ?? new Map<string, string>())]
+  const imaged: (readonly [string, TemplateService])[] = []
   for (const [svc, service] of services) {
-    if (!isPinned(service.image)) throw stop(words.TF21(svc))
-    if (tagOf(service.image) === undefined) throw stop(words.TF22(svc))
-    if (publisherOf(service.image) === undefined) throw stop(words.TF23(svc))
+    const { image } = service
+    if (image === undefined || !isPinned(image)) throw stop(words.TF21(svc))
+    if (tagOf(image) === undefined) throw stop(words.TF22(svc))
+    if (publisherOf(image) === undefined) throw stop(words.TF23(svc))
+    imaged.push([svc, { ...service, image }])
   }
   for (const [svc, service] of services)
     if (service.publish !== undefined) throw stop(words.TF24(svc))
@@ -332,11 +346,12 @@ function ownRules(
   for (const [offer, text] of offers)
     if (!pointsAtService(text)) throw stop(words.TF34(offer))
   // `services` holds 1 to 8 services here, and the first has a tag (TF22).
-  const tag = tagOf(services[0]![1].image)!
+  const tag = tagOf(imaged[0]![1].image)!
   if (tag !== software && !tag.startsWith(`${software}.`))
     throw stop(words.TF30(tag))
   const keepsData = services.some(([, service]) => service.volumes?.length)
   if (keepsData && !notes.includes(BACKUP_NOTE)) throw stop(words.TF31)
+  return imaged
 }
 
 /** Steps 3 to 8 on the file's text (contracts/template-file.md, "The order of checks"). */
@@ -394,7 +409,7 @@ function read(name: string, text: string): Template | TemplateFault {
   if (settings.services.length > MAX_SERVICES) return form(words.TF13)
 
   // 8. The template's own rules.
-  ownRules(settings, fields, fields.software, fields.notes)
+  const services = ownRules(settings, fields, fields.software, fields.notes)
 
   return {
     name: fields.name,
@@ -403,7 +418,7 @@ function read(name: string, text: string): Template | TemplateFault {
     software: fields.software,
     author: fields.author,
     also: fields.also ?? [],
-    services: settings.services,
+    services,
     makes: [...fields.makes].map(([made, secret]) => ({
       name: made,
       kind: secret.kind,

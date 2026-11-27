@@ -548,15 +548,16 @@ function faulty(): SettingsCase[] {
       `A setting this zekno does not know (line ${lineOf(include, "include")}).`
     )
   )
+  // specs/016-build-from-source, CL1: a build is a section of its own; under source it is a key not known (C30 went).
+  const sourceBuild = web({}).replace(
+    `"image": "${IMAGE}"`,
+    `"image": "${IMAGE}",\n        "build": { "context": "../.." }`
+  )
   add(
-    '"build": {"context": "../.."}',
-    web({}).replace(
-      `"image": "${IMAGE}"`,
-      `"image": "${IMAGE}",\n        "build": { "context": "../.." }`
-    ),
-    later(
-      "sets a build for web.",
-      "Building from source is not in this version of zekno yet."
+    '"build": {"context": "../.."} in source',
+    sourceBuild,
+    form(
+      `web, source: a setting this zekno does not know (line ${lineOf(sourceBuild, '"build"')}).`
     )
   )
   add(
@@ -629,12 +630,11 @@ function faulty(): SettingsCase[] {
     web({ deploy: [S] }),
     form("web, deploy: use an object.")
   )
+  // specs/016-build-from-source, CL1: neither an image nor a build is C26 (SV7 changed, plan item 21 (a)), said by its id until the words tasks (FR-092).
   add(
     "a service with no image",
     json({ zekno: 1, services: { web: { deploy: { start: S } } } }),
-    form(
-      "web, source.image: a service needs an image, such as ghcr.io/acme/web:1.4.2."
-    )
+    { fault: "C26" }
   )
   add(
     "an image that is not a reference",

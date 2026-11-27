@@ -32,6 +32,7 @@ import {
 import { resolve } from "node:path"
 
 import { CliError } from "../cli/errors"
+import { handComposeStop } from "./compose-build"
 import { DEFAULT_COMPOSE, isAbove, type ProjectLink } from "./file"
 import { shownPath } from "./shown"
 import { sanitize } from "../server/sanitize"
@@ -257,15 +258,39 @@ function readGiven(path: string, words: Words): ComposeText {
   return { text: read.bytes.toString("utf8"), path: read.path }
 }
 
-/** Reads the Compose file a deploy will sign, once. Every problem is a sentence that names the file. */
-export function readCompose(source: ComposeSource): ComposeText {
-  const words = wordsFor(source)
+/** The Compose file as a line names it: its name, as the zekno.json names it, or the path given, cleaned. */
+function shownName(source: ComposeSource): string {
   switch (source.kind) {
     case "project":
-      return readInside(source.link.folder, source.link.compose, words)
+      return sanitize(source.link.compose)
     case "default":
-      return readInside(source.folder, DEFAULT_COMPOSE, words)
+      return DEFAULT_COMPOSE
     case "given":
-      return readGiven(source.path, words)
+      return shownPath(source.path)
   }
+}
+
+/**
+ * Reads the Compose file a deploy will sign, once. Every problem is a
+ * sentence that names the file; a file written by hand that asks Docker to
+ * build, or names `zekno.invalid`, is C8 or C9, before signing
+ * (specs/016-build-from-source, CL6; compose-build.ts).
+ */
+export function readCompose(source: ComposeSource): ComposeText {
+  const words = wordsFor(source)
+  let read: ComposeText
+  switch (source.kind) {
+    case "project":
+      read = readInside(source.link.folder, source.link.compose, words)
+      break
+    case "default":
+      read = readInside(source.folder, DEFAULT_COMPOSE, words)
+      break
+    case "given":
+      read = readGiven(source.path, words)
+      break
+  }
+  const stop = handComposeStop(read.text, shownName(source))
+  if (stop !== undefined) throw stop
+  return read
 }

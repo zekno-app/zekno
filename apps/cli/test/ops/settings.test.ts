@@ -25,10 +25,8 @@ import type { Settings } from "../../src/settings/types"
 import {
   CS1,
   CS13,
-  CS15,
   CS2,
   CS4,
-  CS5,
   CS6,
   IN1_RULE,
   IN4,
@@ -36,6 +34,13 @@ import {
   SH2,
   SH3,
 } from "../../src/settings/words"
+import {
+  answer,
+  building,
+  built,
+  folderWith as builtFolder,
+  server,
+} from "../support/build-events"
 import { COMPOSE_V1, machine, ready, twin } from "../support/helpers"
 import {
   DESIGN_FILE,
@@ -134,6 +139,28 @@ describe("showing", () => {
     )
     expect(marked).toEqual([["web", "memory", { was: "512m" }]])
     expect(links(m)).toBe(before)
+  }, 60_000)
+
+  test("a last deploy that built: read back with the history's builds, so a Build value changed since is marked (specs/016-build-from-source, CL1)", async () => {
+    const m = await builtFolder({ web: built() })
+    server(m, (signed) => [
+      ...building(signed.keys[0]!, ["#1 done"]),
+      answer(signed, { outcome: "started" }),
+    ])
+    expect(await m.zekno("link", "--app", "shop", "--server", "dev")).toBe(0)
+    expect(await m.zekno("deploy")).toBe(0)
+    writeFileSync(
+      join(m.project, "zekno.app.json"),
+      `${JSON.stringify({ zekno: 1, services: { web: built({ network: "none" }) } }, null, 2)}\n`
+    )
+    const report = await showSettings(m.deps)
+    expect(report.app).toBe("shop")
+    const marked = report.services.flatMap((service) =>
+      service.rows
+        .filter((row) => row.changed !== undefined)
+        .map((row) => [service.name, row.changed])
+    )
+    expect(marked).toEqual([["web", { was: "internet" }]])
   }, 60_000)
 
   test("the last deploy a Compose file written by hand: the app, and no marks", async () => {
@@ -298,9 +325,10 @@ describe("changing (contracts/commands.md, 'Order of checks'; T049)", () => {
     expect(
       thrown(() => prepareSettingChange(deps, "web.replicas", "2", false))
     ).toEqual(["WrongInput", CS6("replicas")])
+    // specs/016-build-from-source, CL1: no such setting is G18, by its id until the words tasks (CS5 changed, plan item 21 (a)).
     expect(
       thrown(() => prepareSettingChange(deps, "web.memroy", "1g", false))
-    ).toEqual(["WrongInput", CS5])
+    ).toEqual(["BuildValueRefused", "G18"])
     expect(
       thrown(() => prepareSettingChange(deps, "web.memory", "1g", false))
     ).toEqual(["CliError", SH1])
@@ -326,9 +354,10 @@ describe("changing (contracts/commands.md, 'Order of checks'; T049)", () => {
       "WrongInput",
       "That change cannot be written. worker, networking.publish: set networking.port too, the port it reaches.",
     ])
+    // specs/016-build-from-source, CL1: CS15 became G16, by its id until the words tasks.
     expect(
       thrown(() => prepareSettingChange(deps, "web.image", undefined, true))
-    ).toEqual(["WrongInput", CS15])
+    ).toEqual(["WrongInput", "G16"])
     expect(
       prepareSettingChange(deps, "worker.memory", undefined, true)
     ).toEqual({

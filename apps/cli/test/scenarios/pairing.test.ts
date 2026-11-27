@@ -15,11 +15,7 @@ import { describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import {
-  fakeDocker,
-  RUNNER_MAIN,
-  tempDir,
-} from "../../../runner/test/support/helpers"
+import { fakeDocker, tempDir } from "../../../runner/test/support/helpers"
 import {
   BEFORE,
   OLDER_RUNNER,
@@ -35,17 +31,10 @@ import { connect } from "../../src/server/transport"
 import { C6 } from "../../src/shared/deploy-words"
 import { plainUi } from "../../src/ui/plain/plain"
 import { COMPOSE_V1, COMPOSE_V2, machine } from "../support/helpers"
+import { todaysRunner } from "../support/older-runner"
 
 const runnerTree = olderTree(OLDER_RUNNER)
 const zeknoTree = olderTree(BEFORE)
-
-/** The runner of this repository, with the stand-in Docker at `docker`. */
-const todaysRunner = (docker: string) => [
-  "env",
-  `ZEKNO_DOCKER=${docker}`,
-  process.execPath,
-  RUNNER_MAIN,
-]
 
 /** C6 against runner 0.1.0 named prod, for this zekno carrying 0.1.1. */
 const C6_PROD = C6("prod", "0.1.0", "0.1.1")
@@ -264,8 +253,8 @@ describe("SC-006: the zekno from before version 2, and runner 0.1.0 put back", (
       expect(mine.at(-1)).toBe(
         "Deploy 1 of other is running on dev with no secrets."
       )
-      // Protocol 4's runner writes the state marked 4 (specs/015-domains-https, contracts/core.md, "The state").
-      expect(stateIn(runnerHome).v).toBe(4)
+      // Protocol 6's runner writes the state marked 5 (specs/016-build-from-source, contracts/core.md CO9).
+      expect(stateIn(runnerHome).v).toBe(5)
 
       // The older zekno can no longer deploy either app, and says why it skipped the newer entry of each history.
       for (const app of ["web", "other"]) {

@@ -9,6 +9,7 @@ import type { AppEvent, Effect, Step } from "../../src/app/state/events"
 import { initialState, update } from "../../src/app/state/state"
 import type { State, TeamView } from "../../src/app/state/types"
 import { healthOf } from "../../src/domains/routes"
+import { MADE_AT_DEPLOY } from "../../src/ops/settings-build"
 import { composeText } from "../../src/settings/compose"
 import { removedServices, screenRows } from "../../src/settings/rows"
 import type { Settings } from "../../src/settings/types"
@@ -108,10 +109,20 @@ export function settingsRead(
       },
       settings,
       sha256: options.sha256 ?? "a".repeat(64),
-      compose: composeText(settings),
+      compose: composeText(settings, builtNames(settings, options.app)),
     },
   }
 }
+
+/** A built service's image in the Compose text, as effects/settings.ts names it: the placeholder of a key made at deploy (specs/016-build-from-source). */
+const builtNames = (settings: Settings, app = "demo") =>
+  new Map(
+    settings.services.flatMap(([name, service]) =>
+      service.build === undefined
+        ? []
+        : [[name, `zekno.invalid/${app}:${MADE_AT_DEPLOY}`] as const]
+    )
+  )
 
 /** The board `AppSettings`: design.md's file, with the memory changed since deploy 4 from 512m. */
 export const BOARD_READ = settingsRead(DESIGN_SETTINGS, {

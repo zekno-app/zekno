@@ -27,6 +27,11 @@
  * Its words are in first-deploy-words.ts, and adding the server, with the
  * server questions' words, in connect-server.ts (specs/016-build-from-source,
  * contracts/cli.md CL14).
+ *
+ * A deploy that builds (specs/016-build-from-source, contracts/cli.md CL5
+ * and CL6): in a folder with a Dockerfile and neither file, the first
+ * question comes first (first-build.ts); the questions before signing come
+ * once the deploy is prepared, before its session opens (build-yes.ts).
  */
 import { acceptedLinks } from "../project/accepted"
 import { flagsAgain, fromRow, send, shownFile } from "../commands/deploy"
@@ -65,11 +70,14 @@ import { findProject } from "../project/file"
 import { withProject, type Details, type FromProject } from "../project/project"
 import { notSignedHere } from "../project/signed"
 import { sanitize } from "../server/sanitize"
+import { readDeploySource } from "../ops/deploy-build"
 import { SETTINGS_FILE } from "../settings/file"
-import { chooseSource, readSource } from "../settings/source"
+import { chooseSource } from "../settings/source"
 import { SSH_DESTINATION } from "../server/transport"
 import type { ListQuestion, Ui } from "../ui/types"
 import { whichApp, whichFile, whichServer, type How } from "./asking"
+import { askBuildYes } from "./build-yes"
+import { firstBuild, firstBuildHere } from "./first-build"
 import {
   connectServer,
   DESTINATION_RULE,
@@ -95,8 +103,12 @@ export {
 } from "./connect-server"
 export * from "./first-deploy-words"
 
-/** What `zekno deploy` was typed with, `--skip-dns-check` too (specs/015-domains-https, CL3). */
-export type DeployFlags = Where & { file?: string; skipDnsCheck?: boolean }
+/** What `zekno deploy` was typed with, `--skip-dns-check` too (specs/015-domains-https, CL3), and `--fresh` (specs/016-build-from-source, CL7). */
+export type DeployFlags = Where & {
+  file?: string
+  skipDnsCheck?: boolean
+  fresh?: boolean
+}
 
 /**
  * F1: the opening line, only when the key or a server is missing. It counts
@@ -240,8 +252,20 @@ export async function deployAtTerminal(
         ? { kind: "settings", source: here }
         : { kind: "compose", source: here }
   }
+  // specs/016-build-from-source, CL6: a folder with a Dockerfile and neither file, with no `-f` and no link, is asked the
+  // first question here, before the opening line, with no keychain; its yes writes the settings file read next.
+  if (
+    flags.file === undefined &&
+    details.project === undefined &&
+    source.kind === "compose" &&
+    source.source.kind === "default" &&
+    firstBuildHere(deps.cwd)
+  ) {
+    await firstBuild(ui, deps)
+    source = { kind: "settings", source: { kind: "default", folder: deps.cwd } }
+  }
   // Read once: a fault of a settings file is said here, before any question but those two.
-  const read = readSource(source, deps.cwd)
+  const read = readDeploySource(source, deps.cwd)
   if (source.kind === "settings" && source.source.kind === "default")
     named = SETTINGS_FILE
   if (read.text.trim() === "")
@@ -265,7 +289,7 @@ export async function deployAtTerminal(
   let wrote: WrittenLink | undefined
   let server: Server
   let app: string
-  let fresh: boolean
+  let newApp: boolean
   try {
     // 3. The key.
     if (current === undefined) {
@@ -337,7 +361,7 @@ export async function deployAtTerminal(
       { offerNew: true, folder: deps.cwd }
     )
     app = chosen.app
-    fresh = chosen.fresh
+    newApp = chosen.fresh
     if (
       (serverHow === "asked" ||
         serverHow === "made" ||
@@ -404,12 +428,30 @@ export async function deployAtTerminal(
   // deploy onto it without asking: it is taken back, with its record of first use. The key, a server and the values
   // made in this run are kept, and F9 says so; when zekno.json could not be taken back (it changed since), A12 is said
   // alone, since running again would deploy the app it names.
-  const plan = await prepareDeploy(ops(), { app, server: server.name, read })
+  const prepare = () =>
+    prepareDeploy(ops(), {
+      app,
+      server: server.name,
+      read,
+      fresh: flags.fresh === true,
+    })
+  let plan = await prepare()
+  // specs/016-build-from-source, CL5: B24 and B26, before the session opens. A file agreed to changes what is sent, so the
+  // deploy is prepared again. Leaving a question once something was made says F8, as every question here does.
+  try {
+    if (await askBuildYes(ui, deps.home, plan)) {
+      plan.build?.run.remove()
+      plan = await prepare()
+    }
+  } catch (error) {
+    plan.build?.run.remove()
+    throw keptSoFar(error, made)
+  }
   const typed = { app: flags.app, server: flags.server }
   try {
     return await send(
       ops(),
-      { ...plan, fresh, skipDnsCheck: flags.skipDnsCheck === true },
+      { ...plan, newApp, skipDnsCheck: flags.skipDnsCheck === true },
       { typed },
       {
         app: plan.app,

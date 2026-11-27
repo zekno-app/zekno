@@ -18,6 +18,16 @@ import type { Question, State } from "./types"
  * are the plan's for the signed link, decided by the maintainer the same day
  * (contracts/app.md, "A zekno.json signed by the team").
  */
+/**
+ * The answers of "deploy without them?", which a first-time yes of a deploy
+ * that builds takes too (specs/016-build-from-source, J12): only `y` goes
+ * on, and nothing is deployed otherwise.
+ */
+const DEPLOY_OR_NOT = [
+  { key: "y", answer: "yes", does: "deploy" },
+  { key: "n", answer: "no", does: "do not deploy" },
+] as const satisfies readonly Choice<string>[]
+
 export const CHOICES = {
   "remove-secret": [
     { key: "enter", answer: "yes", does: "remove it" },
@@ -33,10 +43,9 @@ export const CHOICES = {
     { key: "esc", answer: "no", does: "cancel" },
   ],
   // Esc answers no as well (`onQuestion`): it never deploys.
-  "skip-values": [
-    { key: "y", answer: "yes", does: "deploy" },
-    { key: "n", answer: "no", does: "do not deploy" },
-  ],
+  "skip-values": DEPLOY_OR_NOT,
+  // Esc answers no as well: only `y` agrees, and a no deploys nothing (B25).
+  "build-yes": DEPLOY_OR_NOT,
   // Esc answers no as well, and enter answers nothing: only `y` deploys. The screen names the app after "deploy to" (`elsewhereChoices`).
   "deploy-elsewhere": [
     { key: "y", answer: "yes", does: "deploy to" },
@@ -129,7 +138,8 @@ export function onQuestion(
   const escapeIsNo =
     (question.kind === "skip-values" ||
       question.kind === "deploy-elsewhere" ||
-      question.kind === "use-link") &&
+      question.kind === "use-link" ||
+      question.kind === "build-yes") &&
     flags.escape
   const answer =
     applyConfirmKey<string>(CHOICES[question.kind], input, flags) ??
@@ -138,14 +148,14 @@ export function onQuestion(
   const closed = { ...state, question: undefined }
   if (question.kind === "skip-values")
     return skipValues(closed, question, answer === "yes")
-  if (question.kind === "deploy-elsewhere") {
+  if (question.kind === "deploy-elsewhere" || question.kind === "build-yes") {
     if (answer !== "yes")
       return stay({ ...closed, notice: { tone: "info", text: NOT_DEPLOYED } })
     return go(closed, {
       kind: "deploy-continue",
       server: question.server,
       app: question.app,
-      answer: "deploy-elsewhere",
+      answer: question.kind === "build-yes" ? "build-yes" : "deploy-elsewhere",
     })
   }
   // No leaves the file unused while the app is open, and says nothing: `d` says so if it is pressed.
@@ -230,6 +240,28 @@ export function askDeployElsewhere(
       server: event.server,
       app: event.app,
       linked: event.linked,
+    },
+  })
+}
+
+/**
+ * A deploy that builds needs a first-time yes (specs/016-build-from-source,
+ * CL5; J12): the question, unless another is open, as "deploy this folder
+ * elsewhere?" is asked; then nothing is deployed, and the next `d` asks it.
+ */
+export function askBuildYes(
+  state: State,
+  event: EventOf<"ask-build-yes">
+): Step {
+  if (state.question || textQuestionOpen(state) || hiddenPromptOpen(state))
+    return stay({ ...state, notice: { tone: "info", text: NOT_DEPLOYED } })
+  return stay({
+    ...state,
+    question: {
+      kind: "build-yes",
+      server: event.server,
+      app: event.app,
+      line: event.line,
     },
   })
 }

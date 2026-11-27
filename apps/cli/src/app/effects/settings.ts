@@ -3,7 +3,10 @@
  * contracts/app-screen.md, "States no board shows"): which settings file
  * this folder's `d` would deploy for an app, read once with the strict
  * reader (settings/file.ts), its rows marked against this machine's last
- * deploy of that app, and the Compose text it turns into.
+ * deploy of that app, and the Compose text it turns into. A built service's
+ * rows are its Source and Build rows (J15, J16), marked changed against the
+ * builds of that deploy (J17; settings/rows.ts), and its image in the
+ * Compose text is the placeholder of a key made at deploy (`builtNames`).
  *
  * The file is content of the project, possibly from someone else's
  * repository. The reader bounds it and names a place, never its content, in
@@ -19,6 +22,7 @@ import { lstatSync } from "node:fs"
 
 import { CliError } from "../../cli/errors"
 import { healthOf } from "../../domains/routes"
+import { MADE_AT_DEPLOY } from "../../ops/settings-build"
 import { profileStore, type Server } from "../../profile/profile"
 import type { ComposeSource } from "../../project/compose-read"
 import { findProject } from "../../project/file"
@@ -200,7 +204,10 @@ export function createSettings(context: Context) {
         },
         settings: read.settings,
         sha256: read.sha256,
-        compose: composeText(read.settings),
+        compose: composeText(
+          read.settings,
+          builtNames(read.settings, effect.app)
+        ),
       }
     } catch (error) {
       // Every fault of the file, and of a zekno.json, is one sentence that names a place, never the content.
@@ -242,11 +249,13 @@ export function createSettings(context: Context) {
         return refuse("error", CS13(read.shown))
       if (read.sha256 !== effect.sha256)
         return refuse("error", CS12(read.shown))
+      // The file read gives a root its reach, as for `zekno settings set` (specs/016-build-from-source, CL1: G20's root form).
       const change = applyChange(
         read.settings,
         effect.path,
         effect.value,
-        read.shown
+        read.shown,
+        read.path
       )
       if ("refused" in change)
         return refuse(change.status === 0 ? "info" : "error", change.refused)
@@ -259,6 +268,22 @@ export function createSettings(context: Context) {
   }
 
   return { read, write }
+}
+
+/**
+ * The image name of each built service in the screen's Compose text
+ * (specs/016-build-from-source, contracts/cli.md CL1; plan item 18 (a)): the
+ * placeholder of a key made at deploy, since the screen reads the file and
+ * never packs the folder. `zekno settings compose` prints the key itself.
+ */
+function builtNames(settings: Settings, app: string): Map<string, string> {
+  return new Map(
+    settings.services.flatMap(([name, service]) =>
+      service.build === undefined
+        ? []
+        : [[name, `zekno.invalid/${app}:${MADE_AT_DEPLOY}`] as const]
+    )
+  )
 }
 
 /** Whether a path is a symbolic link itself. */

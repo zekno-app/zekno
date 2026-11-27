@@ -19,12 +19,21 @@ import { notSignedHere, standingOf, type Standing } from "../../project/signed"
 import { shownPath } from "../../project/shown"
 import { sanitize } from "../../server/sanitize"
 import { SETTINGS_FILE } from "../../settings/file"
-import { chooseSource, present, readSource } from "../../settings/source"
-import type { DeploySource, DeployText } from "../../settings/types"
+import type { SourceRead } from "../../ops/deploy-build"
+import { chooseSource, present } from "../../settings/source"
+import type { DeploySource } from "../../settings/types"
 import { DP5, DP6 } from "../../settings/words"
+import { lineText } from "../../shared/build-lines"
 import { appNames, secretNamesOf } from "../../shared/views"
 import type { Effect } from "../state/events"
 import type { Context } from "./context"
+import {
+  agreeTo,
+  type BuildQuestion,
+  buildFolderHere,
+  nextBuildQuestion,
+  readForApp,
+} from "./deploy-build"
 import { sendAsEvents } from "./deploy-events"
 import { linkedElsewhere, notConnected, NOT_IN_USE } from "./links"
 
@@ -41,7 +50,7 @@ export const COMPOSE_FILE = DEFAULT_COMPOSE
  * asked first.
  */
 type Source = {
-  read: DeployText
+  read: SourceRead
   named: string
   app: string
   linked: boolean
@@ -73,8 +82,10 @@ export function createDeploys(context: Context) {
     | {
         server: string
         app: string
-        on: "link" | "values" | "elsewhere"
+        on: "link" | "values" | "elsewhere" | "build"
         source: Source
+        /** With `build`: the first-time question of a deploy that builds that was asked (deploy-build.ts). */
+        question?: BuildQuestion
       }
     | undefined
   /** "n" to "remember this folder?": it is not asked again while the app is open. */
@@ -109,12 +120,13 @@ export function createDeploys(context: Context) {
    * comes from one; were it to, DP5 is said and nothing is read, as for a
    * folder that is not linked: neither file is ever picked silently.
    */
-  function readChosen(chosen: DeploySource): DeployText | undefined {
+  function readChosen(chosen: DeploySource): SourceRead | undefined {
     if (chosen.kind === "both") {
       notice("error", DP5)
       return undefined
     }
-    return readSource(chosen, ops.cwd)
+    // A settings file with a built service is kept whole, so its build is prepared as `zekno deploy` prepares it (deploy-build.ts).
+    return readForApp(chosen, ops.cwd)
   }
 
   /**
@@ -199,6 +211,12 @@ export function createDeploys(context: Context) {
       notice("error", DP5)
       return undefined
     }
+    // specs/016-build-from-source, J10: a folder with a Dockerfile and no settings file is set up by `zekno deploy` (choice J-a (a)).
+    const building = buildFolderHere(ops.cwd)
+    if (building !== undefined) {
+      notice("error", lineText(building))
+      return undefined
+    }
     if (chosen.kind === "compose" && !present(ops.cwd, COMPOSE_FILE)) {
       notice(
         "error",
@@ -214,7 +232,7 @@ export function createDeploys(context: Context) {
       return undefined
     }
     return {
-      read: readSource(chosen, ops.cwd),
+      read: readForApp(chosen, ops.cwd),
       named: chosen.kind === "settings" ? SETTINGS_FILE : COMPOSE_FILE,
       app: selected,
       linked: false,
@@ -302,6 +320,26 @@ export function createDeploys(context: Context) {
       server: effect.server,
       read: source.read,
     })
+    // specs/016-build-from-source, J12: B24 and B26, one at a time, before anything is signed; each yes is kept, so the
+    // deploy is prepared again with it and the next one is asked. Its sealed pieces go: the next plan seals again.
+    const question = nextBuildQuestion(planned)
+    if (question !== undefined) {
+      planned.build?.run.remove()
+      waiting = {
+        server: planned.server.name,
+        app,
+        on: "build",
+        source,
+        question,
+      }
+      dispatch({
+        type: "ask-build-yes",
+        server: planned.server.name,
+        app,
+        line: question.line,
+      })
+      return undefined
+    }
     if (after?.on !== "values") {
       // Names only: the secrets' values are never opened here.
       const set = new Set(secretNamesOf(planned.team, planned.server, app))
@@ -309,6 +347,7 @@ export function createDeploys(context: Context) {
         (name) => !set.has(name)
       )
       if (missing.length > 0) {
+        planned.build?.run.remove()
         waiting = { server: planned.server.name, app, on: "values", source }
         dispatch({
           type: "missing-values",
@@ -341,9 +380,14 @@ export function createDeploys(context: Context) {
         ? "link"
         : effect.answer === "deploy-elsewhere"
           ? "elsewhere"
-          : "values"
+          : effect.answer === "build-yes"
+            ? "build"
+            : "values"
     if (asked.on !== about) return
     waiting = undefined
+    // Only a yes typed here writes agreed.json, as at a terminal (CL5, "Kept answers").
+    if (effect.answer === "build-yes" && asked.question !== undefined)
+      agreeTo(deps.home, asked.question)
     if (effect.answer === "write-link") {
       // Written by a "yes" here: signed with this member's key, and recorded as used here (accepted.ts).
       // It names the file this deploy uses, compose.yaml or zekno.app.json, as the question said.

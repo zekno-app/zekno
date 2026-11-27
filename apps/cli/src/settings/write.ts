@@ -61,10 +61,14 @@ export type WriteOptions = {
  * The fields of a service, in one order, to compare two settings whatever
  * order their objects were made in. Every field is here: one left out would
  * not be compared, so a write that dropped it would pass the check that
- * reads the text back (specs/015-domains-https added `health` and `domains`).
+ * reads the text back (specs/015-domains-https added `health` and `domains`;
+ * specs/016-build-from-source, `root`, `include` and `build`).
  */
 const FIELDS: readonly (keyof ServiceSettings)[] = [
   "image",
+  "root",
+  "include",
+  "build",
   "start",
   "restart",
   "memory",
@@ -78,7 +82,11 @@ const FIELDS: readonly (keyof ServiceSettings)[] = [
   "volumes",
 ]
 
-/** Settings as one text, a list left empty the same as one left out, a health check as its path and limit in that order. */
+/**
+ * Settings as one text, a list left empty the same as one left out, a health
+ * check as its path and limit in that order, a build as its fields in the
+ * order the file writes them.
+ */
 const canonical = (settings: Settings): string =>
   JSON.stringify(
     settings.services.map(([name, service]) => [
@@ -88,6 +96,18 @@ const canonical = (settings: Settings): string =>
           return service.health === undefined
             ? null
             : [service.health.path ?? null, service.health.timeout ?? null]
+        if (field === "build") {
+          const { build } = service
+          return build === undefined
+            ? null
+            : [
+                build.builder,
+                build.dockerfile ?? null,
+                build.stage ?? null,
+                build.timeout ?? null,
+                build.network ?? null,
+              ]
+        }
         const value = service[field]
         return Array.isArray(value) && value.length === 0
           ? null

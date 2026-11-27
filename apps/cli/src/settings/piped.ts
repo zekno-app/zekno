@@ -40,10 +40,32 @@ function healthPlaces(service: ServiceSettings): [string, string][] {
   ]
 }
 
+/**
+ * The Source fields a build adds and the Build section, each as the file
+ * holds it (specs/016-build-from-source, G11): files to include joined with
+ * `,`, as secrets are; the time limit in seconds.
+ */
+function buildPlaces(service: ServiceSettings): [string, string | undefined][] {
+  const { build } = service
+  return [
+    ["source.root", service.root],
+    ["source.include", service.include?.join(",")],
+    ["build.builder", build?.builder],
+    ["build.dockerfile", build?.dockerfile],
+    ["build.stage", build?.stage],
+    [
+      "build.timeout",
+      build?.timeout === undefined ? undefined : String(build.timeout),
+    ],
+    ["build.network", build?.network],
+  ]
+}
+
 /** The places and values of one service that are set, in the order of the file's sections. */
 function placesOf(service: ServiceSettings): [string, string][] {
   const places: [string, string | undefined][] = [
     ["source.image", service.image],
+    ...buildPlaces(service),
     ["deploy.start", service.start],
     ["deploy.restart", service.restart],
     ["deploy.memory", service.memory],

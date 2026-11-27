@@ -8,7 +8,7 @@ import { doctor } from "../commands/doctor"
 import { domainAdd, domainList, domainRemove } from "../commands/domain"
 import { init } from "../commands/init"
 import { link } from "../commands/link"
-import { logs, parseTail } from "../commands/logs"
+import { logs, logsBuild, parseTail } from "../commands/logs"
 import {
   readImport,
   secretImport,
@@ -276,11 +276,15 @@ export async function run(argv: string[], given: Deps): Promise<number> {
             server: values.server,
             file: values.file,
             skipDnsCheck: values["skip-dns-check"] === true,
+            // specs/016-build-from-source, CL7 and CL12: `--fresh` at a terminal as in a script.
+            fresh: values.fresh === true,
           })
         return await deploy(deps, {
           ...(await project(["app", "server", "file"])),
           typed: { app: values.app, server: values.server },
           skipDnsCheck: values["skip-dns-check"] === true,
+          // specs/016-build-from-source, CL7: a fresh build of every built service.
+          fresh: values.fresh === true,
         })
       case "rollback":
         return await rollback(deps, {
@@ -291,6 +295,13 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         await status(deps, await details(["server"]))
         return 0
       case "logs":
+        // `--build`: the saved output of the app's last build from this machine, read with no keychain and no server
+        // (specs/016-build-from-source, CL9), so nothing is asked and zekno.json is not judged here.
+        if (values.build === true)
+          return await logsBuild(deps, {
+            app: values.app,
+            server: values.server,
+          })
         await logs(deps, await details(["app", "server"]))
         return 0
       case "link":
@@ -308,8 +319,8 @@ export async function run(argv: string[], given: Deps): Promise<number> {
       case "settings unset":
         return await settingsUnset(deps, third, { yes: values.yes === true })
       case "settings compose":
-        // What a deploy of this folder would sign, byte for byte; no team, no keychain, no server.
-        settingsCompose(deps)
+        // What a deploy of this folder would sign, byte for byte; no server. Only a built service's opens the team, to read this machine's history (specs/016-build-from-source, T124).
+        await settingsCompose(deps)
         return 0
       case "settings init":
         return await settingsInit(deps)
@@ -342,7 +353,11 @@ export async function run(argv: string[], given: Deps): Promise<number> {
         })
       case "doctor":
         // It never asks and takes nothing from zekno.json: no `withProject`, no asking step (contracts/doctor.md).
-        return await doctor(deps, { server: values.server, json: values.json })
+        return await doctor(deps, {
+          server: values.server,
+          json: values.json,
+          builds: values.builds === true,
+        })
       default:
         throw new UsageError(`Unknown command "${positionals.join(" ")}".`)
     }

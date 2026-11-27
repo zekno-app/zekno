@@ -14,11 +14,19 @@ import { Panel, type PanelTone } from "./panel"
 import type { Stage, StageState } from "./stages"
 
 const LABELS = ["Checked", "Signed", "Sent", "Starting"] as const
-/** How many stages are done once each stage has been reached. */
+/**
+ * How many stages are done once each stage has been reached. The build
+ * stage's states (specs/016-build-from-source, D1, D7) count as `sent` until
+ * the stage row draws a stage for them, with its label (tasks T144).
+ */
 const DONE: Record<DeployStage, number> = {
   checked: 1,
   signed: 2,
   sent: 3,
+  building: 3,
+  built: 3,
+  reused: 3,
+  build_failed: 3,
   starting: 3,
   started: 4,
   failed: 3,

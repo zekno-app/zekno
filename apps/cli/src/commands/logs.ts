@@ -2,6 +2,7 @@ import { remoteThroughUi, type Deps } from "../cli/context"
 import { UsageError } from "../cli/errors"
 import type { Where } from "../ops/deploy"
 import { followLogs, LOG_TAIL, MAX_TAIL, prepareLogs } from "../ops/logs"
+import { printBuildOutput } from "../ops/logs-build"
 
 type Options = Where & { tail?: string; "no-follow"?: boolean }
 
@@ -52,4 +53,19 @@ export async function logs(deps: Deps, options: Options): Promise<void> {
     process.off("SIGTERM", interrupt)
     closed?.removeEventListener("abort", interrupt)
   }
+}
+
+/**
+ * `zekno logs --build [--app <app>] [--server <name>]`
+ * (specs/016-build-from-source, contracts/cli.md CL9): the saved output of
+ * the app's last build from this machine, each line cleaned, as plain lines
+ * on standard output (E16). Nothing saved: E17, exit status 1. No keychain,
+ * no server.
+ */
+export async function logsBuild(
+  deps: Deps,
+  options: { app?: string; server?: string }
+): Promise<number> {
+  await printBuildOutput(deps, options, (line) => deps.ui.info(line))
+  return 0
 }

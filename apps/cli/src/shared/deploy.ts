@@ -11,21 +11,32 @@
  */
 import { dnsPlain, httpsLivePlain, httpsWaitingPlain } from "../domains/words"
 import type { Ui } from "../ui/types"
+import type {
+  BuildStage,
+  DeployBuildInfo,
+  DeployBuildProgress,
+} from "./deploy-build"
 import type { Notice } from "./notice"
 import { stoppedWaitingPlain } from "./start-limit"
 
-/** data-model.md, "Stages of a deploy". A refusal ends a deploy at whatever stage it had reached. */
+/**
+ * data-model.md, "Stages of a deploy". A refusal ends a deploy at whatever
+ * stage it had reached. A deploy that builds reaches the build stage's
+ * states between `sent` and `starting` (specs/016-build-from-source, D1, D7;
+ * shared/deploy-build.ts); one that does not build never does.
+ */
 export type DeployStage =
-  "checked" | "signed" | "sent" | "starting" | "started" | "failed"
+  "checked" | "signed" | "sent" | BuildStage | "starting" | "started" | "failed"
 
 /**
  * How a deploy the runner answered ended. `routes_failed` and `unhealthy`
  * (specs/015-domains-https, contracts/cli.md, CL3): it was accepted, its app
  * started and it is the app's current one, but its routes are not in force,
- * or it was not healthy in time.
+ * or it was not healthy in time. `build_failed` (specs/016-build-from-source,
+ * CL7, "The answer"): its number is used, and nothing of the app changed.
  */
 export type DeployOutcome =
-  "started" | "start_failed" | "routes_failed" | "unhealthy"
+  "started" | "start_failed" | "routes_failed" | "unhealthy" | "build_failed"
 
 /**
  * The health check a deploy signed, as it is shown (specs/015-domains-https,
@@ -66,6 +77,12 @@ export type DeployInfo = {
   domains?: string[]
   /** The health check it signs, for the fifth stage (C1, C2). Left out for a deploy with none. */
   health?: DeployHealth
+  /**
+   * The builds it signs (specs/016-build-from-source, CL7), and on the
+   * result of a build that failed, the failure (shared/deploy-build.ts).
+   * Left out for a deploy that does not build.
+   */
+  build?: DeployBuildInfo
 }
 
 /** What a deploy view is told before anything is sent. */
@@ -183,6 +200,13 @@ export type DeployProgress = {
   secretNames?: string[]
   /** The line that says how it ended. */
   result?: Notice
+  /**
+   * A deploy that builds (specs/016-build-from-source, CL7 steps 12 and 13):
+   * the bytes sent, the service building and its line, the builds reused,
+   * the wait for another app's build and a failed build
+   * (shared/deploy-build.ts). Left out for a deploy that does not build.
+   */
+  build?: DeployBuildProgress
 }
 
 /** The most of Docker's lines kept during a deploy (research R5): the last ones, where it says what went wrong. */

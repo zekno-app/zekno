@@ -67,8 +67,14 @@ function ownedByMe(uid: number): boolean {
   return mine === undefined || uid === mine
 }
 
-/** The text of `links.json`, or undefined when it cannot be taken as it is. Never through a link, never more than `LINKS_BYTES`. */
-function readLinksText(path: string): string | undefined {
+/**
+ * The text of a small file of the profile folder (`links.json`, and
+ * `agreed.json` of specs/016-build-from-source), or undefined when it cannot
+ * be taken as it is: not there, a link (never followed), not a regular file
+ * (never waited on as a pipe), not this user's, past `limit` bytes, or not
+ * UTF-8. Never more than `limit` bytes are read.
+ */
+export function readOwnFile(path: string, limit: number): string | undefined {
   let fd: number
   try {
     fd = openSync(
@@ -80,16 +86,17 @@ function readLinksText(path: string): string | undefined {
   }
   try {
     const stat = fstatSync(fd)
-    if (!stat.isFile() || !ownedByMe(stat.uid) || stat.size > LINKS_BYTES)
+    if (!stat.isFile() || !ownedByMe(stat.uid) || stat.size > limit)
       return undefined
-    const buffer = Buffer.alloc(LINKS_BYTES + 1)
+    const buffer = Buffer.alloc(stat.size + 1)
     let length = 0
     while (length < buffer.length) {
       const read = readSync(fd, buffer, length, buffer.length - length, null)
       if (read === 0) break
       length += read
     }
-    if (length > LINKS_BYTES) return undefined
+    // More than its size said: it grew while it was read, and is not taken as it is.
+    if (length > stat.size) return undefined
     return new TextDecoder("utf-8", { fatal: true }).decode(
       buffer.subarray(0, length)
     )
@@ -102,7 +109,7 @@ function readLinksText(path: string): string | undefined {
 
 /** Every accepted project file, oldest first. Anything that does not read and match the schema counts as none. */
 export function acceptedLinks(home: string): AcceptedLink[] {
-  const text = readLinksText(join(home, LINKS_FILE))
+  const text = readOwnFile(join(home, LINKS_FILE), LINKS_BYTES)
   if (text === undefined) return []
   try {
     const parsed = LinksSchema.safeParse(JSON.parse(text))
@@ -160,12 +167,17 @@ export function forget(home: string, link: AcceptedLink): void {
 
 /** Writes the list whole, as `accept` describes. */
 function writeLinks(home: string, entries: readonly AcceptedLink[]): void {
-  const text = linksText(entries)
-  const path = join(home, LINKS_FILE)
-  const temporary = join(
-    home,
-    `.${LINKS_FILE}.${randomBytes(8).toString("hex")}.tmp`
-  )
+  writeOwnFile(home, LINKS_FILE, linksText(entries))
+}
+
+/**
+ * Writes `text` as the file `name` of the folder `home`, whole or not at
+ * all: a new file under a name nobody can predict, mode 600, then put in
+ * place by a rename, which replaces a link instead of writing through it.
+ */
+export function writeOwnFile(home: string, name: string, text: string): void {
+  const path = join(home, name)
+  const temporary = join(home, `.${name}.${randomBytes(8).toString("hex")}.tmp`)
   try {
     // `wx` refuses a file or link that is already there under this name.
     const fd = openSync(temporary, "wx", 0o600)

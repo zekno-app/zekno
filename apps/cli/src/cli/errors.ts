@@ -1,4 +1,5 @@
 import { R9 } from "../domains/words"
+import type { BuildLineId } from "../shared/build-lines"
 
 /** Something the person can fix: shown as one sentence, exit status 1. */
 export class CliError extends Error {}
@@ -6,12 +7,15 @@ export class CliError extends Error {}
 /**
  * The runner said no. The reason is one of the fixed words the runner can
  * answer with. The sentence is `explain`'s unless the caller knows a better
- * one, such as `explainDeploy`'s for the deploy it signed.
+ * one, such as `explainDeploy`'s for the deploy it signed. `disk`: with
+ * `low_disk`, the free disk and the floor the runner reported, in bytes
+ * (specs/016-build-from-source, CO10), which R14 says.
  */
 export class RunnerRefused extends CliError {
   constructor(
     readonly reason: string,
-    message: string = explain(reason)
+    message: string = explain(reason),
+    readonly disk?: { readonly free: number; readonly floor: number }
   ) {
     super(message)
   }
@@ -96,8 +100,28 @@ const REASONS: Record<string, string> = {
   domain_taken: R9,
 }
 
+/**
+ * Protocol 6's refusals (specs/016-build-from-source, contracts/core.md
+ * CO10; contracts/cli.md CL7, "The answer"), to a `deploy` or a `pack`: the
+ * row of that feature's design/lines.md each says. `pack_missing` says D20,
+ * the line of pieces still missing once the rounds of CL7 step 12 are spent.
+ * Until the words tasks, the message is the row's id (FR-092): no sentence
+ * is written in a logic task.
+ */
+const BUILD_REFUSALS: Record<string, BuildLineId> = {
+  pack_mismatch: "R11",
+  docker_too_old: "R12",
+  no_build_plugin: "R13",
+  low_disk: "R14",
+  pack_missing: "D20",
+}
+
 export function explain(reason: string): string {
-  return REASONS[reason] ?? `The runner refused the request (${reason}).`
+  return (
+    REASONS[reason] ??
+    BUILD_REFUSALS[reason] ??
+    `The runner refused the request (${reason}).`
+  )
 }
 
 /**

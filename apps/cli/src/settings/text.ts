@@ -9,7 +9,7 @@
  * service always open on their own line. So a change of one value changes
  * one line, and design.md's example is written back byte for byte.
  */
-import type { Health, ServiceSettings, Settings } from "./types"
+import type { BuildSettings, Health, ServiceSettings, Settings } from "./types"
 
 /** What is written: a value as its JSON text, a list, or an object whose members are in the order given. */
 type Node =
@@ -52,12 +52,57 @@ const healthNode = (health: Health): Node => ({
   ]),
 })
 
-/** One service's sections, in the order of contracts/settings-file.md, "The settings"; `healthcheck` after `cpus` and `domains` after `publish` (CL1). */
+/**
+ * A service's Build section (specs/016-build-from-source, data-model.md, "The
+ * settings' Build section"; tasks T115): the builder, then the Dockerfile,
+ * the stage, the time limit and the network, each only when set.
+ */
+function buildNode(build: BuildSettings): Node {
+  return {
+    kind: "object",
+    members: setOnly([
+      ["builder", string(build.builder)],
+      [
+        "dockerfile",
+        build.dockerfile === undefined ? undefined : string(build.dockerfile),
+      ],
+      ["stage", build.stage === undefined ? undefined : string(build.stage)],
+      [
+        "timeout",
+        build.timeout === undefined ? undefined : number(String(build.timeout)),
+      ],
+      [
+        "network",
+        build.network === undefined ? undefined : string(build.network),
+      ],
+    ]),
+  }
+}
+
+/**
+ * One service's sections, in the order of contracts/settings-file.md, "The
+ * settings"; `healthcheck` after `cpus` and `domains` after `publish` (CL1);
+ * the image, the root and the files to include under `source`, then `build`
+ * (specs/016-build-from-source, CL1).
+ */
 function serviceNode(service: ServiceSettings): Node {
   const has = <T>(value: T | undefined, node: (value: T) => Node) =>
     value === undefined ? undefined : node(value)
   const sections = setOnly([
-    ["source", object([["image", string(service.image)]])],
+    [
+      "source",
+      object([
+        ["image", has(service.image, string)],
+        ["root", has(service.root, string)],
+        [
+          "include",
+          service.include?.length
+            ? { kind: "list", items: service.include.map(string) }
+            : undefined,
+        ],
+      ]),
+    ],
+    ["build", has(service.build, buildNode)],
     [
       "deploy",
       object([
