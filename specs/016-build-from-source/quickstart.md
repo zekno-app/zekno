@@ -217,7 +217,8 @@ Mac network, 2026-11-27: busybox:1.36.1 busybox@sha256:73aaf090f3d85aa34ee199857
 
 ### Counts
 
-- Core at the end of phase 1 (T058, 2026-11-28): 869 tests in 61 files, all passing; every source module loads when imported first. The runner's and the CLI's own tests that pin protocol 5 or state mark 4 fail until phases 2 and 3 move them.
+- Core at the end of phase 1 (T058, 2026-11-28): 869 tests in 61 files, all passing; every source module loads when imported first. The runner's and the CLI's own tests that pin protocol 5 or state mark 4 failed until phases 2 and 3 moved them.
+- The runner and the CLI after the first pass of phases 2 and 3 (2026-11-28, commit `d4f0bdf`), each whole suite with a failing `docker` first on `PATH`: runner 1,329 pass, 29 skip, 0 fail in 139 files; CLI 3,394 pass, 12 skip, 0 fail in 216 files. The skips are the tests that need a real Docker. The commit before it, `185ca34`, which differs only in tests and one file split, in the stand-in on the Mac (floor, containerd): job `checks` 15 pass and 1 skip, jobs `released` and `memory` pass, nothing left in Docker.
 
 ### Phase 0 on the Mac (T022, 2026-11-27)
 
