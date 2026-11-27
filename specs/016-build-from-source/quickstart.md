@@ -9,7 +9,7 @@ How each user story is shown to work, end to end, step by step, and where. Contr
 | **Mac, tests** | `bun --no-env-file test` in each package: the real runner program with the stand-in for Docker, stand-ins for the SSH host, Railpack's release and `railpack` | real Docker |
 | **Mac, real Docker** | the gated sets on Docker Desktop, run by hand | Linux; QEMU lets a build for the wrong processor run |
 | **Linux stand-in, Mac** | the server stand-in container on the Mac, the same script as on GitHub, with a client container for SC-003 (the same `ubuntu:24.04` digest) | a server's kernel and init; the Mac's VM is shared |
-| **GitHub** | `linux checks` on every push: the stand-in on `ubuntu-24.04` (x86-64), and with items 4 and 5 on ARM64 and macOS | a real domain and a public certificate; a real 1 GB server |
+| **GitHub** | `linux checks` on every push: the stand-in on `ubuntu-24.04` (x86-64), and on ARM64 and macOS (items 4 and 5) | a real domain and a public certificate; a real 1 GB server |
 | **Server proof** | the maintainer's own server, once, at the end of step 2 (M9), each use with a go-ahead | an older engine; out of memory; ARM64 unless the server is |
 
 Prerequisites: Bun 1.4.4; for the Mac's real-Docker and stand-in runs, Docker running. No run reads `apps/cli/.env.local`: every command uses `bun --no-env-file`. Every key, team list and secret value is made in the run, and secrets are marker values.
@@ -59,7 +59,7 @@ Where: GitHub, on every push to the branch; the Linux stand-in on the Mac while 
 1. Push the branch. `linux checks` runs the jobs above. Expect each within its time limit, with no repository secret.
 2. Read each job's record. Expect one line per check, naming the engine, the store and what was seen: for L2, whether `BUILDKIT_SYNTAX=dockerfile.v0` builds (map-checks T4), at the floor and the newest, and whether a deny-all `<dockerfile>.rego` inside the pack is loaded; for L4, whether the iidfile equals `.Id`; L4b, whether a file's time changes a cached `COPY`; L5, whether a silent step stops when only its reader goes; L7, the disk a 512 MiB build used; L9, the materials of a build from a local image, and whether item 17 (c)'s policy stops it; L15, whether two salts ever share a step, at the floor and the newest.
 3. L18 asserts from its first run: with RB7's argument list (as written in the contract until `args.ts` exists), Dockerfiles holding `RUN --network=host`, `RUN --security=insecure`, `RUN --device=<name>` (where the built-in reader accepts it) and `RUN --mount=type=ssh` each fail, or run with no host network interface, no device, no insecure mode and no SSH agent socket; under a signed `none`, `RUN --network=default` trying an address has no network.
-4. The answers go to the maintainer with items 11 to 14, 17 and 27 of the plan before the runner's build code is written.
+4. The findings settle the branches of items 11 (L2), 14 (L4b), 17 (L9) and 27 (L5) before the runner's build code is written, and L15 settles item 12 before step 1b is built, as the plan's phase 0 says. A finding goes back to the maintainer only where the item says so: item 12, when `--add-host` is not in the cache key on an engine the check covers.
 
 ## Step 1: a folder with a Dockerfile
 
@@ -68,7 +68,7 @@ Where: GitHub, on every push to the branch; the Linux stand-in on the Mac while 
 - **Mac, tests** (`apps/cli/test/scenarios/build-first-deploy.test.ts`): a fixture folder with only `Dockerfile` (`EXPOSE 3000`), at a stand-in terminal. Run `zekno deploy`. Expect A1 to A12 before the key question: the block, the settings file it would write, `PORT=3000`, the proposed `.dockerignore` when there is none. Answer `Build, port 3000`. Expect `zekno.app.json` with `build.builder` `dockerfile` and `networking.port` 3000, and the deploy going on, with the stage row `✔ Checked ✔ Signed ✔ Sent ✔ Built ✔ Started`. Answer `Don't build` instead: nothing written, `✖ Nothing was done.`, exit status 1. With no terminal: today's sentence for a folder with no Compose file, exit status 1, nothing written. With `Dockerfile` and `Dockerfile.dev`: A14 asks which. A settings file with no `build.dockerfile` in a folder holding `Dockerfile` and `Dockerfile.prod`, or a sent `api/Dockerfile`: the new stop naming them, exit status 1. On macOS, a file `dockerfile` and a setting `Dockerfile`: C20.
 - **Mac, tests**: a fixture with a 600 MB `node_modules` (made by the test, sparse files) and no `.dockerignore`. Expect the proposal to list `**/node_modules`, and the summary to send none of it.
 - **Linux stand-in, Mac and GitHub** (job `proof`): from a client with a throwaway `ZEKNO_HOME` and no terminal, `zekno server add stand-in --ssh root@<stand-in> --runner-file <runner compiled from this commit>`, then `zekno deploy --json`, and again without `--json`, in the fixture `dockerfile-web` (which holds its `zekno.app.json`). Expect the `--json` outcome `started` with its builds, B29's facts and D17's `remote:` lines on standard error, today's result line on standard output, the app answering on its port inside the stand-in, the image `zekno.invalid/<app>:<key>` on the stand-in's Docker, and no registry asked for it. Then `zekno domain add` and deploy again with no change: nothing sent, nothing built (the `--json` outcome says every build was reused), and the domain answering over HTTPS with Caddy's internal authority. The stage row and D6's `✔ Reused` are shown by the in-process scenarios with a stand-in terminal.
-- **Linux stand-in, Mac** (ARM64) and **GitHub** (x86-64; ARM64 with item 4): the same image built for each processor (US1 sc8).
+- **Linux stand-in, Mac** (ARM64) and **GitHub** (x86-64, and ARM64 by item 4): the same image built for each processor (US1 sc8).
 - **Server proof**: the same with a real domain and a public certificate (M9).
 
 ### US2. Know what is sent before anything is signed
@@ -78,7 +78,7 @@ Where: GitHub, on every push to the branch; the Linux stand-in on the Mac while 
 - **Mac, tests**: a `source.root` that resolves to the home folder (a home folder made a git repository by the test) or holds `ZEKNO_HOME`: the new stop naming `source.root`, nothing signed. `ZEKNO_HOME` inside the folder sent: never in the pack.
 - **Mac, tests**: a git fixture made by the test (no `git` run) with a changed file. Expect B13 once, the deploy going on, and nothing different in the pack. Outside a repository, or with nothing changed: no line. A SHA-256 repository: no line.
 - **Mac, tests**: with no terminal, every fact on standard error (B29); standard output holds only today's result line.
-- **Mac and GitHub** (SC-013): the fixture `fingerprint` packed on the Mac (by hand, and with item 5 on GitHub's macOS) and on Linux gives the fingerprint recorded in the tests.
+- **Mac and GitHub** (SC-013): the fixture `fingerprint` packed on the Mac (by hand, and on GitHub's macOS by item 5) and on Linux gives the fingerprint recorded in the tests.
 - **Linux stand-in, Mac** (SC-003, L11): from the client container held to 10 Mbit/s and 50 ms, deploy a 10 MB and a 100 MB fixture. Expect packing, the summary, sealing and sending under 30 and 150 seconds. Recorded in the results with the date.
 - **Mac, tests**: two runs at once (two stand-in terminals) each keep their sealed pieces in their own folder under `~/.zekno/tmp/`, and neither deletes the other's; a folder there older than 24 hours is deleted at a run's start.
 - **GitHub** (L17, at the floor and the newest): the file list of pass 1 equals what BuildKit copies out of the same fixture, for each ignore-file fixture.
@@ -86,7 +86,7 @@ Where: GitHub, on every push to the branch; the Linux stand-in on the Mac while 
 ### US3. Follow a build; a failed build leaves the app alone
 
 - **Mac, tests** (runner scenarios): the stand-in for Docker fails a step, hangs past the time limit, reports disk below the floor, builds for another processor. Expect `build_failed` with `step_failed`, `time_limit`, `out_of_disk`, `wrong_processor`; the number used; no `up`; the state's `running` unchanged; Docker's record removed; nothing of the output in `<home>`; no `zekno.invalid/*` tag the state does not name. A deploy of two builds whose second fails, and a `cache_used` build: both images removed, none recorded.
-- **Mac, tests** (runner): a `sync` during a build that removes the signer stops the client within 10 seconds, `team_changed`, no `up`; one that removes the setter of a secret the deploy lists ends the same way. A record that ignores the stop: `build_failed` after 120 seconds, `building` kept with phase `stopping`, and the next deploy `busy` until the record leaves `Running`.
+- **Mac, tests** (runner): a `sync` during a build that removes the signer stops the client within 10 seconds, `team_changed`, no `up`; one that removes the setter of a secret the deploy lists ends the same way. A record that ignores the stop: `build_failed` after 120 seconds, `building` kept with phase `stopping`, and the next deploy `busy` until the record leaves `Running`, or, with no process of the run alive, for 10 minutes past the stop (item 28 (b)); then the deploy goes on and `zekno doctor` names the record (G39a).
 - **Mac, tests** (CLI): E1 to E13 word for word by reason, the "Docker said" panel with `step` and `error`, E4 past 40 lines, E6 naming `zekno logs --build`; with no terminal E18 and exit status 1; `--json` with `build.reason`. `zekno logs --build` prints the saved output; with none, E17. A step that prints an OSC 52 sequence: it reaches neither the screen, standard error, nor what `zekno logs --build` prints.
 - **Mac, tests** (CLI and runner): a deploy of app `shop` while app `blog` builds. Expect `busy` with `building`, the pieces of `shop` sent with `pack` and staged during `blog`'s build, the live line while zekno waits, then the deploy running with no second upload. With a bound that runs out: E15, exit status 1, nothing of `shop` ran.
 - **Mac, tests** (CLI): the connection cut after half the pieces were sent. Expect a second connection in the same run that sends only the rest (D3), and the deploy going on; cut three times: D14, no number used.
@@ -101,7 +101,7 @@ Where: GitHub, on every push to the branch; the Linux stand-in on the Mac while 
 - **Mac, tests**: the argument list and environment the runner builds, for every combination, holds none of RB7's forbidden flags, both cases of the five proxy names, and `BUILDX_GIT_INFO=0` (SC-008).
 - **GitHub** (L18, at the floor and the newest, both stores): the Dockerfiles of phase 0's item 3 with the runner's exact command; each fails or stays in the sandbox (SC-008, FR-033).
 - **GitHub** (job `released`, L1): runner 0.1.1 itself given a signed Compose text with `build:` (context `.`, a git address, `../..`). Expect what it does recorded, and said in the docs. The new runner given the same text: `start_failed`, nothing built (SC-009).
-- **GitHub** (L2): with item 11's answer, a `# syntax=` line is either ignored (no image pulled for it) or refused before the number; a deny-all `<dockerfile>.rego` in the pack does not stop the build.
+- **GitHub** (L2): as L2 settles item 11, a `# syntax=` line in a build without secrets is either ignored, with no image pulled for it (c), or refused before the number (a); a deny-all `<dockerfile>.rego` in the pack does not stop the build.
 - **GitHub** (L8, at the floor and the newest): a private base image through the stand-in's registry login, and the client's `config.json` proxies, upper and lower case, reaching no step.
 
 ### US5. Nothing changed, nothing sent, nothing built
@@ -149,10 +149,10 @@ Where: GitHub, on every push to the branch; the Linux stand-in on the Mac while 
 
 ### US12. A build reads only the secrets named for it
 
-- **Mac, tests** (CLI): `zekno settings set web.build-secrets NPM_TOKEN`: H1, G15. At a terminal the first deploy: H2, H3 for a base image named by tag, H4 with H4a and H5; yes, and the deploy is signed. With no terminal and no earlier yes: H9, exit status 1. `GIT_AUTH_TOKEN`: H11 at `set` (exit status 2), H10 at deploy. A name the app does not have: H12; one removed: H13. A `# syntax=` line in that build's Dockerfile: the new stop, whatever item 11 decided.
-- **Mac, tests** (runner): the build client gets `ZEKNO_BUILD_SECRET_0` and never `NPM_TOKEN` as a name in its environment; `--secret id=NPM_TOKEN,env=ZEKNO_BUILD_SECRET_0` in its arguments; `--add-host zekno-<salt>` (item 12 (a)). A build without secrets has no salt. A signed build with secrets and a `# syntax=` line: `unsupported_version`, no number used. With item 12 (i), a server above the covered versions: `docker_unchecked`, no number used.
+- **Mac, tests** (CLI): `zekno settings set web.build-secrets NPM_TOKEN`: H1, G15. At a terminal the first deploy: H2, H3 for a base image named by tag, H4 with H4a and H5; yes, and the deploy is signed. With no terminal and no earlier yes: H9, exit status 1. `GIT_AUTH_TOKEN`: H11 at `set` (exit status 2), H10 at deploy. A name the app does not have: H12; one removed: H13. A `# syntax=` line in that build's Dockerfile: the new stop, whatever check L2 settles for item 11.
+- **Mac, tests** (runner): the build client gets `ZEKNO_BUILD_SECRET_0` and never `NPM_TOKEN` as a name in its environment; `--secret id=NPM_TOKEN,env=ZEKNO_BUILD_SECRET_0` in its arguments; `--add-host zekno-<salt>` (item 12 (a), as L15 settles). A build without secrets has no salt. A signed build with secrets and a `# syntax=` line: `unsupported_version`, no number used. A server above the covered versions (item 12 (i)): `docker_unchecked`, no number used.
 - **Linux stand-in, GitHub** (L12, floor and newest, both stores): a step reads the mounted secret and checks its value without printing it. Expect the marker value nowhere in the image, its history, its metadata, the build cache, Docker's record once removed, the signed deploy, what a relay reads, or `<home>` (SC-021).
-- **GitHub** (L13, floor and newest): a build with a secret and a `# syntax=` line naming a frontend served by the check's registry is refused before signing, and, handed one signed by hand, before the number; the registry logs no request for it, and the secret reaches no frontend (FR-037c). With item 11 (c), the same line in a build without secrets: no request either.
+- **GitHub** (L13, floor and newest): a build with a secret and a `# syntax=` line naming a frontend served by the check's registry is refused before signing, and, handed one signed by hand, before the number; the registry logs no request for it, and the secret reaches no frontend (FR-037c). If L2 settles item 11 as (c), the same line in a build without secrets: no request either.
 - **GitHub** (L14): a secret named `GIT_AUTH_TOKEN` never reaches the builder: refused before signing and, handed one signed by hand, `malformed`.
 - **GitHub** (L15, floor and newest, both stores): the same step built with the secret, then with another value, then with none, then by another app with a secret of the same name. Expect no reuse across any of them, and reuse for the same app and fingerprint (SC-022). If two salts ever share a step on an engine, item 12 goes back to the maintainer.
 - **GitHub** (L16): a build with no cached step reads a fresh cache folder; recorded, and said in the docs (FR-037g).
@@ -187,7 +187,7 @@ Before it: M3, the pin file, and R1 to R10 and R16 recorded on GitHub (R2 and R3
 
 ### End of step 2
 
-As at the end of step 1 (the root build and the docs pages in a real browser among it), with the compiled runner answering `{"version":"0.1.2-dev.2","protocol":7}`, R1 to R10 and R16 asserting, the Railpack proof scenarios green, B1 (ARM64) and B3 (macOS) with items 4 and 5, and the security review of step 2.
+As at the end of step 1 (the root build and the docs pages in a real browser among it), with the compiled runner answering `{"version":"0.1.2-dev.2","protocol":7}`, R1 to R10 and R16 asserting, the Railpack proof scenarios green, B1 (ARM64, item 4) and B3 (macOS, item 5), and the security review of step 2.
 
 ## The one proof on the maintainer's server (M9)
 
@@ -210,14 +210,14 @@ Filled in as each step ends: the counts of each package's tests, the jobs of `li
 
 ## Maintainer steps
 
-Each is the maintainer's, with a go-ahead at the time. Nothing before M2 needs them, but the workflow waits for item 2.
+Each is the maintainer's, with a go-ahead at the time. On 2026-11-27 the maintainer decided M2 to M4 as the plan recommends, but for the parts their rows leave open. M5 to M10 each keep their own go-ahead (item 25).
 
 | Step | What | State |
 |---|---|---|
 | M1 | Answer the open points of the spec. | Done on 2026-11-26. |
-| M2 | Approve the boards: every new screen and line, the README's and the docs' new words, and the nineteen choices; with them the lines of the plan's item 23. Screens and every sentence are built after it. | Open. |
-| M3 | Approve the tools: the stand-in's engines, packages and images (items 2, 3), the readers written in the project (items 8, 9), zstd (item 10), the tracing tool of R16 (item 26), and `timeout` if item 27 (a); for step 2, the Railpack pin, how it was established and the attestation tool (item 1). | Open. |
-| M4 | Where the Linux checks run: decided (D10). Approve the way the check gets its engines (item 2), the two extra jobs (items 4, 5) and the newest-engine legs (item 6). | Partly done. |
+| M2 | Approve the boards: every new screen and line, the README's and the docs' new words, and the nineteen choices; with them the lines of the plan's item 23. Screens and every sentence are built after it. | Done on 2026-11-27 for the 18 boards and the nineteen choices, each as recommended. The lines of item 23 are drafts in `lines.md`, shown to the maintainer before their screens are built. |
+| M3 | Approve the tools: the stand-in's engines, packages and images (items 2, 3), the readers written in the project (items 8, 9), zstd (item 10), the tracing tool of R16 (item 26), and `timeout` if check L5 settles item 27 as (a); for step 2, the Railpack pin, how it was established and the attestation tool (item 1). | Decided on 2026-11-27: items 2, 3, 8, 9, 10 and 26, `timeout` as L5 settles item 27, and how the pin is established and verified (item 1). Open: the maintainer's own fetch of Railpack's checksums when step 2 starts. |
+| M4 | Where the Linux checks run: decided (D10). Approve the way the check gets its engines (item 2), the two extra jobs (items 4, 5) and the newest-engine legs (item 6). | Done on 2026-11-27 (items 2, 4, 5 and 6). The ruleset setting of item 7 stays the maintainer's, made once `linux checks` has passed on `dev`. |
 | M5 | Merge step 1, and step 1b if ready, into `dev` after each one's security review; push `dev`. | Open. |
 | M6 | Before the tag, read step 1's proof from `linux checks` on the commit to tag. | Open. |
 | M7 | Push `runner-v0.1.2-dev.1` from `dev`; the workflow publishes the pre-release. Run the second build and commit its checksums on `dev`. Then read B6, the update from 0.1.1. | Open. |

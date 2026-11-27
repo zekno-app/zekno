@@ -1,6 +1,6 @@
 # Contract: the runner (`apps/runner`)
 
-For FR-021a to FR-050, FR-061 to FR-069, FR-076, FR-078 to FR-080, FR-083, FR-085. The facts about Docker behind each rule, with where they ran: [research/map-runner.md](../research/map-runner.md) (E01 to E12, Docker Desktop) and [research/map-checks.md](../research/map-checks.md) (T1 to T11, nested engines). Every such fact is run again on Linux by the check before the rule relies on it ([quickstart.md](../quickstart.md)). Shapes: [core.md](./core.md). "Item N" is an item of the plan's "Needs the maintainer".
+For FR-021a to FR-050, FR-061 to FR-069, FR-076, FR-078 to FR-080, FR-083, FR-085. The facts about Docker behind each rule, with where they ran: [research/map-runner.md](../research/map-runner.md) (E01 to E12, Docker Desktop) and [research/map-checks.md](../research/map-checks.md) (T1 to T11, nested engines). Every such fact is run again on Linux by the check before the rule relies on it ([quickstart.md](../quickstart.md)). Shapes: [core.md](./core.md). "Item N" is an item of the plan's "Needs the maintainer", decided on 2026-11-27 as recommended; where a check settles an item's branch, the rule names the check.
 
 ## Names and paths the runner uses
 
@@ -54,7 +54,7 @@ A refusal before K17 changes nothing but the team lists of K3, uses no number, a
 | K3 | Take S; read the state; team lists followed and saved, as today | D, S | roster reasons |
 | K4 to K14 | `verifyDeployV2`, with CO7's table of what this runner carries out; then S is released | D, S | core reasons, `unsupported_version` |
 | K14a | For each build: kept when the state records its key for this app, in `images` or in `drop` (CO13), and `docker image inspect` of its name gives an `.Id` equal to its manifest or config digest (FR-061, FR-062) | D | none |
-| K14b | Only when a build is not kept: RB5 | D | `docker_too_old`, `no_build_plugin`; with item 12 (i), `docker_unchecked` for a build with secrets |
+| K14b | Only when a build is not kept: RB5 | D | `docker_too_old`, `no_build_plugin`; `docker_unchecked` for a build with secrets (item 12 (i)) |
 | K14c | Only when a build is not kept: RB6, before the number | D | `low_disk` |
 | K15 | Today's limits | D | `too_large` |
 | K16 | Every listed secret opens, a build's named secrets among them | D | `secrets_mismatch` |
@@ -78,7 +78,7 @@ A refusal before K17 changes nothing but the team lists of K3, uses no number, a
 - Every fingerprint the build lists (code pieces and, for Railpack, its plan piece) must be a file in `packs/<app>/` for this deploy. Missing: `pack_missing` with the fingerprints, at most 72, and nothing is moved. For a build the state recorded before (a rollback), `missing.images` says `gone` or `changed`.
 - Each piece, in order, from `building/<app>/`: `openPiece` (CO5), the opened bytes fed to the streaming hash and to CO5's checker. Stop at the signed size. Nothing is written.
 - A Dockerfile build's pack must hold a regular-file entry named exactly `builder.dockerfile`, byte for byte; else `pack_mismatch`. BuildKit's reader would otherwise fall back to a file named `dockerfile`.
-- `# syntax=`: with item 11 (a), and whatever item 11 decides for a build whose `secrets` is not empty, a line of that entry that CO6's `isSyntaxLine` matches is `unsupported_version`. zekno refuses the same lines with the same function before signing. The entry is read up to 1 MiB, the most zekno reads (CL3); a longer one is `pack_mismatch`, since zekno never signs one.
+- `# syntax=`: in every build if check L2 settles item 11 as (a), and in a build whose `secrets` is not empty whatever L2 shows, a line of that entry that CO6's `isSyntaxLine` matches is `unsupported_version`. zekno refuses the same lines with the same function before signing. The entry is read up to 1 MiB, the most zekno reads (CL3); a longer one is `pack_mismatch`, since zekno never signs one.
 - Railpack (step 2): the plan piece opens to exactly `plan.size` and hashes to `plan.hash`; `railpackPlanImages(plan)` (CO15, a strict schema) must equal the signed `images`; `"unreadable"` or any difference is `pack_mismatch`.
 - Nothing opened from the code is ever written to `<home>` (FR-031). For a Dockerfile the code is never written out: it is streamed again from the pieces into the builder (RB7), each piece checked again before any byte of it reaches the builder.
 
@@ -89,7 +89,7 @@ Each through `runDocker` with its time limit (`CALL_MS`, 60 seconds), holding D,
 - `docker version --format json`: the server's engine version and processor. Below the floor (29.5.0, item 11): `docker_too_old` with `docker.engine`.
 - `docker buildx version`: missing or failing: `no_build_plugin`. Below the buildx floor the check sets (item 11): `docker_too_old` with `docker.buildx`.
 - `docker context show`, then `docker buildx inspect --builder <that name>`: its driver must be `docker`. Else `no_build_plugin`. So a `docker buildx use` of the server's user, or a container builder, never takes a build.
-- With item 12 (i), for a build whose `secrets` is not empty: an engine or buildx newer than the newest the check covered (`builder/covered.ts`, raised only with a passing check) is `docker_unchecked` with `docker: { engine, buildx }`.
+- Item 12 (i), for a build whose `secrets` is not empty: an engine or buildx newer than the newest the check covered (`builder/covered.ts`, raised only with a passing check) is `docker_unchecked` with `docker: { engine, buildx }`.
 
 The same facts answer `builder` (RB17).
 
@@ -111,17 +111,17 @@ docker buildx build
   [--target <signed target>]
   --network <default | none>                          # signed (FR-038); never host
   --build-arg BUILDKIT_CACHE_MOUNT_NS=zekno-<app>      # FR-035
-  [--build-arg BUILDKIT_SYNTAX=dockerfile.v0]          # only if item 11 ends (c); never with secrets (they refuse the line)
+  [--build-arg BUILDKIT_SYNTAX=dockerfile.v0]          # only if check L2 settles item 11 as (c); never with secrets (they refuse the line)
   --build-arg HTTP_PROXY= --build-arg HTTPS_PROXY= --build-arg FTP_PROXY=
   --build-arg NO_PROXY= --build-arg ALL_PROXY=
   --build-arg http_proxy= --build-arg https_proxy= --build-arg ftp_proxy=
   --build-arg no_proxy= --build-arg all_proxy=         # item 13 (a): both cases of each name
   [--build-arg <NAME>=<value> ...]                     # the signed args, in their order (FR-036a)
   [--secret id=<NAME>,env=ZEKNO_BUILD_SECRET_<i> ...]  # step 1b (FR-037)
-  [--add-host zekno-<buildSalt>:127.0.0.1]             # step 1b, item 12 (a)
+  [--add-host zekno-<buildSalt>:127.0.0.1]             # step 1b, item 12 (a), as check L15 settles
   [--no-cache --pull]                                  # a fresh build (FR-021a)
   [--policy reset=true]                                # when the server's buildx has it (E09)
-  [<item 17 (c)'s source policy>]                      # only if item 17 ends (c)
+  [<item 17 (c)'s source policy>]                      # only if check L9 settles item 17 as (c)
   --provenance=false --sbom=false
   --tag zekno.invalid/<app>:<key>
   --metadata-file <work>/meta.json
@@ -133,7 +133,7 @@ docker buildx build
 - **`--policy reset=true`**: E09 showed buildx loading a `<recipe>.rego` beside the recipe as a build policy, and the flag stopping it. Whether a `.rego` inside a tar on standard input is loaded was not run; L2 runs it with a deny-all `<dockerfile>.rego` in the pack, and the build must succeed.
 - **Environment** (FR-033a): today's `dockerEnv()` names, `BUILDX_CONFIG=<home>/buildx`, `BUILDX_GIT_INFO=0`, `BUILDX_GIT_LABELS=0`, `ZEKNO_BUILD_RUN=<the run token>`, and for step 1b `ZEKNO_BUILD_SECRET_0…n` with the named secrets' values only. Nothing else of the runner's environment; never a secret under its own name. A test asserts the whole environment.
 - **Working folder**: the build's own empty work folder, which receives `meta.json`.
-- **Standard input**: the pieces of `building/<app>/` in order. Each is read whole into memory and its fingerprint `hash("zekno/v1/pack-chunk", sealed)` checked against `pack.chunks[i]` before it is opened; a mismatch stops the client before any byte of that piece reaches it (`step_failed`). Then it is opened, each header's time set to the build's start (`withTime`, item 14), the data unchanged.
+- **Standard input**: the pieces of `building/<app>/` in order. Each is read whole into memory and its fingerprint `hash("zekno/v1/pack-chunk", sealed)` checked against `pack.chunks[i]` before it is opened; a mismatch stops the client before any byte of that piece reaches it (`step_failed`). Then it is opened and, if check L4b settles item 14 as (A), each header's time set to the build's start (`withTime`), the data unchanged.
 
 ## RB8. The build command, Railpack (step 2; FR-046 to FR-050)
 
@@ -172,14 +172,14 @@ docker buildx build
 - **The watches**, during each build: a timer at the signed `timeout`; RB6's disk reading every 5 seconds; and the **team list watch**: every 5 seconds, and before each build, `state.json` is read without a lock (the runner writes it atomically). When its team lists differ from those K17 checked against, `stillAllowed` (CO9) runs.
 - **The stop**: at the limit, below the floor, or when `stillAllowed` fails: `stopChild` (asked, then killed after 2 seconds), which stopped a step at once on Docker Desktop (E04). Under S, `building.phase` becomes `stopping` and `building.stopped` the time. The builds not yet run are skipped. The reason is `time_limit`, `out_of_disk` or `team_changed`.
 - **The wait**: up to 120 seconds, until Docker's record of the build is no longer `Running` (`docker buildx history inspect <ref>`). Then B2, the images this deploy made removed (RB11), and the outcome.
-- **A record still `Running` after 120 seconds**: the runner answers `build_failed` with its reason, keeps `building` (phase `stopping`) and the ref file, and releases D. Every later request that takes D runs RB15 first, which waits again and answers `busy` while that record still runs, so no deploy starts while a step of the build may still run (FR-039). How long that lasts is item 28.
+- **A record still `Running` after 120 seconds**: the runner answers `build_failed` with its reason, keeps `building` (phase `stopping`) and the ref file, and releases D. Every later request that takes D runs RB15 first, which waits again and answers `busy` while that record still runs, so no deploy starts while a step of the build may still run (FR-039). How long that lasts is item 28 (b): until no process of the run is alive and the record has stayed `Running` for 10 minutes past the stop (RB15, step 2).
 - A dropped connection does not stop a build: the deploy finishes, as today, and the outcome is recorded for `zekno status`.
 
 ## RB11. The image (FR-041, FR-043, FR-061, FR-066, FR-067)
 
 - From `meta.json`: `containerimage.digest` (manifest) and `containerimage.config.digest` (config). Never the iidfile.
 - `docker image inspect --format '{{.Id}} {{.Architecture}}' zekno.invalid/<app>:<key>`: `.Id` must be one of the two digests, and the architecture must equal the server's (`amd64` or `arm64`). Another architecture: `wrong_processor` with `arch`.
-- From `meta.json`'s `buildx.build.provenance` materials: the base images with their digests, at most 16, each held to its pattern. With item 17 (a), a material under `zekno.invalid/` fails the build as `reserved_image`.
+- From `meta.json`'s `buildx.build.provenance` materials: the base images with their digests, at most 16, each held to its pattern. If check L9 settles item 17 as (a), or as (c) with (a) beside it, a material under `zekno.invalid/` fails the build as `reserved_image`.
 - The record of CO14 is written to `kept/<app>/<key>.json` in B3.
 - **The images of a deploy that ends `build_failed`**, whatever the reason (a later build failed, `cache_used`, `wrong_processor`, `reserved_image`, `team_changed`, a stop): for each build of this deploy that tagged an image, `docker image inspect` its tag, and `docker image rm` it (no `-f`) while its `.Id` equals the manifest or config digest that build's `meta.json` gave. Nothing of the deploy is recorded (FR-043), so without this no record would ever name these images (FR-067, SC-012).
 - **A leftover under a tag**: before B1 builds a key, when its tag already names an image whose `.Id` is none of the digests the state records for that key (left by a failed deploy, or by a runner that died), `docker image rm` that tag (no `-f`), so the new build's tag never strands an older image where nothing can find it.
@@ -221,7 +221,7 @@ With phase `starting` (the runner died during `up`, routes or health), steps 1 t
 
 Then the request goes on, or is `busy` while a record still runs. The interrupted deploy's number stays used, and the earlier deploy keeps running.
 
-The runner runs only while a request is handled, so until one arrives nothing on the server stops an orphaned client at its limit or the disk floor. Item 27 decides whether more is done: with (a), RB7 and RB8 start the client as `/usr/bin/timeout -k 2 <seconds left of the signed limit> docker buildx build …`, so the time limit holds without the runner.
+The runner runs only while a request is handled, so until one arrives nothing on the server stops an orphaned client at its limit or the disk floor. Check L5 settles whether more is done (item 27): if a silent step outlives its runner on Linux, as E04c showed on Docker Desktop, (a): RB7 and RB8 start the client as `/usr/bin/timeout -k 2 <seconds left of the signed limit> docker buildx build …`, so the time limit holds without the runner; the disk floor still waits for a request. Else (c): nothing more, and the docs say that a build whose runner died can run past its limit until the next request.
 
 ## RB16. The bounded reasons (FR-031a), in this order
 
@@ -232,7 +232,7 @@ The runner runs only while a request is handled, so until one arrives nothing on
 | `team_changed` | the team list watch (before or during a build) or B3: the signer, or a secret statement or removal the deploy used, is no longer allowed by the team lists now in the state. Every image this deploy made is removed and none is recorded |
 | `cache_used` | a build that may reuse no cached step showed one (RB9) |
 | `wrong_processor` | RB11's architecture check, or an "exec format error" |
-| `reserved_image` | RB11, with item 17 (a) |
+| `reserved_image` | RB11, if check L9 settles item 17 as (a), or as (c) with (a) beside it |
 | `out_of_memory` | the failing step was killed (exit 137), or the builder's error says memory could not be allocated (as in T6) |
 | `step_failed` | any other failure, a piece that no longer matches on the second pass among them |
 | `runner_restarted` | recorded by RB15; never in a deploy's answer, since the zekno whose runner died saw D16. `zekno status` shows it (G30) |

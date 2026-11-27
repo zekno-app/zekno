@@ -1,6 +1,6 @@
 # Data model: build from source (feature 016)
 
-Shapes and rules in full: [contracts/core.md](./contracts/core.md), [contracts/runner.md](./contracts/runner.md), [contracts/cli.md](./contracts/cli.md). Quotes are from [spec.md](./spec.md). "Item N" is an item of the plan's "Needs the maintainer"; the model follows its recommendation.
+Shapes and rules in full: [contracts/core.md](./contracts/core.md), [contracts/runner.md](./contracts/runner.md), [contracts/cli.md](./contracts/cli.md). Quotes are from [spec.md](./spec.md). "Item N" is an item of the plan's "Needs the maintainer"; each was decided on 2026-11-27 as recommended, and where a check settles an item's branch, the model names the check.
 
 ## In the project folder
 
@@ -70,7 +70,7 @@ The folder's files as zekno packed them: "the same bytes for the same files on e
 | Names | valid UTF-8 as on disk, relative, no empty, `.` or `..` part, no control character; split into a `prefix` of at most 155 bytes and a `name` of at most 100 at a `/`, a folder's trailing `/` counted (`splitsAsUstar`, item 16) |
 | Mode | `0644`, or `0755` for a folder and for a file its owner may run |
 | Owner | uid and gid 0, empty names |
-| Time | one fixed time, 946684800 (2000-01-01). The runner gives each file the build's start time as it streams the checked pack to the builder (item 14) |
+| Time | one fixed time, 946684800 (2000-01-01). If check L4b shows BuildKit leaves file times out of its cache checksums, the runner gives each file the build's start time as it streams the checked pack to the builder (item 14 (A)); else every file keeps the fixed time, and the docs say so (item 14 (C)) |
 | End | two zero blocks, then nothing |
 | Fingerprint | `hash("zekno/v1/pack", tar bytes)`, streamed |
 | Limits | 512 MiB (`LIMITS.packBytes`), 50,000 entries (`LIMITS.packEntries`); a warning above 100 MB |
@@ -230,7 +230,7 @@ After a fresh build succeeds, `fresh` records its base key with the deploy's num
 
 ### The bounded reasons (FR-031a)
 
-`step_failed`, `out_of_memory`, `out_of_disk`, `time_limit`, `wrong_processor`, `cache_used`, `team_changed`, `runner_restarted`, and `reserved_image` with item 17 (a) or (c). Chosen by the runner from what it did and saw; never text the builder printed, never a step's command. `runner_restarted` is recorded, never answered to a deploy; `zekno status` shows it.
+`step_failed`, `out_of_memory`, `out_of_disk`, `time_limit`, `wrong_processor`, `cache_used`, `team_changed`, `runner_restarted`, and `reserved_image` if check L9 settles item 17 as (a) or (c). Chosen by the runner from what it did and saw; never text the builder printed, never a step's command. `runner_restarted` is recorded, never answered to a deploy; `zekno status` shows it.
 
 ### Staging and work folders (FR-028, FR-031, FR-047, FR-050, FR-069)
 
@@ -256,8 +256,8 @@ There is no `building.json`: the state's `building` holds the run token, the pha
 | any check fails | `docker_too_old`, `no_build_plugin`, `low_disk`, `too_large`, `secrets_mismatch`, `pack_mismatch`, a core reason | nothing written but team lists; pieces moved for the check deleted | not used |
 | every build kept | the checks pass | no build; `last` is `reused` | used |
 | building | every build succeeds; the signer and every statement and removal used are still allowed | images recorded with the deploy's entry; `last` is `built`; phase `starting`; then `up --no-build`, routes and health as in 015; `building` cleared | used |
-| building | a step fails, out of memory, wrong processor, a cached step where none was allowed, `reserved_image` | `build_failed` with its reason; every image the deploy made removed, none recorded; the running app untouched | used |
-| building | its time limit, free disk below the floor, or the team list watch finds the signer or a statement no longer allowed | stopped (phase `stopping`); the builds left skipped; the lock held until Docker's record is no longer `Running`, or 120 seconds (then released with `building` kept, and every deploy `busy` while the record runs, item 28); `build_failed`, `time_limit`, `out_of_disk` or `team_changed`; the deploy's images removed | used |
+| building | a step fails, out of memory, wrong processor, a cached step where none was allowed, `reserved_image` (item 17 (a) or (c), as L9 settles) | `build_failed` with its reason; every image the deploy made removed, none recorded; the running app untouched | used |
+| building | its time limit, free disk below the floor, or the team list watch finds the signer or a statement no longer allowed | stopped (phase `stopping`); the builds left skipped; the lock held until Docker's record is no longer `Running`, or 120 seconds (then released with `building` kept, and every deploy `busy` while the record runs, until no process of the run is alive and the record has stayed `Running` for 10 minutes past the stop, item 28 (b)); `build_failed`, `time_limit`, `out_of_disk` or `team_changed`; the deploy's images removed | used |
 | built | the team lists at B3 no longer allow the signer, or a statement or removal used | `build_failed`, `team_changed`; the new images removed and not recorded; the running app untouched | used |
 | building | the runner dies | at the next request that takes the deploy lock (or, bounded, `sync`, `pack`, `builds`, `status`): every client with the run token stopped, records removed, the run's images removed, `last` is `build_failed`, `runner_restarted`; `building` cleared | used |
 | starting | the runner dies during `up`, routes or health | at the next such request: `building` cleared; `last` stays `built`; the outcome as when a runner dies in 015 | used |

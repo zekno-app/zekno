@@ -1,6 +1,6 @@
 # Contract: the core library (`packages/core`)
 
-For FR-008, FR-012, FR-016, FR-021 to FR-031a, FR-036 to FR-037h, FR-044, FR-045, FR-049a, FR-063 to FR-067, FR-077, FR-081 to FR-085. Decisions: [plan.md](../plan.md), "Decisions where the maps differ". The code as it was: [research/map-core.md](../research/map-core.md). Rule numbers continue features 014 and 015 ([014 message.md](../../014-deploy-v2/contracts/message.md), [014 runner-checks.md](../../014-deploy-v2/contracts/runner-checks.md), [015 core.md](../../015-domains-https/contracts/core.md)); those files stay as their record. "Item N" is an item of the plan's "Needs the maintainer".
+For FR-008, FR-012, FR-016, FR-021 to FR-031a, FR-036 to FR-037h, FR-044, FR-045, FR-049a, FR-063 to FR-067, FR-077, FR-081 to FR-085. Decisions: [plan.md](../plan.md), "Decisions where the maps differ". The code as it was: [research/map-core.md](../research/map-core.md). Rule numbers continue features 014 and 015 ([014 message.md](../../014-deploy-v2/contracts/message.md), [014 runner-checks.md](../../014-deploy-v2/contracts/runner-checks.md), [015 core.md](../../015-domains-https/contracts/core.md)); those files stay as their record. "Item N" is an item of the plan's "Needs the maintainer", decided on 2026-11-27 as recommended; where a check settles an item's branch, the rule names the check.
 
 ## CO1. The build entry (changes the reserved shape of 014)
 
@@ -76,7 +76,7 @@ buildSalt(app, build, listed) = first 32 characters of
 ```
 
 - Arrays, strings and null only, so both sides make the same bytes.
-- `secretsHash` is Railpack's build argument `secrets-hash` (FR-036d, step 2). `buildSalt` names the runner's `--add-host` (FR-037d, step 1b, item 12); it is defined only for a build with secrets.
+- `secretsHash` is Railpack's build argument `secrets-hash` (FR-036d, step 2). `buildSalt` names the runner's `--add-host` (FR-037d, step 1b, item 12 (a), as check L15 settles); it is defined only for a build with secrets.
 - Every input is signed and readable by a relay. None is a secret value or made from one by a plain hash.
 - The domain stays `zekno/v1/build`: no released program computes 014's layout.
 
@@ -88,7 +88,7 @@ buildSalt(app, build, listed) = first 32 characters of
 - `splitsAsUstar(name)`: true when some `/` of the name as packed (a folder's trailing `/` counted) leaves a `prefix` of at most 155 bytes and a `name` of 1 to 100 bytes, or the whole name is at most 100 bytes. The one rule for which names fit (item 16): zekno's walk refuses any other before signing (C7), the writer and the checker use it, and it replaces a separate limit on the whole path and on its last part. So a folder whose last part is 100 bytes, which needs 101 with its `/`, and a path such as `a/<160 bytes>/<90 bytes>`, with no split point, are refused before signing, never an internal error.
 - `header(entry)`: 512 bytes from `{ name, kind: "file" | "folder", mode: 0o644 | 0o755, size }`, with the fixed owner, time, magic and checksum, the name split as `splitsAsUstar` finds it. A name it refuses throws `CoreError("invalid_argument")`, which zekno never reaches, since its walk refused the name first.
 - The checker rebuilds every header from what it parsed and compares all 512 bytes. It checks the zero padding, the order, that each parent came before, the end (two zero blocks, then nothing), at most `LIMITS.packEntries` entries, the signed size and the streamed `hash("zekno/v1/pack", …)`. Anything else is `pack_mismatch`. It yields each entry, so the runner can write the Railpack folder in the same pass.
-- `withTime(header, seconds)`: the same header with another time and its checksum made again. Used only by the runner, after the check, as it streams to the builder (item 14).
+- `withTime(header, seconds)`: the same header with another time and its checksum made again. Used only by the runner, after the check, as it streams to the builder, if check L4b settles item 14 as (A).
 
 `pack/pieces.ts`:
 
@@ -105,7 +105,7 @@ buildSalt(app, build, listed) = first 32 characters of
 - **Build secrets**: never `GIT_AUTH_TOKEN`, `GIT_AUTH_HEADER`, or a name starting `HTTP_AUTH_TOKEN_` or `HTTP_AUTH_HEADER_`, any case (FR-037b).
 - Exported as `isNeverGivenArg(name, builder)` and `isCredentialName(name)`, used by the schema and by zekno's summary (FR-036b).
 - Railpack's own arguments `cache-key` and `secrets-hash` hold a hyphen, which no variable name can.
-- **A `# syntax=` line**: `SYNTAX_LINE = /^\s*#\s*syntax\s*=/i` and `isSyntaxLine(line)`, applied to every line of the Dockerfile, wherever it stands. zekno's reader (CL3) and the runner (RB4) use this one function, so zekno never signs a line the runner refuses (FR-025): with item 11 (a) in every build, and whatever item 11 decides in a build whose `secrets` is not empty.
+- **A `# syntax=` line**: `SYNTAX_LINE = /^\s*#\s*syntax\s*=/i` and `isSyntaxLine(line)`, applied to every line of the Dockerfile, wherever it stands. zekno's reader (CL3) and the runner (RB4) use this one function, so zekno never signs a line the runner refuses (FR-025): in every build if check L2 settles item 11 as (a), and in a build whose `secrets` is not empty whatever L2 shows.
 
 ## CO7. What this core carries out (changes F7)
 
@@ -140,12 +140,12 @@ K4 to K10 of `verifyDeployV2` (envelope, signature, payload with F4 to F7, role,
 | `DEPLOY_V2_REFUSALS` | `pack_mismatch` | nothing | a piece not listed, over its bound, that does not open, or opens to another length; a pack not in the one form; a pack or plan whose fingerprint differs; a plan that names an image not signed (FR-049a) |
 | `RUNNER_REFUSALS` | `low_disk` | `disk: { free: number; floor: number }`, bytes | free disk below the floor before the number; or a `pack` whose piece would bring the disk of `<home>` below it |
 | `RUNNER_REFUSALS` | `docker_too_old` | `docker: { engine: string; buildx: string \| null }`, each held to a version pattern | the engine, or buildx, below the floor (item 11) |
-| `RUNNER_REFUSALS` | `docker_unchecked` (with item 12 (i)) | `docker: { engine: string; buildx: string \| null }`, as above | a build with secrets on an engine or buildx newer than the newest the Linux check covered |
+| `RUNNER_REFUSALS` | `docker_unchecked` (item 12 (i)) | `docker: { engine: string; buildx: string \| null }`, as above | a build with secrets on an engine or buildx newer than the newest the Linux check covered |
 | `RUNNER_REFUSALS` | `no_build_plugin` | nothing | no buildx, or a builder whose driver is not `docker` |
-| `busy` (existing) | — | `building: { app: APP_NAME; seconds: number; limit: number; phase: "building" \| "stopping" \| "starting" }`, optional, read from the state's `building` (CO13) | the deploy lock is held by a deploy that builds, or a stopped build's record still runs. Only in a `deploy` answer |
+| `busy` (existing) | — | `building: { app: APP_NAME; seconds: number; limit: number; phase: "building" \| "stopping" \| "starting" }`, optional, read from the state's `building` (CO13) | the deploy lock is held by a deploy that builds, or a stopped build's record still runs, until item 28 (b) takes it as ended (RB15 step 2). Only in a `deploy` answer |
 | `RUNNER_OUTCOMES` | `build_failed` | `app`, `sequence`, and `build: { key: Hex64; reason: Reason; arch?: { image: Arch; server: Arch }; team?: { version: number } }` | a build failed or was stopped after the number was used. `arch` exactly with `wrong_processor`; `team` exactly with `team_changed` |
 
-`Reason` is one of `step_failed`, `out_of_memory`, `out_of_disk`, `time_limit`, `wrong_processor`, `cache_used`, `team_changed`, `runner_restarted` (and `reserved_image` with item 17 (a) or (c)). `runner_restarted` is only ever in the state and in `builds`, never in a `deploy` answer (RB16). `Arch` is `amd64`, `arm64` or `other`. A report still has no free text, and each field comes only with its outcome or reason. Only a `deploy` answer of protocol 6 or more carries any of them, so no older zekno reads them.
+`Reason` is one of `step_failed`, `out_of_memory`, `out_of_disk`, `time_limit`, `wrong_processor`, `cache_used`, `team_changed`, `runner_restarted` (and `reserved_image` if check L9 settles item 17 as (a) or (c)). `runner_restarted` is only ever in the state and in `builds`, never in a `deploy` answer (RB16). `Arch` is `amd64`, `arm64` or `other`. A report still has no free text, and each field comes only with its outcome or reason. Only a `deploy` answer of protocol 6 or more carries any of them, so no older zekno reads them.
 
 ## CO11. Events of `deploy`
 
@@ -217,7 +217,7 @@ type AppBuilds = {
 
 Read strictly. A state marked 5 must also satisfy: every app in `builds` is at format 2; the keys of `deploys` together are exactly the keys of `images`; no key is in both `images` and `drop`; every sequence is at most the app's last number; `running` is `null` or one of the app's numbers; `building.app` is in `formats` and `building.sequence` equals its last number; `building.keys` 1 to 8, sorted; `building.run` 32 hex; `stopped` is a time exactly when `phase` is `stopping`, else `null`; a `Digest` is `sha256:` and 64 hex; `since`, `at` and `stopped` are ISO times; `limit` 1 to 57,600 (8 builds of 2 hours).
 
-`building` is written with the number (`phase: "building"`), becomes `stopping` when the runner stops a build (RB10, RB15), `starting` at B3, and is cleared once U has run, or once a failed build's records are gone (RB3). Each change is one state write under the state lock, so the phase `busy` and `builds` report survives the process that set it.
+`building` is written with the number (`phase: "building"`), becomes `stopping` when the runner stops a build (RB10, RB15), `starting` at B3, and is cleared once U has run, or once a failed build's records are gone (RB3), or, by item 28 (b), once no process of the run is alive and a record has stayed `Running` for 10 minutes past `stopped` (RB15 step 2; the ref file stays and `builder` counts it in `stale`). Each change is one state write under the state lock, so the phase `busy` and `builds` report survives the process that set it.
 
 Reading: marks 4, 3, 2 and none are read by their own rules, as feature 015 reads them, and given `builds: {}` and `building: null` in memory. A state marked anything above 5 is refused. `newRunnerState` writes mark 5. Runner 0.1.1 refuses mark 5 (`invalid_state` for every request), so FR-085 holds.
 
